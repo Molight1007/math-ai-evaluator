@@ -125,7 +125,7 @@ class EvalLauncher:
         status_label.pack(fill="x", side="bottom")
 
         self.progress = ttk.Progressbar(
-            self.root, mode="indeterminate", length=200
+            self.root, mode="determinate", length=200, maximum=100
         )
 
         self.file_path = None
@@ -170,7 +170,7 @@ class EvalLauncher:
         self.run_btn.configure(state="disabled", text="评测中...")
         self.select_btn.configure(state="disabled")
         self.progress.pack(pady=(0, 8))
-        self.progress.start()
+        self.progress["value"] = 0
         self.status_var.set("正在评测，请稍候...")
 
         thread = threading.Thread(target=self._run_async, daemon=True)
@@ -187,7 +187,11 @@ class EvalLauncher:
             json_path = auto_convert(self.file_path, max_problems=self.max_var.get())
 
             self._update_status("[2/3] 正在评测题目...")
-            html_path = asyncio.run(run_evaluation(json_path, self.concurrency_var.get()))
+            def _on_progress(current, total):
+                    pct = int(current / total * 100) if total > 0 else 0
+                    self.root.after(0, lambda p=pct: self.progress.configure(value=p))
+
+            html_path = asyncio.run(run_evaluation(json_path, self.concurrency_var.get(), progress_callback=_on_progress))
 
             self._update_status("[3/3] 评测完成！正在打开报告...")
             if html_path and os.path.exists(html_path):
@@ -205,7 +209,7 @@ class EvalLauncher:
         self.root.after(0, lambda: self.status_var.set(text))
 
     def _on_done(self, success, msg):
-        self.progress.stop()
+        self.progress["value"] = 0
         self.progress.pack_forget()
         self.run_btn.configure(state="normal", text="开始评测")
         self.select_btn.configure(state="normal")

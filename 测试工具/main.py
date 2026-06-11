@@ -50,13 +50,11 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
 
     if ext == ".pdf":
         print(f"\n[转化] 检测到 PDF 文件，正在转化...")
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "转化工具"))
-        from pdf_to_json import convert_pdf
+        from 转化工具.pdf_to_json import convert_pdf
         problems = convert_pdf(file_path, max_problems=max_problems)
     elif ext == ".docx":
         print(f"\n[转化] 检测到 Word 文件，正在转化...")
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "转化工具"))
-        from docx_to_json import convert_docx
+        from 转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
     else:
         raise ValueError(f"不支持的文件格式: {ext}（支持 .pdf / .docx / .json / .csv）")
@@ -91,7 +89,7 @@ async def evaluate_single(problem, semaphore):
         return merge_result(problem, inference, judge)
 
 
-async def run_evaluation(problems_path, concurrency=3):
+async def run_evaluation(problems_path, concurrency=3, progress_callback=None):
     problems = load_problems(problems_path)
     if not problems:
         logger.error("No problems loaded!")
