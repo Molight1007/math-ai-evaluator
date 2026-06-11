@@ -1,10 +1,10 @@
 """
-数学智能体评测器 — GUI 启动器
+数学智能体评测器 – GUI 启动器
 支持拖入或选择 PDF / Word / JSON / CSV 文件，一键评测。
 
 用法:
     python 测试工具/launcher.py
-    pythonw 测试工具/launcher.py   （无控制台窗口）
+    pythonw 测试工具/launcher.py    （无控制台窗口）
 """
 import asyncio
 import json
@@ -15,7 +15,6 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
-# 确保项目根目录在 path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
@@ -29,11 +28,8 @@ class EvalLauncher:
         self.root.geometry("520x420")
         self.root.resizable(True, True)
         self.root.configure(bg="#f0f4f8")
-
-        # 图标 / 最小尺寸
         self.root.minsize(460, 380)
 
-        # === 标题 ===
         title_frame = tk.Frame(self.root, bg="#f0f4f8")
         title_frame.pack(pady=(20, 5))
         tk.Label(
@@ -45,7 +41,6 @@ class EvalLauncher:
             font=("Microsoft YaHei", 9), fg="#718096", bg="#f0f4f8"
         ).pack()
 
-        # === 拖放区域 ===
         self.drop_frame = tk.Frame(
             self.root, bg="white", bd=2, relief="groove",
             highlightbackground="#cbd5e0", highlightthickness=1
@@ -60,13 +55,11 @@ class EvalLauncher:
         )
         self.drop_label.pack(expand=True)
 
-        # 拖放绑定
         self.drop_frame.bind("<Enter>", self._on_drag_enter)
         self.drop_frame.bind("<Leave>", self._on_drag_leave)
         self.drop_label.bind("<Enter>", self._on_drag_enter)
         self.drop_label.bind("<Leave>", self._on_drag_leave)
 
-        # === 文件路径显示 ===
         self.path_var = tk.StringVar(value="未选择文件")
         path_label = tk.Label(
             self.root, textvariable=self.path_var,
@@ -75,7 +68,6 @@ class EvalLauncher:
         )
         path_label.pack(padx=30, pady=(2, 8), fill="x")
 
-        # === 设置区 ===
         settings_frame = tk.Frame(self.root, bg="#f0f4f8")
         settings_frame.pack(padx=30, pady=(0, 5), fill="x")
 
@@ -105,7 +97,6 @@ class EvalLauncher:
             bg="#f0f4f8", fg="#a0aec0"
         ).pack(side="left")
 
-        # === 按钮区 ===
         btn_frame = tk.Frame(self.root, bg="#f0f4f8")
         btn_frame.pack(padx=30, pady=(5, 15), fill="x")
 
@@ -125,8 +116,7 @@ class EvalLauncher:
         )
         self.run_btn.pack(side="left")
 
-        # === 状态栏 ===
-        self.status_var = tk.StringVar(value="就绪 — 请选择题目文件")
+        self.status_var = tk.StringVar(value="就绪 - 请选择题目文件")
         status_label = tk.Label(
             self.root, textvariable=self.status_var,
             font=("Microsoft YaHei", 9), fg="#718096", bg="#edf2f7",
@@ -134,14 +124,12 @@ class EvalLauncher:
         )
         status_label.pack(fill="x", side="bottom")
 
-        # === 进度条 ===
         self.progress = ttk.Progressbar(
             self.root, mode="indeterminate", length=200
         )
 
         self.file_path = None
 
-    # ---- 拖放 ----
     def _on_drag_enter(self, event):
         self.drop_frame.configure(bg="#ebf8ff")
         self.drop_label.configure(bg="#ebf8ff")
@@ -150,7 +138,6 @@ class EvalLauncher:
         self.drop_frame.configure(bg="white")
         self.drop_label.configure(bg="white")
 
-    # ---- 文件选择 ----
     def _select_file(self):
         path = filedialog.askopenfilename(
             title="选择题目文件",
@@ -173,48 +160,44 @@ class EvalLauncher:
             text=f"已选择: {basename}", fg="#2d3748"
         )
         self.run_btn.configure(state="normal")
-        self.status_var.set(f"已选择: {basename} — 点击「开始评测」运行")
+        self.status_var.set(f"已选择: {basename} - 点击「开始评测」运行")
 
-    # ---- 评测 ----
     def _start_eval(self):
         if not self.file_path:
             messagebox.showwarning("提示", "请先选择题目文件")
             return
 
-        # 禁用按钮
         self.run_btn.configure(state="disabled", text="评测中...")
         self.select_btn.configure(state="disabled")
         self.progress.pack(pady=(0, 8))
         self.progress.start()
         self.status_var.set("正在评测，请稍候...")
 
-        # 后台线程运行
         thread = threading.Thread(target=self._run_async, daemon=True)
         thread.start()
 
     def _run_async(self):
-        """在后台线程中运行 asyncio 评测"""
         try:
             from main import auto_convert, run_evaluation
-            from config import load_config
+            from config import load_config, validate_config, ConfigError
 
-            load_config()
+            validate_config(load_config())
 
-            # Step 1: 转化
             self._update_status("[1/3] 正在转化文件...")
             json_path = auto_convert(self.file_path, max_problems=self.max_var.get())
 
-            # Step 2: 评测
             self._update_status("[2/3] 正在评测题目...")
             html_path = asyncio.run(run_evaluation(json_path, self.concurrency_var.get()))
 
-            # Step 3: 打开报告
             self._update_status("[3/3] 评测完成！正在打开报告...")
             if html_path and os.path.exists(html_path):
                 webbrowser.open(f"file:///{html_path.replace(os.sep, '/')}")
 
             self.root.after(0, lambda: self._on_done(True, "评测完成！报告已打开。"))
 
+        except ConfigError as e:
+            self.root.after(0, lambda: self._on_done(False, str(e)))
+            return
         except Exception as e:
             self.root.after(0, lambda: self._on_done(False, str(e)))
 
@@ -234,21 +217,17 @@ class EvalLauncher:
             messagebox.showerror("错误", f"评测失败:\n{msg}")
 
     def run(self):
-        # Windows 拖放支持
         try:
             from tkinterdnd2 import DND_FILES
             self.root.drop_target_register(DND_FILES)
             self.root.dnd_bind("<<Drop>>", self._on_drop)
         except ImportError:
-            # tkinterdnd2 未安装，不影响基本使用
-            pass
+            self.status_var.set('就绪 - 拖放功能未启用 (pip install tkinterdnd2)')
 
         self.root.mainloop()
 
     def _on_drop(self, event):
-        """拖放文件处理"""
         path = event.data.strip()
-        # 去掉可能的 {} 包裹和引号
         path = path.strip("{}").strip('"').strip("'")
         if os.path.isfile(path):
             self._set_file(path)
