@@ -212,7 +212,7 @@ def main():
 
     problems = convert_docx(docx_path, max_problems=args.max)
 
-    # 默认输出
+    # 默认输出路径：测试结果/原本问题/
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, "测试结果", "原本问题")

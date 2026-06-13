@@ -16,13 +16,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
-# API config helpers (used by settings dialog)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "转化工具"))
 
-# API config helpers (used by settings dialog)
 from config import has_config, load_config, save_config, reset_config, ConfigError, validate_config
 
 
@@ -38,7 +36,7 @@ class QuestionBankPanel(ttk.Frame):
         self._eval_running = False
         self._audit_running = False
 
-        # --- 第一行：题库选择 + 新建 ---
+        # 第一行：题库选择 + 新建
         row1 = ttk.Frame(self)
         row1.pack(fill="x", padx=15, pady=(15, 8))
 
@@ -59,14 +57,14 @@ class QuestionBankPanel(ttk.Frame):
         ttk.Button(row1, text="创建", command=self._create_bank, width=6).pack(side="left")
         ttk.Button(row1, text="删除", command=self._delete_bank, width=6).pack(side="left", padx=(4, 0))
 
-        # --- 第二行：统计信息 ---
+        # 第二行：统计信息
         row2 = ttk.Frame(self)
         row2.pack(fill="x", padx=15, pady=(0, 8))
         self.stats_var = tk.StringVar(value="题库统计: —")
         ttk.Label(row2, textvariable=self.stats_var, font=("Microsoft YaHei", 9),
                   foreground="#4a5568").pack(anchor="w")
 
-        # --- 第三行：导入 & 添加 ---
+        # 第三行：导入 & 添加
         row3 = ttk.Frame(self)
         row3.pack(fill="x", padx=15, pady=(0, 8))
 
@@ -78,7 +76,7 @@ class QuestionBankPanel(ttk.Frame):
                                      width=14)
         self.audit_btn.pack(side="left")
 
-        # --- 第四行：随机选题评测 ---
+        # 第四行：随机选题评测
         eval_frame = ttk.LabelFrame(self, text="随机选题评测", padding=(10, 8))
         eval_frame.pack(fill="x", padx=15, pady=(5, 10))
 
@@ -100,7 +98,7 @@ class QuestionBankPanel(ttk.Frame):
                                          command=self._start_bank_eval, width=18)
         self.bank_eval_btn.pack(side="left")
 
-        # --- 题目列表 ---
+        # 题目列表（Treeview 表格）
         list_frame = ttk.LabelFrame(self, text="题库题目列表", padding=(8, 5))
         list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 10))
 
@@ -125,14 +123,13 @@ class QuestionBankPanel(ttk.Frame):
         self.tree_menu.add_command(label="删除此题目", command=self._delete_selected_problem)
         self.tree.bind("<Button-3>", self._on_tree_right_click)
 
-        # --- 底部状态 ---
+        # 底部状态栏
         self.bank_status_var = tk.StringVar(value="就绪 — 请选择一个题库")
         ttk.Label(self, textvariable=self.bank_status_var, font=("Microsoft YaHei", 9),
                   foreground="#718096").pack(anchor="w", padx=15, pady=(0, 5))
 
         self._refresh_banks()
 
-    # ---- 数据库懒加载 ----
     @property
     def db(self):
         if self._db is None:
@@ -140,7 +137,6 @@ class QuestionBankPanel(ttk.Frame):
             self._db = get_db()
         return self._db
 
-    # ---- 题库操作 ----
     def _refresh_banks(self):
         """刷新题库下拉列表和统计"""
         banks = self.db.list_banks()
@@ -245,7 +241,6 @@ class QuestionBankPanel(ttk.Frame):
             self._refresh_banks()
             self.bank_status_var.set(f"题库「{bank}」已删除")
 
-    # ---- 导入题目 ----
     def _import_from_file(self):
         bank = self.bank_var.get()
         if not bank:
@@ -279,7 +274,6 @@ class QuestionBankPanel(ttk.Frame):
         except Exception as e:
             messagebox.showerror("导入失败", str(e))
 
-    # ---- 手动添加题目 ----
     def _manual_add(self):
         bank = self.bank_var.get()
         if not bank:
@@ -350,7 +344,6 @@ class QuestionBankPanel(ttk.Frame):
         ttk.Button(btn_f, text="确认添加", command=do_add, width=12).pack(side="left", padx=(0, 10))
         ttk.Button(btn_f, text="取消", command=dialog.destroy, width=12).pack(side="left")
 
-    # ---- 随机选题评测 ----
     def _start_bank_eval(self):
         bank = self.bank_var.get()
         if not bank:
@@ -422,7 +415,6 @@ class QuestionBankPanel(ttk.Frame):
                 state="normal", text="🎯 从题库随机评测"))
             self._eval_running = False
 
-    # ---- AI 质量审核 ----
     def _start_audit_quality(self):
         bank = self.bank_var.get()
         if not bank:
@@ -523,7 +515,6 @@ class EvalLauncher:
         self.root.configure(bg="#f0f4f8")
         self.root.minsize(520, 500)
 
-        # ==== 标题 ====
         title_frame = tk.Frame(self.root, bg="#f0f4f8")
         title_frame.pack(pady=(15, 5))
         tk.Label(
@@ -535,11 +526,9 @@ class EvalLauncher:
             font=("Microsoft YaHei", 9), fg="#718096", bg="#f0f4f8"
         ).pack()
 
-        # ==== Notebook 选项卡 ====
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=(5, 0))
 
-        # ---- Tab 1: 文件评测 ----
         self.file_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.file_tab, text="📄 文件评测")
 
@@ -634,11 +623,9 @@ class EvalLauncher:
         )
         self.clear_btn.pack(side="left")
 
-        # ---- Tab 2: 题库评测 ----
         self.bank_panel = QuestionBankPanel(self.notebook, launcher=self)
         self.notebook.add(self.bank_panel, text="📚 题库评测")
 
-        # ==== 底部状态栏 ====
         self.status_var = tk.StringVar(value="就绪 - 请选择题目文件或切换到题库评测")
         status_label = tk.Label(
             self.root, textvariable=self.status_var,
@@ -705,7 +692,6 @@ class EvalLauncher:
         self.status_var.set(f"清理完成 - 共删除 {total} 个文件")
         messagebox.showinfo("清理完成", f"已清除以下文件：\n\n" + "\n".join(parts))
 
-# ==== API 配置对话框 ====
     def _show_api_dialog(self):
         """弹窗输入/修改 API Key"""
         existing_s1 = ""
@@ -736,7 +722,7 @@ class EvalLauncher:
         tk.Label(dialog, text="密钥将保存在 ~/.math_evaluator/.env",
                  font=("Microsoft YaHei", 8), fg="#a0aec0", bg="#f0f4f8").pack()
 
-        # Intern-S1
+        # Intern-S1 推理模型配置
         f1 = tk.LabelFrame(dialog, text="Intern-S1 (推理模型)", bg="#f0f4f8",
                            font=("Microsoft YaHei", 10, "bold"), fg="#2d3748")
         f1.pack(padx=20, pady=(10, 5), fill="x")
@@ -745,7 +731,7 @@ class EvalLauncher:
         tk.Entry(f1, textvariable=s1_var, width=50, show="*",
                  font=("Consolas", 9)).pack(padx=10, pady=(2, 8), fill="x")
 
-        # DeepSeek
+        # DeepSeek 评判模型配置
         f2 = tk.LabelFrame(dialog, text="DeepSeek (评判模型)", bg="#f0f4f8",
                            font=("Microsoft YaHei", 10, "bold"), fg="#2d3748")
         f2.pack(padx=20, pady=(0, 5), fill="x")
@@ -754,7 +740,6 @@ class EvalLauncher:
         tk.Entry(f2, textvariable=ds_var, width=50, show="*",
                  font=("Consolas", 9)).pack(padx=10, pady=(2, 8), fill="x")
 
-        # Buttons
         btn_f = tk.Frame(dialog, bg="#f0f4f8")
         btn_f.pack(pady=(10, 15))
 
@@ -788,7 +773,6 @@ class EvalLauncher:
         self.root.wait_window(dialog)
         return result["confirmed"]
 
-    # ==== 评测 ====
     def _start_eval(self):
         if not self.file_path:
             messagebox.showwarning("提示", "请先选择题目文件")
@@ -805,9 +789,16 @@ class EvalLauncher:
         thread.start()
 
     def _run_async(self):
+        """在后台线程中执行评测流水线（线程 + asyncio 嵌套模式）
+        
+        工作流程：
+        1. 验证 API 配置
+        2. 自动转化文件（PDF/Word -> JSON）
+        3. 执行 asyncio.run() 运行异步评测
+        4. 打开 HTML 报告
+        """
         try:
             from main import auto_convert, run_evaluation
-            from config import load_config, validate_config, ConfigError, save_config, has_config, get_user_env_path, reset_config
 
             validate_config(load_config())
 

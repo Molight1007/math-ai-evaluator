@@ -1,5 +1,5 @@
 """
-Aggregator - merges inference + judge results and computes summary statistics.
+结果合并器 - 将推理结果与评判结果合并为最终评测结果，并计算统计摘要。
 """
 import logging
 from models import Problem, InferenceResult, JudgeResult, EvaluationResult
@@ -12,6 +12,7 @@ def merge_result(
     inference: InferenceResult,
     judge: JudgeResult,
 ) -> EvaluationResult:
+    """将 Problem + InferenceResult + JudgeResult 合并为一条完整的 EvaluationResult"""
     return EvaluationResult(
         problem_id=problem.id,
         question=problem.question,
@@ -36,6 +37,18 @@ def merge_result(
 
 
 def compute_summary(results: list[EvaluationResult]) -> dict:
+    """计算评测统计摘要，返回字典包含以下字段：
+    - total: int             — 题目总数
+    - correct: int           — 正确题目数
+    - accuracy: float        — 准确率（百分比）
+    - avg_confidence: float  — 平均置信度（仅统计无评判错误的题目）
+    - avg_inference_latency: float — 平均推理耗时（秒，仅统计无推理错误的题目）
+    - avg_judge_latency: float     — 平均评判耗时（秒，仅统计无评判错误的题目）
+    - total_inference_tokens: int  — 推理总 token 消耗
+    - total_judge_tokens: int      — 评判总 token 消耗
+    - error_types: dict[str, int]  — 各错误类型的出现次数
+    - domain_stats: dict[str, dict] — 各知识域的统计（total/correct/accuracy）
+    """
     total = len(results)
     if total == 0:
         return {
@@ -46,14 +59,17 @@ def compute_summary(results: list[EvaluationResult]) -> dict:
         }
 
     correct = sum(1 for r in results if r.is_correct)
+    # 仅统计无错误的评判结果和推理结果，确保均值准确性
     valid_judges = [r for r in results if not r.judge_error]
     valid_inferences = [r for r in results if not r.inference_error]
 
+    # 统计各错误类型的出现频次
     error_types = {}
     for r in results:
         if r.error_type:
             error_types[r.error_type] = error_types.get(r.error_type, 0) + 1
 
+    # 按知识域分组统计正确率
     domain_stats = {}
     for r in results:
         domain = r.domain or "unknown"

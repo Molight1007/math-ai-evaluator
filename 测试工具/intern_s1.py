@@ -1,6 +1,6 @@
 """
-Intern-S1 inference module.
-Calls Intern-S1 model to solve math problems and extracts structured JSON.
+Intern-S1 推理模块。
+调用 Intern-S1 模型解答数学题，提取结构化 JSON 输出。
 """
 import logging
 import time
@@ -10,6 +10,7 @@ from models import Problem, InferenceResult
 
 logger = logging.getLogger(__name__)
 
+# Intern-S1 系统提示词：要求输出结构化 JSON，包含答案、推理、步骤和验证
 SYSTEM_PROMPT = (
     "You are an expert math problem solver. "
     "For each problem, output a JSON object with these fields: "
@@ -22,14 +23,17 @@ SYSTEM_PROMPT = (
 
 
 def parse_intern_response(raw_content: str) -> dict:
+    """解析 Intern-S1 的原始响应，提取结构化字段"""
     parsed = extract_json_from_text(raw_content)
     if parsed and isinstance(parsed, dict):
+        # 从 JSON 中提取各字段，提供默认值
         answer = str(parsed.get("answer", ""))
         reasoning = str(parsed.get("reasoning", ""))
         steps = parsed.get("steps", [])
         if not isinstance(steps, list):
             steps = [str(steps)]
         verification = str(parsed.get("verification", ""))
+        # 如果答案为空但推理文本非空，用推理第一行作为答案
         if not answer and reasoning:
             answer = reasoning.split("\n")[0][:200]
         return {
@@ -38,6 +42,7 @@ def parse_intern_response(raw_content: str) -> dict:
             "steps": [str(s) for s in steps],
             "verification": verification,
         }
+    # 无法解析 JSON 时的回退策略：按行拆分
     lines = raw_content.strip().split("\n")
     return {
         "answer": lines[0][:200] if lines else "",
@@ -48,6 +53,7 @@ def parse_intern_response(raw_content: str) -> dict:
 
 
 async def run_inference(problem: Problem) -> InferenceResult:
+    """对单道题目执行 Intern-S1 推理，返回 InferenceResult"""
     cfg = get_config()
     client = LLMClient(cfg.intern_s1)
     messages = [

@@ -213,7 +213,7 @@ def main():
     
     problems = convert_pdf(args.pdf, max_problems=args.max, start_page=args.start_page)
     
-    # 默认输出
+    # 默认输出路径：测试结果/原本问题/
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, "测试结果", "原本问题")

@@ -1,58 +1,61 @@
 """
-Configuration management - loads API keys and model settings from .env file.
+配置管理模块 - 从 .env 文件加载 API 密钥和模型设置。
 
-Storage priority:
-1. User home directory: ~/.math_evaluator/.env  (recommended, persistent)
-2. Project directory:   测试工具/.env              (legacy fallback)
+存储优先级：
+1. 用户主目录: ~/.math_evaluator/.env（推荐，持久化存储）
+2. 项目目录:   测试工具/.env（旧版兼容）
 """
 import os
 from dataclasses import dataclass
 from dotenv import load_dotenv, set_key
 
+# 全局标记：是否已加载 .env，避免重复加载
 _loaded = False
 
-# User-level config directory
+# 用户级配置目录（跨项目共享，一次配置永久生效）
 USER_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".math_evaluator")
 USER_ENV_PATH = os.path.join(USER_CONFIG_DIR, ".env")
 
 
 class ConfigError(Exception):
-    """Raised when configuration is missing required values."""
+    """配置缺失时抛出的异常"""
     pass
 
 
 @dataclass
 class LLMConfig:
-    api_key: str
-    base_url: str
-    model: str
-    timeout: float = 120.0
-    max_retries: int = 3
+    """单个 LLM 服务的配置信息"""
+    api_key: str                                  # API 密钥
+    base_url: str                                 # API 基础地址
+    model: str                                    # 模型名称
+    timeout: float = 120.0                        # 请求超时（秒）
+    max_retries: int = 3                          # 最大重试次数
 
 
 @dataclass
 class EvalConfig:
-    intern_s1: LLMConfig
-    deepseek: LLMConfig
+    """评测器完整配置 - 包含 Intern-S1 和 DeepSeek 两个服务的配置"""
+    intern_s1: LLMConfig                          # Intern-S1 推理服务
+    deepseek: LLMConfig                           # DeepSeek 评判服务
 
 
 def get_user_env_path() -> str:
-    """Return the path to user-level .env file."""
+    """获取用户级 .env 文件路径"""
     return USER_ENV_PATH
 
 
 def has_config() -> bool:
-    """Check if user-level config exists."""
+    """检查用户级配置文件是否存在"""
     return os.path.isfile(USER_ENV_PATH)
 
 
 def _find_dotenv() -> str:
-    """Find .env file, preferring user-level over project-level."""
-    # 1. User home directory (preferred)
+    """查找 .env 文件，优先使用用户级配置，回退到项目级配置"""
+    # 优先：用户主目录下的配置文件
     if os.path.isfile(USER_ENV_PATH):
         return USER_ENV_PATH
 
-    # 2. Legacy: project directory
+    # 回退：项目目录中的旧版配置
     current_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(current_dir, ".env"),
@@ -63,14 +66,14 @@ def _find_dotenv() -> str:
         if os.path.isfile(c):
             return c
 
-    # Default: user home (will be created on save)
+    # 默认返回用户级路径（保存时自动创建）
     return USER_ENV_PATH
 
 
 def save_config(intern_s1_key: str, deepseek_key: str,
                 intern_s1_url: str = None, deepseek_url: str = None,
                 intern_s1_model: str = None, deepseek_model: str = None) -> str:
-    """Save API keys to user-level .env file. Returns the file path."""
+    """将 API 密钥保存到用户级 .env 文件，返回文件路径"""
     os.makedirs(USER_CONFIG_DIR, exist_ok=True)
 
     with open(USER_ENV_PATH, "w", encoding="utf-8") as f:
@@ -85,7 +88,7 @@ def save_config(intern_s1_key: str, deepseek_key: str,
         f.write("LLM_TIMEOUT=120\n")
         f.write("LLM_MAX_RETRIES=3\n")
 
-    # Reload env so os.getenv picks up new values
+    # 重新加载环境变量，使新保存的配置立即生效
     global _loaded
     _loaded = False
     load_dotenv(USER_ENV_PATH, override=True)
@@ -95,6 +98,7 @@ def save_config(intern_s1_key: str, deepseek_key: str,
 
 
 def load_config(dotenv_path: str = None) -> EvalConfig:
+    """加载配置：先读取 .env 文件，再返回 EvalConfig 对象"""
     global _loaded
     if not _loaded:
         if dotenv_path is None:
@@ -105,12 +109,13 @@ def load_config(dotenv_path: str = None) -> EvalConfig:
 
 
 def reset_config():
-    """Force reload config on next call."""
+    """强制下次调用时重新加载配置"""
     global _loaded
     _loaded = False
 
 
 def get_config() -> EvalConfig:
+    """从环境变量中构建 EvalConfig 对象（含 Intern-S1 和 DeepSeek 配置）"""
     return EvalConfig(
         intern_s1=LLMConfig(
             api_key=os.getenv("INTERN_S1_API_KEY", ""),
@@ -130,7 +135,7 @@ def get_config() -> EvalConfig:
 
 
 def validate_config(cfg: EvalConfig = None) -> EvalConfig:
-    """Validate that required API keys are set. Raises ConfigError if not."""
+    """验证必要的 API 密钥是否已配置，缺少则抛出 ConfigError"""
     if cfg is None:
         cfg = get_config()
     missing = []

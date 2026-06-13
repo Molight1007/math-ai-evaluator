@@ -1,5 +1,5 @@
 """
-Report generator - produces JSON, CSV, terminal, and HTML reports.
+报告生成器 - 生成 JSON、CSV、终端和 HTML 格式的评测报告。
 """
 import csv
 import json
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_json_report(results, output_path):
+    """生成 JSON 格式报告，包含摘要统计和逐题详情"""
     data = {
         "generated_at": datetime.datetime.now().isoformat(),
         "summary": compute_summary(results),
@@ -25,6 +26,7 @@ def generate_json_report(results, output_path):
 
 
 def generate_csv_report(results, output_path):
+    """生成 CSV 格式报告，使用 utf-8-sig 编码以兼容 Excel"""
     if not results:
         with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
             f.write("")
@@ -64,6 +66,7 @@ def generate_csv_report(results, output_path):
 
 
 def print_summary(results):
+    """在终端打印评测摘要，包含总体统计、错误分布和分域准确率"""
     summary = compute_summary(results)
     print("\n" + "=" * 60)
     print("  MATH AGENT EVALUATION REPORT")
@@ -94,11 +97,15 @@ def print_summary(results):
 
 
 def _escape_html(text):
+    """HTML 转义：防止 XSS 和标签破坏"""
     return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
 
 def generate_html_report(results, output_path):
+    """生成内联 CSS 的 HTML 可视化报告"""
     summary = compute_summary(results)
+
+    # 构建逐题表格行
     rows_html = ""
     for r in results:
         status_class = "pass" if r.is_correct else "fail"
@@ -119,6 +126,7 @@ def generate_html_report(results, output_path):
             <td>{r.inference_tokens + r.judge_tokens}</td>
         </tr>"""
 
+    # 构建分域统计卡片
     domain_html = ""
     for domain, stats in summary.get("domain_stats", {}).items():
         domain_html += f"""
@@ -128,6 +136,7 @@ def generate_html_report(results, output_path):
             <span class="domain-count">({stats['correct']}/{stats['total']})</span>
         </div>"""
 
+    # 完整 HTML 模板（内联 CSS）
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import sqlite3
+import uuid
 from datetime import datetime
 from typing import Optional, Callable
 
@@ -33,10 +34,6 @@ class QuestionBankDB:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self._init_db()
-
-    # ------------------------------------------------------------------
-    # 内部辅助
-    # ------------------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -67,10 +64,6 @@ class QuestionBankDB:
                     UNIQUE(problem_id, bank_name)
                 )
             """)
-
-    # ------------------------------------------------------------------
-    # 题库操作
-    # ------------------------------------------------------------------
 
     def create_bank(self, name: str) -> bool:
         """创建新题库，返回是否创建成功（已存在则返回 False）"""
@@ -112,10 +105,6 @@ class QuestionBankDB:
         with self._connect() as conn:
             r = conn.execute("SELECT 1 FROM banks WHERE name = ?", (name,)).fetchone()
             return r is not None
-
-    # ------------------------------------------------------------------
-    # 题目操作
-    # ------------------------------------------------------------------
 
     def add_problem(self, problem: Problem, bank_name: str) -> bool:
         """添加单道题目到题库，返回是否添加成功（重复则 False）"""
@@ -279,9 +268,7 @@ class QuestionBankDB:
             for r in rows
         ]
 
-    # ------------------------------------------------------------------
-    # 质量审核（DeepSeek AI 审核 + 自动清理 + 补全）
-    # ------------------------------------------------------------------
+    # === 质量审核（DeepSeek AI 审核 + 自动清理 + 补全） ===
 
     @staticmethod
     def _build_audit_prompt(problems_batch: list[Problem], bank_domains: list[str]) -> str:
@@ -464,8 +451,7 @@ class QuestionBankDB:
                     d = np_item.get("domain", "").strip()
                     a = np_item.get("answer", "").strip()
                     if q:
-                        # 生成唯一 ID
-                        import uuid
+                        # 使用 uuid 生成唯一题目 ID
                         new_pid = f"gen_{uuid.uuid4().hex[:8]}"
                         new_p = Problem(
                             id=new_pid,
@@ -491,7 +477,7 @@ class QuestionBankDB:
         }
 
 
-# 便捷单例
+# 数据库单例，避免重复创建连接
 _db_instance: Optional[QuestionBankDB] = None
 
 

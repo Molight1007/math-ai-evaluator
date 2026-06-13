@@ -1,7 +1,7 @@
 """
-Main entry point for the Math Agent Evaluator.
+数学智能体评测器 - 主入口
 支持直接输入 PDF / Word (.docx) / JSON / CSV，自动识别并转化。
-Usage: python 测试工具/main.py -i <file> [--concurrency N] [--max N]
+用法: python 测试工具/main.py -i <file> [--concurrency N] [--max N]
 """
 import argparse
 import asyncio
@@ -13,7 +13,7 @@ import io
 import tempfile
 from typing import Optional
 
-# Add current dir to path for imports
+# 将当前目录添加到 import 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import load_config, validate_config, ConfigError, save_config, has_config
@@ -26,15 +26,15 @@ from models import JudgeResult
 
 logger = logging.getLogger(__name__)
 
-# Output sub-directories under 测试结果
+# 评测结果输出子目录
 BASE_RESULT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "测试结果")
-DIR_DISPLAY = os.path.join(BASE_RESULT, "测试结果展示")      # HTML
-DIR_OUTPUT = os.path.join(BASE_RESULT, "原始输出和推理过程")  # JSON
-DIR_PROBLEMS = os.path.join(BASE_RESULT, "原始问题")         # copy of problems file
+DIR_DISPLAY = os.path.join(BASE_RESULT, "测试结果展示")      # HTML 报告
+DIR_OUTPUT = os.path.join(BASE_RESULT, "原始输出和推理过程")  # JSON 原始数据
+DIR_PROBLEMS = os.path.join(BASE_RESULT, "原始问题")         # 题目文件副本
 
 
 def clear_all_results() -> dict:
-    """清除所有评测结果（HTML/JSON/临时文件）。返回各目录删除的文件数。"""
+    """清除所有评测结果（HTML/JSON/临时文件），返回各目录删除的文件数"""
     import glob
     counts = {}
     for name, path in [
@@ -55,6 +55,7 @@ def clear_all_results() -> dict:
 
 
 def _safe_str(s, maxlen=50):
+    """截断字符串并确保 UTF-8 安全，用于终端打印"""
     s = str(s)[:maxlen]
     try:
         s.encode("utf-8")
@@ -68,7 +69,7 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext in (".json", ".csv"):
-        return file_path  # 无需转化
+        return file_path  # JSON/CSV 无需转化
 
     if ext == ".pdf":
         print(f"\n[转化] 检测到 PDF 文件，正在转化...")
@@ -84,7 +85,7 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     if not problems:
         raise ValueError("未解析出任何题目，请检查文件内容。")
 
-    # 保存为临时 JSON 并复制到原始问题
+    # 保存为临时 JSON 并复制到"原始问题"目录
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
     import json
     base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -96,9 +97,11 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
 
 
 async def evaluate_single(problem, semaphore):
+    """评测单道题目：先推理，再评判，最后合并结果"""
     async with semaphore:
         inference = await run_inference(problem)
         if inference.error:
+            # 推理失败时，构造一个"失败"的评判结果
             judge = JudgeResult(
                 problem_id=problem.id,
                 is_correct=False,
@@ -112,15 +115,18 @@ async def evaluate_single(problem, semaphore):
 
 
 async def run_evaluation(problems_path, concurrency=3, progress_callback=None):
+    """执行完整评测流水线：加载题目 -> 并发推理+评判 -> 生成报告"""
     problems = load_problems(problems_path)
     if not problems:
         logger.error("No problems loaded!")
         return
     logger.info(f"Loaded {len(problems)} problems. Starting evaluation...")
+
     # 并发数不应超过实际题目数量
     actual_concurrency = min(concurrency, len(problems))
     semaphore = asyncio.Semaphore(actual_concurrency)
     tasks = [evaluate_single(p, semaphore) for p in problems]
+
     print(f"\nEvaluating {len(problems)} problems (concurrency={actual_concurrency})...\n")
     results = []
     for i, coro in enumerate(asyncio.as_completed(tasks), 1):
@@ -132,17 +138,17 @@ async def run_evaluation(problems_path, concurrency=3, progress_callback=None):
 
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # 1) JSON -> 原始输出和推理过程
+    # 1) 保存 JSON 报告到"原始输出和推理过程"
     os.makedirs(DIR_OUTPUT, exist_ok=True)
     json_path = os.path.join(DIR_OUTPUT, f"report_{ts}.json")
     generate_json_report(results, json_path)
 
-    # 2) HTML -> 测试结果展示
+    # 2) 保存 HTML 报告到"测试结果展示"
     os.makedirs(DIR_DISPLAY, exist_ok=True)
     html_path = os.path.join(DIR_DISPLAY, f"report_{ts}.html")
     generate_html_report(results, html_path)
 
-    # 3) 原始问题 -> copy problems file
+    # 3) 复制题目文件到"原始问题"
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
     problems_copy = os.path.join(DIR_PROBLEMS, os.path.basename(problems_path))
     if os.path.abspath(problems_path) != os.path.abspath(problems_copy):
@@ -186,7 +192,7 @@ async def run_evaluation_from_bank(bank_name: str, count: int, concurrency: int 
     if not problems:
         raise ValueError(f"题库 {bank_name} 中没有符合条件的题目")
 
-    # 写入临时 JSON 文件
+    # 将题目写入临时 JSON 文件
     import json
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
     temp_path = os.path.join(DIR_PROBLEMS, f"_bank_temp_{bank_name}.json")
@@ -217,6 +223,7 @@ async def run_evaluation_from_bank(bank_name: str, count: int, concurrency: int 
 
 
 def main():
+    """命令行入口：解析参数 -> 转化文件 -> 评测 -> 自动打开报告"""
     parser = argparse.ArgumentParser(
         description="Math Agent Evaluator - 支持 PDF/Word/JSON/CSV 自动转化",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -237,24 +244,24 @@ def main():
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Load and validate config (fails fast if API keys missing)
+    # 加载并验证配置（缺少 API Key 时快速失败）
     try:
         validate_config(load_config())
     except ConfigError as e:
         print(f"\n[ERROR] {e}")
         sys.exit(1)
 
-    # Step 1: 自动转化
+    # 步骤1: 自动转化文件
     try:
         json_path = auto_convert(args.input, max_problems=args.max)
     except Exception as e:
         print(f"\n[错误] 转化失败: {e}")
         sys.exit(1)
 
-    # Step 2: 评测
+    # 步骤2: 执行评测
     html_path = asyncio.run(run_evaluation(json_path, args.concurrency))
 
-    # Step 3: 自动打开报告
+    # 步骤3: 自动打开报告
     if html_path:
         try:
             os.startfile(html_path)

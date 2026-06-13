@@ -595,8 +595,9 @@ const mkShadow = () => ({ type: "outer", blur: 8, offset: 3, angle: 135, color: 
 }
 
 // =========================================================
-// 保存
+// 保存 - 输出到脚本所在目录，使用相对路径
 // =========================================================
-pres.writeFile({ fileName: "D:\\挑战杯\\挑战杯计划书.pptx" })
-  .then(() => console.log("✅ PPT 生成完成：D:\\挑战杯\\挑战杯计划书.pptx"))
+const outputPath = path.join(__dirname, "挑战杯计划书.pptx");
+pres.writeFile({ fileName: outputPath })
+  .then(() => console.log("✅ PPT 生成完成：" + outputPath))
   .catch(err => { console.error("❌ 生成失败:", err); process.exit(1); });

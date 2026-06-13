@@ -1,6 +1,6 @@
 """
-DeepSeek judge module.
-Sends Intern-S1's reasoning + answer to DeepSeek for correctness evaluation.
+DeepSeek 评判模块。
+将 Intern-S1 的推理过程和答案发送给 DeepSeek 进行正确性评估。
 """
 import logging
 import time
@@ -10,6 +10,7 @@ from models import InferenceResult, JudgeResult
 
 logger = logging.getLogger(__name__)
 
+# DeepSeek 评判系统提示词：要求输出正确性、置信度、解释和错误类型
 JUDGE_SYSTEM_PROMPT = (
     "You are a rigorous math evaluator. Your task is to judge whether "
     "an AI model's answer to a math problem is correct.\n\n"
@@ -28,6 +29,7 @@ JUDGE_SYSTEM_PROMPT = (
 
 
 def parse_judge_response(raw_content: str) -> dict:
+    """解析 DeepSeek 评判响应，提取正确性判定和置信度"""
     parsed = extract_json_from_text(raw_content)
     if parsed and isinstance(parsed, dict):
         return {
@@ -37,6 +39,7 @@ def parse_judge_response(raw_content: str) -> dict:
             "error_type": parsed.get("error_type"),
             "correct_answer": parsed.get("correct_answer"),
         }
+    # 无法解析 JSON 时的关键词回退：检测 "correct"、"正确" 等
     lower = raw_content.lower()
     is_correct = "correct" in lower or "true" in lower or "正确" in raw_content
     return {
@@ -49,20 +52,22 @@ def parse_judge_response(raw_content: str) -> dict:
 
 
 async def run_judge(inference: InferenceResult) -> JudgeResult:
+    """对单道推理结果进行评判，返回 JudgeResult"""
     cfg = get_config()
     client = LLMClient(cfg.deepseek)
+    # 构建包含题目、答案、推理过程、推理步骤的评判请求
     steps_text = chr(10).join(f"- {s}" for s in inference.steps) if inference.steps else "N/A"
     user_content = f"""## Math Problem
-{inference.question}
+:{inference.question}
 
 ## Model's Answer
-{inference.answer}
+:{inference.answer}
 
 ## Model's Reasoning
-{inference.reasoning}
+:{inference.reasoning}
 
 ## Model's Steps
-{steps_text}
+:{steps_text}
 
 Please judge whether the answer is correct."""
 
@@ -74,7 +79,7 @@ Please judge whether the answer is correct."""
     try:
         response = await client.chat(
             messages=messages,
-            temperature=0.1,
+            temperature=0.1,  # 低温度以获得更一致的评价
             max_tokens=2048,
         )
         latency = round(time.time() - start_time, 2)

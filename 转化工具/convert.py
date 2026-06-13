@@ -20,8 +20,10 @@
     python 转化工具/convert.py "题目.pdf" -o "my_problems.json"
 """
 import argparse
+import json
 import os
 import sys
+from collections import Counter
 
 
 def main():
@@ -67,7 +69,7 @@ def main():
         print("[警告] 未解析出任何题目，请检查文件内容格式。")
         sys.exit(1)
 
-    # 默认输出路径
+    # 默认输出路径：测试结果/原本问题/
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, "测试结果", "原本问题")
@@ -75,14 +77,12 @@ def main():
         file_name = os.path.splitext(os.path.basename(file_path))[0]
         args.output = os.path.join(output_dir, f"{file_name}.json")
 
-    import json
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(problems, f, ensure_ascii=False, indent=2)
 
     print(f"\n[完成] 已保存到: {args.output}")
     print(f"  共 {len(problems)} 道题目")
 
-    from collections import Counter
     domain_counts = Counter(p["domain"] for p in problems)
     if domain_counts:
         print("\n章节分布:")
