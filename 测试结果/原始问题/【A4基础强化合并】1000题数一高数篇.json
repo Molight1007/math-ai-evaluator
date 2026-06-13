@@ -1,0 +1,6200 @@
+[
+  {
+    "id": "零基础_001",
+    "question": "“sin2α+sin2β=1”是“sinα+cosβ=0”的( ). A. 充分非必要条件 B. 必要非充分条件 C. 充分必要条件 D. 既非充分又非必要条件",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_002",
+    "question": "证明:对任意正整数n,均有2n+2>n2",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_003",
+    "question": "设实数a∈(0,1 ( .数列{x n { 满足x =1,且对任意正整数n,均有x = +a.证明:对任意正整 0 n x n-1 数n,有x >1. n",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_004",
+    "question": "(2a3+ab2+b3 ( (a2b-ab2 ( =_____. λ4-3λ3-6λ2+16λ",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_005",
+    "question": "设λ≠0,2,则 =_____. λ2-2λ",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_006",
+    "question": "设函数f(x ( x2 = ,则f(1 1+x2 ( +f(2 ( +f(3 ( +f(4 ( +f/ / +f/ / +f/ / =_____",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_007",
+    "question": "设f(x ( 在[0,1 [ 上有定义,f(0 ( =f(1 ( ,且对任意x 1 ,x 2 ∈[0,1 [ ,均有 f(x ( -f(x ( | |≤|x -x |",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_001",
+    "question": "2 证明:当a,b∈[0,1 [ 时, f(a ( -f(b ( | |≤",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_008",
+    "question": "设x>0,求函数y=x+ 的最小值. x2",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_009",
+    "question": "设实数x,y满足3x2+2y2=6,求2x+y的最大值",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_010",
+    "question": "函数f(x ( =ax3+bx2-2x(a,b∈R,ab≠0 ( 的图像如图所示，且x +x <0，则有( ). 1 2 A. a>0,b>0 B. a<0,b<0 C. a<0,b>0 D. a>0,b<0",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_011",
+    "question": "设函数f(x ( 满足af(x ( +f/ x / =ax,其中x≠0,a2≠1,求函数f(x ( 的表达式. π",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_012",
+    "question": "已知cos/ -θ /",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_001",
+    "question": "5π = ,则sin/ +θ",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_003",
+    "question": "12 / 的值为_____",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_013",
+    "question": "已知|x -3|<1,|x -3|<1.求证:",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_001",
+    "question": "2 (1)4<x +x <8,|x -x |<2",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_001",
+    "question": "2 1 2 (2)若f(x ( =x2-x+1，且x ≠x ，则|x -x |< f(x 1 2 1 2 1 ( -f(x 2 ( | |<7|x -x |. 1 2",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_014",
+    "question": "已知等差数列{a n { 满足(a +a 1 2 ( +(a +a 2 3 ( +⋯+(a n +a n+1 ( =2n(n+1 ( (n∈N + ( .求: (1)数列{a n { 的通项公式； a (2)数列{ {{ n 2n-1 {{{ 的前n项和S . n",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_015",
+    "question": "函数y=-x2+(ex-e-x ( sinx在区间[-2.8,2.8 [ 的图像大致为( )",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "零基础_016",
+    "question": "已知曲线C的极坐标方程是r=1,以极点为原点,极轴为x轴的正半轴建立平面直角坐标系，直 t { {{ x=1+ , 线l的参数方程为 (t为参数). { {{y=2+ t { 2 (1)写出直线l与曲线C的直角坐标方程； xθ=3x, (2)设曲线C经过伸缩变换 { {{ 得到曲线Cθ，设曲线Cθ上任一点为M(x,y yθ=y ( x ，求 + 3y的最 小值",
+    "domain": "零基础",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "函数f(x ( =x2tanxecosx是( ). A. 有界函数 B. 单调函数 C. 周期函数 D. 奇函数",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "设函数 f(x ( 在(-∞,+∞ ( 内有定义,在区间[0,2 [ 上, f(x ( =x(x2-4 ( ,若对任意的x都满足 f(x ( =- f(x+2 ( .写出f(x ( 在[-2,0)上的表达式",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "设函数f(x ( {1-2x2, x<-1, {{ = {x3, -1≤x≤2, 写出f(x {{ {12x-16, x>2. ( 的反函数g(x ( 的表达式",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_004",
+    "question": "设函数 f(x ( 在(-∞,+∞ ( 上满足 f(x ( = f(x-π ( +sinx,且 f(x ( =x,x∈[0,π),求 f(x ( 在[π,3π) 上的表达式",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_005",
+    "question": "当x→0时,e-ecosx是 3 1+x2-1的( ). A. 高阶无穷小 B. 低阶无穷小 C. 同阶但非等价无穷小 D. 等价无穷小",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_006",
+    "question": "下列选项中,极限存在的是( ) sinx 1 sinx 1 |sinx| 1 |sinx| 1 A. lim arctan B. lim arctan C. lim arctan D. lim arctan x→0 |x| |x| x→0 x x x→0 |x| x x→0 x x 2+x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_007",
+    "question": "设x→0时,ln 与xn为同阶无穷小,则n=_____. 2+sinx sin2x+xf(x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_008",
+    "question": "设lim x→0 ( 2cosx+f(x =1,则lim x3 x→0 ( =( ). x2",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "4 A. 0 B. - C. D. ∞",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_009",
+    "question": "设函数 f(x ( ,g(x ( 在x=0的某去心邻域内有定义且不为零,若当x→0时, f(x ( 是g(x ( 的高阶无 穷小,则当x→0时,对于以下结论: ①f(x ( +g(x ( =o f(x ( ( ( ; ②f(x ( g(x ( =o g2 (x ( ( ( ； ③f(x ( =o ln 1+g(x ( [ [ ( ( ； ④f(x ( =o g2 (x ( ( ( . 正确结论的个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_010",
+    "question": "limx/2x -3x x→+∞ / =_____. 1+2x-3 1+3x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_011",
+    "question": "lim x→0 ln(1+x2 ( =_____. arctanx",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_012",
+    "question": "lim/ x→0 x / tan2x =_____. 2x3+ax2-3x+6",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_013",
+    "question": "已知lim =b,则ab=_____. x→-2 x+2 1+tanx- 1+sinx",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_014",
+    "question": "lim x→0 x2-xln(1+x ( =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_015",
+    "question": "limln(1+2x x→+∞ ( ln/1+ x / =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_016",
+    "question": "lim/cos +sin x→∞ x x / x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "=_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_017",
+    "question": "f(x ( tanx = 在x=0处的3次泰勒多项式为_____. 1+x2",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_018",
+    "question": "已知limf(x x→1 ( 存在,且f(x ( =x2+exlimf(x x→1 ( ,则f(x ( =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_019",
+    "question": "设f(x ( ex+xex 1 = - 在x=0处连续,则应补充f(0 ex-1 x ( =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_020",
+    "question": "设f(x ( 1-x⋅21-x = (2-x ( (1-x ( (x≠1,2 ( ,若f(x ( 在[1,2 [ 上连续,则f(1 ( f(2 ( =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_021",
+    "question": "函数f(x ( x |x| -1 = x(x+1 ( 的可去间断点的个数为( ). ln|x| A. 0 B. 1 C. 2 D. 3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_022",
+    "question": "函数f(x ( ln|1-x| = (ex-1 ( (x+2 ( 的第二类间断点的个数为( ). A. 0 B. 1 C. 2 D. 3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_023",
+    "question": "设f(x ( x+etx = lim ,则x=0是f(x t→+∞1+etx ( 的( ). A. 可去间断点 B. 跳跃间断点 C. 振荡间断点 D. 无穷间断点 arcsinx",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "lim/ x→0 x / sin2x =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "lim (1+sin2t x→0 x 0 ( ∫ t dt=_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "lim/xx -1 x→+∞ / lnx =_____. x e(t-x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_004",
+    "question": "计算lim 0 x→0 ( 2 [ -1 [ ∫ sintdt x2(ex2 -1 ( . f(x 5. 设lim 1+2x+3x2+ x→0 ( x x =e5,则lim 1+ f(x x→0 ( x x =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_006",
+    "question": "设函数f(x ( 在点x=3的某邻域内可微,且limf(x x→3 ( =0,limfθ (x x→3 ( x 3 t∫ f(s)ds =4016.求lim 3 t x→3 ∫ dt",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "(3-x)",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_007",
+    "question": "设f(x ( ,g(x ( 在点x=0的某邻域内连续,且当x→0时,f(x ( 与g(x ( 为等价无穷小,则当x→0时, x ∫ f(t ( (1-cost ( x dt是∫ t2g(t ( dt的( ). A. 等价无穷小 B. 同阶但非等价无穷小 C. 高阶无穷小 D. 低阶无穷小 x2",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_008",
+    "question": "设当x→0时,a∫ cost2dt与sinx-bln(1+x ( 是等价无穷小,则(a,b ( =( ). A. (1,2 ( B. (-1,2 ( C. / ,1 / D. /- ,1 / x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_009",
+    "question": "设当x→0时, (etcost2 -et ( ∫ dt与axb是等价无穷小量,则(a,b ( =( ) A. /- ,3 / B. /- ,4 / C. /- ,5 / D. /- ,6 / x3-3x2+bx2+x-3bx-3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_010",
+    "question": "已知lim =25,则ab=_____. x→3 x+a",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_011",
+    "question": "设函数f(x ( f(x 在0<|x|<1上有定义,且满足lim cosx+ x→0 ( x x2 =e-1,求lim f(x x→0 ( . sin3x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_012",
+    "question": "设函数f(x ( 在点x=0处连续,f(0 ( = ,且函数g(x 2 (",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "x { {{ x sin , x<0, = { 1 {{x+ , x≥0, { 2 xf(x 则lim x→0 ( +g(x ( 2x ∫ cost2dt xg(x ( =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_013",
+    "question": "f(x ( 1 =limnx /1+ n→∞ n / n -e 在x=1处( ). A. 左极限存在,右极限不存在 B. 左极限不存在,右极限存在 C. 左、右极限都存在,但不相等 D. 连续 xx+1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_014",
+    "question": "计算 lim x→+∞ (1+x ( x - x e . x+2 |x|",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_015",
+    "question": "lim =_____. x→0 1+x2-1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_016",
+    "question": "设f(x ( x+|x| = ，则lim f(1-x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "x→0 ( f(1+x ( [ [ x2 =_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_017",
+    "question": "设函数f(x ( x-f(x 在x=0的某邻域内有定义,且lim x→0 ( ln(1+x ( =1,则以下叙述: ①f(0 ( =0； ②limf(x x→0 ( =f(0 ( f(x ； ③lim x→0 ( =1； x 正确叙述的个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_018",
+    "question": "函数f(x ( f(x 在x=0的某邻域内有定义,则“lim x→0 ( | | f(x 存在”是“lim x x→0 ( =0”的( ). x A. 充分必要条件 B. 充分非必要条件 C. 必要非充分条件 D. 既非充分又非必要条件",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_019",
+    "question": "当x→0时,以下无穷小量阶数最高的是( ). sinx A. (1+t ( θ [ -1 [ sinx2 ∫ dt B. (1+t ( ∫ t dt sinx C. e-(1+t ( 1 t sin2x ∫ dt D. (tet-t ( ∫ dt",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_020",
+    "question": "设函数f(x ( 在点x=0的某一邻域内可导,且f(0 ( =0,fθ (0 ( x2 ∫ f(t ≠0,求lim 0 x→0 ( dt x x2∫ f(t ( . dt",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_021",
+    "question": "设 lim f(x x→+∞ ( =+∞,limg(x x→+∞ ( f(x =+∞,且 lim x→+∞ ( g(x ( lnf(x =a>0,计算 lim x→+∞ ( lng(x (",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_022",
+    "question": "若二次多项式f(x ( 在x=0的某邻域内与g(x ( =secx的差为x2的高阶无穷小,则f(x ( =___",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_023",
+    "question": "当n→∞时,e-/1+ n / n c 与 为等价无穷小,则( ). nk e e e e A. c= ,k=2 B. c= ,k=2 C. c= ,k=1 D. c= ,k=1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "2 3 2",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_024",
+    "question": "当x→0时,α(x ( 与β(x ( 是非零且不相等的等价无穷小量,以下4个结论: ①α(x ( +β(x ( =2α(x ( ； ②α(x ( +β(x ( =2β(x ( ； ③α(x ( -β(x ( =o α(x ( ( ( ； ④α(x ( -β(x ( =o β(x ( ( ( . 所有正确结论的序号是( ). A. ①③ B. ③④ C. ①②③④ D. ②④",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_025",
+    "question": "当x→0时,(3+2tanx ( x -3x是3sin2x+x3cos 1 的( ) x A. 高阶无穷小 B. 低阶无穷小 C. 等价无穷小 D. 同阶但非等价无穷小",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_026",
+    "question": "当x→0时,以下无穷小中,阶数最高的是( ). sinx A. (1+t (",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "ln(1+x2 ∫ t dt B. ( x ∫ cos3tdt C. (ecost-esint",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_060",
+    "question": "0 ( x-tanx ∫ dt D. ∫ arctantdt",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_027",
+    "question": "当x→0时,函数f(x ( =ax+bx2+ln(1+x ( 与g(x ( =1-cosx是等价无穷小,则ab=_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_028",
+    "question": "当x→0时,f(x (",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "1+x = ln -arctanx与g(x",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_002",
+    "question": "1-x ( =axb是等价无穷小,则ab=_____",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_029",
+    "question": "当x→0时,ln(1+x ( -tanx与axb是等价无穷小,则(a,b ( =( ). A. /- ,2 / B. / ,2 / C. /- ,3 / D. / ,3 /",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_030",
+    "question": "当x→0时,x-ln(x+ 1+x2 ( ∼axb,则a,b的值分别是( )",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "1 1 1 A. ,3 B. ,2 C. ,2 D. ,3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_006",
+    "question": "6 3 3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_031",
+    "question": "当x→0时,arcsinx-x与axb是等价无穷小,则(a,b ( =( ). A. /- ,2 / B. / ,2 / C. /- ,3 / D. / ,3 /",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_001",
+    "question": "2+ex",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_032",
+    "question": "已知lim a +(1+|x| x→0 4 1+ex ( x 存在,求a的值",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_033",
+    "question": "设函数f(x ( 1+x = 在x=0处的2次泰勒多项式为a+bx+cx2,则( ). 1-x A. a=1,b=1,c=1 B. a=1,b=1,c= C. a=0,b=-1,c= D. a=0,b=-1,c=1",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_034",
+    "question": "设f(x ( 在(0,+∞ ( 内可导,a为常数.对于以下结论: ①若 lim fθ (x x→+∞ ( f(x =a,则 lim x→+∞ ( f(x =a; ②若 lim x x→+∞ ( =a,则 lim fθ (x x x→+∞ ( =a. 下列说法中正确的是( ). A. ①正确,②错误 B. ①错误,②正确 C. ①与②均正确 D. ①与②均错误",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_035",
+    "question": "f(x ( |ln|x|| = 有( ). x2-1 A. 两个跳跃间断点,一个无穷间断点 B. 两个可去间断点,一个无穷间断点 C. 一个可去间断点,一个跳跃间断点,一个无穷间断点 D. 三个无穷间断点",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_036",
+    "question": "设f/ x / =x+ 1+x2 (x≠0 ( ,则x=0是f(x ( 的( ). A. 连续点 B. 跳跃间断点 C. 可去间断点 D. 第二类间断点",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_037",
+    "question": "函数f(x ( =|x-1| x(2-x ( 的第二类间断点的个数是( ). A. 0 B. 1 C. 2 D. 3",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "函数极限与连续_038",
+    "question": "设f(x ( xn+1+(cosπx+1 =lim n→∞ ( sinαx xn+(cosπx+1 ( ,为使f(x ( 对于一切x都连续,求常数α的最小正值",
+    "domain": "函数极限与连续",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_004",
+    "question": "n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "lim/ arctan n→∞ π n+1 / n =( ). -2 -π π 2 A. e π B. e 2 C. D",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_002",
+    "question": "π n99",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_002",
+    "question": "lim n→∞n100-(n-1 ( =_____",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_003",
+    "question": "设{a n { n k 1 非负有界,b n =∑ ,则lim =_____. k=1 a n +n2 n→∞b n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "a",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_004",
+    "question": "设x >0,x = /x + 0 n+1 2 n x n / (n=0,1,2,⋯ ( ,且a>0,证明limx 存在,并求此极限. n n→∞ π",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_005",
+    "question": "当0≤x≤ 时,limn sinnx+cosnx=_____",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_002",
+    "question": "n→∞",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_006",
+    "question": "limn 1+|x| 3n =_____. n→∞",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_007",
+    "question": "设数列{x n { 满足x n+1 =lnx n +1,x n >0,n=1,2,⋯,则{x n { ( ). A. 单调不减 B. 单调不增 C. 严格单调递增 D. 严格单调递减",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_008",
+    "question": "若对于数列{x n { ,存在常数k(0<k<1 ( ,使得|x n+1 -a|≤k|x n -a|,n=1,2,⋯.证明{x n { 收敛于a",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_009",
+    "question": "若对于数列{x n { ,x n+1 = f(x n ( ,n=1,2,⋯,f(x ( 可导,a是 f(x ( =x的唯一解,且对任意的x∈R, 有 fθ (x ( | |≤k<1.证明{x n { 收敛于a",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_010",
+    "question": "设a >0,limb =0,且e an+a =e bn,n=1,2,⋯,求lima n n n n n→∞ n→∞",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_011",
+    "question": "设c=2ln(1+b ( ,b>a>0,且a是方程x-2ln(1+x ( =0的唯一非零解,证明c>a",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_012",
+    "question": "设单调递减数列{x n { 满足x n+1 =2ln(1+x n ( ,n=1,2,⋯,x 1 >a>0,且a是x-2ln(1+x ( =0的 唯一非零解,证明{x n { 收敛",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "若{x n { ,{y n { 满足limx y =∞,则以下结论: n n n→∞ ①limx =∞或limy =∞; ②limx =∞且limy =∞; n n n n n→∞ n→∞ n→∞ n→∞ ③x 与y 中一个是无穷大量，另一个是无界量； ④当x 是非零无穷小量时,limy =∞. n n n n n→∞ 正确结论的个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "1 1",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_002",
+    "question": "lim + +⋯+ n→∞ 2 6 n(n+1 ( n =____",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_003",
+    "question": "已知数列{a n { 发散,b =a e an,则( ). n n A. 当a n >0时,{b n { 收敛 B. 当a n <0时,{b n { 收敛 C. 当a n >0时,{b n { 发散 D. 当a n <0时,{b n { 发散",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_004",
+    "question": "设a =∫ 1 xn 1-x2dx,b =∫ π 2 sinntdt,则极限lim (n+1 n n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_022",
+    "question": "0 n→∞ ( a n b n n =( ). A. 0 B. e C. e-1 D. +∞ c(1+x n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_005",
+    "question": "设0≤x ≤ c,x = 1 n+1 ( c+x ,n∈N + ,c>1.证明数列{x n n { 收敛,并求其极限值",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_006",
+    "question": "设x <0,x =e xn-1,求lim/ 1 - 1",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "n+1 n→∞ x n x n+1 /",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_007",
+    "question": "设数列{x n { π 满足0<x < ,cosx -x =cosx ,n=1,2,⋯. n 2 n+1 n+1 n (1)证明limx 存在并求其值； n n→∞ x (2)计算lim n+1 . n→∞ x2 n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_008",
+    "question": "已知数列{x n { π 满足0<x < ,x +tanx =2x ,n=1,2,⋯. 1 4 n+1 n n (1)证明limx 存在并求其值; n n→∞",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_001",
+    "question": "1 (2)求极限lim/ - n→∞ x2 n x n x n+1 /",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_009",
+    "question": "已知a n =∫ tn |lnt|dt,n=1,2,⋯,计算lim(n2a n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_030",
+    "question": "n→∞ ( n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_010",
+    "question": "设数列{a n { +∞ dx 的通项a = n 0 (1+x2 ( a ∫ ,n=2,3,⋯,计算lim/ n+1 n n→∞ a n / ln(1+e2n (",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "数列极限_011",
+    "question": "已知f(x ( 可导,且 fθ (x ( | |≤ ,方程f(x e ( =x有唯一解x=0,又x n+1 =f(x n ( ≠0,n=1,2,⋯.证 -n 明:当n→∞时,x 是e 2 的高阶无穷小. n",
+    "domain": "数列极限",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "设f(x ( 满足f(0 ( =0,且fθ (0 ( f(1-cosx 存在,则lim x→0 ( ln(1-xsinx ( =_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_002",
+    "question": "设F(x ( =g(x ( φ(x ( ,φ(x ( 在x=a处连续但不可导,g(x ( 在x=a处可导,F(x ( 在x=a处可导,则 一定有( ). A. g(a ( ≠0 B. g(a ( ≠0 C. gθ (a ( =0 D. g(a ( 可以为任意实数",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_003",
+    "question": "设连续函数f(x ( ln(x-1 满足lim x→2 ( f(3-x ( =2,且f(1 ( =0,则fθ (1 ( 的值为( )",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "1 A. 2 B. -2 C. D. -",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_002",
+    "question": "2",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_004",
+    "question": "设f(x ( 在x=0处可导,f(0 ( =fθ (0 ( f2 (x = 2,则lim x→0 ( -2 =_____. x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_005",
+    "question": "设f(x (",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "1 = , n2 (n+1 ( <x≤ ,n=1,2,⋯,f(0 2 n2 ( =0,则f + ′ (0 ( =_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_006",
+    "question": "设可导函数f(x ( f( 1 >0,则limnln n n→∞ ( f(0 ( =_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_007",
+    "question": "设函数f(x ( 可导， f(x ( | |在x=0处不可导，则( ). A. f(0 ( =0,fθ (0 ( =0 B. f(0 ( =0,fθ (0 ( ≠0 C. f(0 ( ≠0,fθ (0 ( =0 D. f(0 ( ≠0,fθ (0 ( ≠0",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_008",
+    "question": "设函数f(x ( f(x 连续,lim x→1 ( -1 =2,则曲线y=f(x lnx ( 在点x=1处的切线方程为_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_009",
+    "question": "设函数f(x ( 在x=1处可导,且Δf(1 ( 是f(x ( Δf(1 在增量为Δx时的函数值增量,则lim Δx→0 ( -df(1 ( Δx =( ). A. fθ (1 ( B. 1 C. ∞ D. 0",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_010",
+    "question": "设f(x ( {x3sin , x>0, ={{ x 则f(x x2, x≤0, ( 在x=0处( ). A. 不连续 B. 连续,但不可导 C. 可导,但导函数不连续 D. 可导,且导函数连续",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_011",
+    "question": "设φ(x ( 具有一阶连续导数,f(x ( =φ(x ( 1+ ln(1+x ( [ | | [ ,则φ(0 ( =0是f(x ( 在x=0处可导的( ) A. 充分必要条件 B. 充分非必要条件 C. 必要非充分条件 D. 既非充分又非必要条件",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_012",
+    "question": "设f(x ( f(x +1 在x 处可导,x =sin 1 + 1 ,则lim 0 n 0 n n n2 n→∞ ( -f(x 0 -x n ( =_____. sin1 n",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_013",
+    "question": "设f(x ( f(tx 为在x=0处可导的奇函数,则lim x→0 ( -5f(x ( =_____. x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_014",
+    "question": "设f(x ( =max{2x,x2 {{ {{{ ,x∈(0,4 ( ,且fθ (a ( 不存在,a∈(0,4 ( ,则a=_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_015",
+    "question": "设f(x ( x2e n(x-1 =lim n→∞ ( +ax+b 5+e n(x-1 ( ,求f(x ( 并讨论f(x ( 的连续性及可导性与a,b的关系",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "函数f(x ( =(ex-1 ( |x3-x2+x|的不可导点的个数为( ). A. 0 B. 1 C. 2 D. 3",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_002",
+    "question": "设f(x+x 0 ( =αf(x ( 恒成立，fθ (0 ( =β(《，8》为非零常数)，则f(x ( 在点x 处( ) 0 A. 可导且fθ (x ( =αβ B. 可导且fθ (x ( =α C. 可导且fθ (x ( =β D. 不可导",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_003",
+    "question": "设f(x ( t {x2sin , x≠0, ={{ x 其中t为非零常数,则f(x 0, x=0, ( 在x=0处( ). A. 不连续 B. 连续但不可导 C. 可导但fθ (x ( 不连续 D. 可导且fθ (x ( 连续",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_004",
+    "question": "设函数f(x ( 在区间(-1,1 ( 内有定义,且在点x=0处连续,则以下结论: f(x ①当lim x→0 ( =0时，f(x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_003",
+    "question": "x ( 在点x=0处可导； f(x ②当lim x→0 ( =0时,f(x x2 ( 在点x=0处可导; ③当f(x ( f(x 在点x=0处可导时,lim x→0 ( =0",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_003",
+    "question": "x 所有正确结论的序号为( ). A. ① B. ② C. ②③ D. ①②",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_005",
+    "question": "设f(x ( {x2sin , x≠0, ={{ x 记F(x 0, x=0, ( =g f(x ( [ [ ,g(x ( 可导,则F(x ( 在x=0处( ). A. 不连续 B. 可导且Fθ (0 ( =0 C. 连续但不可导 D. 可导且Fθ (0 ( ≠0",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_006",
+    "question": "设函数y=f(x ( π 由参数方程 { {{ x=t3+ 2 -1, 确定,则limn f/ π + 2 y=et2 n→∞ 2 n / π -f/ / =( ). 4e 2e e A. 2e B. C. D",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_003",
+    "question": "3 3",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_007",
+    "question": "设f(0 ( =a>0,fθ (0 ( f(x =b,求lim x→0 ( f(x ( -f(0 ( f(x ( . x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_008",
+    "question": "已知函数g(x ( 连续.设f(x ( x2 =∫ g(xt ( dt,求fθ (x ( 的表达式,并判断fθ (x ( 在x=0处的连续性",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_009",
+    "question": "设函数 f(x ( 在x=a的某个邻域内可导且 f(a ( =0.若其绝对值函数 f(x ( | |在x=a处也可导,求 fθ (a ( 的值,并说明理由",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_010",
+    "question": "设f(x ( g(x = ( -e-x { , x≠0, {{ x 其中g(x a, x=0, ( 有二阶连续导函数,g(0 ( =1,gθ (0 ( =-1. (1)a为何值时，f(x ( 在(-∞,+∞ ( 上连续？ (2)当f(x ( 为连续函数时，f(x ( 是否可导？若可导，求fθ (x (",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_011",
+    "question": "设f(x ( 有二阶连续导函数,且f(0 ( =0,令g(x ( f(x = ( , x≠0, x fθ (0 ( { {{ , x=0. (1)求gθ (x ( ； (2)讨论gθ (x ( 在点x=0处的连续性",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_012",
+    "question": "设 f(x ( xarctan , x>0, x = π (esinx-1 2 ( { {{ { 讨论 f(x {{ , x≤0, { ( 在点x=0处的连续性和可导性；若可导,讨论其导 函数fθ (x ( 在x=0处的连续性",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_013",
+    "question": "设f(x ( 在x=a处可导,则 f(x ( | |在x=a处不可导的充分必要条件是( ). A. f(a ( =0,fθ (a ( =0 B. f(a ( =0,fθ (a ( ≠0 C. f(a ( ≠0,fθ (a ( ≠0 D. f(a ( ≠0,fθ (a ( ≠0",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_014",
+    "question": "设f(x ( (1+x = ( x -1, x>-1,x≠0, { {{ 则在x=0处( ). 0, x=0, A. f(x ( 连续,但fθ (0 ( 不存在 B. fθ (0 ( 存在,但fθ (x ( 在x=0处不连续 C. fθ (x ( 连续,但f (0 ( 不存在 D. f (0 ( 存在",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_015",
+    "question": "已知 (1,0 ( 在曲线 y = f (x ( 上, 且曲线在该点与 y = ln(2x2-1 ( 有公共的切线, 则 n+1 limn f/ n→∞ n / n+2 -f/ n / =_____",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_016",
+    "question": "设f(x ( 在点x=a处可导,且f(a ( f(a+1 ≠0,计算I=lim x x→∞ ( f(a ( x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_017",
+    "question": "设f(x ( 在x=a的某邻域内有定义,在x=a的某去心邻域内可导,下述论断正确的是( ). A. 若limfθ (x x→a ( =A,则fθ (a ( =A B. 若fθ (a ( =A,则limfθ (x x→a ( =A C. 若limfθ (x x→a ( =∞,则fθ (a ( 不存在 D. 若fθ (a ( 不存在,则limfθ (x x→a ( =∞",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_018",
+    "question": "设f(x ( ln|x| = ,则fθ (-1 2x2-ln|x| ( =_____. f(x",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_019",
+    "question": "设lim x→a ( -b cosf(x =A,则lim x-a x→a ( -cosb =_____. x-a",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_020",
+    "question": "已知函数f(x ( f(cosx 在x=1处可导,且lim x→0 ( -3f(1+sin2x ( =2,求fθ (1 x2 (",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_021",
+    "question": "设f(x ( f2 (x 是非负连续函数,且lim x→a ( -a =1(a>0 x2-a2 ( ,求fθ (a (",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "1",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_022",
+    "question": "已知a n =1-en -sin ,可导函数y=f(x n2 ( -sinx在x=0处取得极值.计算",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的概念_001",
+    "question": "limn f/ n→∞ n / -f(a n (",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_001",
+    "question": "设f(x ( =x2,h(x ( =f 1+g(x ( [ [ ，其中g(x ( 可导，且gθ (1 ( =hθ (1 ( =2，则g(1 ( =( ). A. -2 B. - C. 0 D. 2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_002",
+    "question": "设f(x ( =(lnx-1 ( (ln2x-2 ( ⋯(lnnx-n ( ,n≥2,则fθ (e ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_003",
+    "question": "设函数f(x ( 可导,f(0 ( =-1,fθ (0 ( =1,若y(x ( = f(x-1 ( | |,则yθ (1 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_004",
+    "question": "设函数f(x ( 可导,f(1 ( =fθ (1 ( 1 = ,若y(x ( =e f(2x-1 ( ,则yθ (1 ( =( )",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_001",
+    "question": "1 A. e B. e C. e D. 2 e",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_004",
+    "question": "2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_005",
+    "question": "已知函数y=y(x ( 满足(x+y2 ( yθ=1,y(-1 ( dx =0,则 | =_____. dy y=0 1-x",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_006",
+    "question": "设y=ln ,则 yθ| =_____. 1+x2 x=0 {x=t-t2, dy",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_007",
+    "question": "设 {{ te y +y+1=0, 则 dx | t=0 =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_008",
+    "question": "设函数y=f(x ( { x=2t+|t|, π π 由 {{ 所确定,则在/- , y=|t|tant 2 2 / 内( ). A. f(x ( 连续,fθ (0 ( 不存在 B. fθ (0 ( 存在,fθ (x ( 在x=0处不连续 C. fθ (x ( 连续,f (0 ( 不存在 D. f (0 ( 存在,f (x ( 在x=0处不连续",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_009",
+    "question": "设可导的奇函数f(x ( 满足fθ (x ( =f2 (x ( ,且f(-1 ( =1,则f (1 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_010",
+    "question": "设可导函数f(x ( 满足fθ (x ( =f2 (x ( ,且f(0 ( =-1,则在x=0处的三阶导数f (0 ( =( ). A. -6 B. -4 C. 4 D. 6",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_011",
+    "question": "已知函数f(x ( =x2ln(1-x ( ，则当n≥3时，f(n ( (0 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_012",
+    "question": "设f(t ( n+t =limcost⋅/ n→∞ n-t / n ,则fθ (0 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_013",
+    "question": "设f(x ( =limx/1+ t→∞ t / tsinx ,则fθ (x ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_014",
+    "question": "设f(x ( =max{x,x2 {{ {{{ ,0<x<2,则fθ (x ( =_____. x=etsin2t, {",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_015",
+    "question": "曲线 {{ 在对应t=0处的点的切线方程为_____. y=etcost",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_016",
+    "question": "若 { {{ x=ln|t|, 则 d2y | =_____. y=e-t2 , dx2 t= 2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_017",
+    "question": "已知函数f(x ( =x2 (ex+5 ( ，则f(5 ( (1 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_018",
+    "question": "设f(x ( =(x-1 ( 10 sinx,则f(10 ( (1 ( =( ) A. 10!⋅cos1 B. 11!⋅cos1 C. 10!-sin1 D. 11!⋅sin1",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_001",
+    "question": "若y=sin(e- x ( dy ,则 | =_____. dx x=1",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_002",
+    "question": "设f(x ( 在x=0的某邻域内具有连续导数,且f(0 ( =1,fθ (x ( = f f(x ( [ -1 [ ,求f (0 (",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_003",
+    "question": "设y=y(x ( 是由方程y3+xy+x2-2x+1=0确定并且满足y(1 ( (x-1 =0的函数,则lim x→1 ( x ∫ y(t ( = dt _____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_004",
+    "question": "设函数y=y(x ( x dy d2y 由方程arctan =ln x2+y2确定,求 与 . y dx dx2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_005",
+    "question": "设y=2x+sinx,求其反函数x=x(y ( d2x 的二阶导数 . dy2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_006",
+    "question": "已知函数y=y(x ( x=arctan(t+1 由 ( , { dy {{ y+r2 确定,则 | =____. 2t-∫ e-u2 du=0 dx t=0",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_007",
+    "question": "设y=y(x ( d2y 由方程x2-xy+y2=1确定,则 =____. dx2",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_008",
+    "question": "设y=y(x ( y-x π 由方程x=∫ sin2/ t / d2y dt确定,则 | =_____. dx2 t=0",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_009",
+    "question": "设函数y=y(x ( 由 { {{ e x y = si t n 2 t - - 2 y t + + 1 1 = , 0 确定,则 d d 2 x2 y | t=0 =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_010",
+    "question": "设x=x(y ( x-y πt 由方程y=∫ cos2/",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_004",
+    "question": "1 / 1 dt确定,则lim nx/ n→∞ n / -n =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_011",
+    "question": "设f(x ( f(x 在x=0处存在二阶导数,且lim x→0 ( +x =2,则f (0 1-cosx ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_012",
+    "question": "设fθ (lnx ( =xlnx,则f(n ( (x ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_013",
+    "question": "设f(x ( =ln(1+x+x2 ( ,则f(5 ( (0 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_014",
+    "question": "设f(x ( = 1+x+x2 ,则f(4 1-x+x2 ( (0 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_015",
+    "question": "设f(x ( =arctan 1+x ,整数n≥0,则f(2n+1 1-x ( (0 ( =_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的计算_016",
+    "question": "设f(x ( =|x|sin2x,则使f(n ( (0 ( 存在的阶数n的最大值为( ). A. 1 B. 2 C. 3 D. 4 e-x",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "函数y=ex+ 的最小值为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_002",
+    "question": "若函数f(x ( =e-ax-ex的极值点小于零，则常数a的取值范围为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_003",
+    "question": "设函数f(x ( { cos|x|-1, x≤0, ={{ 则x=0是f(x xlnx, x>0, ( 的( ). A. 可导点,极值点 B. 不可导点,极值点 C. 可导点,非极值点 D. 不可导点,非极值点",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_004",
+    "question": "已知x2+ax-3≥ (x>0 ( 恒成立,则a的取值范围为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_005",
+    "question": "已知函数y=f(x ( 连续,其二阶导函数的图像如图所示,则曲线y=f(x ( 的拐点个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_006",
+    "question": "设函数f(x ( >0且二阶可导,曲线y= f(x ( 有拐点(1, 2 ( ,fθ (1 ( =2,则f (1 ( =_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_007",
+    "question": "曲线y(x ( =ln|e2x-1|的斜渐近线为( )",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1 A. y=2x+ B. y=2x C. y=-2x+ D. y=-2x e e",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_008",
+    "question": "曲线y=xln/e+ x / 的斜渐近线为( )",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1 A. y=x+e B. y=x-e C. y=x+ D. y=x- e e",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_009",
+    "question": "曲线x2-xy+y2=1在点(1,1 ( 处的曲率为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_010",
+    "question": "已知曲线y= f(x ( 在其点(0,1 ( 处的曲率圆方程为(x-1 ( 2 +y2=2,且当x→0时,二阶可导函 数f(x ( 与a+bx+cx2的差为o(x2 ( ,则( ). A. a=0,b=1,c= B. a=1,b=0,c=1 C. a=1,b=1,c=-1 D. a=1,b=0,c=-1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_011",
+    "question": "设在(-∞,+∞ ( 内,f (x ( <0,f(0 ( f(x ≥0,则函数 ( ( ). x A. 在(-∞,0 ( 内单调减少,在(0,+∞ ( 内单调增加 B. 在(-∞,0 ( 和(0,+∞ ( 内单调减少 C. 在(-∞,0 ( 内单调增加,在(0,+∞ ( 内单调减少 D. 在(-∞,0 ( 和(0,+∞ ( 内单调增加",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_012",
+    "question": "设f(x ( f(x 连续,且lim x→0 ( =k(k<0 x2 ( ,则f(x ( 在点x=0处( ). A. 导数不存在 B. 导数存在,且fθ (0 ( ≠0 C. 取得极小值 D. 取得极大值",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_013",
+    "question": "设M=max{1, 2,3 3,⋯,n n}(n>4 ( ,则M=( ) A. 2 B. 3 3 C. 4 4 D. n n",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_014",
+    "question": "设函数f(x ( x =n2en -(1+n ( x,若f(x ( 在x=ξ 处取得极值,则limξ =_____. n n n→∞ |lnx|",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_015",
+    "question": "曲线y=x+ ( ). x A. 有铅直渐近线,也有斜渐近线 B. 有水平渐近线,也有斜渐近线 C. 有且仅有铅直渐近线 D. 有且仅有水平渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_016",
+    "question": "设函数f(x ( 在[0,1 [ 上可导，f(0 ( =0，fθ (x ( 严格单调递增，则对任意x∈(0,1 ( ，有( ). A. f(x ( >fθ (0 ( x>f(1 ( x B. fθ (0 ( x>f(x ( >f(1 ( x C. f(1 ( x>fθ (0 ( x>f(x ( D. f(1 ( x>f(x ( >fθ (0 ( x",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_017",
+    "question": "已知函数y=f(x ( 对一切x满足3 x f (x ( +xfθ (x ( =e-x-1,若fθ (x 0 ( =0(x ≠0 0 ( ,则( ) A. x=x 0 是f(x ( 的极小值点 B. x=x 0 是f(x ( 的极大值点 C. x ,f(x 0 0 ( ( ( 是曲线y=f(x ( 的拐点 D. 以上结论均不正确",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_018",
+    "question": "已知函数f(x ( =ax3+x2+2在x=0和x=-1处取得极值,求f(x ( 的增减区间、极大值、极小 值和拐点",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_019",
+    "question": "设f(x ( =nx(1-x ( n (n∈N + ( ，且记M(n ( = max x∈[0,1 [ f(x ( ，则必有( ). A. limM(n n→∞ ( =e B. limM(n n→∞ ( = C. limM(n e n→∞ ( =0 D. limM(n n→∞ ( =∞ x2+1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_020",
+    "question": "曲线y= 的渐近线的条数为( ). x2-1 A. 4 B. 3 C. 2 D. 1 2+e-x4",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_021",
+    "question": "曲线y= ( ). 1-e-x4 A. 仅有斜渐近线 B. 仅有水平渐近线 C. 仅有铅直渐近线 D. 既有水平渐近线,又有铅直渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_022",
+    "question": "曲线y=(4+5x ( ex 的斜渐近线是_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_023",
+    "question": "曲线y=ex x2-4x+1的渐近线条数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_024",
+    "question": "曲线x2=y+1在点(0,-1 ( 的曲率圆方程为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "设f(x ( =|ln|x||，则( ). A. x=1不是f(x ( 的极值点 B. (1,0 ( 不是y=f(x ( 的拐点 C. x=-1不是f(x ( 的驻点 D. x=0不是y=f(x ( 的渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_002",
+    "question": "设f(x ( f(x 在x=0处连续,且lim x→0 ( [ +1 [ x2 =2,则曲线y=f(x x-sinx ( 在点 0,f(0 ( ( ( 处的切线方程为_ ____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_003",
+    "question": "设f(x ( 在[a,b [ 上可导,且在点x=a处取最小值,在点x=b处取最大值,则( ). A. f + ′ (a ( ≤0,f - ′ (b ( ≤0 B. f + ′ (a ( ≤0,f - ′ (b ( ≥0 C. f + ′ (a ( ≥0,f - ′ (b ( ≤0 D. f + ′ (a ( ≥0,f - ′ (b ( ≥0",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_004",
+    "question": "设函数f(x ( =(x2+a ( ex,若f(x ( 既没有极值点也没有拐点,则a的取值范围是( ). A. [0,1) B. [1,+∞) C. [1,2) D. [2,+∞)",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_005",
+    "question": "使得lnx≤a x恒成立的最小正数a为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_006",
+    "question": "设eax≥1+x对任意实数x均成立,则a的取值范围为_____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_007",
+    "question": "设函数f(x ( = t(t-x ( ∫ | |dt(0<x<1 ( ,则f(x ( 的单调区间及曲线y=f(x ( 的凹凸区间分别为( ). A. 单调增区间/ ,1 / ;单调减区间/0, / ;在(0,1 ( 内曲线为凹 B. 单调减区间/ ,1 / ;单调增区间/0, / ;在(0,1 ( 内曲线为凹 C. 单调增区间/ ,1 / ;单调减区间/0, / ;在(0,1 ( 内曲线为凸 D. 单调减区间/ ,1 / ;单调增区间/0, / ;在(0,1 ( 内曲线为凸",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_008",
+    "question": "求函数f(x ( x = (x2-t2 ( ∫ ln(1+t2 ( dt的极值",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_009",
+    "question": "设函数f(x ( 在x=0的某邻域内有定义，则以下结论正确的是( ). A. 若f(0 ( =0,fθ (0 ( =0,则x=0必不是极值点 B. 若fθ (0 ( =0,f (0 ( =0,则x=0必是极值点 C. 若f(0 ( =0,fθ (0 ( >0,则存在δ>0,使得f(x ( 在(0,δ ( 内单调递增 D. 若fθ (0 ( =0,f (0 ( >0,则存在δ>0,使得f(x ( 在(-δ,0 ( 内单调递减",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_010",
+    "question": "曲线x3-y3=3x2的斜渐近线方程为( ). A. x+y-1=0 B. x+y+1=0 C. x-y+1=0 D. x-y-1=0",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_011",
+    "question": "设fθ (x ( 在[0,1 [ 上单调增加,f(0 ( =fθ (0 ( =0,则在[0,1 [ 上( ). A. exf(x ( 单调增加,e-xf(x ( 单调减少 B. exf(x ( 单调增加,e-xf(x ( 单调增加 C. exf(x ( 单调减少,e-xf(x ( 单调增加 D. exf(x ( 单调减少,e-xf(x ( 单调减少",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_012",
+    "question": "已知函数y=f(x ( 对一切x满足xf (x ( +3x fθ (x ( [ [ 2 =1-e-x.若fθ (x 0 ( =0(x ≠0 0 ( ,则( ). A. f(x 0 ( 是函数f(x ( 的极大值 B. f(x 0 ( 是函数f(x ( 的极小值 C. x ,f(x 0 0 ( ( ( 是曲线y=f(x ( 的拐点 D. f(x 0 ( 不是函数f(x ( 的极值, x ,f(x 0 0 ( ( ( 也不是曲线y=f(x ( 的拐点 y -t2 1 13. 由∫ e 4dt= ( x-2 ( 2所确定的函数y=y(x ( ( ). A. 只有极大值点x=4，极大值为0 B. 只有极小值点x=4,极小值为0 C. 只有极大值点x=0 D. 有极大值点和极小值点分别为x=0,x=4",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_014",
+    "question": "设函数f(x ( ,g(x ( 在[a,b [ 上连续,在(a,b ( 内可导,gθ (x ( >0,则在(a,b ( fθ (x 上,“ ( gθ (x ( 严格单调递 f(x 增”是“ ( -f(a ( g(x ( -g(a ( 严格单调递增”的( ) A. 充分非必要条件 B. 必要非充分条件 C. 充分必要条件 D. 既非充分又非必要条件",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_015",
+    "question": "曲线y=(5x-3 ( -1 e x 有渐近线( ). A. x=0,y=5x+2 B. x=0,y=5x-8 C. x=0,y=5x-3 D. x=0,y=5x-2 x2-x+1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_016",
+    "question": "曲线y= 的渐近线共有( ). ex-1 A. 1条 B. 2条 C. 3条 D. 4条或4条以上",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_017",
+    "question": "曲线r(3θ-π ( =1的斜渐近线为( )",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_003",
+    "question": "3 2 2 A. y= 2x- B. y= 2x+ C. y= 3x- D. y= 3x+",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_002",
+    "question": "2 3 3",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_018",
+    "question": "曲线y=x2ln/sin +cos x x / 的斜渐近线为_____. (1+1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_019",
+    "question": "求曲线y=x2 x ( x -1 e (x>0 ( 的斜渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_020",
+    "question": "设函数f(x ( ln f(x+2 在x=2的某邻域内连续,且有lim x→0 ( [ +ex2 [ =4,则x=2是f(x 1-cosx ( 的( ). A. 不可导点 B. 驻点且是极大值点 C. 驻点且是极小值点 D. 可导点但不是驻点",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_021",
+    "question": "设函数 f(x ( 在(-∞,+∞ ( 内连续,其一阶导函数 fθ (x ( 的图形如图所示，并设在 fθ (x ( 存在处 f (x ( 也存在，则曲线y=f(x ( 的拐点个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_022",
+    "question": "f(x (",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1 = + (a>0 1+|x| 1+|x-a| ( 的最大值为( ). 1+a 2+a 1+2a 2+a A. B. C. D. 2+a 1+a 2+a 1+2a",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_023",
+    "question": "设fθ (x ( 在区间[0,4 [ 上连续,曲线y=fθ (x ( 与直线x=0,x=4,y=0围成如图所示的三个区域, 其面积分别为S 1 =3,S 2 =4,S 3 =2,且f(0 ( =1，则f(x ( 在[0,4 [ 上的最大值与最小值分别为( ). A. 2,-3 B. 4,-3 C. 2,-2 D. 4,-2 π",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_024",
+    "question": "设y=tannx在x= 处的切线在x轴上的截距为x n ,则limy(x n",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_004",
+    "question": "n→∞ ( =____. x2",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_025",
+    "question": "过曲线 +y2=1(x>0,y>0 ( 任意点作该曲线的切线,切线夹在两坐标轴之间的部分为L,求 L的最小长度,以及L的长度达到最小时的切点坐标",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_026",
+    "question": "求f(x ( =∫ ln|x-t|dt(0≤x≤1 ( 的最大值",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_027",
+    "question": "设y=y(x ( 满足微分方程(xyθ-2 ( lnx+y=0,y(e ( =2. (1)求y=y(x ( 的表达式及其定义域； (2)求函数y=y(x ( 的极值",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_028",
+    "question": "设y=y(x ( 满足(xy-1 ( dx+x2dy=0,x>0,y(1 ( =0,求: (1)y=y(x ( 的表达式; (2)曲线y=y(x ( 的拐点及渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_029",
+    "question": "曲线y=xln/2+ x-1 / 的斜渐近线方程为( )",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1 A. y=xln2+1 B. y=xln2+ C. y=xln2-1 D. y=xln2-",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_002",
+    "question": "2",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_001",
+    "question": "1",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_030",
+    "question": "求曲线y=x3/ex +ex -2 / 的全部渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_031",
+    "question": "设函数y=y(x ( x=2et+t+1, 由参数方程 y=4(t-1 ( { {{ 确定,则曲线y=y(x et+t2 ( 在t=0对应点处的曲率为 _____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_032",
+    "question": "设y=f(x ( 是由方程x(1+y ( -e y +1=0确定的隐函数,则曲线y=f(x ( 在点(0,0 ( 处的曲率为 _____",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_033",
+    "question": "设圆与曲线x=y2在(0,0 ( 处有公切线且它们关于y的二阶导数值相同,则该圆的方程为___",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_001",
+    "question": "设函数f(x ( =x(2x-3 ( (4x-5 ( ，则方程fθ (x ( =0的实根个数为( ). A. 0 B. 1 C. 2 D. 3",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_002",
+    "question": "若方程x-elnx-k=0在(0,1]上有解,则k的最小值为( ). A. -1 B. C. 1 D. e e",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_003",
+    "question": "设函数f(x ( =aex-bx(a>0 ( b 有两个零点，则 的取值范围是( ). a A. /0, e / B. (0,e ( C. / ,+∞ e / D. (e,+∞ (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_004",
+    "question": "已知函数f(x ( x =lnx- +a(x>0 e ( 有两个零点,则a的取值范围是( ). A. (-1,0 ( B. (0,1 ( C. (-∞,0 ( D. (0,+∞ ( x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_005",
+    "question": "设存在0<θ<1，使得arcsinx= 1-(θx ( ，-1≤x≤1，则limθ=_____",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_002",
+    "question": "x→0 x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_006",
+    "question": "设x>0,证明 <ln(1+x 1+x ( <x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_001",
+    "question": "1",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_007",
+    "question": "设x>0,证明 <ln/1+ 1+x x / < . x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_008",
+    "question": "设函数f(x ( 可导,且 fθ (x ( | |≤1,f(0 ( =1,证明 f(x ( | |≤1+x,0<x<1",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_009",
+    "question": "设函数f(x ( 在[a,+∞)(a>0 ( 上一阶导数连续, lim fθ (x x→+∞ ( =0,则( ). A. lim f(2x x→+∞ ( +f(x ( [ [ =0 B. lim f(2x x→+∞ ( -f(x ( [ [ =0 C. lim f(x+1 x→+∞ ( -f(x ( [ [ =0 D. lim f(x+1 x→+∞ ( +f(x ( [ [ =0",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_010",
+    "question": "设函数f(x ( 在x=1处一阶导数连续,且fθ (1 ( f(x =2,则lim x→1+ ( -f(1 ( =_____. lnx",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_011",
+    "question": "设fθ (1 ( f(x =2,计算lim x→1+ ( -f(1 ( ,并指出与第10题的区别. lnx",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_012",
+    "question": "(1)将sinx在x=0处展开成一阶带拉格朗日余项的泰勒公式； sinx 1 (2)证明| -1|≤ |x|,x≠0. x 2 -x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_013",
+    "question": "求曲线y=e 2 与曲线y=x3-3x的交点个数",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_014",
+    "question": "设f(x ( 是连续可导函数，当0<a<x<b时，恒有xfθ (x ( <f(x ( ，则( )). A. af(x ( >xf(a ( B. bf(x ( >xf(b ( C. xf(x ( >bf(b ( D. xf(x ( <af(a (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_015",
+    "question": "方程x4+4x+b=0有两个不等的实根，则b的取值满足( ). A. b<3 B. b>3 C. b<-3 D. b>-3",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_016",
+    "question": "设常数k>0,函数f(x ( = 在(0,+∞ lnx- x +k e ( 内的间断点个数为( ). A. 3 B. 2 C. 1 D. 0",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_017",
+    "question": "设 f(x ( ,g(x ( 为恒大于零的可导函数,且 fθ (x ( g(x ( < f(x ( gθ (x ( ,则当a<x<b时,下列不等式 恒成立的是( ). A. f(a ( g(x ( >f(x ( g(b ( B. f(x ( g(a ( >f(b ( g(x ( C. f(a ( g(b ( >f(b ( g(x ( D. f(x ( g(b ( >f(b ( g(x (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_018",
+    "question": "设0≤x≤1,p>1,证明 1 ≤x p +(1-x p-1 ( p ≤1",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_019",
+    "question": "对于k的不同取值情况,确定方程x3-3x+k=0实根的个数,并证明你的结论",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_020",
+    "question": "设f(x ( 在[a,b [ 上连续,在(a,b ( 内可导(a>0 ( ,证明: 在(a,b ( 内2x f(b ( -f(a ( [ [ =(b2-a2 ( fθ (x ( 至少有一个实根. a a",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_021",
+    "question": "设a 0 + 2 1 +⋯+ n+ n 1 =0(a i 为实数,i=0,1,2,⋯,n),则在区间(0,1 ( 内,方程a +a x+⋯ 0 1 +a xn=0( ). n A. 没有实根 B. 至少有一个实根 C. 仅有一个实根 D. 是否有实根不能判定",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_022",
+    "question": "设函数f(x ( 在[a,b [ 上可导,c∈(a,b ( ,证明: (1)存在一点ξ∈(a,c ( ，使得f(c ( -f(a ( =fθ (ξ ( (c-a ( ； (2)存在一点η∈(a,b ( ，使得f(b ( -f(a ( =fθ (η ( (b-a ( 且η>ξ",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_001",
+    "question": "设f(x ( 在(0,+∞ ( 内可导,对于以下结论: ①若 lim f(x x→+∞ ( 存在,则 lim fθ (x x→+∞ ( 存在; ②若 lim fθ (x x→+∞ ( 存在，则 lim f(x x→+∞ ( 存在； ③若 lim fθ (x x→+∞ ( =a≠0，则f(x ( 在x→+∞时无界； ④若 lim fθ (x x→+∞ ( =0,则f(x ( 在x→+∞时有界. 正确的个数为( ). A. 1 B. 2 C. 3 D. 4",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_002",
+    "question": "设f(x ( 在(0,+∞ ( 内可导,对于以下结论: ①若 lim f(x x→+∞ ( 存在， lim fθ (x x→+∞ ( 存在，则 lim fθ (x x→+∞ ( =0； ②若 lim f(x x→+∞ ( +fθ (x ( [ [ 存在，则 lim fθ (x x→+∞ ( =0. 正确的说法是( ). A. ①正确，②错误 B. ①错误，②正确 C. ①与②均正确 D. ①与②均错误",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_003",
+    "question": "设 f (x ( 在区间[0,1 [ 上可导, f (0 ( =0,f (1 ( =1,且 f (x ( 不恒等于x.证明:存在ξ∈(0,1 ( ,使得 fθ (ξ ( >1",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_004",
+    "question": "设函数f(x ( 在[0,+∞)上可导. (1)若f(0 ( = lim f(x x→+∞ ( =0，求证:存在ξ∈(0,+∞ ( ，使fθ (ξ ( =0； (2)若0≤f(x ( 2x+1 ≤ln ,求证:存在ξ∈(0,+∞ x+ 1+x2 ( ,使fθ (ξ (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_002",
+    "question": "1 = - . 2ξ+1 1+ξ2",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_005",
+    "question": "设正值函数 f(x ( 二阶可导且满足 fθ (x ( [ [ 2 > f(x ( f (x ( ,函数 f(x ( -x在x=0处取得极值1,证 明f(x ( ≤ex",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_006",
+    "question": "设f(x ( 在(-∞,+∞ ( 上二阶可导,且f (x ( ≥0.证明: (1)对于任意x 0 ,x∈(-∞,+∞ ( ,有f(x ( ≥f(x 0 ( +fθ (x 0 ( (x-x 0 ( ; (2)若存在常数M>0，使得任意x∈(-∞,+∞ ( ，均有 f(x ( | |≤M，则f(x ( 为常值函数",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_007",
+    "question": "设f(x ( 在[0,1 [ 上二阶可导, f (x ( | |≤M,x∈[0,1 [ ,M>0,f(0 ( =f(1 ( =0.证明: (1) fθ (x ( M | |≤ ,x∈[0,1 [ ; (2)若f/ / =0，则 fθ (x ( M | |< ,x∈[0,1 [",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_008",
+    "question": "设函数f(x ( 在区间[-2,2 [ 上可导,且fθ (x ( >2f(x ( >0,则( ). f(-2 A. ( f(-1 ( f(0 >1 B. ( f(-1 ( f(1 >e2 C. ( f(-1 ( f(2 <e2 D. ( f(-1 ( <e3",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_009",
+    "question": "若可导函数f(x ( 满足fθ (x ( <2f(x ( ，则当b>a>0时，有( ). A. b2f(a ( >a2f(b ( B. b2f(lna ( >a2f(lnb ( C. b2f(a ( <a2f(b ( D. b2f(lna ( <a2f(lnb (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_010",
+    "question": "设f(x ( x =∫ et2 dt,x≥0. x (1)证明∫ et2 dt=xfθ x∘θ(x ( [ [ ，且θ(x ( 唯一，其中0<θ(x ( <1，x>0； (2)求limθ(x x→0+ (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_011",
+    "question": "设f(x ( 在[2,4 [ 上一阶可导且fθ (x ( ≥M>0,f(2 ( >0.证明: (1)对任意的x∈[3,4 [ ，均有f(x ( >M； (2)存在ξ∈(3,4 ( ，使得f(ξ ( eξ-3 >M⋅ . e-1",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_012",
+    "question": "设函数y=f(x ( 在区间(α,β ( 内二阶可导,且其图像在(α,β ( 内有三个点满足关系y=ax2+bx+ c.证明:必然存在一个点ξ∈(α,β ( ,使得f (ξ ( =2a",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_013",
+    "question": "设函数f(x ( 在[0,1 [ 上二阶可导,且∫ f(x ( dx=0,则( ). A. 当fθ (x ( <0时,f/ / <0 B. 当f (x ( <0时,f/ / <0 C. 当fθ (x ( >0时,f/ / <0 D. 当f (x ( >0时,f/ / <0",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_014",
+    "question": "设函数 f (x ( 在 [0,1 [ 上连续且 f (0 ( = f (1 ( =0,在 (0,1 ( 内二阶可导且 f (x ( <0,记M= max f(x 0≤x≤1 ( { { (1)证明对任意正整数n，存在唯一的x n ∈(0,1 ( ，使得fθ (x n ( M = ； n (2)对(1)中得到的{x n { ，证明limx n 存在，且limf(x n n→∞ n→∞ ( =M",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_015",
+    "question": "设函数 f (x ( 在 (a,b ( 上二次可微,证明:对任意x∈ (a,b ( 及适当小的正数h(使x+h,x-h∈ (a,b ( ),不等式f(x ( ≤ f(x+h ( +f(x-h ( [ [ 成立的充要条件是f (x ( ≥0,x∈(a,b (",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_016",
+    "question": "确定常数k的取值范围,使方程x-arctanx=kx3在(0,1]内有实根. tanx π",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_017",
+    "question": "设方程 =k在/0, x 4 / 内有实根,则常数k的取值范围为( )",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_004",
+    "question": "4 4 4 4 A. 0<k< -1 B. -1<k< C. 1<k< D. -1<k<1 π π π π π",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_018",
+    "question": "设b>0>a,则( ). A. aea (eb-1 ( >beb (ea-1 ( B. aea (eb-1 ( <beb (ea-1 ( C. bea (eb-1 ( >aeb (ea-1 ( D. bea (eb-1 ( <aeb (ea-1 ( lna",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_019",
+    "question": "设e<a<b,证明:a2<ab <b2. lnb",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_020",
+    "question": "设f (x ( f(x <0,且lim x→0 ( =1,证明:f(x x ( ≤x",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_021",
+    "question": "设f(x ( >0,f (x ( 存在且f (x ( ≤0,x∈[0,+∞).证明:对于任意x∈[0,+∞),fθ (x ( ≥0",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_001",
+    "question": "一动点P在曲线9y=4x2上运动,设坐标轴的单位长度是1cm,若点P横坐标的变化率是30cm/s， 则当点P经过点(3,4 ( 时，点P到原点距离的变化率为_____",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_002",
+    "question": "设二阶可导函数y=f(t ( 表示某人在10分钟内心跳次数的变化曲线，如图所示.则关于此人心跳 次数的增长速度，说法正确的是( ). A. 0∼3分钟增速变大;7∼10分钟增速变大 B. 0∼3分钟增速变大;7∼10分钟增速变小 C. 0∼3分钟增速变大;7∼10分钟增速变大 D. 0∼3分钟增速变小;7∼10分钟增速变小 π",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_003",
+    "question": "已知一容器中水增加的速率为1m3/min,且水的体积V与水面高度y满足V= y2,当水面上升到 高为1m时,求水面高度上升的速率",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_004",
+    "question": "已知某圆柱体底面半径与高随时间变化的速率分别为2cm/s,-3cm/s，且圆柱体的体积与表面积 随时间变化的速率分别为-100πcm3/s,40πcm2/s，则圆柱体的底面半径与高分别为( ). A. 5cm,5cm B. 10cm,5cm C. 5cm,10cm D. 10cm,10cm",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_005",
+    "question": "一物体在距离同一水平面上的地面观测器10m处离地匀速垂直上升,其速度为am/s.若该物体上 升到离地20m时,观测器视线倾角的变化率为 ,则a=( ). A. 1 B. 2 C. 3 D. 5",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_001",
+    "question": "质点P沿抛物线x=y2 (y>0 ( 移动,P的横坐标x的变化速度为5cm/s.当x=9时,点P到原点O 的距离变化速度为_____",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_002",
+    "question": "球的半径以5cm/s的速度匀速增长,当球的半径为50cm时,球的表面积和体积的增长速度各是多 少?",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数微分学的应用(三)物理应用_003",
+    "question": "已知曲线L:y=ln x(2≤x≤4 ( ,在L上的任意点P(x,y ( 作切线,记切线与曲线L在2≤x≤4时所 围成的有界区域的面积为S. (1)求一点P，使上述面积S关于x的变化率为零； (2)当点P(x,y ( 在曲线上移动至/e, / 时，横坐标关于时间的变化率为1，求此时面积关于时间的 dS 变化率 . dt",
+    "domain": "一元函数微分学的应用(三)物理应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "设函数f(x ( 在区间[0,1 [ 上连续,则∫ f(x ( dx=( ). n 3k-1 A. lim∑ f/ n→∞ 3n k=1 / n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "3k-1 B. lim∑ f/ 3n n→∞ 3n k=1 / n 3n k-1 C. lim∑ f/ n→∞ 3n k=1 / 3n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "k D. lim∑ f/ n n→∞ 3n k=1 / n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 2 2. lim ln +4ln +⋯+(n-1 n→∞n3 n n ( 2 ln n-1 n =_____",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_003",
+    "question": "甲、乙两人赛跑,图中实线和虚线分别为甲和乙的速度曲线(单位:m/s),三块阴影部分面积依次为 15,20,10,且当t=0时,甲在乙前面10m处,则在[0,t [ 上,甲、乙相遇的次数为( ). A. 1 B. 2 C. 4 D. 4",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "4. 设M= 2 /1+ x -1 1+x2 / 1 (1+x ∫ dx,N= ( ln2 (1+x ( 1 ex ∫ dx,K=∫ dx,则( ). x2 1+x A. M>N>K B. N>K>M C. K>M>N D. K>N>M",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_005",
+    "question": "设f(x ( 是(0,+∞ ( 内的正值连续函数,且fθ (x ( <0,g(x ( x =∫ f(t ( dt,则g/ / 和g/ / 的可能取 值是( ). A. -2,1 B. -2,3 C. 2,-1 D. 2,-3",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_006",
+    "question": "设f(x ( { xlnx, x>0, b ={{ 若∫ f(x x2+x, x≤0, a ( dx(a<b ( 取得最小值,则(a,b ( =( ). A. (-1,1 ( B. (-1,2 ( C. (0,1 ( D. (1,2 (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_007",
+    "question": "设函数g(x ( 在 0, π π 上连续,若在/0, / 内gθ (x ( π ≥0,则对任意的x∈/0, / ,有( ). π A. ∫2 g(t x ( π dt≥∫2 g(sint x ( dt B. ∫ g(t x ( dt≤∫ g(sint x ( dt C. ∫ g(t x ( dt≥∫ g(sint x ( π dt D. ∫2 g(t x ( π dt≤∫2 g(sint x ( dt",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_008",
+    "question": "若 1-x2是xf(x (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 的一个原函数，则",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_012",
+    "question": "f(x ( ∫ dx=( ). π π A. -1 B. C. - D. 1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_004",
+    "question": "4 n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_009",
+    "question": "lim∑ =_____. n→∞ in i=1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_010",
+    "question": "设 f (x ( 是 (-∞,+∞ ( 上可导的奇函数,任意的x∈ (-∞,+∞ ( ,均有 f (x+1 ( - f (x ( = f (1 ( , f/ / =0,则以下是偶函数的是( ). x A. sinf(t ( +f(t+1 ( [ [ x ∫ dt B. sinfθ (t ( +fθ (t+1 ( [ [ ∫ dt x C. cosf(t ( +f(t+2 ( [ [ x ∫ dt D. cosfθ (t ( +fθ (t+2 ( [ [ ∫ dt",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_011",
+    "question": "设f(x ( 是实数集上连续的偶函数,在(-∞,0 ( 上有唯一零点x =-1,且fθ (x 0 0 ( =1,则函数F(x ( x =∫ f(t ( dt的严格单调增区间是( ). A. (-∞,-1 ( B. (-1,+∞ ( C. (-1,1 ( D. (1,+∞ (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_012",
+    "question": "设 f (x ( 在 [0,2 [ 上单调连续, f (0 ( =1,f (2 ( =2,且对任意x 1 ,x 2 ∈ [0,2 [ x +x 总有 f / 1 2 2 / > f(x ( +f(x ( ,g(x ( 是f(x ( 的反函数，P=∫ g(x ( dx，则( ). A. 3<P<4 B. 2<P<3 C. 1<P<2 D. 0<P<1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_013",
+    "question": "下列反常积分中,发散的是( ). A. ∫ +∞ xe-xdx B. ∫ +∞ xe-x2 dx C. ∫ +∞arctanx dx D. ∫ +∞ x dx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_019",
+    "question": "-∞ -∞ 1+x2 -∞ 1+x2 +∞ lnx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_014",
+    "question": "若反常积分",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_021",
+    "question": "(1+x ( ∫ dx收敛，则( ). 1-p x A. p<1 B. p>1 C. 0≤p<1 D. 0≤p<1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_015",
+    "question": "下列反常积分收敛的是( ). A. ∫ +∞ 1 dx B. ∫ +∞ e-x2 dx C. ∫ 1 1 dx D. 1 x",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_002",
+    "question": "xlnx 0 -1 sinx 0 ln2 (1+x ( ∫ dx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "16. lim n2-1+ n2-22+⋯+ n2-(n-1 n→∞n2 ( 2 [ [ =_____. n n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_017",
+    "question": "lim∑ =_____. n→∞ n2+9i2 i=1 π",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_018",
+    "question": "定积分I=∫2 sinx dx的值满足( ). π x",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 2 2 A. 0≤I≤ B. ≤I≤ C. ≤I≤1 D. 1≤I≤2 2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_002",
+    "question": "2 2 2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_019",
+    "question": "设f(x ( ≢0为(-∞,+∞ ( 上可导的奇函数，则下列函数为奇函数的是( ). x A. x3∫ fθ (t ( x dt B. ∫ f(-t ( x dt C. fθ (t ( +f(t ( [ [ x ∫ dt D. f(t ( ∫ | |dt π π",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_020",
+    "question": "设M=∫2 x cos5xdx,N= 2 (x2sinx+sin2xcosx -π 1+x2 -π ( π ∫ dx,P= 2 (sin3x-cos4x -π ( ∫ dx,则有( ). A. N<P<M B. M<P<N C. N<M<P D. P<M<N",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "lnx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_021",
+    "question": "设a,b为常数",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_033",
+    "question": "xa (tanπ x ( ∫ dx收敛，则( ). b A. a+b>1且b>-2 B. a+b<1且b>-2 C. a+b>1且b<-2 D. a+b<1且b<-2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_022",
+    "question": "设F(x ( x = t-[t [ ( ( ∫ dt,其中[x [ 表示不超过x的最大整数,则F - ′ (1 ( -F + ′ (1 ( =_____",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_023",
+    "question": "下列命题中不成立的是( ). A. 若f(x ( 连续,x∈[a,b [ x ,则∫ f(t a ( dt必为f(x ( 的原函数 B. 若f(x ( 可积,x∈[a,b [ ,则f(x ( 在(a,b ( 内存在原函数 C. 若f(x ( 连续,且为奇函数,x∈[-a,a [ a ,则∫ f(x -a ( dx=0 D. 若f(x ( a+T 连续,T为其周期,则∫ f(x a ( T dx=∫ f(x ( dx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_024",
+    "question": "设f(x-5 (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_004",
+    "question": "4 = ,则∫ f(2x+1 x2-10x ( dx( ). A. 为反常积分,且发散 B. 为反常积分,且收敛 π C. 不是反常积分,且其值为10 D. 不是反常积分,且其值为",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_025",
+    "question": "下列表达式中正确的是( ). 2π 2π A. ∫ |sinx|dx≤∫ sin2xdx π π π π B. ∫4 x dx< 4 / sinx + 1 -π 1+cosx -π 1+x4 1+x2 / ∫ dx b C. ∫ f(x a ( d dx≤∫ f(x c ( dx,[a,b [ ⊂[c,d [ ,f(x ( 连续,x∈[c,d [ D. f(x -1 ( ∫ | |dx=2 f(x ( ∫ | |dx,f(x ( 连续,x∈[-1,1 [ n 1-cos π",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "计算lim∑ n . n→∞ l=1 1+cosiπ 2n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_002",
+    "question": "设f(x ( n k-1 +n 连续，则lim∑ 2 f/ 2k-1 n→∞ n2 2n k=1 / =( )",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 A. /x+ / ∫ f(x (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 dx B. /x+1- 2n / ∫ f/x- 2n / dx C. (x+1 ( ∫ f(x (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 1 dx D. /x+ +",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_002",
+    "question": "n / ∫ f/x- n / dx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_003",
+    "question": "设f(x ( 在[0,1 [ n-1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "i 上可积,则lim∑ln 1+ f/ n→∞ n n i=0 / =( )",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "f(x A. ∫ ln 1+ ( n",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "dx B. ∫ ln 1+f(x ( [ [ 1 dx C. ∫ f(x ( 1 dx D. ∫ f2 (x ( dx 2πsinx 2π sinx 2π sinx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_004",
+    "question": "I =∫ dx,I =∫ dx,I =",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "0 x 2 0 2π-x 3 0 x(2π-x ( ∫ dx,则( ) A. I <I <I B. I <I <I C. I <I <I D. I <I <I",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_003",
+    "question": "1 2 3 2 1 2 3 1 1 2 3 2π π",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_005",
+    "question": "设I =∫ sinx2dx,I =∫4 ,则( )",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "0 2 -π 4 1+sinx A. I >0,I >0 B. I <0,I <0 C. I >0,I <0 D. I <0,I >0",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "2 1 2 1 2 1 2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_006",
+    "question": "设f(x ( 在[0,1 [ 上连续,∫ 2x2f(x ( dx≥∫ f2 (x ( dx+ ,则f(x ( =____",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_007",
+    "question": "设f(x ( =∫ |sinx| et2 dt,g(x ( |x| =∫ sint2dt,则在(-π,π ( 内( ). A. f(x ( 是可导的奇函数 B. g(x ( 是可导的偶函数 C. f(x ( 是奇函数且fθ (0 ( 不存在 D. g(x ( 是偶函数且gθ (0 ( 不存在",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_008",
+    "question": "设f(x ( =3x- 1-x2∫ f2 (x ( dx,求f(x ( 的表达式",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_009",
+    "question": "设常数m>0,n>0,则∫ n x m x dx([⋅ [ 是取整符号)的敛散性( ). A. 仅与m有关 B. 仅与n有关 C. 与m,n均有关 D. 与m,n均无关",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_010",
+    "question": "设p,q为正常数，若∫ dx收敛，则( ). p q",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_061",
+    "question": "x |lnx| A. p<1,q<1 B. p>1,q<1 C. p<1,q>1 D. p>1,q>1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_011",
+    "question": "若函数f(x ( +∞ 1 =",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_002",
+    "question": "t(lnt ( ∫ dt存在，则该函数的最小值点为x =( ). x+1 0",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 A. - B. -lnln2 C. D. ln2 lnln2 ln2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "lnx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_012",
+    "question": "设p为常数，若反常积分 p",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_067",
+    "question": "x (1-x ( ∫ dx收敛，则p的取值范围是( ). 1-p A. (-1,1 ( B. (-1,2 ( C. (-∞,1 ( D. (-∞,2 (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_013",
+    "question": "设非负函数f(x ( 在[0,+∞)上具有有界导数,给出以下四个命题: +∞ ①若∫ f2 (x ( +∞ dx收敛，则∫ f(x ( +∞ dx收敛； ②若∫ f(x ( +∞ dx收敛，则∫ f2 (x ( dx收敛； ③若 limx2f(x x→+∞ ( +∞ 存在，则∫ f(x ( +∞ dx收敛； ④若∫ f(x ( dx收敛，则 limx2f(x x→+∞ ( 存在. 其中，真命题的个数为( ). A. 1 B. 2 C. 3 D. 4 +∞ -cos1",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_014",
+    "question": "若反常积分 /e x -e-1 / ∫ xkdx收敛，则k的取值范围是_____",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_015",
+    "question": "下列反常积分中发散的是( ). A. ∫ +∞e-x dx B. ∫ +∞ x2e-x2 dx C. ∫ +∞ dx D. +∞ dx",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_071",
+    "question": "x 0 0 xln2x 0 (x+2 ( ln2 (x+2 ( ∫",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_016",
+    "question": "下列反常积分中收敛的是( ). +∞ dx +∞ dx A. ∫ B",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "x2-1 1 x(x-1 ( +∞ dx +∞ dx ∫ C. ∫ D",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "x2 x2-1 1 x(x2-1 ( ∫",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_017",
+    "question": "设y=y(x ( 满足 (1+x ( [ y-1 [ dx+x(1+x ( dy=0,y(1 ( =ln2. (1)求y=y(x ( 的表达式及定义域； (2)记f(x ( x =∫ y(|t| -1 ( dt，求fθ (0 (",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_018",
+    "question": "设f(x ( =lim x / e - n x2 2+e -4 n x 2 2 +⋯+e-x2 n→∞n / ,求: (1)f(x ( 的表达式； (2)曲线y=ex2 f(x ( 的拐点",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_019",
+    "question": "设f(x ( =x2,f φ(x ( [ [ =-x2+2x+3且φ(x ( n ≥0,则lim ∑i2 (n-i n→∞n3 i=1 ( ⋅ n+φ(x ( =( )",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_001",
+    "question": "1 1 2 A. B. C. D",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_012",
+    "question": "6 3 3",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "计算下列不定积分. (1)∫cos3xdx; (2)∫sin3xdx； (3)∫secxdx; (4)∫sec3xdx; (5)∫ dx(a≠0 a2-x2 ( ; (6)∫ dx(a≠0 x2-a2 ( ; (7)∫ dx(a≠0 a2+x2 ( ; (8)∫ a2+(x+b ( dx(a≠0 ( ; (9)∫ a2-(x+b ( dx(a>0 ( ; (10)∫ (x+b ( dx(a>0",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "-a2 ( ; (11)∫ dx(a>0 x2-a2 ( ; (12)∫ dx(a>0 a2-x2 ( ; (13)∫ dx(a>0 x2+a2 ( ； (14)∫csc3xdx; (15)∫tan2xdx; (16)∫tan3xdx; (17)∫tan4xdx; (18)∫cot3xdx; cosx 1 (19)∫ dx; (20)∫ dx; 1+sinx a2sin2x+b2cos2x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1 (21)∫ dx； (22)∫ dx； sin2x cos2x (23)∫ dx(a>0,b>0 a+bcosx ( ； (24)∫ dx(a>0,b>0 a+bsinx ( . e2x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "计算不定积分∫ dx. ex-1 1+x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_003",
+    "question": "计算不定积分∫ln/1+ x / dx(x>0 (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_004",
+    "question": "计算不定积分∫e2xarctan ex-1dx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_005",
+    "question": "∫ e- xdx=( )",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_004",
+    "question": "2 1 A. 2 B. 2- C. 1- D. 1- e e e",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "4x-3",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_006",
+    "question": "∫ dx=_____. x2-x+1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "arctan x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_013",
+    "question": "x(1+x ( ∫ dx=_____. π",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_008",
+    "question": "∫4 sec3θdθ=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_009",
+    "question": "设连续函数f(x ( 满足f(x+1 ( -f(x ( =xlnx，∫ f(x ( dx=0，则∫ f(x ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_010",
+    "question": "设y= x ,则∫ 2 xydy=_____. 1+x2 1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_011",
+    "question": "若e-x是f(x (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "1 的一个原函数,则∫ f(lnx T x2 ( dx=( )",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1 A. - B. -1 C. D. 1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_004",
+    "question": "4",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_012",
+    "question": "若函数f(x ( 在[0,+∞)上连续,g(x ( 2x t =∫ f/x+ / dt,则当x→0+时,g(x ( 是 x的( ). A. 高阶无穷小 B. 低阶无穷小 C. 等价无穷小 D. 同阶但非等价无穷小",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_013",
+    "question": "设 f(x ( 在x=0的某邻域内连续,在x=0处可导,且 f(0 ( =0,φ(x (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "x ∫ tf(t = x2 0 ( { dt, x≠0, {{ 则 0, x=0, φ(x ( 在x=0处( ). A. 不连续 B. 连续但不可导 C. 可导但φθ (x ( 在x=0处不连续 D. 可导且φθ (x ( 在x=0处连续",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_014",
+    "question": "若连续周期函数y= f(x ( x+6 (不恒为常数)对任何x恒有∫ f(t -1 ( dt+∫ f(t x-3 ( dt=14成立,则 f(x ( 的周期是( ). A. 7 B. 8 C. 9 D. 10",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_015",
+    "question": "设f(x ( 在[-a,a [ 上是连续的偶函数，a>0，g(x ( a =∫ |x-t|f(t -a ( dt，则在[-a,a [ 上( ). A. g(x ( 是奇函数 B. g(x ( 是单调递减函数 C. g(x ( 是偶函数 D. g(x ( 是奇函数",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_016",
+    "question": "若F(x ( π =∫ |x-t|sintdt,则Fθ (0 -π ( =( ). A. -4 B. -2 C. 2 D. 4",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_017",
+    "question": "若函数y(x ( x2 d2 y(x =∫ e- tdt，则 ( [ [ | =( ). dx2 x=-1 A. 0 B. 1 C. 4e-1 D. 4e",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_018",
+    "question": "已知函数f(x ( x 1 =∫ 1+t3dt,则∫ xf(x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "0 ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_019",
+    "question": "设连续函数f(x ( x 满足∫ f(t ( e f(lnx dt=xex,则 ( ∫ dx=_____. x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_020",
+    "question": "设a n =∫ xn 1-x2dx(n≡0,1,2,⋯ ( a ,则lim/ n n→∞ a n-2 / n =_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_005",
+    "question": "1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_021",
+    "question": "∫ dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_005",
+    "question": "|x2-9| +∞",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_022",
+    "question": "∫ |x|e-x2 dx=_____. -∞",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_023",
+    "question": "设f(x ( 1-x2n 2 =lim x,且∫ f(x n→∞1+x2n ( dx=a,则a=( ). A. 2 B. 1 C. 0 D. -1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": " 1 24. -1  1+2 -1 x  θ ∫ dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "2 |x|(arcsinx+arccosx 25. -1 ( ∫ dx=_____. 1-x2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_003",
+    "question": "2 (1-x 26. ( arcsin(1-x ( ∫ dx=_____. 2x-x2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_027",
+    "question": "若f(x (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1 = +x3∫ f(x 1+x2 ( dx,则f(x ( =_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_028",
+    "question": "x3cosx+ln(x+ x2+1 -1 ( [ [ ∫ dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_029",
+    "question": "设f(x ( =∫ x cost dt,则 π 2 fθ (x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_044",
+    "question": "1+sin2t 0 ( 1+f2 (x ( ∫ dx=( ). π π π π A. - B. -arctan C. D. arctan",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_004",
+    "question": "4 4 4 +∞ 30. 设∫ f(x ( dx收敛,f(x ( =x3e-x2 + 1 x(1+x ( +∞ ∫ f(x ( +∞ dx,则∫ f(x ( dx=( )",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1 e 1 A. B. C. D. 1-ln2 ln2 1-ln2 (1-ln2 ( e",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_031",
+    "question": "函数f(x ( ,x≤0, = 1+x2 (x+1 ( { {{ 的一个原函数为( ). ex,x>0 A. F(x ( ln( 1+x2-x = ( , x≤0, (x-1 ( { {{ B. F(x ex, x>0 ( ln( 1+x2-x = ( +1, x≤0, (x-1 ( { {{ ex, x>0 C. F(x ( ln( 1+x2+x = ( { +1, x≤0, {{ D. F(x xex, x>0 ( ln( 1+x2+x = ( { +1, x≤0, {{ xex+1, x>0",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_032",
+    "question": "∫2 xarcsinx dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_049",
+    "question": "1-x2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_033",
+    "question": "∫ xarcsin(1-x ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_034",
+    "question": "设y=y(x ( 满足xyθ= 1-x2,y(1 ( =0,则∫ y(x ( dx=_____. +∞ 1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "x(x+2 ( ∫ dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_036",
+    "question": "设fθ (ex ( =sinx,求f(x ( 的表达式",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "∫ ln dx=_____. 1-x x+2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "求∫ (2x+1 ( (x2+x+1 ( dx. e",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_003",
+    "question": "∫ cos(lnx ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_004",
+    "question": "设函数f(x ( 满足方程xf(x ( +f(1-x ( =x2,求∫f(x ( dx. ∞ n+1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_005",
+    "question": "∑∫ 2- xdx=_____. n=1 n",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_006",
+    "question": "已知f(x ( 是连续的偶函数，且∫ f(x ( dx=2，则∫ xf(1-x ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_007",
+    "question": "已知f(x ( 连续,f(x2+1 ( -f(x2 ( =x(x>0 ( ,∫ f(x ( dx=1,则∫ f(x ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_008",
+    "question": "设f(t (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "2 =∫ t|t-x|dx,求∫ f(t",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_065",
+    "question": "-1 ( dt",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_009",
+    "question": "设f(x ( 是以2为周期的连续函数,∫ f(x ( dx=1,g(x ( 是过点/- ,0 / 和(0,1 ( 的直线,则 ∫ f g(x ( [ [ dx=( ). A. -2 B. -1 C. 1 D. 2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_010",
+    "question": "已知fθ (x ( =arctan(x-1 ( 2 ,f(0 ( =0,则∫ f(x ( dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_011",
+    "question": "设g(x ( =x2,g f(x ( [ [ =-x2+2x+3,且f(x (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "1 >0,则",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_070",
+    "question": "f(x ( ∫ dx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_012",
+    "question": "求∫ xln(1+ex -1 ( dx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "dx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_013",
+    "question": "求",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_074",
+    "question": "(x+1 ( (x2+1 ( ∫",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_014",
+    "question": "设F(x ( >0为R上的连续可导函数,F(0 ( = π,且F(x ( Fθ (x ( cosx = .求F(x 2sin2x+cos2x (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "arcsin x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_015",
+    "question": "求",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_078",
+    "question": "x(1-x ( ∫ dx. π",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_016",
+    "question": "求∫4 dx . sin2x+3cos2x",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_003",
+    "question": "dx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_017",
+    "question": "求∫",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "|2x-x2 |",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_018",
+    "question": "设n为非负整数,则∫ x2lnnxdx=_____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_019",
+    "question": "设f(x ( =∫ ln x2+y2dy,0≤x≤1,则f + ′ (0 ( =( ). π π A. - B. C. -π D. π",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "2",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_020",
+    "question": "设|x|≤1,求积分I(x ( =∫ |t-x|e2tdt的最大值. -1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_021",
+    "question": "设函数f(x ( =∫ |t2-x2 |dt(x>0 ( ,求fθ (x ( ,并求f(x ( 的最小值",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_022",
+    "question": "设f(x ( =x,g(x ( cosx, x≤π, { ={{ 求F(x 0, x>π, ( x =∫ f(t ( g(x-t ( dt(x≥0 (",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_023",
+    "question": "设y=f(x ( 2 =x e -(xt ( 2 ∫ dt+x2,其在x=0的某邻域内与x=g(y ( 互为反函数,则g (0 ( =____",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_024",
+    "question": "F(x ( π =∫2 |sinx-sint|dt(x≥0 ( 在x→0+处的2次泰勒多项式为a+bx+cx2,求a,b,c的值",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_002",
+    "question": "dx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_025",
+    "question": "求∫",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "x 3x2-2x-1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_005",
+    "question": "1",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_026",
+    "question": "∫ dx=( ). -11+2 3 x-2 A. 1 B. 3 C. 3 D",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_027",
+    "question": "设y=y(x ( 满足x2yθ+(x2-3 ( y2=0且y(1 ( =1. (1)求y=y(x ( 的表达式； (2)计算∫ y2 (x ( dx. +∞ xlnx",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的计算_028",
+    "question": "∫ dx=_____. 1+x4",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_001",
+    "question": "曲线y= 在区间(0,+∞ x2+4x+5 ( 上与x轴所围成的图形的面积为_____. lnx",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_002",
+    "question": "曲线y= 在[1,e2 x [ 上与x轴所围成的图形的面积是_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_003",
+    "question": "如图所示，抛物线y=( 2-1 ( x2把曲线y=x(b-x ( (b>0 ( 与x轴所围成的闭区域分成面积为 S 与S 的两部分，则( ). A B A. S <S A B B. S =S A B C. S >S A B D. S 与S 的大小关系与b的数值有关 A B",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_004",
+    "question": "过点(p,sinp ( 作曲线y=sinx的切线(见图),设该曲线与切线及y轴所围成的图形的面积为S ,曲 1 线与直线x=p及x轴所围成的图形的面积为S ,则( ). A. lim S 2 = 1 p→0+S +S B. lim S 2 = 1 p→0+S +S C. lim S 2 = 2 p→0+S +S S D. lim 2 =1 p→0+S +S",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_005",
+    "question": "平面无界区域D= (x,y ( (1+x2 ( { {{ | |y∣≤1 {{{ 的面积为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_006",
+    "question": "设平面区域D由曲线段y=sinπx(0≤x≤1 ( 与x轴围成,则D绕y轴旋转一周所成旋转体的体积 为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_007",
+    "question": "已知函数f(x ( xet2 =x∫ dt，则f(x t ( 在(0,1 ( 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_008",
+    "question": "已知曲线L:y=e-x (x≥0 ( ,设P是L上的动点,V是L上从点A(0,1 ( 到点P的一段弧绕x轴旋转一 周所得的旋转体体积,当P运动到点/1, e / 时,沿x轴正向的速度为1,求此时V关于时间t的变化 率. π π",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_009",
+    "question": "曲线y=lnsinx/ ≤x≤",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_006",
+    "question": "3 / 的弧长为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_010",
+    "question": "曲线r=eθ从θ=0到θ=1的弧长为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_011",
+    "question": "已知函数y=y(x ( 由方程y4-6xy+3=0(1≤y≤2 ( 所确定,则曲线y=y(x ( 从点/ ,1 / 到点 / ,2 / 的长度为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_012",
+    "question": "曲线y=ex与其过原点的切线及y轴所围图形的面积为( ). A. (lny-ylny ( ∫ dx B. (ex-ex ( e ∫ dx C. (lny-ylny ( e ∫ dx D. (ex-xex ( ∫ dx",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_013",
+    "question": "曲线y=x2e-x (0≤x<+∞ ( 绕x轴旋转一周所得延展到无穷远的旋转体的体积为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_014",
+    "question": "曲线f(x ( =xlnx(0<x≤2 ( 绕x轴旋转一周所得旋转体的体积为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_015",
+    "question": "曲线y= x2 (0≤x≤1 ( 的长度为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_016",
+    "question": "设平面D是由y=lnx,x=1,y=1围成的第一象限的有界区域,记D绕x轴与绕y=1旋转一周 所得旋转体的体积分别为V,V,则( )",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_001",
+    "question": "2 π π π π A. V > >V B. V > >V C. >V >V D. >V >V",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_001",
+    "question": "2 2 2 2 1 2 1 2 2 2 1",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_017",
+    "question": "曲线y=x2从点(1,1 ( 到点(2,4 ( 的一段弧绕y轴旋转一周所得旋转体的侧面积为_____. x2",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_018",
+    "question": "函数y= 在区间[0,1 1-x2 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_019",
+    "question": "设平面区域D= (x,y ( { {{ |0≤y≤ x2-1 , 2≤x≤2 x2 {{{ ,求: (1)D的面积； (2)D绕x轴旋转一周所成旋转体的体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_001",
+    "question": "曲线e y +xy+x3=e在点(0,1 ( 处的切线与两坐标轴所围成的三角形的面积为_____. π",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_002",
+    "question": "曲线r=2cos3θ/0≤θ≤ / π 与θ=0及θ= 所围图形面积为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_003",
+    "question": "若曲线r=a(1+cosθ ( (a>0 ( 所围图形的面积为6π,则a=_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_004",
+    "question": "设函数y=y(x ( y(x 满足方程y+3yθ+2y=e-x,且lim x→0 ( =1,求曲线y=y(x x ( 与x轴正半轴之间 的平面图形的面积及该平面图形绕y轴旋转一周所形成的旋转体体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_005",
+    "question": "曲线y= x与y=x2所围平面有界区域绕直线y=x旋转一周所得旋转体的体积为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_006",
+    "question": "过坐标原点作曲线y=ex的切线,该切线与曲线y=ex以及x轴围成的向x轴负向无限伸展的图 形记为D. (1)求D的面积； (2)求D绕直线x=1旋转一周所成的旋转体体积. -x",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_007",
+    "question": "求曲线y=e 2 sinx(x≥0 ( 绕x轴旋转一周所成旋转体的体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_008",
+    "question": "设曲线y=ax2 (x≥0,常数a>0 ( 与曲线y=1-x2交于点A,过坐标原点O和点A的直线与曲线y =ax2围成一平面图形D. (1)求D绕x轴旋转一周所成的旋转体体积V(a ( ； (2)求使V(a ( 为最大值时a的值",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_009",
+    "question": "设函数f(x ( 在[0,1 [ 上连续,在(0,1 ( 内可导,且满足xfθ (x ( =f(x ( +x2.已知曲线y=f(x ( 与x= 0,x=1,y=0所围的图形S面积为2.求 f(x ( 的表达式,以及图形S绕x轴旋转一周所得旋转体的体 积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_010",
+    "question": "当x≥0时,在曲线y=e-2x上面作一个台阶曲线,台阶的宽度皆为1(见图).则图中无穷多个阴影 部分的面积之和S=_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_011",
+    "question": "设函数y=f(x ( e-xcosx 满足微分方程yθ+y= ,且f(π",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_002",
+    "question": "sinx ( =0,求曲线y=f(x ( (x≥0 ( 绕x轴旋转 一周所得旋转体的体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_012",
+    "question": "设f(x ( 在(-∞,+∞ ( x 内非负连续,且∫ tf(x2 ( f(x2-t2 ( dt=sin2x2,求f(x ( 在[0,π [ 上的平均值",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_013",
+    "question": "已知 是函数f(x 1+ex ( 的一个原函数,则f(x ( 在[-1,1 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_014",
+    "question": "已知函数f(x ( 在[0,1 [ 上连续,在(0,1 ( sinπx 内是函数 的一个原函数,且f(1 x ( =0,则f(x ( 在区 间[0,1 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_015",
+    "question": "设函数f(x ( 非负连续，且f(x ( ∫ f(xt ( dt=2x2，则f(x ( 在区间[0,2 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_016",
+    "question": "设 f (x ( 为[0,3 [ 上的非负连续函数,且满足 f (x ( ∫ f(xt-x ( dt=2x2,x∈[0,3 [ ,则 f (x ( 在区间 [1,3 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_017",
+    "question": "已知函数 f (x ( 在 0, 3π 3π 上连续,在 /0, / cosx 内是函数 的一个原函数,且 f (0 2x-3π ( =0则 f(x ( 在区间 0, 3π 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_018",
+    "question": "设f(x ( x =∫ t|t|dt,求曲线y=f(x -1 ( 与x轴所围成的封闭图形的面积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_019",
+    "question": "已知函数 f(x ( ,g(x ( 分别满足 fθ (x ( =2 f(x ( ,gθ (x ( g(x = ( x-2 + ,f(0 x-2 x ( =1,g(1 ( =0.求曲线 f(x ( +g(y ( =0所围图形绕直线x=-1旋转一周所成旋转体体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_020",
+    "question": "在曲线 x+ y=1上的横坐标为a(0<a<1 ( 处作曲线的切线,将切线与x轴、y轴所围成的 图形绕y轴旋转一周,使得旋转体的体积最大,求a的值",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_021",
+    "question": "设函数x=x(y ( 4y3 满足y=∫ dx,L为曲线x=x(y 4-y6 ( (-2≤y≤-1 ( ,且x(-1 ( =- ,记L的长 度为s.求: (1)s; (2)x的最大值",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_022",
+    "question": "设连续函数y=y(x ( t2 y 满足yθ+ x3= ,y(1 y x ( = 9-t2,其中0≤t≤3,x>0. (1)利用换元z=y2求y=y(x ( 的表达式； (2)令f(x (",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_001",
+    "question": "3 = ∫ y(x ( dt，求曲线y=f(x ( 的全长",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_023",
+    "question": "设非负函数 y(x ( 是微分方程 2yyθ = cosx 满足条件 y(0 ( = 0 的解, 求曲线 f n(x ( = x n∫n y(t ( dt(0≤x≤nπ ( 的弧长",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_024",
+    "question": "设函数y=f(x ( 在区间[0,a [ 上非负,f (x ( >0,且f(0 ( =0.有一块质量均匀分布的平板D,其占 据的区域是曲线y=f(x (  与直线x=a以及x轴围成的平面图形.用x表示平板D的质心的横坐标(见  2 图).证明:x> a. x=a(t-sint",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_025",
+    "question": "求摆线的一拱 ( , y=a(1-cost ( (0≤t≤2π,a>0 ( { {{ 与x轴围成的平面图形绕x轴旋转一周所形成的 旋转体的体积与表面积. x=a(t-sint",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_026",
+    "question": "已知摆线的参数方程为 ( , y=a(1-cost ( { {{ 其中0≤t≤2π,常数a>0.设该摆线一拱的弧长的数值 , 等于该弧段绕x轴旋转一周所形成的旋转曲面面积的数值.求a的值",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "设a>0,则在[0,a [ x x 1 上方程∫ 4a2-t2dt+∫ dt=0的根的个数为( )",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "a 4a2-t2 A. 0 B. 1 C. 2 D. 3",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "设函数f(x ( 具有二阶导数,fθ (x ( >0,fn (x ( π <0,记I 1 =∫ f(x -π ( π sinxdx,I 2 =∫ f(x -π ( cosxdx,则( ). A. I >0,I <0 B. I <0,I >0 C. I <0,I <0 D. I >0,I >0",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "2 1 2 1 2 1 2",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "设 f(x ( 为连续函数,T>0,证明:f(x ( a+T 以T为周期的充分必要条件是任给常数a,∫ f(x a ( dx为常 数",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "设f(x ( x t 连续,证明: ∫ f(u",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_007",
+    "question": "0 ( du x ∫ dt=∫ f(t ( (x-t ( dt",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_005",
+    "question": "设f(x ( ,g(x ( 连续,x∈[a,b [ ,证明至少存在一点ξ∈(a,b ( ,使f(ξ ( b ∫ g(x ξ ( dx=g(ξ ( ξ ∫ f(x a ( dx. +∞ dx +∞ x2 2",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_006",
+    "question": "证明:∫ =∫ dx= π. 1+x4 1+x4 4",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_007",
+    "question": "已知函数f(x ( ,g(x ( 可导,且fθ (x ( >0,gθ (x ( <0,则( ). A. ∫ f(x -1 ( g(x ( dx>∫ f(x ( g(x ( dx B. f(x -1 ( g(x ( ∫ | |dx> f(x ( g(x ( ∫ | |dx C. ∫ f g(x -1 ( [ [ dx>∫ f g(x ( [ [ dx D. ∫ f f(x -1 ( [ [ dx>∫ g g(x ( [ [ dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_008",
+    "question": "设f(x ( ,g(x ( 在[0,1 [ 上连续,则使得∫ f(x ( dx∫ g(x ( dx≥∫ f(x ( g(x ( dx成立的条件是在[0,1]上 ( ). A. f(x ( ,g(x ( 均为增函数 B. f(x ( ,g(x ( 均为减函数 C. f(x ( 为减函数,g(x ( 为增函数 D. f(x ( 为奇函数,g(x ( 为偶函数",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_009",
+    "question": "设fθ (x ( 在[a,b [ 上连续,f(a ( =f(b ( =0,证明:当x∈(a,b ( 时, f(x (",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "b | |≤ fθ (x a ( ∫ | |dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_010",
+    "question": "设fθ (x ( 在[0,1 [ 上连续,且f(0 ( =0,证明: ∫ f(x ( M | dx|≤ ,其中M=max fθ (x",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "0≤x≤1 ( | |",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_011",
+    "question": "设f(x ( x+1 =∫ sinu2du,证明:当x>0时,有 f(x x ( | |≤ . x",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "设f(x ( 在[0,1 [ 上可导,当0≤x≤1时,fθ (x ( +f2 (x ( ≥0,f(0 ( >0,则( ). A. ∫ f(x ( f(1 dx≤ln ( f(0 ( B. ∫ f(x ( f(0 dx≥ln ( f(1 ( C. ∫ f(x ( dx≤lnf(1 ( D. ∫ f(x ( dx≥lnf(0 (",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "设函数f(x ( 是[0,1 [ 上的连续函数,利用分部积分法证明:",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "x ∫ f(t",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_020",
+    "question": "x2 ( dt",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "∫ dx= ( x-x2 ( ∫ f(x ( dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "设f(x ( 是[0,1 [ 上的可导函数,f(0 ( =f(1 ( =1,max fθ (x 0≤x≤1 ( {| | { =1,则( )",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "1 A. <∫ f(x (",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "1 1 dx< B. <∫ f(x",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "2 ( dx<",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "1 C. <∫ f(x (",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_005",
+    "question": "5 1 dx< D. <∫ f(x",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "4 ( dx<",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "x sint",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "证明: /∫ dt t",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_031",
+    "question": "x / ∫ dx=1-sin1",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_005",
+    "question": "设函数f(x ( ,g(x ( 在区间[a,b [ 上连续,对任意的x∈[a,b [ x ,满足∫ g(t a ( x dt≤∫ f(t a ( b dt,且∫ g(t a ( dt= b ∫ f(t a ( b dt.证明:∫ xf(x a ( b dx≤∫ xg(x a ( dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_006",
+    "question": "设f(x ( 在[a,b [ 上可导,且fθ (x ( 连续,f(a ( b =0.证明:∫ f2 (x a ( (b-a dx≤ ( b fθ (x a ( [ [ ∫ 2 dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_007",
+    "question": "设f(x ( 是[0,1 [ 上单调增加的连续函数,则( ). ∫ 1 e-x2dt A. ∫0 f(x ( dx≥∫ f(x ( ∫ 1 e-x2dt e-x2 dx B. ∫0 f(x ( dx≤∫ f(x ( e-x2 dx ∫ 1 e-x2dt C. ∫0 f(x ( dx≥∫ f(x ( ∫ 1 e-r2dt dx D. ∫0 f(x ( dx≤∫ f(x ( dx",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_008",
+    "question": "设f(x ( 在 0, 3 π",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "上连续,在/0, π / sinx 内是函数 的一个原函数,f(0 x ( =0. (1)证明f/ π / >0； xsint (2)求方程∫ dt=lnx2的实根个数. t",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_009",
+    "question": "设 f (x ( 在[0,1 [ 上具有二阶导数, f (0 ( = f (1 ( =0,f (x ( <0,0≤ f (x ( ≤1.记曲线y= f (x ( 在 [0,1 [ 上的长度为a,证明: (1)存在ξ∈(0,1 ( ,使得对任意x∈(0,ξ ( ,有fθ (x ( >0; (2)a<3. 第12章一元函数积分学的应用(三)--物理应用",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "设沿y轴上的区间[0,1 [ 放置一长度为1且线密度为ρ的均匀细杆,在x轴上x=1处有一单位质 点，则该细杆对此质点的引力(G为引力常量)沿x轴正向的分力为_____",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "边长为a的正方形平板置于水面下，且一个顶点与水面相齐，其中一条对角线与水面垂直，如 图所示.记水的密度为ρ，重力加速度为g，则其一侧所受的静水压力为_____",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "将地面上质量为1的物体铅直向上举高，记地球半径为R，质量为M，引力常数为G，则物体摆 脱地球引力所做的功至少为_____",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "有一内表面为旋转抛物面的水缸,其深为a(单位:米)，缸口直径为2a(单位:米)，缸内盛满了水， 设水的密度为ρ(单位:千克/立方米).若以每秒Q立方米的速率将缸中的水全部抽出，问: (1)共需多少时间？ (2)需做多少功?",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_005",
+    "question": "在一个高为1m的圆柱形容器内储存某种液体,并将容器横放.底面圆的方程为x2+y2=1(单位: m).如果容器内存满了液体后,以0.2m3/min的速率将液体从容器顶端抽出. (1)当液面在y=0时,求液面下降的速率; (2)如果1m3液体所受重力为1N，求抽完全部液体需做多少功?",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_006",
+    "question": "设一单位质量细杆的长为1,G为引力常数.当质量为a的质点在细杆延长线上距杆右端点的 处 移至 处时，引力做功大小为( )",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "5 A. Galn B. Galn C. Galn2 D. Galn3",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "3",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_007",
+    "question": "直角三角板的斜边长度为1,将该直角三角板竖直插入水中,并使其中一个直角边与水面对齐，当 三角板受到水的压力最大时，其水平直角边的长度为( )",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "5 6 2 A. B. C. D",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "5 3 2",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_001",
+    "question": "一三角形平面薄板铅直地浸没于水中,设当该薄板的一条边与水面相平齐时薄板一侧所受的水压 力的大小为F ,当倒转薄板使原来与水面相平齐的那条边与水面平行而该边相对的顶点与水面相齐 时薄板一侧所受的水压力的大小为F,则( )",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "4 A. F = F B. F = F C. F =2F D. F =3F",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "2 1 2 3 1 2 1 2 1",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_002",
+    "question": "边长为2的等边三角形薄平板铅直沉没在水中,且一条边与水面相齐.记重力加速度为g,水的密度 为ρ. (1)求该平板一侧所受的水压力； (2)当水面开始以0.1的速度上涨时,求平板一侧所受水压力的变化率",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_003",
+    "question": "半径为a的球浸没在与其密度ρ相同的某液体中,球与水面相切,g为重力加速度.若将球取出，所 做的功至少为_____",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_004",
+    "question": "设有半圆形板:x2+y2≤a2 (y≥0 ( ,它在点P(x,y ( 的密度与点P到原点的距离成正比,则半圆形板 的重心坐标为( ). πa A. /0, / πa B. /0, / 4a C. /0, 3π / 3a D. /0, 2π /",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的应用(二)--积分等式与积分不等式_005",
+    "question": "曲线y=ex与直线x=1,x=-1及x轴所围平面有界区域D的形心为_____",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "设z=arctan xy+cos(x+y ( [ [ ,则dz| (0,x ( =_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_002",
+    "question": "设函数f(u ( 可导,z=f(cosy-cosx (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "∂z 1 ∂z +xy,则 ⋅ + ⋅ =_____. sinx ∂x siny ∂y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_003",
+    "question": "设函数f(u ( 可导,z=yf(x y2 ( ∂z ∂z ,则2x +y =_____. ∂x ∂y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_004",
+    "question": "设函数z=z(x,y ( 由方程(x+1 ( z+2ylnz-arctan(xy ( ∂z =1确定，则 | ∂x (0,2 ( =_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_005",
+    "question": "设F(x,y ( x-y = (x-y-t ( ∂2F ∂2F ∫ etdt,则 + =_____. ∂x2 ∂y2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_006",
+    "question": "设函数f(x,sinx ( =x+sinx,f x ′ (x,y ( =1+2cosx,则 f y ′ (x,y ( | =_____. y=sinx",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_007",
+    "question": "设函数 f (x,y ( ∂2 f(x,y 具有二阶连续偏导数,且满足 ( [ [ =1,f (0,y ∂x∂y ( =siny,f (x,0 ( =sinx,则 π π f/",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_002",
+    "question": "2 / =_____. x",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_008",
+    "question": "设f/x+y, y / =x2-xy+y2,则f x ′ (x,y ( =_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_009",
+    "question": "设函数f(x,y ( ∂ f(x,y = |xy|,求 ( [ [ . ∂x",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_010",
+    "question": "设Q(x,y ( x = ,y>0,P(x,y y2 ( dx+Q(x,y ( dy是某二元函数的全微分,则P(x,y ( 可取为( ). x2 1 1 x2 1 1 A. y2- B. x2- C. - D. - y3 y y2 y3 x2 y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_011",
+    "question": "设z=f(u ( 可导,u=u(x,y ( 由方程u=φ(u ( x +∫ P(t y ( dt所确定,其中函数P连续,φ有连续导数, 且φθ (u ( ≠1,则P(x ( ∂z +P(y ∂y ( ∂z =_____. ∂x",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_012",
+    "question": "设f具有二阶连续偏导数,且u=f(x2+y,xy ( ,则u′′ =_____. xy",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_013",
+    "question": "设函数f(u,v ( 具有二阶连续偏导数,函数g(x,y ( y x =xy-f/ , x y / ,求 ∂2g ∂2g ∂2g x2 +2xy +y2 . ∂x2 ∂x∂y ∂y2 y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_014",
+    "question": "设函数z=xyf/ x / ,其中f(u ( ∂z ∂z 可导,且满足x +y =y2 (lny-lnx ∂x ∂y ( ,求: (1)f(x ( 的表达式； (2)f(x ( 与x轴所围图形的面积及该图形绕x轴旋转一周所得旋转体的体积",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_015",
+    "question": "已知函数u(x,y ( ∂2u ∂2u ∂u ∂u 满足2 -2 +3 +3 =0,求a,b的值使得在变换 ∂x2 ∂y2 ∂x ∂y u(x,y ( =v(x,y ( ax+by e 后，上述等式可化为函数v(x,y ( 的不含一阶偏导数的等式",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_016",
+    "question": "设函数u= f (x,y ( ∂2u ∂2u 具有二阶连续偏导数,作变量代换ξ=x,η=y-x,将方程 +2 + ∂x2 ∂x∂y ∂2u =0化为以ξ,η为自变量的方程. ∂y2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_017",
+    "question": "设函数z=z(x,y ( z z 由方程F/x+ ,y+ y x / =0确定,且F(u,v ( ∂z ∂z 具有连续偏导数,求x +y . ∂x ∂y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_018",
+    "question": "设f(x,y ( 在有界闭区域D上连续,在D内有一阶偏导数.若f(x,y ( 在D的边界∂D上的值均为0, ∂ f(x,y 且 ( [ [ ∂ f(x,y + ∂x ( [ [ =f(x,y ∂y ( ,则f(x,y ( ( ). A. 在D内有正的最大值 B. 在D内有负的最小值 C. 只在D的边界∂D上取到最大值 D. 在D的边界∂D上可以取到最小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_019",
+    "question": "设f(x,y ( ∂2f ∂2f ∂2f 在平面有界闭区域D上具有二阶连续偏导数,且满足 >0与 + =0,则 ∂x∂y ∂x2 ∂y2 ( ). A. f(x,y ( 的最小值点和最大值点都在D的内部 B. f(x,y ( 的最小值点和最大值点都在D的边界上 C. f(x,y ( 的最小值点在D的内部,最大值点在D的边界上 D. f(x,y ( 的最大值点在D的内部,最小值点在D的边界上",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_020",
+    "question": "设f(x,y ( =x4+y4-(x+y ( 2，且(1,1 ( 与(-1,-1 ( 为函数f(x,y ( 的两个驻点，则( ). A. f(1,1 ( 与f(-1,-1 ( 都是极大值 B. f(1,1 ( 与f(-1,-1 ( 都是极小值 C. f(1,1 ( 是极大值,f(-1,-1 ( 是极小值 D. f(1,1 ( 是极小值,f(-1,-1 ( 是极大值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_021",
+    "question": "求函数f(x,y ( =x3-3xy-y2-y-9的极值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_022",
+    "question": "求函数f(x,y ( =x2/2x2-4y- x5 / +y2的极值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_023",
+    "question": "设f(x,y ( 满足f x ′ (x,y ( =y(1+x ( x-y e ,f(1,y ( =ye 1-y .求: (1)f(x,y ( 的表达式； (2)f(x,y ( 的极值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_024",
+    "question": "求曲线x2+xy+y2+2x-2y-12=0上的点到原点距离的最大值和最小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "设函数f(x,y ( =|x|+y|y|,则( ). A. f x ′ (0,0 ( 存在,f y ′ (0,0 ( 存在 B. f x ′ (0,0 ( 存在,f y ′ (0,0 ( 不存在 C. f x ′ (0,0 ( 不存在,f y ′ (0,0 ( 存在 D. f x ′ (0,0 ( 不存在,f y ′ (0,0 ( 不存在",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_002",
+    "question": "设f(x,y ( 具有一阶偏导数,且对任意的(x,y ( ∂f(x,y 都有 ( ∂f(x,y >0, ∂x ( <0,则( ). ∂y A. f(0,0 ( >f(1,1 ( B. f(0,0 ( <f(1,1 ( C. f(0,1 ( >f(1,0 ( D. f(0,1 ( <f(1,0 (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_003",
+    "question": "已知F(a,b ( π = 2 (asinx-sin2x+b ( ∫ 2 cosxdx,则使得F(a,b ( 取得最小值的a,b分别为( )",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "1 1 1 A. 1, B. 1,- C. -1, D. -1,-",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_006",
+    "question": "6 6 6",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_004",
+    "question": "若 f(x,y ( 在点(0,0 ( 处的某个邻域内有定义, f(0,0 ( =0,且 lim (x,y ( →(0,0 ( f(x,y ( - x2+y2 =a,其中a x2+y2 为常数. (1)讨论函数f(x,y ( 在点(0,0 ( 处的连续性. (2)当a为何值时,函数f(x,y ( 在点(0,0 ( 处可微？并求df| (0,0 (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_005",
+    "question": "设函数u(x,y ( 的全微分du= ex+fθ (x ( [ [ ydx+ fθ (x ( dy,其中 f(x ( 在(-∞,+∞ ( 内具有二阶连续 的导数,且f(0 ( =4,fθ (0 ( =3,求f(x (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_006",
+    "question": "已知f(u ( 在(0,+∞ ( y 内有二阶连续导数,且z=f/ x / ∂2z ∂2z 满足 + =0.求f(u ∂x2 ∂y2 ( 的表达式",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_007",
+    "question": "设函数z=f(x,y ( 连续,且 lim (x,y ( →(1,0 ( f(x,y ( -3x+y+5 (x-1 ( = ,则dz|",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_002",
+    "question": "+y2 4 (1,0 ( =_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_008",
+    "question": "设函数f(u,v ( 具有连续偏导数,z=f(xy,x+y ( .若dz| x=2 =6dx+5dy,则f u ′ (6,5 y=3 ( +f v ′ (6,5 ( =___ __",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_009",
+    "question": "设函数z=f(x,y ( (xy≠0 ( y 满足f/xy, x / =y2 (x2-1 ( ,则dz=_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_010",
+    "question": "设函数f(x,y ( xy ∂2f =∫ ext2 dt,则 | ∂x∂y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_040",
+    "question": "(1,1 ( =_____",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_011",
+    "question": "设z=z(x,y ( ∂2z 是由z+ez=xy所确定的二元函数,则 | =_____. ∂x∂y z=0",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_012",
+    "question": "设z=z(x,y ( 是由方程e x-2y+3z -2xe -y cosz=1所确定的函数,则dz| (0,0 ( =_____. aydy+xdx",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_013",
+    "question": "已知 (x2+y2<1 x2+y2-1 ( 是某二元函数的全微分,则a=( ). A. 1 B. -1 C. 2 D. -2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_014",
+    "question": "设函数z=z(x,y ( 由方程sin(x-y ( z +∫ e-t2 dt=0确定,则dz|",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "(0,0 ( =",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_015",
+    "question": "设z=z(x,y ( 是由方程z+lnz-∫ x e-t2 dt=1确定的函数,计算 ∂2z | y ∂x∂y (0,0 (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_016",
+    "question": "设函数f与g均可微,z=f xy,lnx+g(xy ( [ [ ∂z ∂z ,则x -y =( ). ∂x ∂y A. f′ B. f′ C. f′+f′ D. f′-f′",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_001",
+    "question": "2 1 2 1 2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_017",
+    "question": "设F(u,v ( 具有一阶连续偏导数,且z=z(x,y ( x 由方程F/ ,yz z / =0所确定.设题中出现的分母不 ∂z ∂z 为零,则x -y =( ). ∂x ∂y A. 0 B. z C. D. 1 z",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_018",
+    "question": "设z=z(x,y ( ∂2z 是由方程3x+xyz+z3=1所确定的函数,则 | =_____. ∂x2 x=0 y=0 x2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_019",
+    "question": "已知方程2z-ez+1+∫ sin(t2 y ( dt=0在(x ,y ,z 0 0 0 ( =(1,1,0 ( 的某个邻域中确定了一个隐函数z =z(x,y ( ∂2z ,求 | ∂x∂y (1,1 (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_020",
+    "question": "设f(u,v ( 存在二阶连续偏导数,z=z(x,y ( 是由方程f(z-x,z-y ( ∂2z =1确定的隐函数,求 . ∂x∂y",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_021",
+    "question": "设u=e x+y+z ,其中y(x ( 和z(x ( x ∫ et2 dt+ln(1+y 由方程组 0 ( { =0, du {{ 确定,则 | =_____. y+z dx x=0 e =e+zlnz",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_022",
+    "question": "函数f(x,y ( =x2+y2在约束条件(x-1 ( 3 =y2下( ). A. 有最大值,无最小值 B. 无最大值,有最小值 C. 有最大值,有最小值 D. 无最大值,无最小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_023",
+    "question": "f(x,y ( =x4+y4-(x+y ( 2有( ). A. 2个极小值点,1个极大值点 B. 1个极小值点,1个极大值点 C. 3个极小值点,无极大值点 D. 2个极小值点,无极大值点",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_024",
+    "question": "设f(x,y ( -1 / y-e x2 = / -1 / y-3e x2 / { , x≠0, {{ 则点(0,0 y2, x=0, ( ( ). A. 是f(x,x ( 的极小值点,也是f(x,y ( 的极小值点 B. 是f(x,x ( 的极小值点,不是f(x,y ( 的极小值点 C. 不是f(x,x ( 的极小值点,是f(x,y ( 的极小值点 D. 不是f(x,x ( 的极小值点,也不是f(x,y ( 的极小值点",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_025",
+    "question": "设f(x,y ( =x2+y2 (1+x ( 3 ,则点(0,0 ( ( ). A. 是f(x,y ( 的唯一极小值点,也是其最小值点 B. 是f(x,y ( 的唯一极大值点,也是其最大值点 C. 是f(x,y ( 的唯一极小值点,但不是其最小值点 D. 是f(x,y ( 的唯一极大值点,但不是其最大值点",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_026",
+    "question": "求由方程2x2+2y2+z2+8xz-z+8=0所确定的函数z=z(x,y ( 的极值,并指出是极大值还是 极小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_027",
+    "question": "设f(x,y ( =3x+4y-ax2-2ay2-2bxy.当a,b满足何种条件时,f(x,y ( 有唯一的极大值,并说明理 由. {x2+9y2-2z2=0",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_028",
+    "question": "求|z|在约束条件 {{ 下的最大值与最小值. x+3y+3z=5 {x2+y2-2z2=0",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_029",
+    "question": "求曲线C:{{ 上距离xOy平面最远和最近的点的坐标. x+y+3z=5",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_030",
+    "question": "求函数u= x2+y2+z2在约束条件x+2y=1与x2+2y2+z2=1下的最值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_031",
+    "question": "求曲线x2-xy+y2=1(x>0,y>0 ( 上的一点P,使该点处的切线与x轴,y轴在第一象限所围的 图形的面积最小. x2 y2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_032",
+    "question": "设曲线L 1 :x2+y2=2y内切于曲线L 2 : a2 + b2 =1(a,b>0 ( ,求a,b的值,使L 所围面积最小. 2",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_033",
+    "question": "设u=u(x,y ( ∂2u 具有二阶连续偏导数,且满足 =x2y,u(x,0 ∂x∂y ( =-x2+2,u(1,y ( =cosy.求: (1)u=u(x,y ( 的表达式； (2)u(x,y ( -cosy的极值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_034",
+    "question": "设函数f(x,y ( 具有二阶连续偏导数,且满足f(x,0 ( =x2,f y ′ (x,0 ( = 2x,f y ′′ y(x,y ( =4,求f(x,y ( 在 约束条件x2+2y2=4下的最大值与最小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_035",
+    "question": "设函数u=xz+ay3 (z≥0 ( ,且x2+y2+z2=1. (1)当a= 时，求u的最大值； (2)当a=t(t为变量)时，u是否有最大值，若有，求出最大值，若没有，说明理由",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_036",
+    "question": "设D= (x,y ( { ∣x+y≤3,x≥0,y≥0 { ,求函数 f(x,y ( =2x3+2y3-6x-6y+5在区域D上的最大 值与最小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_037",
+    "question": "设f(x,y ( =4x2 (x-2y ( +16y(xy-3 ( -33x,求其在平面区域D= (x,y ( { ∣0≤y≤x≤3 { 上的取值 范围",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_038",
+    "question": "设函数u=u(x,y ( 在区域D= (x,y ( { ∣2x2+3y2≤4 {{ {{{ 上连续,在区域D的内部有二阶连续偏导数, ∂2u ∂2u 且满足-2 -3 =u2.在区域D的边界2x2+3y2=4上u(x,y ∂x2 ∂y2 ( ≥0.证明:当2x2+3y2≤4时, u(x,y ( ≥0",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_039",
+    "question": "已知可微函数 f (u,v ( ∂ f(u,v 满足 ( [ [ ∂ f(u,v + ∂u ( [ [ =6(u+v ∂v ( -3u2,且 f (u,0 ( =3u2-u3.记 g(x,y ( =f(x,x-y ( . ∂ g(x,y (1)计算 ( [ [ ； ∂x (2)求f(x,y ( 在有界闭区域D= (x,y ( { ∣x2+y2≤16 {{ {{{ 上的最值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_040",
+    "question": "设z=z(u,v ( 具有二阶连续偏导数,且z=z(x-y,x+2y ( 满足 ∂2z ∂2z ∂2z ∂z ∂z d z(0,v",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_002",
+    "question": "+ - =2 - , ∂x2 ∂x∂y ∂y2 ∂x ∂y ( [ [ 1 = z(0,v dv 3 ( v +e3,z(u,0 ( =sinu. ∂2z 1 ∂z (1)证明 = ∘ ; ∂u∂v 3 ∂u (2)求z=z(u,v ( 的表达式",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1. 设D为由x=0,y=0,x+y= 2 ,x+y=1所围成的区域,I 1 = ln7 (x+y D ( dσ,I 2 = (x+y D (  7 dσ,I 3 = sin7 (x+y D ( dσ,则( ). A. I <I <I B. I <I <I C. I <I <I D. I <I <I",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 3 1 3 2 3 2 1 3 1 2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "设I = e -(x2+y2 i Di (  dσ,i=1,2,3,其中D 1 = (x,y ( { {{ |x2+y2≤R2 {{{ ,D 2 = (x,y ( { {{ |x2+y2≤2R2 {{{ ,D = 3 (x,y ( { x|≤R,|y≤R { ,R>0,则( ) A. I <I <I B. I <I <I C. I <I <I D. I-<I <I",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 3 2 3 1 1 3 2 3 2 1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_003",
+    "question": "lim  e x2-y2 cos(x+y r→0 πr2 x2+y2≤r2 ( dxdy=( ). A. 0 B. 1 C. πr2 D. πr2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_004",
+    "question": "设D是由曲线y=x2-1和y= 1-x2围成的平面区域,则 (axy+by2 D (  dxdy( ) A. 等于0 B. 符号与a有关,与b无关 C. 符号与a,b都有关 D. 符号与a,b都有关",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "x - y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_005",
+    "question": "∫ dx∫ e 2 dy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_009",
+    "question": "0",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "y2 xex-",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_006",
+    "question": "∫ dy∫ dx=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_012",
+    "question": "0 1- x e lny",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_007",
+    "question": "I=∫ dy∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "0 ( dx(其中f(x,y ( 连续)交换积分次序得( ). lny e A. I=∫ dx∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_015",
+    "question": "1 (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "e dy B. I=∫ dx∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_017",
+    "question": "ex ( dy e lny C. I=∫ dx∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "0 ( e 1 dy D. I=∫ dx∫ f(x,y ex 0 ( dy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_008",
+    "question": "设f(x,y ( 5π 1 是连续函数，则∫6 dx∫ f(x,y π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "sinx ( dy=( )",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "arcsiny A. ∫ dy∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "2 (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "5π dx B. ∫ dy∫6 f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "π-arcsiny ( dx",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "arcsiny C. ∫2 dy∫ f(x,y π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_027",
+    "question": "2 (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "π dx D. ∫2 dy∫2 f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_029",
+    "question": "π-arcsiny ( dx",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_009",
+    "question": "设函数f(x,y ( 连续,且f(x,y ( =f(y,x ( =f(-x,y (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "2 ,则∫ dx∫ f(x,y -2 4-x2 ( dy=( )",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "- 4-y2 A. ∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_033",
+    "question": "-2 ( 2 dx+∫ f(x,y - 4-y2 ( dx",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "2 ∫ dy B. 2 ∫ f(x,y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_035",
+    "question": "4-y2 ( dy ∫ dx π 2secθ C. 4∫4 dθ∫ f(rcosθ,rsinθ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_036",
+    "question": "2 ( arctan1 2secθ rdr D. 4∫ 2 dθ∫ f(rcosθ,rsinθ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_037",
+    "question": "2 ( rdr π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_010",
+    "question": "已知曲线L的极坐标方程为r=sin3θ/0≤θ≤ / ,D为曲线L围成的区域,则 x2+y2dxdy= D _____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_011",
+    "question": "设D是第一象限内在曲线y=4x2与y=9x2之间的区域,则 xe -y2 dxdy=_____. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_012",
+    "question": "已知D= (x,y ( ∣(x-a ( { 2 +y2≤a2,y≥0 {{ {{{ ,a>0,则 4a2-x2-y2dxdy=_____. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_013",
+    "question": "设平面区域D由曲线y= 3(1-x2 ( 与直线y= 3x及y轴所围成.计算二重积分 (x2+y2 D (  dxdy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_014",
+    "question": "设平面区域D= (x,y ( { ∣1≤x2+y2≤4,x≥0,y≥0 {{ {{{ xcos x2+y2 ,计算 dxdy. x+y D x2-xcosy-y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_015",
+    "question": "设D是由y=|x|及y=1围成的有界区域,计算二重积分 dxdy. D x2+y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_016",
+    "question": "计算二重积分 1-x2-y2dσ,其中D= (x,y D ( { ∣x2+y2≤y {{ {{{",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_017",
+    "question": "设平面区域D= (x,y ( { ∣x3≤y≤1,-1≤x≤1 {{ {{{ ,f(x ( 是定义在[-a,a [ (a≥1 ( 上的任意连续函数, 求 (x+1 D ( f(x ( +(x-1 ( f(-x ( [ [  sinydxdy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2y-y2 1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_018",
+    "question": "计算I=∫ dy∫ dx",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_048",
+    "question": "y x2+y2 4-x2-y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_019",
+    "question": "计算 f(x,y D ( dσ,其中D= (x,y ( { ∣x2+y2≥2x {{ {{{ ,f(x,y ( y, 1≤x≤2,0≤y≤x, { ={{ 0, 其他",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_020",
+    "question": "设平面区域D= (x,y ( { ∣x+y≤1,x≥0,y≥0 { e -(x+y ,计算 D (  dσ. xy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_021",
+    "question": "已知平面区域D= (x,y ( ∣(x-1 ( { 2 +y2≤1 {{ {{{ ,计算二重积分I= (x2-3y2 D (  dxdy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_022",
+    "question": "计算二重积分 (x+y2 D (  dσ,其中D= (x,y ( { ∣x2+y2≤x+y {{ {{{ . a",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_023",
+    "question": "计算I= x2+y2dxdy,其中D是x2+y2≤a2和/x- D /",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "a2 +y2≥ 的公共部分,a>0. 1-x2-y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_024",
+    "question": "计算 dxdy,其中D为圆x2+y2=1所包围的在第一象限内的区域. D 1+x2+y2 n",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "lim∑ n→∞ i=1 j=1 (n+i ( =_____. n2+j2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "设D= (x,y ( { ∥x|+|y∣≤3 { ,D k(k=1,2,3,4 ( 是D的第k象限部分,I k = sin(x-y Dk ( dxdy,则( ). A. I >0 B. I >0 C. I >0 D. I >0",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 3 4",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_003",
+    "question": "设 M =  ln(x2+y2 D ( dxdy,N = ln(x2+y2 D ( [ [  2 dxdy,P = (x2+y2-1 D (  dxdy, 其中 D = (x,y ( { ∣1≤x2+y2≤2 {{ {{{ ,则必有( ). A. M<N<P B. N<M<P C. M<P<N D. N<P<M",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_004",
+    "question": "设f(x ( 是[0,1 [ 上的连续函数且其在[0,1 [  1 上的平均值 f = ,满足f(x ( x +a∫ f(y ( f(y-x ( dy= 1，求常数a的值",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_005",
+    "question": "设I 1 = 0<x<1 (sinx2+cosy2 0≤y<1 ( 1  dσ,I = 2+ln/ x2+y2+ 2 |x|+|y|≤1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "/  dσ，则( ). A. 1≤I ≤I B. I ≤I ≤1 C. I ≤I ≤1 D. I ≤1≤I",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 1 2 2 1 2 1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_065",
+    "question": "(1-x2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_006",
+    "question": "∫ dx -1 (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "/1-x3 / 3(1-sinxcosy (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "(1-x2 ∫ dy+∫ dx (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "/1-x3 / 3(1-sinxcosy ( ∫ dy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_007",
+    "question": "设有界区域D是由圆x2+y2=1和直线y=x以及x轴所围成的在第一象限的图形,计算二重积 分 e(x+y D ( 2  (x2-y2 ( dxdy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_008",
+    "question": "设D= (x,y ( { ∣4x2+y2<1,x≥0,y≥0 {{ {{{ ,则积分I= (1-12x2-y2 D (  dxdy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_009",
+    "question": "设平面区域D= (x,y ( { {{ | 1 x≤y≤ 3x,1≤x≤2 {{{ y ,求二重积分I= yexdxdy. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "xtany",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_010",
+    "question": "∫ dx∫ dy=_____. y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_075",
+    "question": "1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_011",
+    "question": "设平面区域D= (x,y ( { ∣x2+y2≤1 {{ {{{ ,则 (x-2y D (  2 dxdy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_012",
+    "question": "设D= (x,y ( { {{ | x2 + y2 ≤1 a2 b2 {{{ ,常数a>0,b>0,a≠b,计算I= (x-1 D ( 2 +(2y+3 ( 2 [ [  dxdy. x2+y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_013",
+    "question": "计算二重积分 dxdy,其中D= (x,y D |x|+|y| ( { |1≤|x|+|y∣≤2 {",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_014",
+    "question": "∫ dy∫ y 1+x2-y2dx=____. -1 -1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2-x2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_015",
+    "question": "∫ dx (x+1 -1 x2 ( ∫ ydy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_016",
+    "question": "计算二重积分 x-|y D | | |  dσ,其中D= (x,y ( { ∣x2+y2≤2x,x≤1 {{ {{{",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_017",
+    "question": "计算二重积分 x2+y2- 2(x+y D (  | |dxdy,其中D= (x,y ( { ∣x2+y2≤4 {{ {{{",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_018",
+    "question": "设D= (x,y ( { ∣0≤x≤2,0≤y≤2 { ,计算 |xy-|dσ. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_019",
+    "question": "设平面区域D= (x,y ( ∣(x-1 ( 2 +y2≥1,(x-2 ( { 2 +y2≤4,y≥x {{ {{{ ,计算 (x2+y2 D (  dσ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_087",
+    "question": "4-x2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_020",
+    "question": "∫ dx (x2+y2 - 2 -x (",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 4-x2 ∫ 2dy+∫ dx (x2+y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_090",
+    "question": "2x-x2 ( ∫ 2dy=",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_021",
+    "question": "设D= (x,y ( { ∣0≤x≤ π,0≤y≤ π { ,计算二重积分 sin max{x2,y2 {{ D {{{ ( ( dσ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_022",
+    "question": "∫ dy∫ x4-y2dx=____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_094",
+    "question": "y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_023",
+    "question": "∫ 1 x2dx∫ 1 e -y2 dy=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_096",
+    "question": "x",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_024",
+    "question": "设D= (x,y ( |x2+y2≤4,(x-1 ( { 2 +y2≥1,y≥0 {{ {{{ ,计算 (xy+y2 D (  dσ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_025",
+    "question": "设平面区域D= (x,y ( (x-1 ( 2 +(y-1 ( 2 { {{ | ≤1 {{{ ,则 (x2+y2 D (  dσ=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_026",
+    "question": "设平面区域D= (x,y ( { | |x|+|y∣≤1 { |y|  ,求 e|x|+|y|dσ. D +∞ 2y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_027",
+    "question": "∫ dy∫ e-x2 dx=( )",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_101",
+    "question": "y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1 1 A. 1 B. C. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_002",
+    "question": "3 4",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_028",
+    "question": "已知函数f(t ( t2 x =∫ dx∫ e y dy,则fθ (π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "t ( =_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_029",
+    "question": "设D= (x,y ( (x-1 ( 2 +(y-1 ( 2 { {{ | ≤2 {{{ ,则 (x+y D (  dσ=_____",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_030",
+    "question": "设D= (x,y ( { ∣0≤x≤1,0≤y≤2e { ,计算二重积分 x|y-ex |dσ. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_031",
+    "question": "设f(x,y ( =max{ x2+y2,1 {{ {{{ ,D= (x,y ( { ∥x∣≤y≤1 { ,求 f(x,y D ( dσ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_032",
+    "question": "计算∫ 1 dx x (e -y2 +e y siny",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_110",
+    "question": "1 ( ∫ dy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_033",
+    "question": "设平面区域D= (r,θ ( { ∣r≤1,r≤2cosθ,sinθ≥0 { ,计算 r2/cosθ+ rsin2θ D / drdθ",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_034",
+    "question": "设 f (x,y ( 在 D = (x,y ( { ∣x2+y2≤1 {{ {{{ 上连续, f (x,y ( x2+y2 (2x2+1 = e - D ( f(x,y (  dxdy, 求 x2+y2+1  f(x,y D ( dxdy 2x+y",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_035",
+    "question": "计算 dxdy,其中D是由抛物线y2=2x与直线x+y=4,x+y=12所围成的区域. D 3 x2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_036",
+    "question": "设平面区域D= (x,y ( y { {{ |x∣≤y,x2+y2≤ x2+y2+ {{{ x+y ,计算 dxdy. D x2+y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_037",
+    "question": "计算I= x2y2dxdy,其中D是由直线y=2,y=0,x=-2及曲线x=- 2y-y2所围成的区域. D",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_038",
+    "question": "设平面区域D= (x,y ( { {{ |x2+y2≤1,|y|≤|x∣ {{{ x2y2 ,计算 dσ. D x2+y2+x2-y2",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_039",
+    "question": "计算 ln(xy D ( dxdy,其中D= (x,y ( { ∣1≤xy≤2,x≤y≤4x,x>0 {",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_040",
+    "question": "设a=∫ e-t2 dt,b=∫2 e-t2 dt,求整数m,n使得",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_120",
+    "question": "0 /∫ x e -y2 dy",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "2 0 /",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_001",
+    "question": "1 ∫ dx=ma-nb+ - . e 4 e",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "二重积分_041",
+    "question": "设平面区域D= (x,y ( { |2x2+y2≤2 x2+y2,y≥x≥0 {{ {{{ f(x,y ,若 D (  dσ=a>0,f(x,y 1-x2 ( 是D上的 连续函数. (1)计算 dσ； D 1-x2 (2)证明:存在(ξ,η ( ∈D，使得 f(ξ,η ( | |≥ a. π",
+    "domain": "二重积分",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "xdy+ydx=sinxdx满足y(π ( =0的特解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_002",
+    "question": "已知曲线上任一点的切线在y轴上的截距与法线在x轴上的截距之比为3:1,则该曲线方程为__ ___",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_003",
+    "question": "设y 1 ,y 2 是一阶非齐次线性微分方程yθ+p(x ( y=q(x ( 的两个特解,若常数λ,μ使λy +μy 是该方 1 2 程的解,λy -μy 是该方程对应的齐次方程的解,则( )",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "2",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "1 1 1 2 1 2 2 A. λ= ,μ= B. λ=- ,μ=- C. λ= ,μ= D. λ= ,μ=",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_002",
+    "question": "2 2 2 3 3 3 3",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_004",
+    "question": "求微分方程(2x-3xy2-y3 ( yθ+y3=0的通解",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_005",
+    "question": "过原点的曲线y=y(x ( dy 满足 =(x+y dx ( 2 ,则lim y(x x→0+ ( [ [ x =_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_006",
+    "question": "微分方程yθ=(x+1 ( secy-tany的通解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_007",
+    "question": "设函数y(x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "1 1 是微分方程yθ+ y=2ex 满足y/ x2 2 / =0的解. (1)求y=y(x ( 的表达式； (2)求曲线y(x ( 的斜渐近线",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_008",
+    "question": "以yOz面上的平面曲线段y=f(z ( (z≥0 ( 绕z轴旋转一周所成旋转曲面与xOy面围成一个无上盖 容器(见图),现以3cm3/s的速率把水注入容器内,水面的面积以πcm2/s的速率增大.已知容器底面积 为16πcm2,求曲线y=f(z ( 的方程",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_009",
+    "question": "设f(x ( x 有连续导数,x∈[0,+∞),且满足方程 (x-1 ( ∫ f(t ( x dt-∫ ff(t ( dt=x,求函数f(x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_010",
+    "question": "设φ(x ( 为连续函数, φ(x ( dy | |≤k(k为常数),求微分方程 +y=φ(x dx ( 满足初始条件y(0 ( =0的 特解y(x ( ,并证明当x≥0时,有 y(x ( | |≤k(1-e-x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_011",
+    "question": "设函数y=y(x ( 是微分方程2xyθ-4y=2lnx-1满足条件y(1 ( = 的解,求曲线y=y(x ( 在 [1,e [ 上的平均值",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_012",
+    "question": "设曲线y=y(x ( (x>0 ( 经过点(1,0 ( ,该曲线上任一点P(x,y ( 到y轴的距离等于该点处的切线在 y轴上的截距,求y(x ( 在区间(0,1 ( 上与x轴所围平面图形的面积",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_013",
+    "question": "设曲线y=y(x ( 上点P(0,4 ( 处的切线垂直于直线x-2y+5=0,且该曲线满足微分方程y+ 2yθ+y=0,则此曲线方程为( )",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_009",
+    "question": "9 A. y= xe-x B. y=/4+ x 2 2 / e-x C. y=(C x+C 1 2 ( e-x D. y=2(x+2 ( e-x",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_014",
+    "question": "设曲线y=y(x ( 经过原点,且在原点处的切线与直线2x+y+6=0平行,而y(x ( 满足微分方程 y-2yθ+5y=0，则此曲线的方程为( ). A. y=exsin2x B. y=-exsin2x C. y=ex (cos2x-sin2x ( D. y=ex (sin2x-cos2x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_015",
+    "question": "设y=y(x ( 满足y-2yθ+y=0,且y(0 ( =0,yθ (0 ( =1,则∫ y(x -∞ ( dx=_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_016",
+    "question": "已知某常系数齐次线性微分方程的通解为y=C +ex (C cos2x+C sin2x",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "2 3 ( ,则该微分方程为__ ___. 3x",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_017",
+    "question": "微分方程4y-12yθ+9y=e2 (3x2+2 ( 的特解形式为( ). 3x A. Ax2+Bx+C+De2 B. (Ax2+Bx+C ( 3x e2 C. x(Ax2+Bx+C ( 3x e2 D. x2 (Ax2+Bx+C ( 3x e2",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_018",
+    "question": "已知y =xex+e2x,y =xex+e-x,y =xex+e2x-e-x是某二阶常系数非齐次线性微分方程的三",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "2 3 个解,则此微分方程为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_019",
+    "question": "求微分方程y-2yθ+y=2(3x2-2 ( ex的通解",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_020",
+    "question": "求微分方程y+4yθ+5y=8cosx,当x→-∞时为有界的特解",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_021",
+    "question": "欧拉方程x2y+3xyθ+3y=0满足条件y(1 ( =0,yθ (1 ( = 2的解为y=_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "微分方程x+yyθ=y-xyθ的通解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_002",
+    "question": "每一个解y=y(x ( 都满足 lim y(x x→+∞ ( =0的微分方程是( ). y y y y A. yθ+ =0 B. yθ- =0 C. yθ+ =0 D. yθ- =0 1+x3 1+x3 4 1+x3 4 1+x3",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_003",
+    "question": "设 f(u,v ( 具有连续偏导数,且满足 f u ′ (u,v ( + f v ′ (u,v ( =uv,则函数y=e-2xf(x,x ( 满足条件 y| x=0 =1的表达式为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_004",
+    "question": "设f(x ( 在[0,+∞)上连续且有水平渐近线y=b≠0，则( ). A. 当a>0时,yθ+ay=f(x ( 的任意解都满足 lim y(x x→+∞ ( b = a B. 当a>0时,yθ+ay=f(x ( 的任意解都满足 lim y(x x→+∞ ( a = b C. 当a<0时,yθ+ay=f(x ( 的任意解都满足 lim y(x x→+∞ ( b = a D. 当a<0时,yθ+ay=f(x ( 的任意解都满足 lim y(x x→+∞ ( a = b",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_005",
+    "question": "若二阶常系数齐次微分方程y+ayθ+by=0的解在(-∞,+∞ ( 上均有周期性，则( ). A. a<0,b<0 B. a>0,b>0 C. a=0,b<0 D. a=0,b>0",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_006",
+    "question": "如果对于微分方程y-(2k-4 ( yθ+ky=0的任一解y(x ( +∞ ,反常积分∫ y(x ( dx均收敛,则k的取 值范围为( ). A. (-∞,1] B. (0,1] C. (-∞,2 ( D. (0,2 (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_007",
+    "question": "以y=x与y=xe-2x为特解的最低阶常系数齐次线性微分方程为( ). A. y+2y=0 B. y+4y+4yθ-4y=0 C. y(4 ( +2y=0 D. y(4 ( +4y+4y=0",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_008",
+    "question": "已知函数y=y(x ( xy 在任意点x处的增量Δy= Δx+o(Δx 1+x2 ( ,且y(0 ( =1,则yθ (1 ( =( ). A. B. 2 C. 2 D. 2 2",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_009",
+    "question": "微分方程(x+y ( dy+(y+1 ( dx=0满足 y| =2的特解是_____. x=1",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_010",
+    "question": "以y =x2和y =x2-e2x为特解的一阶非齐次线性微分方程为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "2",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_011",
+    "question": "设当x≥0时,f(x ( 有连续的一阶导数,并且满足f(x ( x =-1+x+2 (x-t ( ∫ f(t ( fθ (t ( dt,则f(x ( =",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_012",
+    "question": "设 f (x ( 是 (0,+∞ ( 上的连续函数,且对任意x>0满足x∫ f(tx ( x dt=-2∫ f(t ( dt+xf (x ( +x4, f(1 ( =0.求函数f(x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_013",
+    "question": "设函数y= f(x ( 满足 fθ (x ( +2f(x ( +2x∫ f(xt ( dt+e-x=0,且 f(x ( -x在x=0处取得极值,求 f(x ( 的表达式",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_014",
+    "question": "已知函数y=y(x ( 满足yθ+2 2x y=0,且其曲线的拐点的横坐标为-2,则y(x ( =_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_015",
+    "question": "若函数f(x ( 满足关系式fθ (x ( +af(x ( =∫ f(t x ( +∞ dt,a>0,求∫ f(x ( dx",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_016",
+    "question": "已知函数y=y(x ( 满足x(lnx-1 ( yθ (x ( +(3-lnx2 ( y(x ( =0,x>e,且y(e2 ( e4 = ,求y=y(x ( 的 最小值",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_017",
+    "question": "设y=y(x ( 满足yθ+2(lnx+1 ( y=0,y(1 ( =1,则y(x ( 在(0,1]上的最大值为_____. dy",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_018",
+    "question": "若微分方程 +(a+sin2x dx ( y=0的所有解都以π为周期,则a=_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_019",
+    "question": "当x>0时,函数 f(x ( 满足关系式x2fθ (x ( +(-1+lnx ( f(x ( =0,且 f(1 ( =1,则 f(x ( 的最大值 为( ). -1 1 A. e-e B. ee C. e e D. ee",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_020",
+    "question": "设函数f(x ( 在(-∞,+∞ ( 上连续,且满足f(x ( x -∫ f(t ( dt=- +sinx. (1)求f(x ( 的表达式； (2)求曲线y=f(x ( 与y=0在 π , 5π",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_004",
+    "question": "4 上围成的图形绕x轴旋转一周所成旋转体的体积",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_021",
+    "question": "微分方程dy=cos(y-x ( dx满足y(0 ( π = 的解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_022",
+    "question": "设y≥-2,则微分方程xθ- x+y2=-2y满足x(0 ( =1的特解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_023",
+    "question": "微分方程 dy - 1 =e -y的通解为_____ dx x",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_024",
+    "question": "设曲线y=y(x ( 过原点且在原点处与曲线y=sinx有公共切线,且函数y(x ( 满足方程y+4yθ+ +∞ 4y=0,则∫ y(x ( dx=_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_025",
+    "question": "设下列A,B,C为任意常数，则微分方程y+4y=sin2x有特解形如( ). A. Asin2x B. Acos2x C. x(A+Bcos2x+Csin2x ( D. A+x(Bcos2x+Csin2x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_026",
+    "question": "微分方程y-3yθ+2y=xex的通解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_027",
+    "question": "设三阶常系数齐次线性微分方程有特解cosx与e2x，则该微分方程为( ). A. y+2y+yθ+2y=0 B. y-2y+yθ-2y=0 C. y+2y-yθ+2y=0 D. y-2y-yθ+2y=0",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_028",
+    "question": "设函数y(x ( 满足微分方程y(4 ( -y=0,且当x→0时y(x ( ∼x3.求y(x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_029",
+    "question": "设y=y 1(x ( 是y+P(x ( yθ+Q(x ( y=0的一个非零特解. (1)证明y 2(x ( =y 1(x ( 1 ∫ y2 1(x ( e -∫P(x ( dx dx是与y 1(x ( 线性无关的另一个特解",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_001",
+    "question": "1 (2)求y- yθ+ y=0的通解,其中y=x是方程的一个解. x x2",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_030",
+    "question": "将以y=y(x ( 为未知函数的微分方程y+(x+e y +siny ( (yθ ( 3 =0化为以x=x(y ( 为未知函数的 形式,并求其通解",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_031",
+    "question": "设y=y(x ( 满足关系式e2x (y+yθ ( +y=e-x,且x=-lnt,t>0,y/ln π / π = ,则y(x ( =___",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_032",
+    "question": "设函数f(x ( 满足fθ (x ( =f/ x / (x>0 ( . (1)证明x2f (x ( +2f(x ( =0(x>0 ( ； (2)令x=et，化(1)中方程为常系数线性微分方程，并求f(x (",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_033",
+    "question": "设 u(x,y ( = f (x ( + g(y ( ∂u 具有二阶连续偏导数, 且满足 1+/ ∂y / ∂2u ∂u ∂u ∂2u - 2 + ∂x2 ∂x ∂y ∂x∂y ∂u 1+/ ∂x / 2 ∂2u =0.又已知f (x ∂y2 ( ≠0,求u=u(x,y ( 的表达式",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_034",
+    "question": "设函数f(x ( 在(0,+∞ ( 内可导,对任意的s>0,t>0,均有 π ∫ f(x ( t dx+lnts+lnst= sf(x ( + 1 x s ∫ dx+ tf(x ( + 1 x ∫ dx 成立,且f(1 ( =2,求f(x ( 的表达式",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_035",
+    "question": "设函数y(x ( 具有二阶导数,曲线l:y=y(x ( 与直线y=x相切于原点,且曲线l在点(x,y ( 处切线 的倾角θ关于x的变化率与曲线l在该点的切线斜率相等.求y(x ( 的表达式",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_036",
+    "question": "设平面曲线y=y(x ( 满足y(0 ( =1,yθ (0 ( =0,且对曲线上任意点P(x,y ( (x>0 ( ,沿曲线从点 (0,1 ( 到点P(x,y ( 的弧长等于该曲线在点P(x,y ( 的切线斜率. (1)求y(x ( (x>0 ( ； (2)求y(x ( 与x=ln2及坐标轴所围平面区域D的形心",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_037",
+    "question": "设曲线L:r=r(θ ( ,P(r,θ ( 为L上任意一点,P 0(2,0 ( 为L上的一定点,且曲线L与极径OP ,OP所 0 围成的曲边扇形面积值等于曲线L上P,P两点间弧长值的一半,求曲线L的方程",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_038",
+    "question": "微分方程2y=3y2满足初始条件y(-2 ( =1,yθ (-2 ( =1的特解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_039",
+    "question": "微分方程yθ= xy(1+xy2 ( 满足y(1 ( =0的解为_____",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_040",
+    "question": "设f(x ( 具有二阶连续导数,f(0 ( =0,fθ (0 ( =1,且微分方程 xy(x+y ( -f(x ( [ y [ dx+ fθ (x ( [ +x2y [ dy=0为全微分方程. (1)求f(x ( ； (2)求该全微分方程的通解. ∞ ( n+1- n",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "设p为常数，若级数 n=1 ( p ∞ 1 1 ∑ 与 - n n=1 n p (n+1 ( p ∑ 均收敛，则( ). A. -2<p≤-1 B. -1≤p<0 C. 1<p≤0 D. p>0 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_002",
+    "question": "判断级数 /ln -lnsin n n n=1 / ∑ 的敛散性. ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_003",
+    "question": "设λ>0是常数,则 (-1 n=1 ( n λ+2n2 ∑ sin ( ). n3 A. 发散 B. 条件收敛 C. 绝对收敛 D. 敛散性与λ有关",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_004",
+    "question": "以下结论正确的是( ). ∞ ∞ ∞ ∞ A. 若∑a2 n 收敛，则∑a3 n 收敛 B. 若∑a2 n 发散,则∑a3 n 发散 n=0 n=0 n=0 n=0 ∞ ∞ ∞ ∞ C. 若∑a3 n 收敛,则∑a4 n 收敛 D. 若∑a3 n 发散,则∑a4 n 发散 n=0 n=0 n=0 n=0",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_005",
+    "question": "设u n = arctan(n+k ( ∞ -arctann,k为正常数,则 (-1 n=1 ( n ∑ u n ( ). A. 绝对收敛 B. 条件收敛 C. 发散 D. 敛散性与k有关 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_006",
+    "question": "设 (u n+1 -u n n=1 ( ∑ 收敛，则下列级数中收敛的是( ). ∞ ∞ u A. ∑ n B. (-1 n n=1 n=1 ( ∞ ∑ n 1 C. /1- u n u u n n=1 n+1 / ∞ ∑ D. (u2 n+1 -u2 n n=1 ( ∑",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_007",
+    "question": "设函数y=y(x ( 满足(1-x ( yθ+2y=0,y(0 ( =1,a n(x ( x =∫ y(t ( sinntdt,n=1,2,⋯. (1)求y(x ( 的表达式； ∞ (2)证明∑a n (1)收敛. n=1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_008",
+    "question": "设a n(x ( 满足a′ n(x ( n - (1+x ( ln(1+x ( a n(x ( +lnn (1+x ( =0,x>0,n=1,2,⋯,a n(1 ( =0. (1)求a n(x ( 的表达式； ∞ 1 (2)判别∑∫ a n(x n=1 0 ( dx的敛散性. ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_009",
+    "question": "设幂级数∑na n(x+1 n=1 ( n的收敛区间为(-3,1 ( ∞ ,则∑a n(x-1 n=1 ( 2n的收敛区间为_____. ∞ n!",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_010",
+    "question": "级数∑ e-nx的收敛域为_____. nn n=1 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_011",
+    "question": "幂级数 (-1 n=1 ( n ∑ n-1 ⋅ x2 在(0,1]内的和函数S(x n ( =_____. ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_012",
+    "question": "n=1 (n+1 ( ∑ =_____. 2n ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_013",
+    "question": "n=2 (n2-1 ( ∑ =_____. 2n ∞ (-2",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_014",
+    "question": "求幂级数 n=0 ( n +2 2n (2n+1 ( ∑ x2n的收敛域及和函数S(x (",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_015",
+    "question": "(1)求微分方程yθ (x ( +y(x ( (-x = ( n-1 的通解,其中n为任意正整数; 3nex (2)记a n(x ( (n=1,2,⋯ ( 是(1)中满足条件y(0 ( ∞ =0的特解,求级数∑a n(x n=1 ( 的和函数",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_016",
+    "question": "设函数f(x ( x2-x-1 = x2 (x+1 ( ∞ 的幂级数展开式为∑a n(x-1 n=0 ( n ,x∈(0,2 ( (-1 ,求lim n→∞ ( n a n . n2+1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_017",
+    "question": "设 f (x ( x2, 0≤x≤ , 2 = S(x 1 x-1, <x<1, ( { {{ ∞ 1 { =∑b n sinnπx, 其中 b n = 2∫ f(x {{ n=1 0 { ( sinnπxdx(n=1,2,⋯ ( ,则 S/- / =( )",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "1 1 1 A. B. C. - D. -",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_008",
+    "question": "4 8 4",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_018",
+    "question": "设f(x ( =sinx,若f(x ( a ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_022",
+    "question": "= +∑a n cosnx,x∈[0,π 2 n=1 [ ,则limn2ln(1+a 2n n→∞ ( =____",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_019",
+    "question": "已知f(x ( =|x|,-π≤x≤π. (1)将f(x ( 展开成余弦级数； ∞ (2)求 n=1 (2n-1 ( ∑ . ∞ ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "设级数①∑ ,②∑ ，则( ). n=1n 1+1 n n=2 n 1+ l 1 nn A. ①收敛，②发散 B. ①发散，②收敛 C. ①②均收敛 D. ①②均发散 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_002",
+    "question": "若级数∑|u n v n|发散，则( ). n=1 ∞ ∞ |v n| ∞ ∞ |v n| A. ∑n|u n|收敛且∑ 收敛 B. ∑n|u n|发散且∑ 收敛 n n n=1 n=1 n=1 n=1 ∞ ∞ ∞ ∞ v v C. ∑n|u n|收敛或∑ n 发散 D. ∑n|u n|收敛或∑ n 发散 n n n=1 n=1 n=1 n=1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_003",
+    "question": "设数列{a n { ,{b n { 满足0≤a n+1 ≤a n +b n ,n∈N + ,则“{a n { ∞ 收敛”是“∑b n 收敛”的( ). n=1 A. 充分非必要条件 B. 必要非充分条件 C. 充分必要条件 D. 既非充分又非必要条件 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_004",
+    "question": "设常数项级数∑a n 条件收敛，r是实数，则( ). n=1 ∞ ∞ A. 当|r|≥1时,∑a n rn发散 B. 当|r|≤1时,∑a 2n r2n发散 n=1 n=1 ∞ ∞ C. 当∑a 2n-1 r2n-1发散时,|r|≥1 D. 当∑a 2n r2n发散时,|r|≤1 n=1 n=1 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_005",
+    "question": "设∑u n 为任意项级数,记α n = (u n +|u n| n=1 ( ,b n = (u n -|u n| ( ∞ ,则当∑u n 条件收敛时,以下结论: n=1 ∞ ∞ ∞ ①∑a n 与∑b n 均收敛; ② (a n -b n n=1 n=1 n=1 ( n ∑a k ∑ 发散; ③lim k=1 =-1. n→∞ n ∑b k k=1 正确结论的个数为( ). A. 0 B. 1 C. 2 D. 3 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_006",
+    "question": "若级数 (-1 n=1 ( ∑ n+1 n+1- n 条件收敛，则p的取值范围为( ). p n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "A. /-1, B. (-1,1 ( C. (0,1 ( 1 1 D. /-",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_002",
+    "question": "2",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_007",
+    "question": "设数列{a n { ,{b n { 满足e an-e -an=a n(e bn+e -bn ( ∞ ,0<a n <1,0<b n <1,n=1,2,⋯,且∑b n 收敛. n=1 证明:(1)a >b ,n=1,2,⋯; n n ∞ (2) (b n -a n n=1 ( ∑ 收敛. x+2 1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_008",
+    "question": "已知ln| |- x-1 (1+x ( ∞ +1=∑a n xn (-1<x<1 n=0 ( ,求a . n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_009",
+    "question": "设n为正整数,y=y n(x ( 是微分方程xyθ-ny=0满足条件y n(1 ( =(n+1 ( (n+3 ( 的解. (1)求y n(x ( ； ∞ (2)求级数∑y n(x n=1 ( 的收敛域及和函数",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_010",
+    "question": "设数列{x n { a+x 满足x = n ,0<a<1,x ≥0. n+1 1+x 1 n ∞ (1)证明 (x n+1 -x n n=1 ( ∑ 绝对收敛； n (2)求lim (x -x i+1 i n→∞ i=1 ( ∑",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_011",
+    "question": "已知函数f(x ( 满足f (x ( +fθ (x ( =0及f (x ( +2fθ (x ( +f(x ( =-1，且f(0 ( =0. (1)求f(x ( 的表达式； ∞ (2)设a>0，级数∑ f(n-alnn n=2 ( 收敛，求a的取值范围. ∞ ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_012",
+    "question": "若数项级数∑a n 条件收敛，则幂级数∑na n(x+2 n=1 n=1 ( n在x=- 2处( ). A. 绝对收敛 B. 条件收敛 C. 发散 D. 敛散性不能确定 ∞ ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_013",
+    "question": "若级数∑a n 2n条件收敛，则幂级数∑na n(x+1 n=1 n=1 ( n的收敛区间为( ). A. (-3,1 ( B. (-1,3 ( C. (-2,2 ( D. (-4,2 ( ∞ ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_014",
+    "question": "设∑a n xn,∑b n xn的收敛半径均为r(0<r<+∞ n=0 n=0 ( ,则以下级数的收敛半径仍为r的是( ). ∞ A. (a n +b n n=0 ( ∞ ∑ xn B. (a n +nb n n=0 ( ∞ b ∑ xn C. /a n + 2 n n n=0 / ∞ b ∑ xn D. /a n + n n+1 n=0 / ∑ xn",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_015",
+    "question": "设a 表示由曲线y=xn与y=xn+1所围成的平面图形的面积,n=1,2,⋯. n ∞ (1)求幂级数∑a n xn的收敛域与和函数S(x n=1 ( ; ∞ (-1 (2)求数项级数 n=1 ( n n(n+1 ( ∑ 的和. 2n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "π ∞ b",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_016",
+    "question": "设a =∫ xn 1-x2dx,b =∫2 sinntdt,n=0,1,2,⋯,计算 n n n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_044",
+    "question": "0 n=0 (2n+1 ( ∑ x2n. a n +∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_017",
+    "question": "设a =∫ xne-xdx,n=0,1,2,⋯. n (1)求a 的表达式； n ∞ n2 (2)计算∑ . a n=1 n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_018",
+    "question": "设a =∫ x2lnnxdx,n=0,1,2,⋯. n ∞ a (1)求a n 的表达式； (2)计算∑ n . n! n=0",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_019",
+    "question": "设函数y=f(x ( 满足y+2yθ+5y=0,且f(0 ( =1,fθ (0 ( =-1 (1)求f(x ( 的表达式； +∞ (2)设a n =∫ f(x nπ ( ∞ dx，求∑a n . n=1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_020",
+    "question": "设数列{a n { 满足a 1 =1,(n+1 ( a =/n+ n+1 2 / ∞ a n ，证明:当|x|<1时，幂级数∑a n xn收敛，并 n=1 求其和函数",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_021",
+    "question": "设级数 ∑ ∞ a n xn的系数a n 满足关系式a n = a n n -1 +1- 1 n ,n=2,3,⋯,a 1 =2,则当|x|<1时,级 n=1 ∞ 数∑a n xn的和函数S(x n=1 ( =_____. ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "1 1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_022",
+    "question": "当|x|<1时， /1+ + +⋯+ 2! 3! n! n=1 / ∑ xn=( ). ex-e-x ex-e-x ex-1 ex-1 A. B. C. D. 1+x 1-x 1+x 1-x",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_023",
+    "question": "将g(x ( d ex-1 = / dx x / ∞ n 展开为x的幂级数,并求 n=1 (n+1 ( ∑ 的和. !",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_024",
+    "question": "设数列{a n { ,{b n { 满足∫ tanan ex2 dx=ln(1+b n an ( ∞ bn,a n >0,b n >0,n≡1,2,⋯,且级数∑a n 收敛.证明: n=1 (1)limb =0; n n→∞ ∞ b2 (2)级数∑ n 收敛. a2 n=1 n ∞ (-1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_025",
+    "question": "求级数 n=1 ( n n2 ∑ 的和. 2n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_026",
+    "question": "设曲线y=xn 与其在点(1,1 ( 处的切线和y轴所围成的平面图形的面积为a ,其中n=2,3,⋯. n (1)求a 的表达式； n ∞ (2)求幂级数∑a n xn的收敛域与和函数S(x n=2 (",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_027",
+    "question": "已知函数y= f(x ( ∞ xn+2 =xlnx+ n=0 (n+1 ( ⋅(n+1 ( ∑ .求 f(x ! ( 的定义域,证明y= f(x ( 满足微分方程 xyθ-y=xex,且limf(x x→0+ ( =0",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_028",
+    "question": "将函数 f (x ( ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_001",
+    "question": "= 展开成x+1的幂级数,求该幂级数的收敛域,并求 ∑n2 (x+1 x2 n=1 ( n的和函数 S(x ( . ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_029",
+    "question": "幂级数 (-1 n=1 ( ∑ n x2n+1 的收敛域为_____. 2n+1 ∞ 30. 求数项级数 (-1 n=1 ( n n(n+1 ∑ ( 的和. 2n +∞ ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_031",
+    "question": "设a n =∫ e-n2x2 dx,n=1,2,⋯,求 (-1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_061",
+    "question": "n=1 ( n ∑ a n a n+2 . ∞ 2n-1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_032",
+    "question": "级数∑ 的和为_____. n! n=1 ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_033",
+    "question": "n=1 (n+2 ( ∑ =_____. ⋅n! ∞",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_034",
+    "question": "∑x22-nx (x>0 n=0 ( 的和函数S(x ( =_____. ∞ (-1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_035",
+    "question": "求级数 n=1 ( n n(2n-1 ( ∑ 的和. ∞ 2+(-1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_036",
+    "question": "求 n=1 ( n [ [ n ∑ 的值. n⋅6n",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_037",
+    "question": "设 f (x ( x+1, 0≤x≤π, = S(x 0, -π≤x<0, ( a ∞ 0 = + (a n cosnx+b n sinnx n=1 ( { {{ ∑ 是 f (x ( 以2π为周期的傅里叶 ∞ 级数,则∑a n =( ). n=1 π π π π A. - B. C. - D",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_004",
+    "question": "4 2 2",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_038",
+    "question": "设f(x ( 是周期为2的周期函数,且f(x ( =1-x,x∈[0,1 [ .若f(x ( a ∞ = 0 +∑a n cosnπx,则 n=1 ∞ ∑a =_____. 2n n=1",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_039",
+    "question": "设f(x ( 在[-π,π [ 上连续且满足f(x+π ( =-f(x ( ,则f(x ( 的傅里叶系数a 2n =(n=1,2,⋯ (",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_040",
+    "question": "设f(x ( =1-x2 (0≤x≤π ( ,S(x ( = a 0 +∑ ∞ a n cosnx,x∈R,其中a n = 2 ∫ π f(x",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_002",
+    "question": "π n=1 0 ( cosnxdx,计算 S(-π ( ∞ (-1 + n=1 ( n+1 ∑ . n2",
+    "domain": "无穷级数",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_001",
+    "question": "已知函数 f (x,y ( 在点 (0,0 ( 处可微, f (0,0 ( =0,f x ′ (0,0 ( =1,f y ′ (0,0 ( =-1,且n= (-1,1,1 ( ,则 x,y,f(x,y lim x→0 y→0 ( ( ( ⋅n =_____. x2+y2 e -1 x+3y+2z+1=0, {",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_002",
+    "question": "设有直线L:{{ 及平面π:4x-2y+z-2=0,则直线L( ). 2x-y-10z+3=0 A. 平行于π B. 在π上 C. 垂直于π D. 与π斜交",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_003",
+    "question": "曲面z=4-x2-y2在点P(1,1,2 ( 处的切平面方程为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_004",
+    "question": "过点(1,0,1 ( 与点(0,1,1 ( 且与曲面z=1+x2+y2相切的平面为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_005",
+    "question": "已知曲面z= f(x,y ( 由方程z-xln(1+z2 ( +e y =0所确定，则该曲面在点(0,0,-1 ( 处的切平面 方程为_____. y2",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_006",
+    "question": "z=ln/e -y + x / 在点(1,1 ( 处沿l=(1,0 ( 的方向导数为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_007",
+    "question": "求以M 0(1,1,1 ( 为顶点,以曲线C(C 是平面z=0上y2=x被x=1截下的有限部分)为准线的锥 面方程",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_008",
+    "question": "设函数f(x,y ( x2 |y| , (x,y = x2+y2 ( ≠(0,0 ( , 0, (x,y ( =(0,0 ( { {{ { 则f(x,y {{ { , ( 在点(0,0 ( 处沿l=(1,1 ( 的方向导数是___ __",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_009",
+    "question": "函数f(x,y ( =2x2+y2在点(0,1 ( 处的最大方向导数为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_010",
+    "question": "设f(x,y,z ( =x2e yz2 ,则f(x,y,z ( 在点(-1,0,1 ( 处的方向导数的最小值为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_011",
+    "question": "设a,b为实数,函数z=2+ax2+by2在点(1,2 ( 处的方向导数中,沿方向l=i+2j的方向导数最 大,最大值为10.求a,b",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_012",
+    "question": "设g(x,y ( 是函数f(x,y ( =x+2y+xy在点(x,y ( 处的最大方向导数. (1)求g(x,y ( 的表达式； (2)求g(x,y ( 在曲线C:x2+y2=5上的最大值",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_013",
+    "question": "设可微函数z=z(x,y ( 在平面上任一点 (x,y ( 处沿x轴正向i与y轴正向 j的方向导数分别为 e-x-f(x ( [ [ y与f(x ( ,其中f(x ( 的一阶导数连续,且f(0 ( =1. (1)求z(x,y ( 的表达式； (2)判断z(x,y ( 是否有极值,若有，求之，若无，说明理由",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_014",
+    "question": "设F(x,y,z ( =xyi-ycoszj+ zsinxk,则rotF| (1,1,0 ( =_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_001",
+    "question": "设f(x,y ( =e -(x2+2y2 ( ，曲线y=y(x ( 上任一点P(x,y ( 的切线方向始终指向f(x,y ( 变化率最大的 方向，且y(1 ( =2，则y(x ( =( ). A. 2x2 B. x2+x C. e-x2+1+x D. 2e-x2+1",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_002",
+    "question": "求曲面4z=3x2-2xy+3y2上的点到平面x+y-4z=1的最短距离. y2=z",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_003",
+    "question": "空间曲线L: x=2(y-1 ( { {{ 在y=1处的切线方程为_____. {x2+2y2+3z2=6",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_004",
+    "question": "曲线 {{ 在点(1,1,1 x+y+z=3 ( 处的切线方程为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_005",
+    "question": "求抛物面∑:z=x2+y2上的点到空间图形Ω:x2+y2≤z≤1的形心的最短距离",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_006",
+    "question": "设函数z=f(x,y ( 在点(0,0 ( 附近有定义,且f x ′ (0,0 ( z=f(x,y =3,则曲线 ( , { {{ 在点 0,0,f(0,0 y=0 ( ( ( 处 的法平面方程为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_007",
+    "question": "曲面ez-xz+y=3在点(1,2,0 ( 处的切平面方程为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_008",
+    "question": "设可微函数 f(u,v ( 满足 f(x-y,x+e y ( =x2-y2,则 f(u,v ( 在点(1,2 ( 处的方向导数的最大值等 于( ). A. 1 B. 2 C. 3 D. 2",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_009",
+    "question": "f(x,y,z ( y =x2∫ etdt+2z在点(1,1,2 ( 处的梯度为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_010",
+    "question": "已知函数z=f(x,y ( 可微,其在点P 0(1,2 ( 处沿从P 0 到P 1(2,3 ( 的方向的方向导数为2 2,沿从P 0 到P 2(1,0 ( 的方向的方向导数为-3,则z在点P 处的最大方向导数为_____. 0",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_011",
+    "question": "函数u(x,y,z ( =xy-2z2在点(1,1,-2 ( 处的最大方向导数为_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_012",
+    "question": "设可微函数f(x,y ( 在点(0,0 ( 处的最小方向导数为a,a≠0且a≠-1,b,c是满足b2+c2为正常数 的任意实数，则gradf(0,0 ( 与(b,c ( 内积的最大值为( ). A. a b2+c2 B. -a b2+c2 C. |a|(b2+c2 ( D. - |a|(b2+c2 (",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_013",
+    "question": "设f(x,y ( 可微,p(x,y ( ,p (x ,y 0 0 0 ( 为曲面z=f(x,y ( 上的点,则( ). f(p A. lim p→p0 ( + f(p 0 (  -gradf| p ∘p 0 p f(p  =0 B. lim |p p| p→p0 ( - f(p 0 (  -gradf| p ⋅p 0 p  =0 |p p| f(p C. lim p→p0 ( + f(p 0 (  +gradf| p ⋅p 0 p 0 f(p  =0 D. lim |p p| p→p0 ( - f(p 0 ( ",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_002",
+    "question": "+gradf| p 0 ⋅p 0 p|  =0 |p p|",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_014",
+    "question": "在曲面∑:x2+2y2+z2=1上求一点,使函数f(x,y,z ( =2x2+y2+z在该点沿方向n的方向导数",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_001",
+    "question": "1 1 最大,其中n是曲面∑在点P/ ,-",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_002",
+    "question": "2 2 / 的外侧法向量",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学的预备知识_015",
+    "question": "设F(x,y,z ( =|x|cosyi-ysinzj+zk,则rotF(1,1,0 ( =_____",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_001",
+    "question": "设平面曲线z2=2x绕x轴旋转一周所得空间曲面∑与平面x=1,x=2围成的空间区域为Ω，则I = dv=_____. Ωx2+y2+z2",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_002",
+    "question": "设Ω是由上半球面z= 4-x2-y2与曲面x2+y2=3z所围成的空间有界闭区域,则Ω的形心竖  坐标z=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_003",
+    "question": "设L为圆周x2+y2=1,则 (x3+y2 L (  ds=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_004",
+    "question": "设曲线Γ为曲面x2+y2+z2=1与平面x+y+z=1的交线，则 (y2+2x-z Γ (  ds=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_005",
+    "question": "设l是从点(1,1,1 ( 到点(4,4,4 ( xdx+ydy+zdz 的直线段,则∫ =_____. l x2+y2+z2-x-y+2z",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_006",
+    "question": "若(2ax3y3-3y2+5 ( dx+(3x4y2-2bxy-4 ( dy是某函数u(x,y ( 的全微分,则u(x,y ( =_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_007",
+    "question": "使得 (2y3-3y L (  dx-x3dy的值最大的平面正向边界曲线L为( ). A. 3x2+y2=1 B. 2x2+y2=1 C. x2+3y2=1 D. x2+2y2=1",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_008",
+    "question": "设x>0,I=∫ x(1+ysinx L ( f(x dx+ ( dy与路径L无关, f(x x ( π 有连续导数且 f/ / =0.当L是从点 π A/ ,1 / 到点B(π,0 ( 的任一曲线时,I=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_009",
+    "question": "设D⊂R2是单连通有界闭区域,I(D ( = (1-x2-y2 D (  dxdy取得最大值的积分域记为D . 1 (1)求I(D ( 的值； x2+2y2 (xe +y (2)计算 ∂D1 ( x2+2y2 dx+(2ye -x ( dy  ，其中∂D 是D 的正向边界. x2+2y2 1 1",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_010",
+    "question": "已知 Ω = (x,y,z ( { ∣y2+z2≤1,0≤x≤1 {{ {{{ ,∑为 Ω 的边界面且取外侧, 则 (y3+zsinx ∑ (  dzdx + zdxdy=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_011",
+    "question": "设 ∑为上半球体 0 ≤ z ≤ a2-x2-y2 (a>0 ( 的表面外侧, 则曲面积分  xz2dydz + ∑ (x2y-z3 ( dzdx+(2xy+y2z ( dxdy=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_012",
+    "question": "设∑= (x,y,z ( { ∣x2+y2+z2=1,x≥0,y≥0 {{ {{{ ,指向右侧,则 xyzdxdy=_____. ∑",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_013",
+    "question": "设∑是曲线x=e y (0≤y≤a ( 绕x轴旋转而成的旋转曲面,取后侧,则I= 2(1-x2 ∑ ( dydz+ 8xydzdx-4xzdxdy=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_014",
+    "question": "设∑为曲面x=y2+z2 (x≤1 ( 的后侧,计算曲面积分 I= (x-1 ∑ (  dydz+(y-1 ( 3 dzdx+(z-1 ( 3 dxdy",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_015",
+    "question": "设曲面∑为z2=x2+y2-1介于z=0与z=1之间的部分,取外侧,f(x ( 为连续函数,计算 I= yf(xy ∑ ( [ -2x [  dydz+ y2-xf(xy ( [ [ dzdx+(z-1 (",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_002",
+    "question": "dxdy. |x|+|y|=1",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_016",
+    "question": "设空间曲线Γ: z=arctan(x+y ( { {{ 从z轴正向往z轴负向看,Γ的方向为逆时针,计算 , I= (x2-y Γ (  dx+(2x+y2 ( dy+z2dz",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_001",
+    "question": "设Ω= (x,y,z ( { ∣x2+y2+z2≤1,x≥0,y≥0,z≥0 {{ {{{ ,则 (x2+2y2+3z2 Ω (  dxdydz=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_002",
+    "question": "设曲线L的方程为2x=y2 (0≤y≤1 ( ,则∫ yds=_____. L",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_001",
+    "question": "3. 设 L 为曲线 /x- / 2 1 + /y- / 2 1 = , 取逆时针方向, I =  4ydx + (x+y L ( 2 dy,J =  4xdx + L (x+y ( 2 dy,K= 4xydx+(x+y L ( 2 dy，则I,J,K的大小顺序为( ). A. I<K⋖J B. J<K<I C. I<J<K D. K<I<J",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_004",
+    "question": "已知有界闭区域Ω由锥面z= x2+y2与平面z=1围成，计算三重积分I= (x+y+z Ω (  2 dxdydz. x2+y2+z2=a2",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_005",
+    "question": "设Γ是空间圆周 3 (a>0 x+y+z= a ( { {{ ,则 (2yz+2zx+2xy Γ (  ds=____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_006",
+    "question": "设Γ是球面x2+y2+z2=1与平面x=y的交线,则 (x2+y2 Γ (  ds=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_007",
+    "question": "设Γ为球面x2+y2+z2=m2与平面x+z=m(m>0 ( 的交线,计算I= xz(1+yz-xy Γ ( ds",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_008",
+    "question": "设D= (x,y ( { {{ |x2+y2≤4 {{{ x2+4y2 (xe +y ,∂D为D的正向边界,则 ∂D ( x2+4y2 dx+(4ye -x ( dy  =___ x2+4y2 __",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_009",
+    "question": "设函数f(x ( ,g(x ( 二阶导数连续,f(0 ( =0,g(0 ( =0,且对于平面上任一简单闭曲线L,均有 y2f(x L ( +2yex+2yg(x ( [ [  dx+2 yg(x ( +f(x ( [ [ dy=0. (1)求f(x ( ，g(x ( 的表达式； (2)设L 1 为任一条从点(0,0 ( 到点(1,1 ( 的曲线，计算 y2f(x L1 ( +2yex+2yg(x ( [ [ ∫ dx+2 yg(x ( +f(x ( [ [ dy",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_010",
+    "question": "设P(x,y,z ( 为球面∑:x2+y2+z2-2z=0上的动点,球面∑在点P(x,y,z ( 处的法线与平面x+z =0平行. (1)求点P的轨迹Γ的方程； (2)计算曲线积分 y2dx+z2dy+x2dz，从z轴正向看下去，Γ取逆时针方向. Γ",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_011",
+    "question": "已知∑为曲面4x2+y2+z2=1(x≥0,y≥0,z≥0 ( 的上侧(见图)，L为∑的边界曲线,其方向与 ∑的正法向量满足右手法则,计算曲线积分I= (yz2-cosz L (  dx+2xz2dy+(2xyz+xsinz ( dz",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_012",
+    "question": "设曲面 z = 1-x2-y2 与平面 z =-x 的交线为 L, 起点为 A(0,1,0 ( , 终点为 B(0,-1,0 ( , 则 (x+y-z L ( ∫ dx+|y|dz=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_013",
+    "question": "设 L 为曲线 y = 2 1-x2 上从点 (0,2 ( 到点 (1,0 ( 的一段弧, 则曲线积分 (2y+1 L ( ∫ dx + (3x+2 ( dy=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_014",
+    "question": "设函数 f(x,y ( 在区域D= (x,y ( { ∣x2+4y2≤4 {{ {{{ 上二阶偏导数连续,∂D是D取正向的边界曲线, 则 f x ′ (x,y ∂D ( [ -y [  dx+f y ′ (x,y ( dy=______",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_015",
+    "question": "设yθ=f(x,y ( 是一条简单封闭曲线L(取正向),f(x,y ( ≠0,其所围区域记为D,D的面积为a,a> 0,则I= xf(x,y L ( y dx- f(x,y ( dy=_____. {x2+y2+z2=a2, π π",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_016",
+    "question": "设Γ为曲线 {{ 其中a>0,- <θ< 且θ≠0,从x轴的正向看去,Γ的方向为 y=xtanθ, 2 2 顺时针方向.当θ为何值时,I= (y-z Γ (  dx+(z-x ( dy+(x-y ( dz最大?并求出最大值",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_017",
+    "question": "设函数f(x ( 具有一阶连续导数,且对右半平面x>0内任意分段光滑简单闭曲线L,均有 f(x L ( y2dy-y3dx  =0. 2x2+y6 (1)求f(x ( 的表达式； f(x (2)计算 L0 ( y2dy-y3dx  ，其中L 为2x2+y2=1，取逆时针方向. 2x2+y6 0",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_018",
+    "question": "设L为从点A(-1,0 ( 到点B(3,0 ( 的上半个圆周(x-1 ( 2 +y2=22,y≥0,则 (x-y L ( dx+(x+y ( dy ∫ =_____. x2+y2",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_019",
+    "question": "设 f (x ( 有连续导数, 且 f (0 ( = 0, 若对于平面内的任意简单封闭曲线 L, 均有曲线积分 f(x L ( [ -ex [  y2dx-2yf(x ( dy=0,则f(x ( =______",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_020",
+    "question": "设I 1 =∫ f(x,y L ( dx+(6xy-6x ( dy,I 2 = (6x2y+6xy+x L ( ∫ dx+f(x,y ( dy.已知曲线积分I 与I 均在 1 2 整个xOy平面内与路径无关,且f(0,0 ( =0,求函数f(x,y ( 的极值. m 1",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_021",
+    "question": "设∑为球面x2+y2+z2=m被平面z= 所截下的顶部,计算 /|x|y+",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_003",
+    "question": "z ∑ /  dS. x=t, x=0",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_022",
+    "question": "设∑是由直线 { {{ 绕直线 y=t,(t为参数 y=0 ( { { { 旋转一周得到的曲面,∑是∑介于平面 介于平面x { { 1 { {z=t +y+z=0与x+y+z=1之间部分的外侧.计算曲面积分I= xdydz+(y+1 ∑ ( dzdx+(z+2 ( dxdy",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_023",
+    "question": "设锥面∑的顶点是A(0,1,1 ( {x2+y2=1, ,准线是 {{ 直线L过顶点A和准线上任一点M 1 (x 1 ,y 1 ,0 z=0, ( . Ω是∑(0≤z≤1 ( 与平面z=0所围成的锥体.求: (1)L和∑的方程； (2)Ω的形心坐标. z=y2",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_024",
+    "question": "设锥面∑的顶点为原点,准线为曲线Γ: (|y|≤1 x=1 ( { {{ . (1)求∑的方程； (2)计算I= 2x2dydz+xydzdx+(z+1 ∑ ( dxdy，∑取上侧",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_025",
+    "question": "设a,b为实数,函数 f(x,y ( =ax2+by2在点(1,1 ( 处沿方向l=i+ j的方向导数最大,最大值为",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_002",
+    "question": "2.若∑为曲面x2+z2=2z被曲面z= f(x,y ( 所截取的部分. (1)求a,b的值； (2)计算 zdS. ∑",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_026",
+    "question": "设∑是柱面x2+y2=1介于平面z=0,z=2之间的部分,方向向外.记I = x2dS，I = z2dS",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_001",
+    "question": "2 ∑ ∑ I 3 = (x2+z2 ∑ (  dydz,则( ). A. I >I >I B. I >I >I C. I >I >I D. I >I >I",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_001",
+    "question": "2 3 2 1 3 3 1 2 3 2 1",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_027",
+    "question": "设P=2xzf(y+z ( -y3,Q=2yzf(y+z ( x2+y2 +x3,R=∫ f(z-t ( dt,其中f具有一阶连续导数.L为曲 面z=x2+y2与平面y+z=1的交线,从z轴正向往下看为逆时针方向,计算 Pdx+Qdy+Rdz L",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_028",
+    "question": "设 ∑为曲面 z = 1-x2-y2 ,α,β 分别为曲面 ∑的外法线向量与 x 轴, z 轴的夹角, 则 (|xy|cosα+z2cosβ ∑ (  dS=_____",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数积分学_029",
+    "question": "设曲面∑:z=1-x2-y2 (z≥-3 ( ,取上侧,求曲面积分 I= yz x2+y2+z2dydz+xz x2+y2+z2dzdx+(x2y2-2xy x2+y2+z2 ∑ ( dxdy",
+    "domain": "多元函数积分学",
+    "reference_answer": ""
+  }
+]
