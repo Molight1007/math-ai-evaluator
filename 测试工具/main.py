@@ -15,9 +15,7 @@ import tempfile
 # Add current dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-
-from config import load_config
+from config import load_config, validate_config, ConfigError, save_config, has_config
 from loader import load_problems
 from intern_s1 import run_inference
 from deepseek import run_judge
@@ -30,21 +28,21 @@ logger = logging.getLogger(__name__)
 # Output sub-directories under 测试结果
 BASE_RESULT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "测试结果")
 DIR_DISPLAY = os.path.join(BASE_RESULT, "测试结果展示")      # HTML
-DIR_OUTPUT = os.path.join(BASE_RESULT, "原本输出和推理过程")  # JSON
-DIR_PROBLEMS = os.path.join(BASE_RESULT, "原本问题")         # copy of problems file
+DIR_OUTPUT = os.path.join(BASE_RESULT, "原始输出和推理过程")  # JSON
+DIR_PROBLEMS = os.path.join(BASE_RESULT, "原始问题")         # copy of problems file
 
 
 def _safe_str(s, maxlen=50):
     s = str(s)[:maxlen]
     try:
-        s.encode("gbk")
+        s.encode("utf-8")
         return s
     except UnicodeEncodeError:
-        return s.encode("gbk", errors="replace").decode("gbk", errors="replace")
+        return repr(s)
 
 
 def auto_convert(file_path: str, max_problems: int = 0) -> str:
-    """智能转化：PDF/Word → JSON，JSON/CSV 直接返回原路径"""
+    """智能转化：PDF/Word -> JSON，JSON/CSV 直接返回原路径"""
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext in (".json", ".csv"):
@@ -52,13 +50,11 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
 
     if ext == ".pdf":
         print(f"\n[转化] 检测到 PDF 文件，正在转化...")
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "转化工具"))
-        from pdf_to_json import convert_pdf
+        from 转化工具.pdf_to_json import convert_pdf
         problems = convert_pdf(file_path, max_problems=max_problems)
     elif ext == ".docx":
         print(f"\n[转化] 检测到 Word 文件，正在转化...")
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "转化工具"))
-        from docx_to_json import convert_docx
+        from 转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
     else:
         raise ValueError(f"不支持的文件格式: {ext}（支持 .pdf / .docx / .json / .csv）")
@@ -66,14 +62,14 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     if not problems:
         raise ValueError("未解析出任何题目，请检查文件内容。")
 
-    # 保存为临时 JSON 并复制到原本问题
+    # 保存为临时 JSON 并复制到原始问题
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
     import json
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     json_path = os.path.join(DIR_PROBLEMS, f"{base_name}.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(problems, f, ensure_ascii=False, indent=2)
-    print(f"[转化] 完成！{len(problems)} 道题目 → {json_path}")
+    print(f"[转化] 完成，{len(problems)} 道题目 -> {json_path}")
     return json_path
 
 
@@ -93,7 +89,7 @@ async def evaluate_single(problem, semaphore):
         return merge_result(problem, inference, judge)
 
 
-async def run_evaluation(problems_path, concurrency=3):
+async def run_evaluation(problems_path, concurrency=3, progress_callback=None):
     problems = load_problems(problems_path)
     if not problems:
         logger.error("No problems loaded!")
@@ -112,17 +108,17 @@ async def run_evaluation(problems_path, concurrency=3):
 
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # 1) JSON → 原本输出和推理过程
+    # 1) JSON -> 原始输出和推理过程
     os.makedirs(DIR_OUTPUT, exist_ok=True)
     json_path = os.path.join(DIR_OUTPUT, f"report_{ts}.json")
     generate_json_report(results, json_path)
 
-    # 2) HTML → 测试结果展示
+    # 2) HTML -> 测试结果展示
     os.makedirs(DIR_DISPLAY, exist_ok=True)
     html_path = os.path.join(DIR_DISPLAY, f"report_{ts}.html")
     generate_html_report(results, html_path)
 
-    # 3) 原本问题 → copy problems file
+    # 3) 原始问题 -> copy problems file
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
     problems_copy = os.path.join(DIR_PROBLEMS, os.path.basename(problems_path))
     if os.path.abspath(problems_path) != os.path.abspath(problems_copy):
@@ -134,8 +130,8 @@ async def run_evaluation(problems_path, concurrency=3):
     print_summary(results)
     print(f"\nReports saved:")
     print(f"  测试结果展示:  {os.path.basename(html_path)}")
-    print(f"  原本输出和推理过程: {os.path.basename(json_path)}")
-    print(f"  原本问题:  {os.path.basename(problems_copy)}")
+    print(f"  原始输出和推理过程: {os.path.basename(json_path)}")
+    print(f"  原始问题:  {os.path.basename(problems_copy)}")
 
     return html_path  # 返回 HTML 路径供 GUI 打开
 
@@ -144,8 +140,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Math Agent Evaluator - 支持 PDF/Word/JSON/CSV 自动转化",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
+        epilog="""示例:
   python 测试工具/main.py -i 题目.pdf
   python 测试工具/main.py -i 题目.docx --max 10
   python 测试工具/main.py -i 题目.json -c 5
@@ -161,7 +156,13 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    load_config()
+
+    # Load and validate config (fails fast if API keys missing)
+    try:
+        validate_config(load_config())
+    except ConfigError as e:
+        print(f"\n[ERROR] {e}")
+        sys.exit(1)
 
     # Step 1: 自动转化
     try:
