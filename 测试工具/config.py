@@ -78,7 +78,7 @@ def save_config(intern_s1_key: str, deepseek_key: str,
         f.write("# Saved at: ~/.math_evaluator/.env\n\n")
         f.write(f"INTERN_S1_API_KEY={intern_s1_key}\n")
         f.write(f"INTERN_S1_BASE_URL={intern_s1_url or 'https://internlm-chat.intern-ai.org.cn/puyu/api/v1'}\n")
-        f.write(f"INTERN_S1_MODEL={intern_s1_model or 'internlm3-latest'}\n\n")
+        f.write(f"INTERN_S1_MODEL={intern_s1_model or 'intern-s1'}\n\n")
         f.write(f"DEEPSEEK_API_KEY={deepseek_key}\n")
         f.write(f"DEEPSEEK_BASE_URL={deepseek_url or 'https://api.deepseek.com/v1'}\n")
         f.write(f"DEEPSEEK_MODEL={deepseek_model or 'deepseek-chat'}\n\n")
@@ -115,7 +115,7 @@ def get_config() -> EvalConfig:
         intern_s1=LLMConfig(
             api_key=os.getenv("INTERN_S1_API_KEY", ""),
             base_url=os.getenv("INTERN_S1_BASE_URL", "https://internlm-chat.intern-ai.org.cn/puyu/api/v1"),
-            model=os.getenv("INTERN_S1_MODEL", "internlm3-latest"),
+            model=os.getenv("INTERN_S1_MODEL", "intern-s1"),
             timeout=float(os.getenv("LLM_TIMEOUT", "120")),
             max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
         ),
