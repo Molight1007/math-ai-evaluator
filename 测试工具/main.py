@@ -213,11 +213,16 @@ async def run_evaluation_from_bank(bank_name: str, count: int, concurrency: int 
     # 复用现有评测流水线
     html_path = await run_evaluation(temp_path, concurrency, progress_callback=progress_callback)
 
-    # 清理临时文件
+    # 将临时文件重命名为有意义的名字（保留原始题目副本）
+    import shutil
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    final_path = os.path.join(DIR_PROBLEMS, f"bank_{bank_name}_{ts}_{count}questions.json")
     try:
-        os.remove(temp_path)
+        shutil.move(temp_path, final_path)
+        logger.info(f"原始问题已保存: {final_path}")
     except OSError:
-        pass
+        # 如果 move 失败，至少保留 temp 文件不删除
+        logger.warning(f"无法重命名临时问题文件，保留原文件: {temp_path}")
 
     return html_path
 

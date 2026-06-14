@@ -22,6 +22,8 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "转化工具"))
 
 from config import has_config, load_config, save_config, reset_config, ConfigError, validate_config
+from question_bank import QuestionBankDB, get_db
+from models import Problem
 
 
 # ==================== 题库管理面板 ====================
@@ -472,6 +474,7 @@ class QuestionBankPanel(ttk.Frame):
 
             self.launcher.root.after(0, lambda: self.bank_status_var.set(
                 f"质量审核完成！有效: {result['valid_count']}, "
+                f"优化题干: {result.get('optimized_count', 0)}, "
                 f"删除无效: {result['deleted_count']}, "
                 f"补全新题: {result['added_count']}"))
 
@@ -479,6 +482,7 @@ class QuestionBankPanel(ttk.Frame):
                 f"题库「{bank_name}」AI 质量审核完成！\n\n"
                 f"总审核: {result['total_audited']} 题\n"
                 f"保留有效: {result['valid_count']} 题\n"
+                f"优化题干: {result.get('optimized_count', 0)} 题\n"
                 f"删除无效: {result['deleted_count']} 题\n"
                 f"补全新题: {result['added_count']} 题"
             )
@@ -496,6 +500,384 @@ class QuestionBankPanel(ttk.Frame):
                 state="normal", text="🔍 AI质量审核"))
             self.launcher.root.after(0, lambda: self.bank_eval_btn.configure(state="normal"))
             self._audit_running = False
+
+
+# ==================== 题库浏览器面板 ====================
+
+
+class BankBrowserPanel(ttk.Frame):
+    """题库浏览器 — 直接浏览数据库中各题库的题目，支持搜索、分页、查看详情"""
+
+    def __init__(self, parent, launcher):
+        super().__init__(parent)
+        self.launcher = launcher
+        self._current_bank = None
+        self._all_problems = []
+        self._page = 0
+
+        # 第一行：题库选择
+        row1 = ttk.Frame(self)
+        row1.pack(fill="x", padx=15, pady=(12, 8))
+
+        ttk.Label(row1, text="选择题库:", font=("Microsoft YaHei", 11, "bold")).pack(side="left")
+        self.bank_combo = ttk.Combobox(row1, state="readonly", font=("Microsoft YaHei", 11), width=16)
+        self.bank_combo.pack(side="left", padx=(6, 12))
+        self.bank_combo.bind("<<ComboboxSelected>>", self._on_bank_changed)
+        ttk.Button(row1, text="🔄 刷新", command=self._refresh_banks, width=7).pack(side="left")
+
+        # 统计信息
+        self.stats_var = tk.StringVar(value="")
+        ttk.Label(row1, textvariable=self.stats_var, font=("Microsoft YaHei", 9),
+                  foreground="#4a5568").pack(side="left", padx=(12, 0))
+
+        # 第二行：搜索 + 分页控制
+        search_row = ttk.Frame(self)
+        search_row.pack(fill="x", padx=15, pady=(0, 6))
+
+        ttk.Label(search_row, text="搜索:", font=("Microsoft YaHei", 10)).pack(side="left")
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_row, textvariable=self.search_var, font=("Microsoft YaHei", 10), width=22)
+        self.search_entry.pack(side="left", padx=(4, 6))
+        ttk.Button(search_row, text="搜索", command=self._do_search, width=6).pack(side="left", padx=(0, 4))
+        ttk.Button(search_row, text="清除", command=self._clear_search, width=6).pack(side="left", padx=(0, 16))
+        self.search_entry.bind("<Return>", lambda e: self._do_search())
+
+        ttk.Label(search_row, text="每页:", font=("Microsoft YaHei", 10)).pack(side="left")
+        self.page_size_var = tk.IntVar(value=30)
+        ttk.Spinbox(search_row, from_=10, to=200, width=4, textvariable=self.page_size_var,
+                    font=("Microsoft YaHei", 10), command=self._reload_list).pack(side="left", padx=(4, 12))
+
+        ttk.Button(search_row, text="◀ 上页", command=self._prev_page, width=7).pack(side="left")
+        ttk.Button(search_row, text="下页 ▶", command=self._next_page, width=7).pack(side="left", padx=(0, 8))
+        self.page_label_var = tk.StringVar(value="—")
+        ttk.Label(search_row, textvariable=self.page_label_var, font=("Consolas", 9),
+                  foreground="#666").pack(side="left")
+
+        # 第三行：领域筛选
+        filter_row = ttk.Frame(self)
+        filter_row.pack(fill="x", padx=15, pady=(0, 6))
+
+        ttk.Label(filter_row, text="领域:", font=("Microsoft YaHei", 10)).pack(side="left")
+        self.domain_var = tk.StringVar(value="(全部)")
+        self.domain_combo = ttk.Combobox(filter_row, textvariable=self.domain_var, state="readonly",
+                                          font=("Microsoft YaHei", 10), width=14)
+        self.domain_combo.pack(side="left", padx=(4, 12))
+        self.domain_combo.bind("<<ComboboxSelected>>", lambda e: self._reload_list())
+
+        # ---- 题目表格 ----
+        list_frame = ttk.LabelFrame(self, text="题目列表（双击查看详情 / 右键操作）", padding=(5, 3))
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+
+        columns = ("#", "ID", "domain", "question_preview")
+        self.tree = ttk.Treeview(list_frame, columns=columns, show="headings",
+                                  selectmode="browse", height=12)
+        self.tree.heading("#", text="#", anchor="center")
+        self.tree.heading("ID", text="ID", anchor="w")
+        self.tree.heading("domain", text="领域", anchor="w")
+        self.tree.heading("question_preview", text="题干内容", anchor="w")
+        self.tree.column("#", width=45, stretch=False)
+        self.tree.column("ID", width=110, minwidth=70)
+        self.tree.column("domain", width=80, minwidth=60)
+        self.tree.column("question_preview", width=400, minwidth=150)
+
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        hsb = ttk.Scrollbar(list_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(xscrollcommand=hsb.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        list_frame.grid_columnconfigure(0, weight=1)
+        list_frame.grid_rowconfigure(0, weight=1)
+
+        self.tree.bind("<Double-Button-1>", lambda e: self._view_detail())
+        self.tree.bind("<Button-3>", self._on_right_click)
+
+        # 右键菜单
+        self.ctx_menu = tk.Menu(self.tree, tearoff=0)
+        self.ctx_menu.add_command(label="📋 查看详情", command=self._view_detail)
+        self.ctx_menu.add_command(label="📝 编辑题目", command=self._edit_problem)
+        self.ctx_menu.add_separator()
+        self.ctx_menu.add_command(label="🗑 删除此题目", command=self._delete_problem)
+
+        # 状态栏
+        self.status_var = tk.StringVar(value="就绪 — 请选择题库开始浏览")
+        ttk.Label(self, textvariable=self.status_var, font=("Microsoft YaHei", 9),
+                  foreground="#718096").pack(anchor="w", padx=15, pady=(0, 8))
+
+        self._init_banks()
+
+    @property
+    def db(self):
+        from question_bank import get_db
+        return get_db()
+
+    # ===== 题库切换 =====
+
+    def _init_banks(self):
+        """初始化题库下拉列表"""
+        banks = self.db.list_banks()
+        names = [b["name"] for b in banks]
+        self.bank_combo["values"] = names
+        if names:
+            self.bank_combo.set(names[0])
+            self._load_bank(names[0])
+        else:
+            self.stats_var.set("(暂无题库)")
+            self.status_var.set("暂无题库 — 请在「题库评测」选项卡中创建或导入")
+
+    def _refresh_banks(self):
+        """刷新题库列表"""
+        old = self.bank_combo.get().strip()
+        banks = self.db.list_banks()
+        names = [b["name"] for b in banks]
+        self.bank_combo["values"] = names
+        if names:
+            if old and old in names:
+                self.bank_combo.set(old)
+            else:
+                self.bank_combo.set(names[0])
+            self._on_bank_changed()
+        else:
+            self.bank_combo.set("")
+            self.stats_var.set("(暂无题库)")
+            self._clear_tree()
+            self.status_var.set("暂无题库")
+
+    def _on_bank_changed(self, event=None):
+        bank = self.bank_combo.get()
+        if bank:
+            self._load_bank(bank)
+
+    def _load_bank(self, bank_name):
+        """加载指定题库"""
+        self._current_bank = bank_name
+        self._page = 0
+        self.search_var.set("")
+        self.domain_var.set("(全部)")
+
+        total = self.db.get_problem_count(bank_name)
+        domains = self.db.get_domains(bank_name)
+        self.domain_combo["values"] = ["(全部)"] + domains
+
+        d_str = ", ".join(domains[:6])
+        if len(domains) > 6:
+            d_str += f"…共{len(domains)}"
+
+        self.stats_var.set(f"共 {total} 题 | 领域: {d_str or '未分类'}")
+        self._reload_list()
+        self.status_var.set(f"已加载: 「{bank_name}」({total} 题)")
+
+    # ===== 题目列表 =====
+
+    def _fetch_problems(self) -> list[Problem]:
+        """根据当前条件获取题目列表"""
+        if not self._current_bank:
+            return []
+
+        keyword = self.search_var.get().strip()
+        domain = self.domain_var.get()
+        domain = None if domain == "(全部)" else domain
+
+        if keyword:
+            results = self.db.search_problems(self._current_bank, keyword)
+            if domain:
+                results = [p for p in results if p.domain == domain]
+            return results
+        else:
+            return self.db.get_all_problems(self._current_bank, domain=domain)
+
+    def _reload_list(self):
+        """重新加载并分页显示"""
+        self._clear_tree()
+        self._all_problems = self._fetch_problems()
+        total = len(self._all_problems)
+        ps = self.page_size_var.get()
+        tp = max(1, (total + ps - 1) // ps) if total > 0 else 1
+        self._page = max(0, min(self._page, tp - 1))
+
+        start = self._page * ps
+        items = self._all_problems[start:start + ps]
+
+        seen = set()
+        for i, p in enumerate(items):
+            iid = p.id if p.id else f"_auto_{i}"
+            if iid in seen:
+                iid = f"{iid}_{i}"
+            seen.add(iid)
+            row_no = start + i + 1
+            self.tree.insert("", "end", iid=iid,
+                             values=(row_no, p.id, p.domain or "",
+                                     p.question[:80] + ("…" if len(p.question) > 80 else "")))
+
+        kw_info = ""
+        if self.search_var.get().strip():
+            kw_info = f" | 搜索: 「{self.search_var.get().strip()}」"
+        dom_info = ""
+        if self.domain_var.get() != "(全部)":
+            dom_info = f" | 领域: {self.domain_var.get()}"
+
+        self.page_label_var.set(f"第 {self._page + 1}/{tp} 页 ({total} 题{kw_info}{dom_info})")
+        self.status_var.set(f"「{self._current_bank}」— 显示第 {start+1}-{min(start+ps, total)} 题，共 {total} 题")
+
+    def _clear_tree(self):
+        for c in self.tree.get_children():
+            self.tree.delete(c)
+
+    # ===== 搜索 & 分页 =====
+
+    def _do_search(self):
+        self._page = 0
+        self._reload_list()
+
+    def _clear_search(self):
+        self.search_var.set("")
+        self._page = 0
+        self._reload_list()
+
+    def _prev_page(self):
+        if self._page > 0:
+            self._page -= 1
+            self._reload_list()
+
+    def _next_page(self):
+        ps = self.page_size_var.get()
+        tp = max(1, (len(self._all_problems) + ps - 1) // ps) if self._all_problems else 1
+        if self._page < tp - 1:
+            self._page += 1
+            self._reload_list()
+
+    # ===== 操作 =====
+
+    def _get_sel_problem(self) -> Problem | None:
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        vals = self.tree.item(sel[0], "values")
+        pid = vals[1] if len(vals) >= 2 else sel[0]
+        for p in self._all_problems:
+            if p.id == pid:
+                return p
+        return None
+
+    def _on_right_click(self, event):
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.ctx_menu.post(event.x_root, event.y_root)
+
+    def _view_detail(self):
+        p = self._get_sel_problem()
+        if not p:
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title(f"题目详情 — {p.id}")
+        dlg.geometry("720x550")
+        dlg.resizable(True, True)
+        dlg.transient(self)
+        dlg.configure(bg="#f0f4f8")
+        dlg.update_idletasks()
+        w, h = 360, 275
+        dlg.geometry(f"+{dlg.winfo_screenwidth()//2-w}+{dlg.winfo_screenheight()//2-h}")
+
+        # 标题栏
+        hdr = ttk.Frame(dlg); hdr.pack(fill="x", padx=15, pady=(12, 6))
+        ttk.Label(hdr, text=f"题目 ID: {p.id}", font=("Microsoft YaHei", 12, "bold"),
+                  foreground="#1a365d").pack(side="left")
+        if p.domain:
+            ttk.Label(hdr, text=f"  [{p.domain}]", font=("Microsoft YaHei", 10),
+                      foreground="#2b6cb0").pack(side="left")
+
+        # 题干
+        qf = ttk.LabelFrame(dlg, text="题干", padding=(8, 5))
+        qf.pack(fill="both", expand=True, padx=12, pady=(0, 5))
+        qt = tk.Text(qf, font=("Microsoft YaHei UI", 10), wrap="word", bd=0, bg="#fffaf0", padx=10, pady=8)
+        qt.insert("1.0", p.question); qt.configure(state="disabled")
+        qs = ttk.Scrollbar(qf, orient="vertical", command=qt.yview); qt.configure(yscrollcommand=qs.set)
+        qt.pack(side="left", fill="both", expand=True); qs.pack(side="right", fill="y")
+
+        # 参考答案
+        if p.reference_answer:
+            af = ttk.LabelFrame(dlg, text="参考答案", padding=(8, 5)); af.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+            at = tk.Text(af, font=("Microsoft YaHei UI", 10), wrap="word", bd=0, bg="#f0fff0", padx=10, pady=8)
+            at.insert("1.0", p.reference_answer); at.configure(state="disabled")
+            asc = ttk.Scrollbar(af, orient="vertical", command=at.yview); at.configure(yscrollcommand=asc.set)
+            at.pack(side="left", fill="both", expand=True); asc.pack(side="right", fill="y")
+
+        btns = ttk.Frame(dlg)
+        btns.pack(pady=(0, 10))
+        ttk.Button(btns, text="编辑此题目", command=lambda: [dlg.destroy(), self._edit_problem()], width=14).pack(side="left", padx=4)
+        ttk.Button(btns, text="关闭", command=dlg.destroy, width=10).pack(side="left", padx=4)
+
+    def _edit_problem(self):
+        p = self._get_sel_problem()
+        if not p:
+            return
+
+        dlg = tk.Toplevel(self); dlg.title(f"编辑题目 — {p.id}")
+        dlg.geometry("600x480"); dlg.resizable(True, True); dlg.transient(self); dlg.grab_set()
+        dlg.configure(bg="#f0f4f8"); dlg.update_idletasks()
+        x = dlg.winfo_screenwidth() // 2 - 300; y = dlg.winfo_screenheight() // 2 - 240
+        dlg.geometry(f"+{x}+{y}")
+
+        entries = {}
+        fields = [
+            ("题目 ID:", "id", False, p.id),
+            ("领域:", "domain", False, p.domain or ""),
+            ("题干:", "question", True, p.question),
+            ("参考答案:", "answer", True, p.reference_answer or ""),
+        ]
+        for label_text, key, multiline, default in fields:
+            frm = ttk.Frame(dlg); frm.pack(fill="x", padx=15, pady=4)
+            ttk.Label(frm, text=label_text, font=("Microsoft YaHei", 10), width=10).pack(side="left")
+            if multiline:
+                ent = tk.Text(frm, font=("Microsoft YaHei", 10), height=6 if key == "question" else 4,
+                              wrap="word", bd=1, relief="solid")
+                ent.insert("1.0", default)
+                ent.pack(side="left", fill="both", expand=True)
+            else:
+                ent = ttk.Entry(frm, font=("Microsoft YaHei", 10), width=40)
+                ent.insert(0, default)
+                ent.pack(side="left", fill="x", expand=True)
+            entries[key] = ent
+
+        if key == "id":
+            entries["id"].configure(state="disabled")  # type: ignore[attr-defined]
+
+        def do_save():
+            new_q = entries["question"].get("1.0", "end-1c").strip()
+            new_a = entries["answer"].get("1.0", "end-1c").strip()
+            new_d = entries["domain"].get().strip()
+            if not new_q:
+                messagebox.showwarning("提示", "题干不能为空", parent=dlg); return
+            try:
+                self.db._update_problem_text(p.id, self._current_bank,
+                                              question=new_q, reference_answer=new_a or None)
+                # 更新 domain 需要额外 SQL
+                if new_d != (p.domain or ""):
+                    with self.db._connect() as conn:
+                        conn.execute("UPDATE problems SET domain=? WHERE problem_id=? AND bank_name=?",
+                                     (new_d, p.id, self._current_bank))
+                self._reload_list()
+                self.status_var.set(f"题目 {p.id} 已更新")
+                dlg.destroy()
+            except Exception as ex:
+                messagebox.showerror("保存失败", str(ex), parent=dlg)
+
+        btn_f = ttk.Frame(dlg); btn_f.pack(pady=(10, 12))
+        ttk.Button(btn_f, text="💾 保存修改", command=do_save, width=14).pack(side="left", padx=4)
+        ttk.Button(btn_f, text="取消", command=dlg.destroy, width=10).pack(side="left", padx=4)
+
+    def _delete_problem(self):
+        p = self._get_sel_problem()
+        if not p: return
+        if not self._current_bank: return
+        if messagebox.askyesno("确认删除", f"确定要从题库「{self._current_bank}」中删除题目\n\n  {p.id}\n\n吗？"):
+            self.db.remove_problem(p.id, self._current_bank)
+            self._reload_list()
+            self._init_banks()  # 可能需要刷新统计
+            self.status_var.set(f"已删除题目: {p.id}")
 
 
 # ==================== 主启动器 ====================
@@ -625,6 +1007,9 @@ class EvalLauncher:
 
         self.bank_panel = QuestionBankPanel(self.notebook, launcher=self)
         self.notebook.add(self.bank_panel, text="📚 题库评测")
+
+        self.browser_panel = BankBrowserPanel(self.notebook, launcher=self)
+        self.notebook.add(self.browser_panel, text="📂 题库浏览器")
 
         self.status_var = tk.StringVar(value="就绪 - 请选择题目文件或切换到题库评测")
         status_label = tk.Label(

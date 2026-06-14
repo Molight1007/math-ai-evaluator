@@ -256,6 +256,24 @@ class QuestionBankDB:
             )
             return cur.rowcount > 0
 
+    def _update_problem_text(self, problem_id: str, bank_name: str,
+                              question: str = None, reference_answer: str = None):
+        """更新题目的题干或参考答案（保留其他字段不变）"""
+        sets = []
+        params = []
+        if question is not None:
+            sets.append("question = ?")
+            params.append(question)
+        if reference_answer is not None:
+            sets.append("reference_answer = ?")
+            params.append(reference_answer)
+        if not sets:
+            return
+        params.extend([problem_id, bank_name])
+        sql = f"UPDATE problems SET {', '.join(sets)} WHERE problem_id = ? AND bank_name = ?"
+        with self._connect() as conn:
+            conn.execute(sql, params)
+
     def search_problems(self, bank_name: str, keyword: str) -> list[Problem]:
         """按关键词搜索题目（匹配题干）"""
         with self._connect() as conn:
@@ -284,7 +302,7 @@ class QuestionBankDB:
                 f"参考答案: {p.reference_answer or '无'}\n"
             )
 
-        return f"""你是一个严格的数学题库质量管理专家。请对以下{len(problems_batch)}道数学题目进行质量审核。
+        return f"""你是一个严格的数学题库质量管理专家兼数学题目优化工程师。请对以下{len(problems_batch)}道数学题目进行质量审核与优化。
 
 ## 题库领域分布
 {domain_info}
@@ -293,7 +311,28 @@ class QuestionBankDB:
 {items_text}
 
 ## 审核要求
+
+### 第一部分：有效性判断
 请逐题判断每道题目是否为**完整、有意义、可评测的数学题**。以下情况应判定为「无效」：
+1. 题干为空、只有标点符号或只有1-3个无意义字符
+2. 题干只有选项没有问题（如 "A. 0 B. - C. D. ∞")
+3. 题干是残缺的公式片段（如 "=____"、"lim/ x→0 x / sin2x ="、"2 3 2"）
+4. 题干是乱码、无意义数字组合或格式错乱无法理解
+5. 题目重复（与其他题目实质内容相同）
+
+### 第二部分：题目复现与题干逻辑优化（重要！）
+对于**有效的题目**，你必须：
+1. **复现题目**：用你自己的语言重新完整描述这道数学题，修复原始题干中可能的格式错误（如 LaTeX 残缺、符号混乱、OCR 识别错乱等）
+2. **优化题干逻辑**：
+   - 补全被截断的条件或问题（如 "则 =" 补全为 "则该函数在点(2,1)处的值为多少？"）
+   - 统一数学表达方式（将散乱的公式整理为规范的数学表述）
+   - 明确选项（如果原题有选项但格式混乱，重新整理为 A/B/C/D 格式）
+   - 补充必要的上下文信息（如函数定义域、积分区间等）
+   - 将 OCR 导致的识别错误修正为正确的数学符号
+3. **保留核心不变**：优化的题目必须与原题考查**相同的数学知识点**，答案一致
+
+### 第三步：补全新题目
+生成少量高质量新数学题来补充题库。
 1. 题干为空、只有标点符号或只有1-3个无意义字符
 2. 题干只有选项没有问题（如 "A. 0 B. - C. D. ∞"）
 3. 题干是残缺的公式片段（如 "=____"、"lim/ x→0 x / sin2x ="、"2 3 2"）
@@ -308,8 +347,9 @@ class QuestionBankDB:
       "index": 1,
       "is_valid": true/false,
       "reason": "简短说明判断理由",
-      "optimized_question": "如果无效则填null；如果有效但有瑕疵可以给出优化后的完整题干，否则null",
-      "optimized_answer": "优化后的答案（如果有），否则null"
+      "optimized_question": "【必须填写】复现并优化后的完整题干。即使原题看起来没问题，也要用规范的数学语言重写，确保清晰准确。",
+      "optimized_answer": "基于优化后题干的参考答案",
+      "optimization_notes": "简要说明做了哪些优化（如'修复了LaTeX格式''补全了被截断的问题''统一了选项格式'），如果无需优化则填'原题质量良好'"
     }}
   ],
   "new_problems": [
@@ -322,7 +362,10 @@ class QuestionBankDB:
 }}
 ```
 
-注意：new_problems 数组中生成 {min(3, max(1, len(problems_batch) // 5))} 道高质量新题目来补充题库。题目应覆盖微积分、极限、导数、积分等高等数学核心知识点。"""
+注意：
+- optimized_question 字段**对于有效题目必须填写**，不能为 null
+- new_problems 数组中生成 {min(3, max(1, len(problems_batch) // 5))} 道高质量新题目
+- 新题目应覆盖微积分、极限、导数、积分、偏导数、级数等高等数学核心知识点。"""
 
     @staticmethod
     def _parse_audit_response(raw_content: str) -> dict:
@@ -413,6 +456,7 @@ class QuestionBankDB:
         deleted_ids = []
         added_count = 0
         valid_count = 0
+        optimized_count = 0
         errors = []
 
         # 分批处理
@@ -440,9 +484,23 @@ class QuestionBankDB:
                                 logger.info(f"[质量审核] 删除无效题目: {p.id} — 原因: {item.get('reason', '')}")
                         else:
                             valid_count += 1
-                            # 如果有优化版本且原题有明显瑕疵，考虑更新
+                            # 用 DeepSeek 复现并优化的题干更新原题
                             opt_q = item.get("optimized_question")
                             opt_a = item.get("optimized_answer")
+                            if opt_q and isinstance(opt_q, str) and len(opt_q.strip()) > 10:
+                                # 只有优化版本与原题明显不同时才更新（避免无意义的微小变化）
+                                if opt_q.strip() != p.question.strip():
+                                    try:
+                                        self._update_problem_text(
+                                            p.id, bank_name,
+                                            question=opt_q.strip(),
+                                            reference_answer=opt_a.strip() if (opt_a and isinstance(opt_a, str) and opt_a.strip()) else None,
+                                        )
+                                        optimized_count += 1
+                                        notes = item.get("optimization_notes", "")
+                                        logger.info(f"[质量审核] 优化题干: {p.id} — {notes[:80]}")
+                                    except Exception as e:
+                                        errors.append(f"更新题目 {p.id} 失败: {e}")
 
                 # 导入补全的新题目
                 new_problems = result.get("new_problems", [])
@@ -472,6 +530,7 @@ class QuestionBankDB:
             "valid_count": valid_count,
             "deleted_count": len(deleted_ids),
             "added_count": added_count,
+            "optimized_count": optimized_count,
             "errors": errors,
             "deleted_ids": deleted_ids,
         }
