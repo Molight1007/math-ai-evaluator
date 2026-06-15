@@ -7,7 +7,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/Molight1007/-csust?style=social)](https://github.com/Molight1007/-csust)
+[![Stars](https://img.shields.io/github/stars/Molight1007/math-ai-evaluator?style=social)](https://github.com/Molight1007/math-ai-evaluator)
 
 **关键词：** `数学推理` `大模型评测` `AI教育` `LLM Evaluation` `Intern-S1` `DeepSeek` `Math Benchmark` `自动判题` `题库管理`
 
