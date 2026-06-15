@@ -1,11 +1,15 @@
-# 🧮 数学智能体评测器
+# 🧮 数学智能体评测器 — Math Agent Evaluator
 
-> 基于 **Intern-S1（书生浦语）** + **DeepSeek** 的数学题自动评测流水线。
+> 🏆 **挑战杯** · AI 数学教育 · LLM 评测基准 · 大模型推理评估
 >
+> 基于 **Intern-S1（书生浦语）** + **DeepSeek** 的数学题自动评测流水线。
 > 支持将 **PDF / Word / PPT / JSON / CSV** 格式的数学题集自动转化 → Intern-S1 推理 → DeepSeek 评判 → 生成可视化报告。
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Molight1007/-csust?style=social)](https://github.com/Molight1007/-csust)
+
+**关键词：** `数学推理` `大模型评测` `AI教育` `LLM Evaluation` `Intern-S1` `DeepSeek` `Math Benchmark` `自动判题` `题库管理`
 
 ---
 
