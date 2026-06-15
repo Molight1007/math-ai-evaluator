@@ -1,7 +1,6 @@
 """
 DeepSeek 评判模块。
 将 Intern-S1 的推理过程和答案发送给 DeepSeek 进行正确性评估。
-支持利用题库中已匹配的参考答案辅助评判，提高准确率。
 """
 import logging
 import time
@@ -18,10 +17,7 @@ JUDGE_SYSTEM_PROMPT = (
     "You will receive:\n"
     "1. The math problem\n"
     "2. The model's answer\n"
-    "3. The model's step-by-step reasoning\n"
-    "4. (Optional) A reference answer from the answer bank\n\n"
-    "If a reference answer is provided, use it as ground truth to compare. "
-    "The reference answer comes from an official solution manual and is highly reliable.\n\n"
+    "3. The model's step-by-step reasoning\n\n"
     "Output a JSON object with these fields:\n"
     '- "is_correct": true/false (boolean),\n'
     '- "confidence": a number 0.0-1.0 indicating your confidence,\n'
@@ -55,49 +51,23 @@ def parse_judge_response(raw_content: str) -> dict:
     }
 
 
-async def run_judge(
-    inference: InferenceResult,
-    reference_answer: str = None,
-    answer_source: str = None,
-) -> JudgeResult:
-    """
-    对单道推理结果进行评判，返回 JudgeResult。
-
-    参数:
-        inference: Intern-S1 的推理结果
-        reference_answer: 从答案库匹配的参考答案（可选，有则大幅提升准确率）
-        answer_source: 参考答案来源说明（如 "来自答案文档: 高数练习册答案.pptx"）
-    """
+async def run_judge(inference: InferenceResult) -> JudgeResult:
+    """对单道推理结果进行评判，返回 JudgeResult"""
     cfg = get_config()
     client = LLMClient(cfg.deepseek)
     # 构建包含题目、答案、推理过程、推理步骤的评判请求
     steps_text = chr(10).join(f"- {s}" for s in inference.steps) if inference.steps else "N/A"
-
-    # 构建参考答案部分
-    reference_section = ""
-    if reference_answer:
-        reference_section = f"""
-## Reference Answer (Ground Truth)
-{reference_answer}
-
-{'(Source: ' + answer_source + ')' if answer_source else ''}
-
-**IMPORTANT**: The reference answer above is from an official solution manual.
-Use it as the ground truth when judging correctness.
-If the model's answer matches the reference answer (considering equivalent forms), mark it as correct.
-If the model's answer contradicts the reference answer, mark it as incorrect."""
-
     user_content = f"""## Math Problem
-{inference.question}
-{reference_section}
+:{inference.question}
+
 ## Model's Answer
-{inference.answer}
+:{inference.answer}
 
 ## Model's Reasoning
-{inference.reasoning}
+:{inference.reasoning}
 
 ## Model's Steps
-{steps_text}
+:{steps_text}
 
 Please judge whether the answer is correct."""
 

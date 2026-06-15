@@ -10,13 +10,13 @@
 数据库文件：测试工具/question_bank.db
 """
 
+import asyncio
 import json
 import logging
 import os
 import random
 import sqlite3
 import uuid
-import asyncio  # 用于 audit_quality 中调用异步匹配方法
 from datetime import datetime
 from typing import Optional, Callable
 
@@ -63,28 +63,6 @@ class QuestionBankDB:
                     FOREIGN KEY (bank_name) REFERENCES banks(name) ON DELETE CASCADE,
                     UNIQUE(problem_id, bank_name)
                 )
-            """)
-            # 答案映射表：存储「答案文档条目 → 题库题目」的匹配关系
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS answer_mapping (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bank_name TEXT NOT NULL,
-                    problem_id TEXT NOT NULL,
-                    answer_text TEXT NOT NULL,
-                    question_text TEXT DEFAULT '',
-                    confidence REAL DEFAULT 0.0,
-                    match_reason TEXT DEFAULT '',
-                    source_file TEXT DEFAULT '',
-                    source_page INTEGER DEFAULT 0,
-                    answer_index INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT (datetime('now','localtime')),
-                    FOREIGN KEY (bank_name) REFERENCES banks(name) ON DELETE CASCADE
-                )
-            """)
-            # 为 answer_mapping 创建索引，加速按题库+题目查询
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_answer_mapping_lookup
-                ON answer_mapping(bank_name, problem_id)
             """)
 
     def create_bank(self, name: str) -> bool:
@@ -308,304 +286,6 @@ class QuestionBankDB:
             for r in rows
         ]
 
-    # === 答案映射管理 ===
-
-    def import_answer_mappings(
-        self,
-        bank_name: str,
-        matches: list[dict],
-        source_file: str = "",
-    ) -> dict:
-        """
-        批量导入答案映射到数据库。
-
-        参数:
-            bank_name: 目标题库名称
-            matches: 匹配结果列表，每项包含:
-                - answer_index: 答案条目序号
-                - matched_problem_id: 匹配到的题目 ID（或 null）
-                - confidence: 匹配置信度
-                - match_reason: 匹配理由
-                - matched_answer: 提取的答案
-                - question_text: 答案文档中的题干片段（可选）
-                - source_page: 来源页码（可选）
-            source_file: 答案来源文件名
-
-        返回: {"added": int, "skipped": int}
-        """
-        added = 0
-        skipped = 0
-
-        with self._connect() as conn:
-            for m in matches:
-                problem_id = m.get("matched_problem_id")
-                if not problem_id:
-                    skipped += 1
-                    continue
-
-                answer_text = m.get("matched_answer", "").strip()
-                if not answer_text:
-                    skipped += 1
-                    continue
-
-                confidence = float(m.get("confidence", 0))
-                if confidence < 0.5:
-                    skipped += 1
-                    continue
-
-                try:
-                    conn.execute(
-                        """INSERT INTO answer_mapping
-                           (bank_name, problem_id, answer_text, question_text, confidence,
-                            match_reason, source_file, source_page, answer_index)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            bank_name,
-                            problem_id,
-                            answer_text,
-                            m.get("question_text", ""),
-                            confidence,
-                            m.get("match_reason", ""),
-                            source_file,
-                            m.get("source_page", 0),
-                            m.get("answer_index", 0),
-                        ),
-                    )
-                    added += 1
-                except Exception as e:
-                    logger.warning(f"导入答案映射失败 (problem={problem_id}): {e}")
-                    skipped += 1
-
-        logger.info(f"答案映射导入完成: 新增 {added}, 跳过 {skipped}")
-        return {"added": added, "skipped": skipped}
-
-    def get_answer_for_problem(self, bank_name: str, problem_id: str) -> Optional[dict]:
-        """
-        获取某道题目的匹配答案（取置信度最高的一条）。
-
-        返回:
-            {"answer_text": str, "confidence": float, "match_reason": str, "source_file": str}
-            或 None（无匹配答案）
-        """
-        with self._connect() as conn:
-            row = conn.execute(
-                """SELECT answer_text, confidence, match_reason, source_file, question_text
-                   FROM answer_mapping
-                   WHERE bank_name = ? AND problem_id = ?
-                   ORDER BY confidence DESC
-                   LIMIT 1""",
-                (bank_name, problem_id),
-            ).fetchone()
-
-        if row:
-            return {
-                "answer_text": row["answer_text"],
-                "confidence": row["confidence"],
-                "match_reason": row["match_reason"],
-                "source_file": row["source_file"],
-                "question_text": row["question_text"],
-            }
-        return None
-
-    def get_all_answer_mappings(self, bank_name: str) -> list[dict]:
-        """获取题库中所有答案映射（用于查看和管理）"""
-        with self._connect() as conn:
-            rows = conn.execute(
-                """SELECT am.problem_id, am.answer_text, am.confidence, am.match_reason,
-                          am.source_file, am.source_page, am.answer_index, am.created_at,
-                          p.question, p.domain
-                   FROM answer_mapping am
-                   LEFT JOIN problems p ON am.problem_id = p.problem_id AND am.bank_name = p.bank_name
-                   WHERE am.bank_name = ?
-                   ORDER BY am.problem_id, am.confidence DESC""",
-                (bank_name,),
-            ).fetchall()
-
-        return [
-            {
-                "problem_id": r["problem_id"],
-                "answer_text": r["answer_text"],
-                "confidence": r["confidence"],
-                "match_reason": r["match_reason"],
-                "source_file": r["source_file"],
-                "source_page": r["source_page"],
-                "answer_index": r["answer_index"],
-                "created_at": r["created_at"],
-                "question_preview": (r["question"] or "")[:80],
-                "domain": r["domain"] or "",
-            }
-            for r in rows
-        ]
-
-    def get_answer_mapping_stats(self, bank_name: str) -> dict:
-        """获取答案映射统计信息"""
-        with self._connect() as conn:
-            total = conn.execute(
-                "SELECT COUNT(*) as cnt FROM answer_mapping WHERE bank_name = ?",
-                (bank_name,),
-            ).fetchone()["cnt"]
-
-            covered = conn.execute(
-                "SELECT COUNT(DISTINCT problem_id) as cnt FROM answer_mapping WHERE bank_name = ?",
-                (bank_name,),
-            ).fetchone()["cnt"]
-
-            total_problems = conn.execute(
-                "SELECT COUNT(*) as cnt FROM problems WHERE bank_name = ?",
-                (bank_name,),
-            ).fetchone()["cnt"]
-
-        return {
-            "total_mappings": total,
-            "covered_problems": covered,
-            "total_problems": total_problems,
-            "coverage_rate": round(covered / total_problems * 100, 1) if total_problems > 0 else 0,
-        }
-
-    def delete_answer_mappings(self, bank_name: str) -> int:
-        """删除题库的所有答案映射，返回删除数"""
-        with self._connect() as conn:
-            cur = conn.execute(
-                "DELETE FROM answer_mapping WHERE bank_name = ?",
-                (bank_name,),
-            )
-            deleted = cur.rowcount
-            logger.info(f"已删除 {bank_name} 的 {deleted} 条答案映射")
-            return deleted
-
-    def delete_answer_mapping_by_id(self, mapping_id: int) -> bool:
-        """删除单条答案映射"""
-        with self._connect() as conn:
-            cur = conn.execute(
-                "DELETE FROM answer_mapping WHERE id = ?",
-                (mapping_id,),
-            )
-            return cur.rowcount > 0
-
-    # === 完整答案导入流程（提取 + 匹配 + 入库） ===
-
-    def import_answers_from_file(
-        self,
-        answer_file: str,
-        bank_name: str,
-        batch_size: int = 15,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-    ) -> dict:
-        """
-        一键完成「答案文档导入 → 智能匹配 → 入库」的完整流程。
-
-        参数:
-            answer_file: 答案文档路径 (.pptx / .docx / .txt)
-            bank_name: 目标题库名称
-            batch_size: 每批匹配的答案数量
-            progress_callback: 进度回调
-
-        返回:
-            {
-                "extracted_count": 提取的答案条数,
-                "matched_count": 成功匹配数,
-                "imported_count": 入库数,
-                "coverage_rate": 题库覆盖率,
-                "tokens_used": token 消耗,
-                "latency": 总耗时,
-                "errors": [...],
-            }
-        """
-        import time as _time
-        from answer_extractor import extract_answers
-        from answer_matcher import match_answers_to_bank
-
-        start_time = _time.time()
-
-        # 验证题库存在
-        if not self.bank_exists(bank_name):
-            raise ValueError(f"题库不存在: {bank_name}")
-
-        # 步骤1: 提取答案
-        if progress_callback:
-            progress_callback(0, 100, "正在从答案文档中提取内容...")
-
-        answer_pairs = extract_answers(answer_file)
-        extracted_count = len(answer_pairs)
-
-        if extracted_count == 0:
-            return {
-                "extracted_count": 0,
-                "matched_count": 0,
-                "imported_count": 0,
-                "coverage_rate": 0,
-                "tokens_used": 0,
-                "latency": 0,
-                "errors": ["未能从文件中提取到任何答案"],
-            }
-
-        if progress_callback:
-            progress_callback(10, 100, f"已提取 {extracted_count} 条答案，准备匹配...")
-
-        # 步骤2: 获取题库所有题目
-        bank_problems = self.get_all_problems(bank_name)
-        if not bank_problems:
-            raise ValueError(f"题库 {bank_name} 中没有题目，请先导入题目")
-
-        if progress_callback:
-            progress_callback(20, 100, f"正在用 AI 匹配 {extracted_count} 条答案到 {len(bank_problems)} 道题目...")
-
-        # 步骤3: DeepSeek 智能匹配
-        def match_progress(current, total, msg):
-            if progress_callback:
-                pct = 20 + int(current / total * 50) if total > 0 else 20
-                progress_callback(pct, 100, msg)
-
-        match_result = match_answers_to_bank(
-            answer_pairs,
-            bank_problems,
-            batch_size=batch_size,
-            progress_callback=match_progress,
-        )
-
-        # 步骤4: 入库
-        if progress_callback:
-            progress_callback(80, 100, "正在将匹配结果写入数据库...")
-
-        source_filename = os.path.basename(answer_file)
-
-        # 将 question_text 和 source_page 合并到 matches 中
-        enriched_matches = []
-        for m in match_result["matches"]:
-            answer_idx = m.get("answer_index", 0)
-            # 找到对应的原始答案条目
-            orig = next(
-                (ap for ap in answer_pairs if ap["index"] == answer_idx),
-                None,
-            )
-            if orig:
-                m["question_text"] = orig.get("question_text", "")
-                m["source_page"] = orig.get("source_page", 0)
-            enriched_matches.append(m)
-
-        import_result = self.import_answer_mappings(
-            bank_name,
-            enriched_matches,
-            source_file=source_filename,
-        )
-
-        # 统计覆盖率
-        stats = self.get_answer_mapping_stats(bank_name)
-        elapsed = round(_time.time() - start_time, 1)
-
-        if progress_callback:
-            progress_callback(100, 100, f"完成！{import_result['added']} 条答案已入库")
-
-        return {
-            "extracted_count": extracted_count,
-            "matched_count": match_result["matched_count"],
-            "imported_count": import_result["added"],
-            "coverage_rate": stats["coverage_rate"],
-            "tokens_used": match_result["tokens_used"],
-            "latency": elapsed,
-            "errors": match_result["errors"],
-        }
-
     # === 质量审核（DeepSeek AI 审核 + 自动清理 + 补全） ===
 
     @staticmethod
@@ -652,11 +332,12 @@ class QuestionBankDB:
 3. **保留核心不变**：优化的题目必须与原题考查**相同的数学知识点**，答案一致
 
 ### 第三步：补全新题目
-根据题库已有领域，生成少量高质量新数学题来补充题库（约 {min(3, max(1, len(problems_batch) // 5))} 道）。
-新题目要求：
-- 覆盖微积分、极限、导数、积分、偏导数、级数等高等数学核心知识点
-- 题干完整清晰，有确定答案
-- 领域从题库已有领域中选择
+生成少量高质量新数学题来补充题库。
+1. 题干为空、只有标点符号或只有1-3个无意义字符
+2. 题干只有选项没有问题（如 "A. 0 B. - C. D. ∞"）
+3. 题干是残缺的公式片段（如 "=____"、"lim/ x→0 x / sin2x ="、"2 3 2"）
+4. 题干是乱码、无意义数字组合或格式错乱无法理解
+5. 题目重复（与其他题目实质内容相同）
 
 ## 输出格式（严格 JSON，不要输出其他文字）
 ```json
@@ -778,76 +459,71 @@ class QuestionBankDB:
         optimized_count = 0
         errors = []
 
-        # 分批处理（复用同一个事件循环，避免每批都创建/销毁 asyncio.run 的开销）
-        loop = asyncio.new_event_loop()
-        try:
-            for batch_start in range(0, total, batch_size):
-                batch = all_problems[batch_start : batch_start + batch_size]
-                current_batch_end = min(batch_start + batch_size, total)
+        # 分批处理
+        for batch_start in range(0, total, batch_size):
+            batch = all_problems[batch_start : batch_start + batch_size]
+            current_batch_end = min(batch_start + batch_size, total)
 
-                if progress_callback:
-                    progress_callback(batch_start, total, f"正在审核第 {batch_start+1}-{current_batch_end} 题...")
+            if progress_callback:
+                progress_callback(batch_start, total, f"正在审核第 {batch_start+1}-{current_batch_end} 题...")
 
-                try:
-                    result = loop.run_until_complete(self._audit_batch_async(batch, domains))
+            try:
+                result = asyncio.run(self._audit_batch_async(batch, domains))
 
-                    # 处理审核结果
-                    for item in result.get("results", []):
-                        idx = item.get("index", 1) - 1
-                        if 0 <= idx < len(batch):
-                            p = batch[idx]
-                            is_valid = item.get("is_valid", True)
+                # 处理审核结果
+                for item in result.get("results", []):
+                    idx = item.get("index", 1) - 1
+                    if 0 <= idx < len(batch):
+                        p = batch[idx]
+                        is_valid = item.get("is_valid", True)
 
-                            if not is_valid:
-                                # 删除无效题目
-                                if self.remove_problem(p.id, bank_name):
-                                    deleted_ids.append(p.id)
-                                    logger.info(f"[质量审核] 删除无效题目: {p.id} — 原因: {item.get('reason', '')}")
-                            else:
-                                valid_count += 1
-                                # 用 DeepSeek 复现并优化的题干更新原题
-                                opt_q = item.get("optimized_question")
-                                opt_a = item.get("optimized_answer")
-                                if opt_q and isinstance(opt_q, str) and len(opt_q.strip()) > 10:
-                                    # 只有优化版本与原题明显不同时才更新（避免无意义的微小变化）
-                                    if opt_q.strip() != p.question.strip():
-                                        try:
-                                            self._update_problem_text(
-                                                p.id, bank_name,
-                                                question=opt_q.strip(),
-                                                reference_answer=opt_a.strip() if (opt_a and isinstance(opt_a, str) and opt_a.strip()) else None,
-                                            )
-                                            optimized_count += 1
-                                            notes = item.get("optimization_notes", "")
-                                            logger.info(f"[质量审核] 优化题干: {p.id} — {notes[:80]}")
-                                        except Exception as e:
-                                            errors.append(f"更新题目 {p.id} 失败: {e}")
+                        if not is_valid:
+                            # 删除无效题目
+                            if self.remove_problem(p.id, bank_name):
+                                deleted_ids.append(p.id)
+                                logger.info(f"[质量审核] 删除无效题目: {p.id} — 原因: {item.get('reason', '')}")
+                        else:
+                            valid_count += 1
+                            # 用 DeepSeek 复现并优化的题干更新原题
+                            opt_q = item.get("optimized_question")
+                            opt_a = item.get("optimized_answer")
+                            if opt_q and isinstance(opt_q, str) and len(opt_q.strip()) > 10:
+                                # 只有优化版本与原题明显不同时才更新（避免无意义的微小变化）
+                                if opt_q.strip() != p.question.strip():
+                                    try:
+                                        self._update_problem_text(
+                                            p.id, bank_name,
+                                            question=opt_q.strip(),
+                                            reference_answer=opt_a.strip() if (opt_a and isinstance(opt_a, str) and opt_a.strip()) else None,
+                                        )
+                                        optimized_count += 1
+                                        notes = item.get("optimization_notes", "")
+                                        logger.info(f"[质量审核] 优化题干: {p.id} — {notes[:80]}")
+                                    except Exception as e:
+                                        errors.append(f"更新题目 {p.id} 失败: {e}")
 
-                    # 导入补全的新题目
-                    new_problems = result.get("new_problems", [])
-                    for np_item in new_problems:
-                        q = np_item.get("question", "").strip()
-                        d = np_item.get("domain", "").strip()
-                        a = np_item.get("answer", "").strip()
-                        if q:
-                            # 使用 uuid 生成唯一题目 ID
-                            new_pid = f"gen_{uuid.uuid4().hex[:8]}"
-                            new_p = Problem(
-                                id=new_pid,
-                                question=q,
-                                domain=d or None,
-                                reference_answer=a or None,
-                            )
-                            if self.add_problem(new_p, bank_name):
-                                added_count += 1
-                                logger.info(f"[质量审核] 补全新题目: {new_pid}")
+                # 导入补全的新题目
+                new_problems = result.get("new_problems", [])
+                for np_item in new_problems:
+                    q = np_item.get("question", "").strip()
+                    d = np_item.get("domain", "").strip()
+                    a = np_item.get("answer", "").strip()
+                    if q:
+                        # 使用 uuid 生成唯一题目 ID
+                        new_pid = f"gen_{uuid.uuid4().hex[:8]}"
+                        new_p = Problem(
+                            id=new_pid,
+                            question=q,
+                            domain=d or None,
+                            reference_answer=a or None,
+                        )
+                        if self.add_problem(new_p, bank_name):
+                            added_count += 1
+                            logger.info(f"[质量审核] 补全新题目: {new_pid}")
 
-                except Exception as e:
-                    errors.append(f"Batch {batch_start//batch_size + 1}: {e}")
-                    logger.error(f"[质量审核] 批次处理失败: {e}")
-
-        finally:
-            loop.close()
+            except Exception as e:
+                errors.append(f"Batch {batch_start//batch_size + 1}: {e}")
+                logger.error(f"[质量审核] 批次处理失败: {e}")
 
         return {
             "total_audited": total,

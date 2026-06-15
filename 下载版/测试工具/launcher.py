@@ -1,57 +1,44 @@
 """
 数学智能体评测器 – GUI 启动器
-===============================
-功能概述：
-- 支持拖入或选择 PDF / Word / JSON / CSV 文件，一键评测
-- 题库管理：创建题库、导入题目、随机选题、AI 质量审核、答案文档导入匹配
+支持拖入或选择 PDF / Word / JSON / CSV 文件，一键评测。
+支持题库管理：创建题库、导入题目、随机选题评测。
 
-使用方式：
-    python 测试工具/launcher.py       # 带控制台窗口启动
-    pythonw 测试工具/launcher.py      # 无控制台窗口（推荐）
+用法:
+    python 测试工具/launcher.py
+    pythonw 测试工具/launcher.py    （无控制台窗口）
 """
+import asyncio
+import json
+import os
+import sys
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import webbrowser
 
-# ===== 标准库导入 =====
-# ===== 标准库导入 =====
-import asyncio       # 异步编程支持（用于评测流水线）
-import json          # JSON 数据处理
-import os            # 文件路径操作
-import sys           # 系统路径与参数
-import threading     # 多线程（GUI 后台任务不卡界面）
-import tkinter as tk # GUI 框架
-from tkinter import filedialog, messagebox, ttk  # GUI 组件
-import webbrowser    # 自动打开浏览器查看报告
-
-# ===== 项目路径配置 =====
-
-# ===== 项目路径配置 =====
-# 将项目根目录和各子目录加入 Python 搜索路径，确保模块导入正常
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "转化工具"))
 
-# ===== 项目模块导入 =====
 from config import has_config, load_config, save_config, reset_config, ConfigError, validate_config
 from question_bank import QuestionBankDB, get_db
 from models import Problem
 
 
 # ==================== 题库管理面板 ====================
-# 功能：创建/删除题库、导入题目、手动添加、AI 质量审核、导入答案文档、随机选题评测
 
 class QuestionBankPanel(ttk.Frame):
-    """题库管理选项卡 — 提供题库 CRUD + 评测入口的完整 GUI"""
+    """题库管理选项卡"""
 
     def __init__(self, parent, launcher):
-        """初始化题库管理面板：构建所有 UI 控件并绑定事件"""
         super().__init__(parent)
-        self.launcher = launcher          # 引用主启动器（用于访问根窗口和状态栏）
-        self._db = None                   # 延迟加载的数据库单例
-        self._eval_running = False        # 评测运行标志（防止重复点击）
-        self._audit_running = False       # AI 审核运行标志
-        self._import_running = False      # 答案导入运行标志
+        self.launcher = launcher
+        self._db = None
+        self._eval_running = False
+        self._audit_running = False
 
-        # 第一行：题库选择下拉框 + 刷新 + 新建/删除按钮
+        # 第一行：题库选择 + 新建
         row1 = ttk.Frame(self)
         row1.pack(fill="x", padx=15, pady=(15, 8))
 
@@ -72,14 +59,14 @@ class QuestionBankPanel(ttk.Frame):
         ttk.Button(row1, text="创建", command=self._create_bank, width=6).pack(side="left")
         ttk.Button(row1, text="删除", command=self._delete_bank, width=6).pack(side="left", padx=(4, 0))
 
-        # 第二行：统计信息标签（显示题目数量、领域分布、答案覆盖率）
+        # 第二行：统计信息
         row2 = ttk.Frame(self)
         row2.pack(fill="x", padx=15, pady=(0, 8))
         self.stats_var = tk.StringVar(value="题库统计: —")
         ttk.Label(row2, textvariable=self.stats_var, font=("Microsoft YaHei", 9),
                   foreground="#4a5568").pack(anchor="w")
 
-        # 第三行：操作按钮组（导入题目、手动添加、AI 审核、导入答案）
+        # 第三行：导入 & 添加
         row3 = ttk.Frame(self)
         row3.pack(fill="x", padx=15, pady=(0, 8))
 
@@ -89,13 +76,9 @@ class QuestionBankPanel(ttk.Frame):
                    width=18).pack(side="left", padx=(0, 8))
         self.audit_btn = ttk.Button(row3, text="🔍 AI质量审核", command=self._start_audit_quality,
                                      width=14)
-        self.audit_btn.pack(side="left", padx=(0, 8))
+        self.audit_btn.pack(side="left")
 
-        self.import_answer_btn = ttk.Button(row3, text="📥 导入答案", command=self._import_answers,
-                                            width=14)
-        self.import_answer_btn.pack(side="left")
-
-        # 第四行：随机选题评测区域（选题数量 + 领域筛选 + 评测按钮）
+        # 第四行：随机选题评测
         eval_frame = ttk.LabelFrame(self, text="随机选题评测", padding=(10, 8))
         eval_frame.pack(fill="x", padx=15, pady=(5, 10))
 
@@ -117,7 +100,7 @@ class QuestionBankPanel(ttk.Frame):
                                          command=self._start_bank_eval, width=18)
         self.bank_eval_btn.pack(side="left")
 
-        # 题目列表（Treeview 表格 — 显示 ID/领域/题干预览，支持右键删除）
+        # 题目列表（Treeview 表格）
         list_frame = ttk.LabelFrame(self, text="题库题目列表", padding=(8, 5))
         list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 10))
 
@@ -137,12 +120,12 @@ class QuestionBankPanel(ttk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # 右键菜单（选中题目后可删除）
+        # 右键菜单
         self.tree_menu = tk.Menu(self.tree, tearoff=0)
         self.tree_menu.add_command(label="删除此题目", command=self._delete_selected_problem)
         self.tree.bind("<Button-3>", self._on_tree_right_click)
 
-        # 底部状态栏（显示操作反馈信息）
+        # 底部状态栏
         self.bank_status_var = tk.StringVar(value="就绪 — 请选择一个题库")
         ttk.Label(self, textvariable=self.bank_status_var, font=("Microsoft YaHei", 9),
                   foreground="#718096").pack(anchor="w", padx=15, pady=(0, 5))
@@ -151,14 +134,13 @@ class QuestionBankPanel(ttk.Frame):
 
     @property
     def db(self):
-        """延迟加载数据库单例（首次访问时才创建连接）"""
         if self._db is None:
             from question_bank import get_db
             self._db = get_db()
         return self._db
 
     def _refresh_banks(self):
-        """刷新题库下拉列表：重新从数据库读取题库名称，并更新统计信息"""
+        """刷新题库下拉列表和统计"""
         banks = self.db.list_banks()
         names = [b["name"] for b in banks]
         self.bank_combo["values"] = names
@@ -175,11 +157,9 @@ class QuestionBankPanel(ttk.Frame):
             self.domain_var.set("全部")
 
     def _on_bank_selected(self, event=None):
-        """题库下拉框切换事件：重新加载统计和题目列表"""
         self._update_stats_and_list()
 
     def _update_stats_and_list(self):
-        """更新题库统计栏 + 题目列表 + 答案覆盖率（核心刷新方法）"""
         bank = self.bank_var.get()
         if not bank:
             self.stats_var.set("题库统计: —")
@@ -192,14 +172,7 @@ class QuestionBankPanel(ttk.Frame):
         if len(domains) > 5:
             domain_str += f" …共{len(domains)}个"
 
-        # 获取答案映射覆盖率
-        stats = self.db.get_answer_mapping_stats(bank)
-        coverage_rate = stats.get("coverage_rate", 0) if stats else 0
-
-        self.stats_var.set(
-            f"题库「{bank}」: 共 {total} 题 | 领域: {domain_str or '无'} | "
-            f"答案覆盖率: {coverage_rate:.1f}%"
-        )
+        self.stats_var.set(f"题库「{bank}」: 共 {total} 题 | 领域: {domain_str or '无'}")
 
         # 更新领域筛选下拉
         self.domain_combo["values"] = ["全部"] + domains
@@ -210,7 +183,6 @@ class QuestionBankPanel(ttk.Frame):
         self._refresh_tree(bank)
 
     def _refresh_tree(self, bank_name: str):
-        """从数据库加载指定题库的所有题目，填充到 Treeview 表格中"""
         self._clear_tree()
         problems = self.db.get_all_problems(bank_name)
         seen_iids = set()
@@ -224,19 +196,16 @@ class QuestionBankPanel(ttk.Frame):
             self.tree.insert("", "end", iid=iid, values=(p.id, p.domain or "", preview))
 
     def _clear_tree(self):
-        """清空 Treeview 表格所有行"""
         for item in self.tree.get_children():
             self.tree.delete(item)
 
     def _on_tree_right_click(self, event):
-        """Treeview 右键事件：选中当前行并弹出上下文菜单"""
         item = self.tree.identify_row(event.y)
         if item:
             self.tree.selection_set(item)
             self.tree_menu.post(event.x_root, event.y_root)
 
     def _delete_selected_problem(self):
-        """删除 Treeview 中选中的题目（需二次确认）"""
         sel = self.tree.selection()
         if not sel:
             return
@@ -250,7 +219,6 @@ class QuestionBankPanel(ttk.Frame):
             self.bank_status_var.set(f"已删除题目: {pid}")
 
     def _create_bank(self):
-        """根据输入框内容创建新题库（名称不能为空且不能重复）"""
         name = self.new_bank_var.get().strip()
         if not name:
             messagebox.showwarning("提示", "请输入题库名称")
@@ -266,7 +234,6 @@ class QuestionBankPanel(ttk.Frame):
             messagebox.showinfo("提示", f"题库「{name}」已存在")
 
     def _delete_bank(self):
-        """删除当前选中的题库及其所有题目（不可恢复，需二次确认）"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择要删除的题库")
@@ -277,7 +244,6 @@ class QuestionBankPanel(ttk.Frame):
             self.bank_status_var.set(f"题库「{bank}」已删除")
 
     def _import_from_file(self):
-        """从 JSON/CSV/Word/PDF 文件批量导入题目到当前题库"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择或创建一个题库")
@@ -311,7 +277,6 @@ class QuestionBankPanel(ttk.Frame):
             messagebox.showerror("导入失败", str(e))
 
     def _manual_add(self):
-        """打开手动添加题目对话框（弹窗表单：ID/题干/领域/答案）"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择或创建一个题库")
@@ -382,7 +347,6 @@ class QuestionBankPanel(ttk.Frame):
         ttk.Button(btn_f, text="取消", command=dialog.destroy, width=12).pack(side="left")
 
     def _start_bank_eval(self):
-        """启动题库随机选题评测：校验参数 → 检查 API → 启动后台线程"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择题库")
@@ -426,7 +390,6 @@ class QuestionBankPanel(ttk.Frame):
         thread.start()
 
     def _run_bank_eval_async(self, bank_name, count, domain):
-        """后台线程：调用 main.run_evaluation_from_bank 执行完整评测流水线"""
         try:
             from main import run_evaluation_from_bank
 
@@ -455,7 +418,6 @@ class QuestionBankPanel(ttk.Frame):
             self._eval_running = False
 
     def _start_audit_quality(self):
-        """启动 AI 质量审核：校验配置 → 确认对话框 → 启动后台线程调用 DeepSeek 审核"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择题库")
@@ -499,7 +461,6 @@ class QuestionBankPanel(ttk.Frame):
         thread.start()
 
     def _run_audit_async(self, bank_name):
-        """后台线程：分批调用 DeepSeek 审核题目质量（删除无效/优化题干/补全新题）"""
         try:
             def on_progress(current, total, message):
                 self.launcher.root.after(0, lambda: self.bank_status_var.set(
@@ -540,105 +501,21 @@ class QuestionBankPanel(ttk.Frame):
             self.launcher.root.after(0, lambda: self.bank_eval_btn.configure(state="normal"))
             self._audit_running = False
 
-    # ---------- 答案导入 ----------
-
-    def _import_answers(self):
-        """选择答案文档（PPT/Word/TXT）→ 启动后台线程执行提取+匹配+入库"""
-        bank = self.bank_var.get()
-        if not bank:
-            messagebox.showwarning("提示", "请先选择或创建一个题库")
-            return
-
-        if self._import_running:
-            messagebox.showinfo("提示", "答案导入正在进行中，请稍候")
-            return
-
-        path = filedialog.askopenfilename(
-            title=f"选择答案文档导入到题库「{bank}」",
-            filetypes=[
-                ("所有支持格式", "*.pptx;*.docx;*.txt"),
-                ("PowerPoint 演示文稿", "*.pptx"),
-                ("Word 文档", "*.docx"),
-                ("文本文件", "*.txt"),
-            ]
-        )
-        if not path:
-            return
-
-        self._import_running = True
-        self.import_answer_btn.configure(state="disabled", text="导入中...")
-        self.bank_status_var.set(f"正在导入答案文档并智能匹配到题库「{bank}」...")
-
-        thread = threading.Thread(target=self._run_import_answers_async,
-                                  args=(bank, path), daemon=True)
-        thread.start()
-
-    def _run_import_answers_async(self, bank_name, file_path):
-        """后台线程：调用 db.import_answers_from_file 完成完整答案导入流程"""
-        try:
-            def on_progress(current, total, message):
-                self.launcher.root.after(0, lambda: self.bank_status_var.set(
-                    f"答案导入: {message} ({current}/{total})"))
-
-            result = self.db.import_answers_from_file(
-                file_path, bank_name,
-                batch_size=15,
-                progress_callback=on_progress,
-            )
-
-            self.launcher.root.after(0, lambda: self._on_import_done(bank_name, result))
-        except Exception as e:
-            self.launcher.root.after(0, lambda: self.bank_status_var.set(f"答案导入失败: {e}"))
-            self.launcher.root.after(0, lambda: messagebox.showerror("导入失败", str(e)))
-            self.launcher.root.after(0, lambda: self.import_answer_btn.configure(
-                state="normal", text="📥 导入答案"))
-            self._import_running = False
-
-    def _on_import_done(self, bank_name, result):
-        """导入完成后：恢复按钮状态 → 刷新统计 → 弹窗展示结果摘要"""
-        self._import_running = False
-        self.import_answer_btn.configure(state="normal", text="📥 导入答案")
-
-        self._update_stats_and_list()
-
-        self.bank_status_var.set(
-            f"答案导入完成！提取 {result.get('extracted_count', 0)} 条, "
-            f"匹配 {result.get('matched_count', 0)} 条, "
-            f"入库 {result.get('imported_count', 0)} 条, "
-            f"覆盖率 {result.get('coverage_rate', 0):.1f}%")
-
-        # 构建摘要信息
-        errors = result.get("errors", [])
-        summary = (
-            f"答案文档导入完成 — 题库「{bank_name}」\n\n"
-            f"提取答案对: {result.get('extracted_count', 0)} 条\n"
-            f"语义匹配成功: {result.get('matched_count', 0)} 条\n"
-            f"已写入映射表: {result.get('imported_count', 0)} 条\n"
-            f"题库覆盖率: {result.get('coverage_rate', 0):.1f}%\n"
-            f"耗时: {result.get('latency', 0):.1f} 秒\n"
-            f"Token 消耗: {result.get('tokens_used', 0)}"
-        )
-        if errors:
-            summary += f"\n\n⚠ 警告 ({len(errors)} 条):\n" + "\n".join(errors[:5])
-
-        messagebox.showinfo("答案导入完成", summary)
-
 
 # ==================== 题库浏览器面板 ====================
-# 功能：浏览题库题目详情，支持搜索、分页、查看/编辑/删除
+
 
 class BankBrowserPanel(ttk.Frame):
     """题库浏览器 — 直接浏览数据库中各题库的题目，支持搜索、分页、查看详情"""
 
     def __init__(self, parent, launcher):
-        """初始化浏览器面板：构建搜索栏、分页控件、Treeview 表格"""
         super().__init__(parent)
         self.launcher = launcher
-        self._current_bank = None   # 当前选中的题库名称
-        self._all_problems = []     # 当前搜索结果的全量数据（用于分页）
-        self._page = 0              # 当前页码（从 0 开始）
+        self._current_bank = None
+        self._all_problems = []
+        self._page = 0
 
-        # 第一行：题库选择 + 刷新 + 统计信息
+        # 第一行：题库选择
         row1 = ttk.Frame(self)
         row1.pack(fill="x", padx=15, pady=(12, 8))
 
@@ -648,12 +525,12 @@ class BankBrowserPanel(ttk.Frame):
         self.bank_combo.bind("<<ComboboxSelected>>", self._on_bank_changed)
         ttk.Button(row1, text="🔄 刷新", command=self._refresh_banks, width=7).pack(side="left")
 
-        # 统计信息标签（显示在题库选择右侧）
+        # 统计信息
         self.stats_var = tk.StringVar(value="")
         ttk.Label(row1, textvariable=self.stats_var, font=("Microsoft YaHei", 9),
                   foreground="#4a5568").pack(side="left", padx=(12, 0))
 
-        # 第二行：搜索框 + 分页控制（每页数量、上页/下页按钮）
+        # 第二行：搜索 + 分页控制
         search_row = ttk.Frame(self)
         search_row.pack(fill="x", padx=15, pady=(0, 6))
 
@@ -676,7 +553,7 @@ class BankBrowserPanel(ttk.Frame):
         ttk.Label(search_row, textvariable=self.page_label_var, font=("Consolas", 9),
                   foreground="#666").pack(side="left")
 
-        # 第三行：领域筛选下拉框
+        # 第三行：领域筛选
         filter_row = ttk.Frame(self)
         filter_row.pack(fill="x", padx=15, pady=(0, 6))
 
@@ -687,7 +564,7 @@ class BankBrowserPanel(ttk.Frame):
         self.domain_combo.pack(side="left", padx=(4, 12))
         self.domain_combo.bind("<<ComboboxSelected>>", lambda e: self._reload_list())
 
-        # ---- 题目表格（双击查看详情，右键操作菜单）----
+        # ---- 题目表格 ----
         list_frame = ttk.LabelFrame(self, text="题目列表（双击查看详情 / 右键操作）", padding=(5, 3))
         list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
 
@@ -716,14 +593,14 @@ class BankBrowserPanel(ttk.Frame):
         self.tree.bind("<Double-Button-1>", lambda e: self._view_detail())
         self.tree.bind("<Button-3>", self._on_right_click)
 
-        # 右键菜单（查看详情 / 编辑 / 删除）
+        # 右键菜单
         self.ctx_menu = tk.Menu(self.tree, tearoff=0)
         self.ctx_menu.add_command(label="📋 查看详情", command=self._view_detail)
         self.ctx_menu.add_command(label="📝 编辑题目", command=self._edit_problem)
         self.ctx_menu.add_separator()
         self.ctx_menu.add_command(label="🗑 删除此题目", command=self._delete_problem)
 
-        # 状态栏（显示操作反馈）
+        # 状态栏
         self.status_var = tk.StringVar(value="就绪 — 请选择题库开始浏览")
         ttk.Label(self, textvariable=self.status_var, font=("Microsoft YaHei", 9),
                   foreground="#718096").pack(anchor="w", padx=15, pady=(0, 8))
@@ -732,14 +609,12 @@ class BankBrowserPanel(ttk.Frame):
 
     @property
     def db(self):
-        """延迟加载数据库单例"""
         from question_bank import get_db
         return get_db()
 
     # ===== 题库切换 =====
 
     def _init_banks(self):
-        """初始化题库下拉列表（启动时调用，自动加载第一个题库）"""
         """初始化题库下拉列表"""
         banks = self.db.list_banks()
         names = [b["name"] for b in banks]
@@ -752,7 +627,7 @@ class BankBrowserPanel(ttk.Frame):
             self.status_var.set("暂无题库 — 请在「题库评测」选项卡中创建或导入")
 
     def _refresh_banks(self):
-        """刷新题库列表（保持当前选中项不变）"""
+        """刷新题库列表"""
         old = self.bank_combo.get().strip()
         banks = self.db.list_banks()
         names = [b["name"] for b in banks]
@@ -770,13 +645,12 @@ class BankBrowserPanel(ttk.Frame):
             self.status_var.set("暂无题库")
 
     def _on_bank_changed(self, event=None):
-        """切换题库事件：加载新题库的题目数据"""
         bank = self.bank_combo.get()
         if bank:
             self._load_bank(bank)
 
-    def _load_bank(self, bank_name: str):
-        """加载指定题库：重置搜索和分页 → 更新统计 → 刷新题目列表"""
+    def _load_bank(self, bank_name):
+        """加载指定题库"""
         self._current_bank = bank_name
         self._page = 0
         self.search_var.set("")
@@ -794,10 +668,10 @@ class BankBrowserPanel(ttk.Frame):
         self._reload_list()
         self.status_var.set(f"已加载: 「{bank_name}」({total} 题)")
 
-    # ===== 题目列表加载与分页 =====
+    # ===== 题目列表 =====
 
     def _fetch_problems(self) -> list[Problem]:
-        """根据搜索关键词和领域筛选获取题目列表"""
+        """根据当前条件获取题目列表"""
         if not self._current_bank:
             return []
 
@@ -814,7 +688,7 @@ class BankBrowserPanel(ttk.Frame):
             return self.db.get_all_problems(self._current_bank, domain=domain)
 
     def _reload_list(self):
-        """重新加载数据并按当前页码分页显示到 Treeview 中"""
+        """重新加载并分页显示"""
         self._clear_tree()
         self._all_problems = self._fetch_problems()
         total = len(self._all_problems)
@@ -850,37 +724,32 @@ class BankBrowserPanel(ttk.Frame):
         for c in self.tree.get_children():
             self.tree.delete(c)
 
-    # ===== 搜索 & 分页操作 =====
+    # ===== 搜索 & 分页 =====
 
     def _do_search(self):
-        """执行搜索（重置页码为 0 后刷新）"""
         self._page = 0
         self._reload_list()
 
     def _clear_search(self):
-        """清空搜索框并重置页码"""
         self.search_var.set("")
         self._page = 0
         self._reload_list()
 
     def _prev_page(self):
-        """上一页（若不在首页）"""
         if self._page > 0:
             self._page -= 1
             self._reload_list()
 
     def _next_page(self):
-        """下一页（若不在末页）"""
         ps = self.page_size_var.get()
         tp = max(1, (len(self._all_problems) + ps - 1) // ps) if self._all_problems else 1
         if self._page < tp - 1:
             self._page += 1
             self._reload_list()
 
-    # ===== 操作（查看/编辑/删除） =====
+    # ===== 操作 =====
 
     def _get_sel_problem(self) -> Problem | None:
-        """获取 Treeview 当前选中的题目对象（返回 None 表示无选中）"""
         sel = self.tree.selection()
         if not sel:
             return None
@@ -892,14 +761,12 @@ class BankBrowserPanel(ttk.Frame):
         return None
 
     def _on_right_click(self, event):
-        """Treeview 右键事件：选中行并弹出上下文菜单"""
         item = self.tree.identify_row(event.y)
         if item:
             self.tree.selection_set(item)
             self.ctx_menu.post(event.x_root, event.y_root)
 
     def _view_detail(self):
-        """打开题目详情弹窗（显示题干 + 参考答案的只读视图）"""
         p = self._get_sel_problem()
         if not p:
             return
@@ -944,7 +811,6 @@ class BankBrowserPanel(ttk.Frame):
         ttk.Button(btns, text="关闭", command=dlg.destroy, width=10).pack(side="left", padx=4)
 
     def _edit_problem(self):
-        """打开编辑题目对话框（修改题干/答案/领域后保存到数据库）"""
         p = self._get_sel_problem()
         if not p:
             return
@@ -975,9 +841,9 @@ class BankBrowserPanel(ttk.Frame):
                 ent.insert(0, default)
                 ent.pack(side="left", fill="x", expand=True)
             entries[key] = ent
-            # 题目 ID 不允许修改，禁用输入
-            if key == "id":
-                ent.configure(state="disabled")  # type: ignore[attr-defined]
+
+        if key == "id":
+            entries["id"].configure(state="disabled")  # type: ignore[attr-defined]
 
         def do_save():
             new_q = entries["question"].get("1.0", "end-1c").strip()
@@ -1004,7 +870,6 @@ class BankBrowserPanel(ttk.Frame):
         ttk.Button(btn_f, text="取消", command=dlg.destroy, width=10).pack(side="left", padx=4)
 
     def _delete_problem(self):
-        """删除选中的题目（需二次确认，删除后自动刷新列表和统计）"""
         p = self._get_sel_problem()
         if not p: return
         if not self._current_bank: return
@@ -1016,15 +881,10 @@ class BankBrowserPanel(ttk.Frame):
 
 
 # ==================== 主启动器 ====================
-# 功能：构建整个 GUI 应用窗口，管理三个选项卡（文件评测/题库评测/题库浏览器）
 
 class EvalLauncher:
-    """主应用类：创建根窗口、构建选项卡界面、管理全局状态"""
-
     def __init__(self):
-        """初始化主窗口：尝试加载拖放支持 → 构建所有 UI 组件"""
         try:
-            # 尝试加载 tkinterdnd2 拖放库（可选依赖，没有则降级为普通 Tk）
             from tkinterdnd2 import TkinterDnD
             self.root = TkinterDnD.Tk()
             self._dnd_available = True
@@ -1037,12 +897,8 @@ class EvalLauncher:
         self.root.configure(bg="#f0f4f8")
         self.root.minsize(520, 500)
 
-        # ---- 标题栏 ----
-
         title_frame = tk.Frame(self.root, bg="#f0f4f8")
         title_frame.pack(pady=(15, 5))
-
-        # ---- Notebook 选项卡（三个标签页） ----
         tk.Label(
             title_frame, text="数学智能体评测器",
             font=("Microsoft YaHei", 18, "bold"), fg="#1a365d", bg="#f0f4f8"
@@ -1052,14 +908,12 @@ class EvalLauncher:
             font=("Microsoft YaHei", 9), fg="#718096", bg="#f0f4f8"
         ).pack()
 
-        # ---- Tab 1: 文件评测（拖放/选择文件 → 一键评测） ----
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=(5, 0))
 
         self.file_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.file_tab, text="📄 文件评测")
 
-        # 拖放区域（支持拖入文件或点击按钮选择）
         self.drop_frame = tk.Frame(
             self.file_tab, bg="white", bd=2, relief="groove",
             highlightbackground="#cbd5e0", highlightthickness=1
@@ -1079,7 +933,6 @@ class EvalLauncher:
         self.drop_label.bind("<Enter>", self._on_drag_enter)
         self.drop_label.bind("<Leave>", self._on_drag_leave)
 
-        # 文件路径显示 + 设置行（并发数/题目上限）
         self.path_var = tk.StringVar(value="未选择文件")
         path_label = tk.Label(
             self.file_tab, textvariable=self.path_var,
@@ -1088,7 +941,6 @@ class EvalLauncher:
         )
         path_label.pack(padx=15, pady=(2, 8), fill="x")
 
-        # 评测参数设置行（并发数、题目上限）
         settings_frame = tk.Frame(self.file_tab, bg="#f0f4f8")
         settings_frame.pack(padx=15, pady=(0, 5), fill="x")
 
@@ -1118,7 +970,6 @@ class EvalLauncher:
             bg="#f0f4f8", fg="#a0aec0"
         ).pack(side="left")
 
-        # 操作按钮行（选择文件 / 开始评测 / 设置 API Key / 清理结果）
         btn_frame = tk.Frame(self.file_tab, bg="#f0f4f8")
         btn_frame.pack(padx=15, pady=(5, 10), fill="x")
 
@@ -1154,15 +1005,12 @@ class EvalLauncher:
         )
         self.clear_btn.pack(side="left")
 
-        # ---- Tab 2: 题库评测 ----
         self.bank_panel = QuestionBankPanel(self.notebook, launcher=self)
         self.notebook.add(self.bank_panel, text="📚 题库评测")
 
-        # ---- Tab 3: 题库浏览器 ----
         self.browser_panel = BankBrowserPanel(self.notebook, launcher=self)
         self.notebook.add(self.browser_panel, text="📂 题库浏览器")
 
-        # 底部全局状态栏
         self.status_var = tk.StringVar(value="就绪 - 请选择题目文件或切换到题库评测")
         status_label = tk.Label(
             self.root, textvariable=self.status_var,
@@ -1178,17 +1026,14 @@ class EvalLauncher:
         self.file_path = None
 
     def _on_drag_enter(self, event):
-        """拖拽进入：高亮拖放区域"""
         self.drop_frame.configure(bg="#ebf8ff")
         self.drop_label.configure(bg="#ebf8ff")
 
     def _on_drag_leave(self, event):
-        """拖拽离开：恢复拖放区域默认颜色"""
         self.drop_frame.configure(bg="white")
         self.drop_label.configure(bg="white")
 
     def _select_file(self):
-        """弹出文件选择对话框（支持 PDF/Word/JSON/CSV）"""
         path = filedialog.askopenfilename(
             title="选择题目文件",
             filetypes=[
@@ -1202,8 +1047,7 @@ class EvalLauncher:
         if path:
             self._set_file(path)
 
-    def _set_file(self, path: str):
-        """设置待评测文件路径并更新 UI 状态"""
+    def _set_file(self, path):
         self.file_path = path
         basename = os.path.basename(path)
         self.path_var.set(basename)
@@ -1214,7 +1058,7 @@ class EvalLauncher:
         self.status_var.set(f"已选择: {basename} - 点击「开始评测」运行")
 
     def _clear_results(self):
-        """清理所有评测结果（HTML 报告 / JSON 数据 / 临时题目文件）"""
+        """清理所有评测结果（HTML/JSON/临时文件）"""
         if not messagebox.askyesno(
             "确认清理",
             "即将清除以下目录中的所有文件：\n\n"
@@ -1234,7 +1078,7 @@ class EvalLauncher:
         messagebox.showinfo("清理完成", f"已清除以下文件：\n\n" + "\n".join(parts))
 
     def _show_api_dialog(self):
-        """弹窗配置 API Key（支持 Intern-S1 + DeepSeek 两个服务）"""
+        """弹窗输入/修改 API Key"""
         existing_s1 = ""
         existing_ds = ""
         if has_config():
@@ -1312,10 +1156,9 @@ class EvalLauncher:
                   relief="flat", padx=16, pady=4, cursor="hand2").pack(side="left")
 
         self.root.wait_window(dialog)
-        # 对话框关闭后返回，result 字典仅用于内部回调
+        return result["confirmed"]
 
     def _start_eval(self):
-        """开始文件评测：禁用按钮 → 启动后台评测线程"""
         if not self.file_path:
             messagebox.showwarning("提示", "请先选择题目文件")
             return
@@ -1331,12 +1174,13 @@ class EvalLauncher:
         thread.start()
 
     def _run_async(self):
-        """
-        后台线程执行完整评测流水线：
-        1. 验证 API 配置是否完整
-        2. 自动转化文件格式（PDF/Word → JSON）
-        3. 调用 asyncio.run() 执行并发异步评测
-        4. 自动打开生成的 HTML 报告
+        """在后台线程中执行评测流水线（线程 + asyncio 嵌套模式）
+        
+        工作流程：
+        1. 验证 API 配置
+        2. 自动转化文件（PDF/Word -> JSON）
+        3. 执行 asyncio.run() 运行异步评测
+        4. 打开 HTML 报告
         """
         try:
             from main import auto_convert, run_evaluation
@@ -1365,12 +1209,10 @@ class EvalLauncher:
         except Exception as e:
             self.root.after(0, lambda: self._on_done(False, str(e)))
 
-    def _update_status(self, text: str):
-        """线程安全的状态更新（通过 root.after 回到主线程）"""
+    def _update_status(self, text):
         self.root.after(0, lambda: self.status_var.set(text))
 
     def _on_done(self, success, msg):
-        """评测完成回调：恢复按钮状态 → 显示结果或错误信息"""
         self.progress["value"] = 0
         self.progress.pack_forget()
         self.run_btn.configure(state="normal", text="开始评测")
@@ -1384,23 +1226,16 @@ class EvalLauncher:
             messagebox.showerror("错误", f"评测失败:\n{msg}")
 
     def run(self):
-        """启动应用主循环：注册拖放事件（若可用）→ 进入 tkinter mainloop"""
-        if getattr(self, "_dnd_available", False):
-            try:
-                from tkinterdnd2 import DND_FILES
-                self.root.drop_target_register(DND_FILES)
-                self.root.dnd_bind("<<Drop>>", self._on_drop)
-            except (AttributeError, ImportError, tk.TclError):
-                # 部分环境下TkinterDnD的root窗口不支持drop_target_register
-                self._dnd_available = False
-
-        if not getattr(self, "_dnd_available", False):
-            self.status_var.set('就绪 - 拖放功能未启用')
+        try:
+            from tkinterdnd2 import DND_FILES
+            self.root.drop_target_register(DND_FILES)
+            self.root.dnd_bind("<<Drop>>", self._on_drop)
+        except ImportError:
+            self.status_var.set('就绪 - 拖放功能未启用 (pip install tkinterdnd2)')
 
         self.root.mainloop()
 
     def _on_drop(self, event):
-        """处理文件拖放事件：解析路径 → 调用 _set_file"""
         path = event.data.strip()
         path = path.strip("{}").strip('"').strip("'")
         if os.path.isfile(path):
@@ -1408,7 +1243,6 @@ class EvalLauncher:
 
 
 def main():
-    """应用入口：创建主启动器实例并运行"""
     launcher = EvalLauncher()
     launcher.run()
 
