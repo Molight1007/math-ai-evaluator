@@ -1,26 +1,38 @@
 """
-答案文档提取器 — 从 PPT/Word 格式的答案文件中提取「题目-答案」对。
+答案文档提取器 — 从多种格式的答案文件中提取「题目-答案」对。
 
 支持格式:
-- .pptx (PowerPoint): 按幻灯片逐页提取，每页可能包含题目+答案
+- .pptx / .ppt (PowerPoint): 按幻灯片逐页提取
 - .docx (Word): 按段落提取，识别题号+答案模式
-- .txt: 纯文本，按行解析
+- .txt / .md: 纯文本/Markdown，按行解析
+- .pdf: 用 pdfplumber 提取文本后解析
+- .csv: 用 pandas 读 CSV，自动识别题目列和答案列
+- .xlsx: 用 openpyxl 读取，按行列解析
+- .json: 从 JSON 中提取 question/answer 字段对
 
 输出统一格式:
 [
   {
-    "index": 1,           # 序号
-    "question_text": "...", # 题干（可能为空，如果答案文档只有答案）
-    "answer_text": "...",   # 答案内容
-    "source_page": 1        # 来源页码/幻灯片号
+    "index": 1,              # 序号
+    "question_text": "...",  # 题干（可能为空，如果答案文档只有答案）
+    "answer_text": "...",    # 答案内容
+    "source_page": 1         # 来源页码/幻灯片号
   }
 ]
 """
+import csv
+import json
+import logging
 import os
 import re
-import logging
 
 logger = logging.getLogger(__name__)
+
+# 支持的文件扩展名集合（用于快速成员检查）
+SUPPORTED_ANSWER_EXTS: set = {
+    ".pptx", ".ppt", ".docx", ".txt", ".md",
+    ".pdf", ".csv", ".xlsx", ".json",
+}
 
 
 def extract_from_pptx(pptx_path: str) -> list[dict]:
@@ -107,24 +119,336 @@ def extract_from_txt(txt_path: str) -> list[dict]:
 def extract_answers(filepath: str) -> list[dict]:
     """
     统一入口：根据文件扩展名自动选择提取器。
-    返回 list[dict]，每个 dict 包含 index, question_text, answer_text, source_page
+
+    参数:
+        filepath: 答案文件路径
+
+    返回:
+        list[dict]，每个 dict 包含 index, question_text, answer_text, source_page
+
+    异常:
+        ValueError: 不支持的文件格式
     """
     ext = os.path.splitext(filepath)[1].lower()
 
-    if ext == ".pptx":
-        pairs = extract_from_pptx(filepath)
-    elif ext == ".docx":
-        pairs = extract_from_docx(filepath)
-    elif ext == ".txt":
-        pairs = extract_from_txt(filepath)
-    else:
-        raise ValueError(f"不支持的答案文件格式: {ext}（支持 .pptx / .docx / .txt）")
+    # 按扩展名分发到对应的提取函数
+    _dispatchers = {
+        ".pptx": extract_from_pptx,
+        ".ppt": extract_from_ppt,
+        ".docx": extract_from_docx,
+        ".txt": extract_from_txt,
+        ".md": extract_from_md,
+        ".pdf": extract_from_pdf,
+        ".csv": extract_from_csv,
+        ".xlsx": extract_from_xlsx,
+        ".json": extract_from_json,
+    }
+
+    extract_fn = _dispatchers.get(ext)
+    if extract_fn is None:
+        supported = ", ".join(sorted(SUPPORTED_ANSWER_EXTS))
+        raise ValueError(f"不支持的答案文件格式: {ext}（支持 {supported}）")
+
+    pairs = extract_fn(filepath)
 
     # 重新编号，确保 index 连续
     for i, pair in enumerate(pairs):
         pair["index"] = i + 1
 
     return pairs
+
+
+def extract_from_ppt(ppt_path: str) -> list[dict]:
+    """
+    从旧版 PowerPoint (.ppt) 文件中提取答案对。
+
+    旧版 .ppt 是 OLE 二进制格式，python-pptx 不支持直接读取。
+    优先尝试用 python-pptx 打开（部分 .ppt 内部实为 .pptx 格式），
+    失败则提示用户将文件另存为 .pptx。
+
+    参数:
+        ppt_path: .ppt 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    try:
+        from pptx import Presentation
+    except ImportError:
+        raise ImportError("请安装 python-pptx: pip install python-pptx")
+
+    try:
+        # 尝试用 python-pptx 打开（部分 .ppt 内部兼容 .pptx 格式）
+        prs = Presentation(ppt_path)
+        pairs = []
+        for slide_idx, slide in enumerate(prs.slides, 1):
+            texts = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        t = para.text.strip()
+                        if t:
+                            texts.append(t)
+            if not texts:
+                continue
+            full_text = "\n".join(texts)
+            page_pairs = _parse_answer_pairs(full_text, slide_idx)
+            pairs.extend(page_pairs)
+        logger.info(f"从 .ppt 提取了 {len(pairs)} 个答案对 (共 {len(prs.slides)} 页)")
+        return pairs
+    except Exception:
+        # .ppt 无法直接用 python-pptx 打开，提示用户转换格式
+        raise ValueError(
+            "无法直接读取旧版 .ppt 文件。"
+            "请用 PowerPoint 打开后另存为 .pptx 格式，再重新导入。"
+        )
+
+
+def extract_from_md(md_path: str) -> list[dict]:
+    """
+    从 Markdown 文件中提取答案对。
+
+    按标题（# 开头）分段后逐段解析题目-答案对，
+    复用 _parse_answer_pairs 的通用解析逻辑。
+
+    参数:
+        md_path: .md 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    with open(md_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    pairs = _parse_answer_pairs(content, 1)
+    logger.info(f"从 Markdown 文件提取了 {len(pairs)} 个答案对")
+    return pairs
+
+
+def extract_from_pdf(pdf_path: str) -> list[dict]:
+    """
+    从 PDF 文件中提取答案对。
+
+    使用 pdfplumber 逐页提取文本，然后按页解析题目-答案对。
+    每页独立解析，避免跨页边界匹配问题。
+
+    参数:
+        pdf_path: .pdf 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    try:
+        import pdfplumber
+    except ImportError:
+        raise ImportError("请安装 pdfplumber: pip install pdfplumber")
+
+    pairs = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_idx, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if not text:
+                continue
+            text = text.strip()
+            if not text:
+                continue
+            # 逐页独立解析，source_page 标记实际页码
+            page_pairs = _parse_answer_pairs(text, page_idx)
+            pairs.extend(page_pairs)
+
+    logger.info(f"从 PDF 提取了 {len(pairs)} 个答案对 (共 {len(pdf.pages)} 页)")
+    return pairs
+
+
+def extract_from_csv(csv_path: str) -> list[dict]:
+    """
+    从 CSV 文件中提取答案对。
+
+    自动识别题目列和答案列的策略：
+    1. 先查找列名中包含「题目/问题/question」的列作为题目列
+    2. 再查找列名中包含「答案/answer」的列作为答案列
+    3. 若未识别到，默认第一列为题目列、最后一列为答案列
+
+    参数:
+        csv_path: .csv 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    import pandas as pd
+
+    df = pd.read_csv(csv_path, encoding="utf-8")
+    if df.empty:
+        logger.warning("CSV 文件为空")
+        return []
+
+    columns = [str(c).strip().lower() for c in df.columns]
+
+    # 自动识别题目列：列名包含 question/题目/问题 等关键词
+    question_col_idx = None
+    answer_col_idx = None
+    for i, col in enumerate(columns):
+        if question_col_idx is None and _is_column_like(col, ("question", "题目", "问题", "题干", "problem")):
+            question_col_idx = i
+        if answer_col_idx is None and _is_column_like(col, ("answer", "答案", "解答", "解析", "solution")):
+            answer_col_idx = i
+
+    # 未识别到则用默认策略
+    if question_col_idx is None:
+        question_col_idx = 0
+    if answer_col_idx is None:
+        answer_col_idx = len(df.columns) - 1
+
+    pairs = []
+    for idx, row in df.iterrows():
+        question_text = str(row.iloc[question_col_idx]) if pd.notna(row.iloc[question_col_idx]) else ""
+        answer_text = str(row.iloc[answer_col_idx]) if pd.notna(row.iloc[answer_col_idx]) else ""
+        # 跳过全空行
+        if not question_text.strip() and not answer_text.strip():
+            continue
+        pairs.append({
+            "index": idx + 1,
+            "question_text": question_text.strip(),
+            "answer_text": answer_text.strip(),
+            "source_page": idx + 1,
+        })
+
+    logger.info(f"从 CSV 提取了 {len(pairs)} 个答案对")
+    return pairs
+
+
+def _is_column_like(col_name: str, keywords: tuple[str, ...]) -> bool:
+    """判断列名是否包含指定关键词（不区分大小写）"""
+    col_lower = col_name.lower()
+    return any(kw.lower() in col_lower for kw in keywords)
+
+
+def extract_from_xlsx(xlsx_path: str) -> list[dict]:
+    """
+    从 Excel (.xlsx) 文件中提取答案对。
+
+    与 CSV 提取策略一致：自动识别题目列和答案列。
+    使用 openpyxl 读取，支持 .xlsx 格式。
+
+    参数:
+        xlsx_path: .xlsx 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    import pandas as pd
+
+    df = pd.read_excel(xlsx_path, engine="openpyxl")
+    if df.empty:
+        logger.warning("Excel 文件为空")
+        return []
+
+    columns = [str(c).strip().lower() for c in df.columns]
+
+    question_col_idx = None
+    answer_col_idx = None
+    for i, col in enumerate(columns):
+        if question_col_idx is None and _is_column_like(col, ("question", "题目", "问题", "题干", "problem")):
+            question_col_idx = i
+        if answer_col_idx is None and _is_column_like(col, ("answer", "答案", "解答", "解析", "solution")):
+            answer_col_idx = i
+
+    if question_col_idx is None:
+        question_col_idx = 0
+    if answer_col_idx is None:
+        answer_col_idx = len(df.columns) - 1
+
+    pairs = []
+    for idx, row in df.iterrows():
+        question_text = str(row.iloc[question_col_idx]) if pd.notna(row.iloc[question_col_idx]) else ""
+        answer_text = str(row.iloc[answer_col_idx]) if pd.notna(row.iloc[answer_col_idx]) else ""
+        if not question_text.strip() and not answer_text.strip():
+            continue
+        pairs.append({
+            "index": idx + 1,
+            "question_text": question_text.strip(),
+            "answer_text": answer_text.strip(),
+            "source_page": idx + 1,
+        })
+
+    logger.info(f"从 Excel 提取了 {len(pairs)} 个答案对")
+    return pairs
+
+
+def extract_from_json(json_path: str) -> list[dict]:
+    """
+    从 JSON 文件中提取答案对。
+
+    支持两种 JSON 结构：
+    1. 对象数组：[{"question": "...", "answer": "..."}, ...]
+    2. 单个对象：{"questions": [...], "answers": [...]}
+
+    自动识别 question/answer 字段的常见别名。
+
+    参数:
+        json_path: .json 文件路径
+
+    返回:
+        提取的答案对列表
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    pairs = []
+
+    # 结构1：对象数组
+    if isinstance(data, list):
+        for idx, item in enumerate(data):
+            if not isinstance(item, dict):
+                continue
+            q = _find_value_by_keys(item, ("question", "题目", "题干", "problem", "q"))
+            a = _find_value_by_keys(item, ("answer", "答案", "解答", "解析", "solution", "a"))
+            if not q and not a:
+                continue
+            pairs.append({
+                "index": idx + 1,
+                "question_text": str(q).strip() if q else "",
+                "answer_text": str(a).strip() if a else "",
+                "source_page": idx + 1,
+            })
+
+    # 结构2：单个对象，包含 questions/answers 数组
+    elif isinstance(data, dict):
+        questions = data.get("questions") or data.get("题目列表") or []
+        answers = data.get("answers") or data.get("答案列表") or []
+        max_len = max(len(questions), len(answers))
+        for i in range(max_len):
+            q = questions[i] if i < len(questions) else ""
+            a = answers[i] if i < len(answers) else ""
+            if not q and not a:
+                continue
+            pairs.append({
+                "index": i + 1,
+                "question_text": str(q).strip() if q else "",
+                "answer_text": str(a).strip() if a else "",
+                "source_page": i + 1,
+            })
+
+    logger.info(f"从 JSON 提取了 {len(pairs)} 个答案对")
+    return pairs
+
+
+def _find_value_by_keys(data: dict, keys: tuple[str, ...]) -> str | None:
+    """
+    在字典中按优先级查找第一个存在的 key 对应的值。
+
+    参数:
+        data: 待查找的字典
+        keys: 候选 key 元组，按优先级从高到低排列
+
+    返回:
+        找到的值（字符串），未找到返回 None
+    """
+    for key in keys:
+        value = data.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
 
 
 def _parse_answer_pairs(text: str, page: int) -> list[dict]:
@@ -221,7 +545,18 @@ def _parse_answer_pairs(text: str, page: int) -> list[dict]:
 def _split_question_answer(segment: str) -> tuple[str, str]:
     """
     从一段文本中分离题干和答案。
-    返回 (question_text, answer_text)
+
+    按优先级尝试多种匹配模式：
+    1. 明确的「答案: xxx」标记
+    2. 以「故选/因此/所以」结尾的行作为答案
+    3. 单独字母 A-D（选择题答案）
+    4. 短文本整体当答案
+
+    参数:
+        segment: 待分离的文本段
+
+    返回:
+        (question_text, answer_text) 元组
     """
     segment = segment.strip()
 
@@ -265,5 +600,3 @@ def _split_question_answer(segment: str) -> tuple[str, str]:
     # 默认：全部当题干，答案为空
     return segment, ""
 
-
-# _clean_answer 已移除（当前未被使用），如需要可从 git 历史恢复

@@ -151,11 +151,18 @@ def _print_lean_terminal_summary(results: list[EvaluationResult]) -> None:
         if r.lean_verification
         and r.lean_verification.get("error_category") == "logic_error"
     )
+    lean_incomplete = sum(
+        1 for r in results
+        if r.lean_verification
+        and r.lean_verification.get("has_incomplete_proof")
+    )
     if lean_verified > 0:
         print("-" * 60)
         print("  Lean Verification:")
         print(f"    Verified: {lean_verified}")
         print(f"    Logic errors found: {lean_logic_errors}")
+        if lean_incomplete > 0:
+            print(f"    Proof incomplete (sorry): {lean_incomplete}")
 
 
 # ==================== HTML 报告生成 ====================
@@ -194,6 +201,12 @@ def _build_lean_badge_html(eval_result) -> str:
         return ""
 
     if lv.get("compile_passed") is True:
+        if lv.get("has_incomplete_proof"):
+            sc = lv.get("sorry_count", 0)
+            return (
+                '<span class="lean-badge lean-incomplete" '
+                f'title="Proof incomplete: {sc} sorry detected">L!不完整</span>'
+            )
         return (
             '<span class="lean-badge lean-pass" '
             'title="Lean compilation passed">L✓</span>'
@@ -356,12 +369,14 @@ _HTML_CSS = """
         .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
         .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
         .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
         .section-heading.lean { color: #059669; border-color: #A7F3D0; }
         .section-heading .icon-dot.lean { background: #10B981; }
         .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
         .lean-status.pass { background: #D1FAE5; color: #065F46; }
         .lean-status.fail { background: #FEE2E2; color: #991B1B; }
         .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
         .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
         .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
         .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
@@ -595,7 +610,11 @@ _MODAL_JS = r"""
         h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
 
         if (lv.compile_passed === true) {
-            h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
         } else if (lv.compile_passed === false) {
             var catLabel = lv.error_category || 'unknown';
             var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};

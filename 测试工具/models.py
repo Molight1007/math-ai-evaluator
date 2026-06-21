@@ -73,9 +73,13 @@ class LeanVerificationResult:
     correct_approach: str = ""                    # 正确的做法
     translation_issue: str = ""                   # 转化问题描述
     fix_prompt_for_ai: str = ""                   # 修正提示词（可反馈给书生AI）
+    suggested_fix: str = ""                       # 推荐的修改方法（中文）
     analysis_tokens: int = 0                      # 分析阶段消耗 token
     analysis_latency: float = 0.0                 # 分析耗时（秒）
     analysis_error: Optional[str] = None          # 分析过程中的错误
+    # sorry 检测
+    sorry_count: int = 0                          # Lean 代码中 sorry 出现次数
+    has_incomplete_proof: bool = False            # 是否证明不完整（有 sorry）
 
     def to_dict(self) -> dict:
         return asdict(self)

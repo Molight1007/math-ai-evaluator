@@ -2,7 +2,7 @@
 数学智能体评测器 - 主入口模块
 ================================
 功能：
-- 支持直接输入 PDF / Word (.docx) / JSON / CSV 文件，自动识别并转化
+- 支持 PDF/Word/PPT/Markdown/Excel/JSON/CSV 文件自动识别并转化
 - 执行并发评测流水线（Intern-S1 推理 → DeepSeek 评判 → Lean 验证）
 - 支持从题库随机选题评测，自动使用答案库辅助评判
 - 支持命令行答案导入和统计查询
@@ -26,6 +26,11 @@ from typing import Optional
 
 # 将当前目录添加到 import 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# 确保 Lean 4 (elan) 在 PATH 中
+_ELAN_BIN = os.path.join(os.path.expanduser("~"), ".elan", "bin")
+if os.path.isdir(_ELAN_BIN) and _ELAN_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _ELAN_BIN + os.pathsep + os.environ.get("PATH", "")
 
 # ===== 项目模块导入 =====
 from config import load_config, validate_config, ConfigError
@@ -105,7 +110,7 @@ def _safe_str(s, maxlen: int = _SAFE_STR_MAXLEN) -> str:
 
 def auto_convert(file_path: str, max_problems: int = 0) -> str:
     """
-    智能文件格式转化：PDF/Word → JSON，JSON/CSV 直接返回原路径。
+    智能文件格式转化：PDF/Word/PPT/Markdown/Excel → JSON，JSON/CSV 直接返回原路径。
 
     转化后的 JSON 保存到「原始问题」目录供后续使用。
 
@@ -132,9 +137,22 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
         print("\n[转化] 检测到 Word 文件，正在转化...")
         from 转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
+    elif ext in (".pptx", ".ppt"):
+        print("\n[转化] 检测到 PowerPoint 文件，正在转化...")
+        from 转化工具.ppt_to_json import convert_ppt
+        problems = convert_ppt(file_path, max_problems=max_problems)
+    elif ext == ".md":
+        print("\n[转化] 检测到 Markdown 文件，正在转化...")
+        from 转化工具.md_to_json import convert_md
+        problems = convert_md(file_path, max_problems=max_problems)
+    elif ext == ".xlsx":
+        print("\n[转化] 检测到 Excel 文件，正在转化...")
+        from 转化工具.xlsx_to_json import convert_xlsx
+        problems = convert_xlsx(file_path, max_problems=max_problems)
     else:
         raise ValueError(
-            f"不支持的文件格式: {ext}（支持 .pdf / .docx / .json / .csv）"
+            f"不支持的文件格式: {ext}"
+            f"（支持 .pdf / .docx / .pptx / .ppt / .md / .xlsx / .json / .csv）"
         )
 
     if not problems:
@@ -731,21 +749,23 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Math Agent Evaluator - "
-            "支持 PDF/Word/JSON/CSV 自动转化 + 答案导入匹配"
+            "支持 PDF/Word/PPT/Markdown/Excel/JSON/CSV 自动转化 + 答案导入匹配"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
   python 测试工具/main.py -i 题目.pdf
   python 测试工具/main.py -i 题目.docx --max 10
   python 测试工具/main.py -i 题目.json -c 5
+  python 测试工具/main.py -i 题目.xlsx --max 50
   python 测试工具/main.py --import-answers 答案.pptx --bank 我的题库
-  python 测试工具/main.py --import-answers 答案.docx --bank 我的题库 --batch 20
+  python 测试工具/main.py --import-answers 答案.pdf --bank 我的题库
+  python 测试工具/main.py --import-answers 答案.xlsx --bank 我的题库 --batch 20
   python 测试工具/main.py --bank-stats 我的题库
         """,
     )
     parser.add_argument(
         "-i", "--input", required=False,
-        help="输入文件路径（.pdf / .docx / .json / .csv）",
+        help="输入文件路径（.pdf / .docx / .pptx / .ppt / .md / .xlsx / .json / .csv）",
     )
     parser.add_argument(
         "-c", "--concurrency", type=int, default=3,
@@ -766,7 +786,8 @@ def main():
     # 答案导入相关参数
     parser.add_argument(
         "--import-answers",
-        help="导入答案文档（.pptx / .docx / .txt）并智能匹配到题库",
+        help="导入答案文档（.pptx / .ppt / .docx / .txt / .md / .pdf / .csv / .xlsx / .json）"
+             "并智能匹配到题库",
     )
     parser.add_argument(
         "--bank", default=None,

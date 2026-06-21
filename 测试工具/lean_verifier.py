@@ -64,16 +64,20 @@ CONVERSION_SYSTEM_PROMPT = (
     "3. The model's final answer\n\n"
     "Your job: Convert the reasoning into a Lean 4 theorem and proof. "
     "The theorem should state that the model's conclusion follows from "
-    "the problem's conditions. Include necessary imports from Mathlib.\n\n"
-    "IMPORTANT RULES:\n"
-    "- Use `import Mathlib` at the top\n"
-    "- Write a complete, self-contained Lean 4 file that should compile\n"
-    "- Use `theorem` (not `example`) with a meaningful name\n"
-    "- Include all necessary hypotheses in the theorem statement\n"
-    "- If the reasoning is too complex to fully formalize, formalize "
-    "the core logical claim\n\n"
+    "the problem's conditions.\n\n"
+    "CRITICAL RULES:\n"
+    "- You CAN use `import Mathlib` — Mathlib 4 is available.\n"
+    "- Use Mathlib for calculus/analysis: integrals, derivatives, limits, etc.\n"
+    "- Write a complete Lean 4 file that SHOULD compile.\n"
+    "- Use `theorem` (not `example`) with a meaningful name.\n"
+    "- Include all necessary hypotheses in the theorem statement.\n"
+    "- For simple arithmetic/number theory, use `native_decide` or `omega`.\n"
+    "- For calculus/analysis, use `Real` type and Mathlib's integral/derivative API.\n"
+    "- If a proof is too complex, you may use `sorry` for some steps, "
+    "but the THEOREM STATEMENT itself should still be correct and type-check.\n"
+    "- Even with `sorry`, the file should pass type-checking (no syntax/type errors).\n\n"
     "Output a JSON object with these fields:\n"
-    '- "lean_code": the COMPLETE Lean 4 code (import Mathlib + theorem + proof),\n'
+    '- "lean_code": the COMPLETE Lean 4 code (can use `import Mathlib`, theorem + proof),\n'
     '- "is_formalizable": true/false — whether this problem CAN be formalized,\n'
     '- "formalized_claim": description in Chinese of what the Lean code proves,\n'
     '- "expected_result": "pass" or "fail" — do you think this Lean code will compile?\n'
@@ -95,17 +99,23 @@ ANALYSIS_SYSTEM_PROMPT = (
     "- Is the Lean code correctly representing the original reasoning?\n"
     "- Does the compilation error indicate a logical flaw in the reasoning?\n"
     "- Or is it just a mistake in writing the Lean code?\n\n"
+    "CRITICAL: Even if the Lean code is incomplete or uses 'sorry', "
+    "you MUST still analyze what the code ATTEMPTS to prove and identify "
+    "any logical issues in the underlying reasoning. "
+    "A Lean error is NOT just a syntax issue — it often reveals that "
+    "the reasoning itself cannot be formalized, which IS a logical flaw.\n\n"
     "Output a JSON object with these fields:\n"
     '- "error_category": one of "translation_error" / "logic_error" / "both" / "uncertain",\n'
     '- "confidence": 0.0-1.0,\n'
-    '- "human_readable_error": explain the error in plain Chinese,\n'
-    '- "root_cause": root cause analysis in Chinese (3-5 sentences),\n'
-    '- "logic_flaw_location": if logic_error, which step in the original reasoning is wrong,\n'
-    '- "logic_flaw_why": why that step is mathematically incorrect,\n'
-    '- "correct_approach": the correct mathematical approach,\n'
+    '- "human_readable_error": explain the error in plain Chinese (面向中文用户的简洁说明),\n'
+    '- "root_cause": root cause analysis in Chinese (3-5 sentences, 必须明确是逻辑问题还是转化问题),\n'
+    '- "logic_flaw_location": if logic_error, which step in the original reasoning is wrong (引用原文),\n'
+    '- "logic_flaw_why": why that step is mathematically incorrect (用中文详细说明),\n'
+    '- "correct_approach": the correct mathematical approach (用中文说明正确解法),\n'
     '- "translation_issue": if translation_error, what went wrong in the Lean code,\n'
     '- "fix_prompt_for_ai": a concise prompt (in Chinese) that can be sent to '
-    "the original AI model to help it correct its reasoning.\n"
+    "the original AI model to help it correct its reasoning,\n"
+    '- "suggested_fix": 推荐的修改方法 (in Chinese, 告诉用户应该如何修正推理过程或代码).\n'
     "Output ONLY the JSON object."
 )
 
@@ -122,9 +132,10 @@ LOGIC_REVIEW_SYSTEM_PROMPT = (
     '- "has_logic_error": true/false,\n'
     '- "confidence": 0.0-1.0,\n'
     '- "logic_flaw_location": which step has the logical problem,\n'
-    '- "logic_flaw_why": why it is wrong,\n'
-    '- "correct_approach": the correct approach,\n'
-    '- "fix_prompt_for_ai": a prompt to help the AI correct its reasoning.\n'
+    '- "logic_flaw_why": why it is wrong (用中文说明),\n'
+    '- "correct_approach": the correct approach (用中文说明),\n'
+    '- "fix_prompt_for_ai": a prompt to help the AI correct its reasoning (中文),\n'
+    '- "suggested_fix": 推荐的修改方法 (中文).\n'
     "Output ONLY the JSON object."
 )
 
@@ -153,17 +164,25 @@ def _truncate_error_output(output: str, max_chars: int = _MAX_COMPILE_OUTPUT_CHA
 
 def _build_lean_code_safe(lean_code: str) -> str:
     """
-    确保 Lean 代码包含必要的 import Mathlib 声明。
-    如果缺失则自动补充，防止因缺少导入导致的假阳性编译失败。
+    清理 Lean 代码，使其适合在 Mathlib 环境下编译。
+
+    Mathlib 4 已安装，因此保留 import Mathlib。
+    只移除冗余的 import（如 import Real，因为 Prelude 已有）。
 
     参数:
         lean_code: 原始 Lean 4 代码
 
     返回:
-        补充了 import 后的代码
+        清理后的 Lean 4 代码
     """
-    if "import Mathlib" not in lean_code:
-        lean_code = "import Mathlib\n\n" + lean_code
+    # 移除 import Real（Real 类型是 Prelude，无需显式导入）
+    if "import Real" in lean_code:
+        lean_code = lean_code.replace("import Real\n", "")
+        lean_code = lean_code.replace("import Real", "")
+    # 移除空行残留
+    while "\n\n\n" in lean_code:
+        lean_code = lean_code.replace("\n\n\n", "\n\n")
+    lean_code = lean_code.strip()
     return lean_code
 
 
@@ -359,12 +378,18 @@ def _empty_conversion_result(error_msg: str = "") -> dict:
 
 # ==================== 阶段二：编译 ====================
 
+# Mathlib 项目根目录（编译时使用此项目的 lake 环境）
+_MATHLIB_PROJECT_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "test_mathlib")
+)
+
+
 async def _compile_lean(lean_code: str, config) -> dict:
     """
-    阶段二：将 Lean 代码写入临时文件，调用 Lean 编译器验证。
+    阶段二：在 test_mathlib 项目（已安装 Mathlib 4）中编译 Lean 代码。
 
-    使用 subprocess 异步调用 lake env lean，捕获 stdout/stderr 和返回码。
-    编译超时由 config.lean_timeout 控制，超时后杀掉进程。
+    将代码写入 test_mathlib/TestMathlib/ 目录下，然后通过 lake build
+    编译。这样可以直接使用 Mathlib 4 的全部功能（积分、导数等）。
 
     参数:
         lean_code: 需要编译的 Lean 4 代码
@@ -383,26 +408,31 @@ async def _compile_lean(lean_code: str, config) -> dict:
 
     lean_code = _build_lean_code_safe(lean_code)
 
-    tmp_path = None
     start_time = time.time()
+    verify_file = None
     try:
-        # 创建临时 .lean 文件
-        fd, tmp_path = tempfile.mkstemp(suffix=".lean", prefix="lean_verify_")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(lean_code)
+        # 将代码写入 test_mathlib 项目的 TestMathlib 目录
+        test_dir = os.path.join(_MATHLIB_PROJECT_DIR, "TestMathlib")
+        os.makedirs(test_dir, exist_ok=True)
+        verify_file = os.path.join(test_dir, "Verify.lean")
 
-        # 异步调用 lean 编译器
+        # 写一个 module 声明 + 用户代码
+        full_code = f"import Mathlib\n\n{lean_code}"
+        with open(verify_file, "w", encoding="utf-8") as f:
+            f.write(full_code)
+
+        # 使用 lake build 编译
         proc = await asyncio.create_subprocess_exec(
-            config.lean_executable, "env", "lean", tmp_path,
+            config.lean_executable, "build",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=_MATHLIB_PROJECT_DIR,
         )
         try:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=config.lean_timeout
             )
         except asyncio.TimeoutError:
-            # 编译超时：杀掉进程，返回超时标记
             proc.kill()
             latency = round(time.time() - start_time, 2)
             return {
@@ -413,7 +443,6 @@ async def _compile_lean(lean_code: str, config) -> dict:
             }
 
         latency = round(time.time() - start_time, 2)
-        # 合并 stdout 和 stderr
         output = ""
         if stdout:
             output += stdout.decode("utf-8", errors="replace")
@@ -422,9 +451,16 @@ async def _compile_lean(lean_code: str, config) -> dict:
         if not output:
             output = "(no output)"
 
+        # 只保留 Verify.lean 相关的错误信息
+        verify_errors = []
+        for line in output.split("\n"):
+            if "Verify.lean" in line or "Verify" in line:
+                verify_errors.append(line)
+        filtered_output = "\n".join(verify_errors) if verify_errors else output
+
         return {
             "passed": proc.returncode == 0,
-            "output": output,
+            "output": filtered_output,
             "timeout": False,
             "latency": latency,
         }
@@ -433,12 +469,30 @@ async def _compile_lean(lean_code: str, config) -> dict:
         logger.error(f"Lean compilation error: {e}")
         return {"passed": False, "output": str(e), "timeout": False, "latency": latency}
     finally:
-        # 清理临时文件
-        if tmp_path and os.path.exists(tmp_path):
+        # 清理 Verify.lean
+        if verify_file and os.path.exists(verify_file):
             try:
-                os.unlink(tmp_path)
+                os.unlink(verify_file)
             except OSError:
-                logger.debug(f"Failed to clean up temp file: {tmp_path}")
+                logger.debug(f"Failed to clean up: {verify_file}")
+
+
+# ==================== sorry 检测 ====================
+
+def _detect_sorry(lean_code: str) -> dict:
+    """
+    扫描 Lean 代码中的 `sorry` 关键字，统计数量和判断证明是否完整。
+
+    参数:
+        lean_code: Lean 4 代码文本
+
+    返回:
+        dict: {"count": int, "has_sorry": bool}
+    """
+    import re
+    matches = re.findall(r'\bsorry\b', lean_code)
+    count = len(matches)
+    return {"count": count, "has_sorry": count > 0}
 
 
 # ==================== 阶段三：分析 ====================
@@ -511,6 +565,7 @@ def _fallback_analysis_result(response: dict) -> dict:
         "correct_approach": "",
         "translation_issue": "",
         "fix_prompt_for_ai": "",
+        "suggested_fix": "",
         "_tokens": response.get("tokens_used", 0),
     }
 
@@ -535,6 +590,7 @@ def _empty_analysis_result(error_msg: str = "") -> dict:
         "correct_approach": "",
         "translation_issue": "",
         "fix_prompt_for_ai": "",
+        "suggested_fix": "",
         "_tokens": 0,
     }
 
@@ -596,6 +652,7 @@ def _fallback_review_result(response: dict) -> dict:
         "logic_flaw_why": "",
         "correct_approach": "",
         "fix_prompt_for_ai": "",
+        "suggested_fix": "",
         "_tokens": response.get("tokens_used", 0),
     }
 
@@ -614,6 +671,7 @@ def _empty_review_result() -> dict:
         "logic_flaw_why": "",
         "correct_approach": "",
         "fix_prompt_for_ai": "",
+        "suggested_fix": "",
         "_tokens": 0,
     }
 
@@ -717,6 +775,7 @@ def _fill_analysis_fields(
     result.correct_approach = analysis.get("correct_approach", "")
     result.translation_issue = analysis.get("translation_issue", "")
     result.fix_prompt_for_ai = analysis.get("fix_prompt_for_ai", "")
+    result.suggested_fix = analysis.get("suggested_fix", "")
 
 
 def _fill_review_fields(
@@ -742,6 +801,7 @@ def _fill_review_fields(
         result.logic_flaw_why = review.get("logic_flaw_why", "")
         result.correct_approach = review.get("correct_approach", "")
         result.fix_prompt_for_ai = review.get("fix_prompt_for_ai", "")
+        result.suggested_fix = review.get("suggested_fix", "")
         result.human_readable_error = (
             f"LLM logic review found a potential logic error at: "
             f"{review.get('logic_flaw_location', 'unknown step')}"
@@ -779,16 +839,16 @@ async def _run_full_lean_pipeline(
     result.conversion_latency = round(time.time() - conv_start, 2)
     _fill_conversion_fields(result, conv_result)
 
-    # 如果推理不可形式化或代码为空，跳过编译
-    is_formalizable = conv_result.get("is_formalizable", False)
+    # 只要 Lean 代码非空，就强制尝试编译
+    # （即使 is_formalizable=false，编译错误本身也能暴露逻辑问题）
     lean_code = result.lean_code
-    if not is_formalizable or not lean_code.strip():
+    if not lean_code.strip():
         logger.info(
-            f"[Lean] [{inference.problem_id}] Not formalizable, "
+            f"[Lean] [{inference.problem_id}] Empty Lean code, "
             f"skipping compilation"
         )
         result.compile_passed = None
-        result.compile_output = "(not formalizable)"
+        result.compile_output = "(empty Lean code)"
         return result
 
     # 阶段二：编译
@@ -798,11 +858,33 @@ async def _run_full_lean_pipeline(
     compile_result = await _compile_lean(lean_code, config)
     _fill_compile_fields(result, compile_result)
 
+    # sorry 检测（编译后，无论通过与否都执行）
+    sorry_info = _detect_sorry(lean_code)
+    result.sorry_count = sorry_info["count"]
+    result.has_incomplete_proof = sorry_info["has_sorry"]
+
     if compile_result["passed"]:
-        logger.info(
-            f"[Lean] [{inference.problem_id}] Compilation PASSED "
-            f"— reasoning is logically sound"
-        )
+        if sorry_info["has_sorry"]:
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Compilation PASSED "
+                f"but proof is INCOMPLETE — {sorry_info['count']} sorry detected"
+            )
+            result.analysis_performed = True
+            result.error_category = "logic_error"
+            result.analysis_confidence = 1.0
+            result.human_readable_error = (
+                f"证明不完整：Lean 代码中检测到 {sorry_info['count']} 处 sorry，"
+                f"说明原始推理的关键步骤未能被形式化证明。"
+            )
+            result.root_cause = (
+                f"推理过程存在未完成的证明步骤（共 {sorry_info['count']} 处 sorry），"
+                f"这些步骤在 Lean 形式化验证中被跳过，无法确认其正确性。"
+            )
+        else:
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Compilation PASSED "
+                f"— reasoning is logically sound"
+            )
         return result
 
     # 阶段三：编译失败 → 分析错误

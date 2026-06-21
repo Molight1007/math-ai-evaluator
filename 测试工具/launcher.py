@@ -30,6 +30,12 @@ sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "转化工具"))
 
+# ===== Lean 4 环境配置 =====
+# 确保 elan bin 目录在 PATH 中，以便 lake/lean 命令可用
+ELAN_BIN = os.path.join(os.path.expanduser("~"), ".elan", "bin")
+if os.path.isdir(ELAN_BIN) and ELAN_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = ELAN_BIN + os.pathsep + os.environ.get("PATH", "")
+
 # ===== 项目模块导入 =====
 from config import has_config, load_config, save_config, reset_config, ConfigError, validate_config
 from question_bank import QuestionBankDB, get_db
@@ -277,7 +283,7 @@ class QuestionBankPanel(ttk.Frame):
             self.bank_status_var.set(f"题库「{bank}」已删除")
 
     def _import_from_file(self):
-        """从 JSON/CSV/Word/PDF 文件批量导入题目到当前题库"""
+        """从 JSON/CSV/Word/PDF/PPT/Markdown/Excel 文件批量导入题目到当前题库"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择或创建一个题库")
@@ -286,11 +292,14 @@ class QuestionBankPanel(ttk.Frame):
         path = filedialog.askopenfilename(
             title="选择题目文件导入到题库",
             filetypes=[
-                ("所有支持格式", "*.json;*.csv;*.docx;*.pdf"),
+                ("所有支持格式", "*.json;*.csv;*.docx;*.pdf;*.pptx;*.ppt;*.md;*.xlsx"),
                 ("JSON 文件", "*.json"),
                 ("CSV 文件", "*.csv"),
                 ("Word 文档", "*.docx"),
                 ("PDF 文件", "*.pdf"),
+                ("PowerPoint 演示文稿", "*.pptx;*.ppt"),
+                ("Markdown 文件", "*.md"),
+                ("Excel 工作簿", "*.xlsx"),
             ]
         )
         if not path:
@@ -543,7 +552,7 @@ class QuestionBankPanel(ttk.Frame):
     # ---------- 答案导入 ----------
 
     def _import_answers(self):
-        """选择答案文档（PPT/Word/TXT）→ 启动后台线程执行提取+匹配+入库"""
+        """选择答案文档（PPT/Word/TXT/PDF/Markdown/CSV/Excel/JSON）→ 提取+匹配+入库"""
         bank = self.bank_var.get()
         if not bank:
             messagebox.showwarning("提示", "请先选择或创建一个题库")
@@ -556,10 +565,16 @@ class QuestionBankPanel(ttk.Frame):
         path = filedialog.askopenfilename(
             title=f"选择答案文档导入到题库「{bank}」",
             filetypes=[
-                ("所有支持格式", "*.pptx;*.docx;*.txt"),
-                ("PowerPoint 演示文稿", "*.pptx"),
+                ("所有支持格式",
+                 "*.pptx;*.ppt;*.docx;*.txt;*.md;*.pdf;*.csv;*.xlsx;*.json"),
+                ("PowerPoint 演示文稿", "*.pptx;*.ppt"),
                 ("Word 文档", "*.docx"),
                 ("文本文件", "*.txt"),
+                ("Markdown 文件", "*.md"),
+                ("PDF 文件", "*.pdf"),
+                ("CSV 文件", "*.csv"),
+                ("Excel 工作簿", "*.xlsx"),
+                ("JSON 文件", "*.json"),
             ]
         )
         if not path:
@@ -1192,11 +1207,15 @@ class EvalLauncher:
         path = filedialog.askopenfilename(
             title="选择题目文件",
             filetypes=[
-                ("所有支持格式", "*.pdf;*.docx;*.json;*.csv"),
+                ("所有支持格式",
+                 "*.pdf;*.docx;*.json;*.csv;*.pptx;*.ppt;*.md;*.xlsx"),
                 ("PDF 文件", "*.pdf"),
                 ("Word 文档", "*.docx"),
                 ("JSON 文件", "*.json"),
                 ("CSV 文件", "*.csv"),
+                ("PowerPoint 演示文稿", "*.pptx;*.ppt"),
+                ("Markdown 文件", "*.md"),
+                ("Excel 工作簿", "*.xlsx"),
             ]
         )
         if path:

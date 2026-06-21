@@ -38,3 +38,4 @@ env/
 # 临时文件
 *.tmp
 *.log
+"lean4-toolchain/"  

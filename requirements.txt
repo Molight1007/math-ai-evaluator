@@ -13,5 +13,6 @@ openai>=1.30.0         # 如果使用 OpenAI SDK 兼容模式
 pdfplumber>=0.11.0     # PDF 转 JSON
 python-docx>=1.1.0     # Word 转 JSON
 python-pptx>=0.6.21    # PPT 答案提取
+openpyxl>=3.1.0          # Excel .xlsx 读写支持
 
 tkinterdnd2>=0.3.0       # GUI 拖放支持（可选，不影响基本使用）

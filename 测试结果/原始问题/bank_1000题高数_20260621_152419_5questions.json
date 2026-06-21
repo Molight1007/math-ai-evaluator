@@ -1,0 +1,32 @@
+[
+  {
+    "id": "gen_556925d1",
+    "question": "计算二重积分：∬_D (x + y) dxdy，其中 D 是由直线 y = x, y = 0, x = 1 所围成的三角形区域。",
+    "domain": "二重积分",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_b1ab3bb0",
+    "question": "求极限：\\(\\lim_{x \\to 0} \\frac{\\sin(3x)}{x}\\)",
+    "domain": "函数极限与连续",
+    "reference_answer": "3"
+  },
+  {
+    "id": "二重积分_013",
+    "question": "设平面区域D由曲线y=3(1-x^2)与直线y=3x及y轴所围成。计算二重积分∬_D (x^2+y^2) dxdy。",
+    "domain": "二重积分",
+    "reference_answer": "π/2 - 3/4"
+  },
+  {
+    "id": "多元函数微分学_017",
+    "question": "设函数 $z = z(x,y)$ 由方程 $F\\left(x + \\frac{z}{y}, y + \\frac{z}{x}\\right) = 0$ 确定，且 $F(u,v)$ 具有连续偏导数，求 $x \\frac{\\partial z}{\\partial x} + y \\frac{\\partial z}{\\partial y}$。",
+    "domain": "多元函数微分学",
+    "reference_answer": "$z$"
+  },
+  {
+    "id": "微分方程_028",
+    "question": "设函数y(x)满足微分方程y^{(4)}-y''=0,且当x→0时y(x)∼x^3.求y(x).",
+    "domain": "微分方程",
+    "reference_answer": "y(x)=x^3+6x"
+  }
+]
