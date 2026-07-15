@@ -76,7 +76,8 @@
 ├── 数学模型/                   # 数学建模相关文件
 ├── 题库/                       # 备用题库文件
 ├── 计划文件夹/                  # 项目计划文档
-├── 下载版/                     # 完整发布版（含所有依赖和示例数据）
+├── lean_verify/               # Lean 4 形式化验证模块（源码）
+├── test_mathlib/             # Lean 测试用例与 CI 配置
 ├── 代码要求.txt                # 代码规范文档（9大类50+条）
 ├── 启动评测器.bat              # Windows 一键启动脚本
 ├── make_ppt.js                 # PPT 自动生成脚本
@@ -339,6 +340,26 @@ HTML 报告包含：
 # 一键安装全部依赖
 pip install -r requirements.txt
 ```
+
+---
+
+## 📦 未纳入版本库的文件（需本地准备）
+
+为控制仓库体积、避免提交超大型二进制，以下内容**未上传到 GitHub**，克隆后需自行准备：
+
+| 文件 / 目录 | 体积 | 为何不上传 | 如何获取 |
+|------|------|-----------|---------|
+| `lean4-toolchain/` | **约 1.2 GB**（含 `libLean.a` 314MB、`libLLVM-22.dll` 86MB 及 7000+ 编译产物） | Lean 4 二进制工具链，体积过大 | 由 `lean-toolchain` 文件声明的 `leanprover/lean4:v4.31.0` 自动下载，或手动从 [Lean 官网](https://lean-lang.org/) 获取对应版本 |
+| `test_mathlib/lake-packages/` | 自动拉取 | Lean 社区依赖（mathlib、batteries、aesop 等 13 个包） | 执行 `lake` 命令后按 `lake-manifest.json` 自动拉取，**无需手动下载** |
+| `*.olean` / `*.ilean` / `*.ir` / `*.private` / `*.server` | 自动生成 | Lean 编译产物 | 运行 `lake build` 时自动生成 |
+| `*.db`（如 `测试工具/question_bank.db`） | 约 1 MB | 运行时生成的题库数据库 | 首次运行 `question_bank.py` / GUI 时自动创建 |
+| `*.pdf` / `*.pptx` / `*.docx` / `*.zst` / `*.rar` / `*.zip` | 0.3 ~ 6 MB | 参考资料与文档（数学论文、计划书、压缩包） | 按需在本地放置，不影响代码运行 |
+| `测试结果/` / `100题测试结果/` | 运行时生成 | 评测输出报告 | 运行评测后自动生成 |
+
+> ⚠️ **Lean 形式化验证环境搭建（可选，仅验证模块需要）**
+> 1. 安装 [Lean 4](https://lean-lang.org/learn/getting_started/)（版本须与 `lean-toolchain` 一致：`v4.31.0`）。
+> 2. 进入 `test_mathlib/` 或 `lean_verify/`，执行 `lake build` 自动拉取依赖并编译。
+> 3. 编译产物与依赖不会进入版本库，已在 `.gitignore` 中忽略。
 
 ---
 
