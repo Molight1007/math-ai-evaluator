@@ -58,6 +58,7 @@ _RESULT_BASE = os.path.join(
 DIR_DISPLAY = os.path.join(_RESULT_BASE, "测试结果展示")      # HTML 报告
 DIR_OUTPUT = os.path.join(_RESULT_BASE, "原始输出和推理过程")  # JSON 原始数据
 DIR_PROBLEMS = os.path.join(_RESULT_BASE, "原始问题")         # 题目文件副本
+DIR_LEAN = os.path.join(_RESULT_BASE, "测试lean文件")         # Lean 4 验证代码存档
 
 # 终端输出安全截断长度
 _SAFE_STR_MAXLEN = 50
@@ -68,22 +69,28 @@ _LEAN_VERIFY_CONCURRENCY = 3
 
 def clear_all_results() -> dict:
     """
-    清除所有评测结果文件（HTML/JSON/临时题目）。
+    清除所有评测结果文件（HTML/JSON/临时题目/Lean 文件）。
 
     返回:
-        {"测试结果展示": N, "原始输出和推理过程": N, "原始问题": N}
+        {"测试结果展示": N, "原始输出和推理过程": N, "原始问题": N, "测试lean文件": N}
     """
     counts = {}
     for name, path in [
         ("测试结果展示", DIR_DISPLAY),
         ("原始输出和推理过程", DIR_OUTPUT),
         ("原始问题", DIR_PROBLEMS),
+        ("测试lean文件", DIR_LEAN),
     ]:
         n = 0
         if os.path.isdir(path):
-            for f in glob.glob(os.path.join(path, "*")):
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
                 try:
-                    os.remove(f)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    elif os.path.isdir(item_path):
+                        import shutil
+                        shutil.rmtree(item_path)
                     n += 1
                 except OSError:
                     pass
@@ -474,6 +481,59 @@ async def _run_lean_verification_stage(results: list) -> list:
 
 # ==================== 报告保存辅助函数 ====================
 
+def _save_lean_files(results: list, ts: str) -> int:
+    """
+    将所有评测结果中的 Lean 4 代码保存到「测试lean文件」目录。
+
+    每个 .lean 文件以题目 ID 命名，方便用户手动用 lake build / lean --run 验证。
+    只保存实际包含 Lean 代码的题目（非空的 lean_code）。
+
+    参数:
+        results: EvaluationResult 列表
+        ts: 时间戳字符串，用于子目录命名
+
+    返回:
+        保存的 .lean 文件数量
+    """
+    count = 0
+    for r in results:
+        lv = getattr(r, "lean_verification", None)
+        if not lv or not isinstance(lv, dict):
+            continue
+        lean_code = lv.get("lean_code", "")
+        if not lean_code or not lean_code.strip():
+            continue
+
+        # 子目录按时间戳分组，避免多次评测的文件混在一起
+        lean_dir = os.path.join(DIR_LEAN, ts)
+        os.makedirs(lean_dir, exist_ok=True)
+
+        # 文件名使用题目 ID，特殊字符替换为下划线
+        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in r.problem_id)
+        filename = f"{safe_id}.lean"
+        filepath = os.path.join(lean_dir, filename)
+
+        # 如果同 ID 重复（罕见情况），追加序号
+        if os.path.exists(filepath):
+            base = safe_id
+            i = 2
+            while os.path.exists(os.path.join(lean_dir, f"{base}_{i}.lean")):
+                i += 1
+            filepath = os.path.join(lean_dir, f"{base}_{i}.lean")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            # 添加元数据注释头
+            f.write(f"-- 题目ID: {r.problem_id}\n")
+            f.write(f"-- 评测时间: {ts}\n")
+            f.write(f"-- 编译结果: {'PASSED' if lv.get('compile_passed') else 'FAILED' if lv.get('compile_passed') is False else 'N/A'}\n")
+            f.write(f"-- 原始问题: {r.question[:100]}\n")
+            f.write("\n")
+            f.write(lean_code)
+        count += 1
+
+    return count
+
+
 def _save_reports(results, problems_path, ts: str) -> str:
     """
     保存 JSON 和 HTML 报告，并复制题目文件到「原始问题」目录。
@@ -504,11 +564,16 @@ def _save_reports(results, problems_path, ts: str) -> str:
         with open(problems_copy, "w", encoding="utf-8") as fdst:
             fdst.write(content)
 
+    # 保存 Lean 4 验证代码到独立目录，方便手动 lake build 验证
+    lean_count = _save_lean_files(results, ts)
+
     print_summary(results)
     print(f"\nReports saved:")
     print(f"  测试结果展示:  {os.path.basename(html_path)}")
     print(f"  原始输出和推理过程: {os.path.basename(json_path)}")
     print(f"  原始问题:  {os.path.basename(problems_copy)}")
+    if lean_count > 0:
+        print(f"  测试lean文件:  {lean_count} 个 .lean 文件")
 
     return html_path
 
