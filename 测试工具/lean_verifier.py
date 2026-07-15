@@ -24,7 +24,7 @@ from typing import Optional
 
 from config import get_config, detect_lean_environment
 from llm_client import LLMClient, extract_json_from_text
-from models import InferenceResult, LeanVerificationResult
+from models import ANDORDAG, InferenceResult, LeanVerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -66,18 +66,28 @@ CONVERSION_SYSTEM_PROMPT = (
     "The theorem should state that the model's conclusion follows from "
     "the problem's conditions.\n\n"
     "CRITICAL RULES:\n"
-    "- You CAN use `import Mathlib` — Mathlib 4 is available.\n"
-    "- Use Mathlib for calculus/analysis: integrals, derivatives, limits, etc.\n"
+    "- DO NOT use `import Mathlib` — Mathlib is NOT available.\n"
+    "- Only Lean 4 core tactics are available:\n"
+    "  * `native_decide` — for decidable arithmetic on Nat, Int, Fin\n"
+    "  * `simp` — for simplification\n"
+    "  * `omega` — for linear arithmetic on Nat\n"
+    "  * `ring` — for ring expressions\n"
+    "  * `field_simp` — for field simplifications\n"
+    "  * `positivity` — for proving positivity\n"
+    "  * `calc` — for chained calculations\n"
+    "  * `rw` — for rewriting\n"
+    "  * `apply`, `exact`, `intro`, `refine` — basic tactics\n"
+    "  * `cases`, `induction` — case analysis and induction\n"
+    "- NOT available: `linarith`, `nlinarith`, integrals, derivatives, limits, calculus.\n"
+    "- Use `Nat`, `Int`, `Rat`, `Real` types from Lean core as appropriate.\n"
     "- Write a complete Lean 4 file that SHOULD compile.\n"
     "- Use `theorem` (not `example`) with a meaningful name.\n"
     "- Include all necessary hypotheses in the theorem statement.\n"
-    "- For simple arithmetic/number theory, use `native_decide` or `omega`.\n"
-    "- For calculus/analysis, use `Real` type and Mathlib's integral/derivative API.\n"
     "- If a proof is too complex, you may use `sorry` for some steps, "
     "but the THEOREM STATEMENT itself should still be correct and type-check.\n"
     "- Even with `sorry`, the file should pass type-checking (no syntax/type errors).\n\n"
     "Output a JSON object with these fields:\n"
-    '- "lean_code": the COMPLETE Lean 4 code (can use `import Mathlib`, theorem + proof),\n'
+    '- "lean_code": the COMPLETE Lean 4 code (NO import Mathlib, theorem + proof),\n'
     '- "is_formalizable": true/false — whether this problem CAN be formalized,\n'
     '- "formalized_claim": description in Chinese of what the Lean code proves,\n'
     '- "expected_result": "pass" or "fail" — do you think this Lean code will compile?\n'
@@ -117,6 +127,45 @@ ANALYSIS_SYSTEM_PROMPT = (
     "the original AI model to help it correct its reasoning,\n"
     '- "suggested_fix": 推荐的修改方法 (in Chinese, 告诉用户应该如何修正推理过程或代码).\n'
     "Output ONLY the JSON object."
+)
+
+# 蓝图分解阶段：DeepSeek 模型参数
+_BLUEPRINT_TEMPERATURE = 0.1           # 低温度以获得一致的分解输出
+_BLUEPRINT_MAX_TOKENS = 4096           # 足以容纳完整的 AND-OR DAG JSON
+
+# 阶段四（可选）：蓝图分解 — 将推理过程分解为 AND-OR DAG 子引理树
+BLUEPRINT_SYSTEM_PROMPT = (
+    "You are a mathematical proof decomposition expert. Your task is to "
+    "decompose a mathematical reasoning chain into an AND-OR proof tree "
+    "(blueprint DAG).\n\n"
+    "You will receive:\n"
+    "1. The math problem\n"
+    "2. The AI model's step-by-step reasoning\n"
+    "3. The Lean compilation error (if available)\n\n"
+    "The AND-OR tree structure:\n"
+    "- **OR node**: A goal that needs to be proven. Can be decomposed into "
+    "multiple alternative approaches (AND children).\n"
+    "- **AND node**: A decomposition approach. ALL its children must be "
+    "proven for this approach to succeed.\n"
+    "- **LEAF node**: A sub-lemma that can be directly attempted (may be "
+    "verified or marked as sorry/unknown).\n\n"
+    "CRITICAL RULES:\n"
+    "- The root node MUST be an OR node representing the overall theorem.\n"
+    "- Each OR node should have at least one AND child (decomposition).\n"
+    "- Each AND node should have 1-5 LEAF children (sub-lemmas).\n"
+    "- Node IDs must be unique strings (e.g. 'root', 'and1', 'leaf1a').\n"
+    "- node_type: exactly one of 'OR', 'AND', 'LEAF'.\n"
+    "- status for LEAF: 'verified' if the reasoning covered it, 'sorry' if "
+    "the reasoning skipped it, 'open' otherwise.\n"
+    "- label: a short Chinese label (e.g. '证明目标', '分解方案1', '子引理1').\n"
+    "- statement: the mathematical statement in Chinese or mixed notation.\n"
+    "- children: array of child node IDs (empty for LEAF nodes).\n"
+    "- detail: optional brief explanation of this node's role.\n\n"
+    "Output a JSON object with this structure:\n"
+    '{"dag": {"root_id": "...", "nodes": {"id1": {"node_id": "id1", '
+    '"node_type": "OR", "label": "...", "statement": "...", '
+    '"status": "...", "children": [...], "detail": "..."}, ...}}}\n'
+    "Output ONLY the JSON object, no other text."
 )
 
 # 纯 LLM 逻辑审查 prompt（Lean 不可用时降级方案）
@@ -164,10 +213,9 @@ def _truncate_error_output(output: str, max_chars: int = _MAX_COMPILE_OUTPUT_CHA
 
 def _build_lean_code_safe(lean_code: str) -> str:
     """
-    清理 Lean 代码，使其适合在 Mathlib 环境下编译。
+    清理 Lean 代码，使其适合在纯 Lean 4 核心环境下编译。
 
-    Mathlib 4 已安装，因此保留 import Mathlib。
-    只移除冗余的 import（如 import Real，因为 Prelude 已有）。
+    移除所有 import Mathlib（Mathlib 不可用），只使用 Lean 4 核心库。
 
     参数:
         lean_code: 原始 Lean 4 代码
@@ -175,10 +223,9 @@ def _build_lean_code_safe(lean_code: str) -> str:
     返回:
         清理后的 Lean 4 代码
     """
-    # 移除 import Real（Real 类型是 Prelude，无需显式导入）
-    if "import Real" in lean_code:
-        lean_code = lean_code.replace("import Real\n", "")
-        lean_code = lean_code.replace("import Real", "")
+    # 移除 import Mathlib（Mathlib 不可用）
+    for pattern in ["import Mathlib\n", "import Mathlib", "open Real\n", "open Real"]:
+        lean_code = lean_code.replace(pattern, "")
     # 移除空行残留
     while "\n\n\n" in lean_code:
         lean_code = lean_code.replace("\n\n\n", "\n\n")
@@ -287,6 +334,47 @@ def _build_review_user_prompt(inference: InferenceResult) -> str:
 {steps_text}"""
 
 
+def _build_blueprint_user_prompt(
+    inference: InferenceResult,
+    lean_code: str = "",
+    compile_output: str = "",
+) -> str:
+    """
+    构建蓝图分解阶段的 user prompt。
+
+    将原始题目、推理过程和编译错误（如有）组织成适合 DeepSeek
+    进行 AND-OR DAG 分解的格式。
+
+    参数:
+        inference: 原始推理结果
+        lean_code: 编译失败的 Lean 4 代码（可选，截断至 2000 字符）
+        compile_output: 编译错误输出（可选，截断至 2000 字符）
+
+    返回:
+        结构化的 user prompt 字符串
+    """
+    parts = [f"## Math Problem\n{inference.question}"]
+    parts.append(f"\n## Model's Reasoning\n{inference.reasoning}")
+
+    if lean_code:
+        truncated_code = lean_code[:2000]
+        parts.append(
+            f"\n## Lean 4 Code (that failed to compile)\n```lean\n"
+            f"{truncated_code}\n```"
+        )
+
+    if compile_output:
+        truncated_output = compile_output[:2000]
+        parts.append(
+            f"\n## Compilation Error\n{truncated_output}"
+        )
+
+    parts.append(
+        "\nPlease decompose the reasoning into an AND-OR proof tree."
+    )
+    return "\n".join(parts)
+
+
 # ==================== 阶段一：转化 ====================
 
 async def _convert_to_lean(
@@ -378,22 +466,24 @@ def _empty_conversion_result(error_msg: str = "") -> dict:
 
 # ==================== 阶段二：编译 ====================
 
-# Mathlib 项目根目录（编译时使用此项目的 lake 环境）
-_MATHLIB_PROJECT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "test_mathlib")
+# 轻量级 Lean 4 验证项目根目录（不依赖 Mathlib）
+_LEAN_VERIFY_PROJECT_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "lean_verify")
 )
 
 
 async def _compile_lean(lean_code: str, config) -> dict:
     """
-    阶段二：在 test_mathlib 项目（已安装 Mathlib 4）中编译 Lean 代码。
+    阶段二：直接使用 lean 编译器编译 Lean 4 代码（不依赖 Mathlib）。
 
-    将代码写入 test_mathlib/TestMathlib/ 目录下，然后通过 lake build
-    编译。这样可以直接使用 Mathlib 4 的全部功能（积分、导数等）。
+    策略：
+    1. 将 Lean 代码写入临时文件
+    2. 直接调用 lean 编译器编译该文件
+    3. 编译完成后清理临时文件
 
     参数:
         lean_code: 需要编译的 Lean 4 代码
-        config: EvalConfig 配置对象（含 lean_executable 和 lean_timeout）
+        config: EvalConfig 配置对象（含 lean_compiler 和 lean_timeout）
 
     返回:
         {"passed": bool, "output": str, "timeout": bool, "latency": float}
@@ -409,24 +499,20 @@ async def _compile_lean(lean_code: str, config) -> dict:
     lean_code = _build_lean_code_safe(lean_code)
 
     start_time = time.time()
-    verify_file = None
+    tmp_file = None
+
     try:
-        # 将代码写入 test_mathlib 项目的 TestMathlib 目录
-        test_dir = os.path.join(_MATHLIB_PROJECT_DIR, "TestMathlib")
-        os.makedirs(test_dir, exist_ok=True)
-        verify_file = os.path.join(test_dir, "Verify.lean")
+        # 使用临时文件，写入 Lean 代码
+        fd, tmp_file = tempfile.mkstemp(suffix=".lean", prefix="verify_", text=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(lean_code)
 
-        # 写一个 module 声明 + 用户代码
-        full_code = f"import Mathlib\n\n{lean_code}"
-        with open(verify_file, "w", encoding="utf-8") as f:
-            f.write(full_code)
-
-        # 使用 lake build 编译
+        # 直接使用 lean 编译器编译（而不是 lake build）
+        lean_compiler = getattr(config, "lean_compiler", None) or "lean"
         proc = await asyncio.create_subprocess_exec(
-            config.lean_executable, "build",
+            lean_compiler, tmp_file,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=_MATHLIB_PROJECT_DIR,
         )
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -448,19 +534,10 @@ async def _compile_lean(lean_code: str, config) -> dict:
             output += stdout.decode("utf-8", errors="replace")
         if stderr:
             output += stderr.decode("utf-8", errors="replace")
-        if not output:
-            output = "(no output)"
-
-        # 只保留 Verify.lean 相关的错误信息
-        verify_errors = []
-        for line in output.split("\n"):
-            if "Verify.lean" in line or "Verify" in line:
-                verify_errors.append(line)
-        filtered_output = "\n".join(verify_errors) if verify_errors else output
 
         return {
             "passed": proc.returncode == 0,
-            "output": filtered_output,
+            "output": output.strip() if output.strip() else "(compilation successful, no output)",
             "timeout": False,
             "latency": latency,
         }
@@ -469,12 +546,12 @@ async def _compile_lean(lean_code: str, config) -> dict:
         logger.error(f"Lean compilation error: {e}")
         return {"passed": False, "output": str(e), "timeout": False, "latency": latency}
     finally:
-        # 清理 Verify.lean
-        if verify_file and os.path.exists(verify_file):
+        # 清理临时文件
+        if tmp_file and os.path.exists(tmp_file):
             try:
-                os.unlink(verify_file)
+                os.unlink(tmp_file)
             except OSError:
-                logger.debug(f"Failed to clean up: {verify_file}")
+                logger.debug(f"Failed to clean up: {tmp_file}")
 
 
 # ==================== sorry 检测 ====================
@@ -595,6 +672,60 @@ def _empty_analysis_result(error_msg: str = "") -> dict:
     }
 
 
+# ==================== 阶段四：蓝图分解 ====================
+
+async def _decompose_blueprint(
+    inference: InferenceResult,
+    lean_code: str,
+    compile_output: str,
+    client: LLMClient,
+) -> Optional[ANDORDAG]:
+    """
+    阶段四（可选）：编译失败且存在逻辑错误时，将推理分解为 AND-OR DAG。
+
+    调用 DeepSeek 将原始推理过程分解为 AND-OR 证明树（蓝图），
+    用于可视化展示证明的逻辑结构和未完成的子目标。
+
+    仅在编译失败且 error_category 为 logic_error 或 both 时触发。
+
+    参数:
+        inference: 原始推理结果
+        lean_code: 编译失败的 Lean 4 代码
+        compile_output: Lean 编译器的错误输出
+        client: DeepSeek LLM 客户端实例
+
+    返回:
+        解析后的 ANDORDAG 对象。解析失败或 LLM 调用失败时返回 None。
+    """
+    messages = [
+        {"role": "system", "content": BLUEPRINT_SYSTEM_PROMPT},
+        {"role": "user", "content": _build_blueprint_user_prompt(
+            inference, lean_code, compile_output
+        )},
+    ]
+
+    try:
+        response = await client.chat(
+            messages=messages,
+            temperature=_BLUEPRINT_TEMPERATURE,
+            max_tokens=_BLUEPRINT_MAX_TOKENS,
+        )
+        parsed = extract_json_from_text(response["content"])
+        if parsed and isinstance(parsed, dict) and "dag" in parsed:
+            dag = ANDORDAG.from_dict(parsed["dag"])
+            if not dag.is_empty():
+                return dag
+        # 尝试直接从响应内容解析 DAG（兜底策略）
+        if parsed and isinstance(parsed, dict):
+            dag = ANDORDAG.from_dict(parsed)
+            if not dag.is_empty():
+                return dag
+        return None
+    except Exception as e:
+        logger.error(f"Blueprint decomposition failed: {e}")
+        return None
+
+
 # ==================== 降级方案：纯 LLM 逻辑审查 ====================
 
 async def _logic_review_only(
@@ -696,7 +827,7 @@ def _get_lean_env(config) -> dict:
     """
     global _lean_env_cache
     if _lean_env_cache is None:
-        _lean_env_cache = detect_lean_environment(config.lean_executable)
+        _lean_env_cache = detect_lean_environment(config.lean_compiler)
         if _lean_env_cache["available"]:
             logger.info(f"Lean 4 detected: {_lean_env_cache['version']}")
         else:
@@ -898,6 +1029,32 @@ async def _run_full_lean_pipeline(
     )
     result.analysis_latency = round(time.time() - analysis_start, 2)
     _fill_analysis_fields(result, analysis)
+
+    # 阶段四（可选）：编译失败且存在逻辑错误时 → 蓝图分解
+    _is_logic_related = result.error_category in ("logic_error", "both")
+    if _is_logic_related:
+        logger.info(
+            f"[Lean] [{inference.problem_id}] Logic error detected, "
+            f"decomposing blueprint..."
+        )
+        blueprint_start = time.time()
+        blueprint_result = await _decompose_blueprint(
+            inference, lean_code, compile_result["output"], deepseek_client
+        )
+        blueprint_latency = round(time.time() - blueprint_start, 2)
+        if blueprint_result and not blueprint_result.is_empty():
+            result.dag = blueprint_result.to_dict()
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Blueprint DAG generated "
+                f"({len(blueprint_result.nodes)} nodes, "
+                f"{blueprint_latency}s)"
+            )
+        else:
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Blueprint decomposition "
+                f"returned empty result"
+            )
+
     return result
 
 

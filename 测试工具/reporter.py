@@ -8,6 +8,7 @@ import logging
 import os
 from models import EvaluationResult
 from aggregator import compute_summary
+from utils import escape_html
 
 logger = logging.getLogger(__name__)
 
@@ -283,12 +284,8 @@ def _build_table_rows(results: list[EvaluationResult]) -> str:
             "lean_verification": r.lean_verification,
         }
         detail_json = json.dumps(detail_data, ensure_ascii=False)
-        detail_escaped = (
-            detail_json.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
+        # 复用统一 HTML 转义，避免与 _escape_html 规则不同步（代码要求 1.2）
+        detail_escaped = escape_html(detail_json)
 
         rows_html += f"""
         <tr class="{status_class} detail-row" data-detail="{detail_escaped}" onclick="showDetail(this)" style="cursor:pointer">
@@ -433,6 +430,39 @@ _HTML_CSS = """
         .perf-item { flex: 1; text-align: center; }
         .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
         .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
 """
 
 # HTML 模板：页面结构（不含 CSS，CSS 内联注入）
@@ -533,6 +563,9 @@ _MODAL_JS = r"""
 
         // Lean verification section
         html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
 
         // Performance bar
         html += buildPerfBar(d);
@@ -677,6 +710,89 @@ _MODAL_JS = r"""
         if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
         h += '</div>';
         h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
         return h;
     }
 

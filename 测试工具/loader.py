@@ -8,6 +8,7 @@ import os
 from typing import Optional
 
 from models import Problem
+from utils import get_first_by_aliases
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,11 @@ _FIELD_ALIASES = {
 
 
 def _map_field(row: dict, target: str) -> Optional[str]:
-    """按别名映射从行数据中提取字段值，返回第一个非空匹配"""
-    for alias in _FIELD_ALIASES.get(target, []):
-        if alias in row and row[alias] is not None and str(row[alias]).strip():
-            return str(row[alias]).strip()
-    return None
+    """按别名映射从行数据中提取字段值，返回第一个非空匹配。
+
+    委托给 utils.get_first_by_aliases，避免在多处重复别名解析逻辑。
+    """
+    return get_first_by_aliases(row, target, _FIELD_ALIASES)
 
 
 def load_problems_from_json(filepath: str) -> list[Problem]:

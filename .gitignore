@@ -29,13 +29,33 @@ env/
 测试结果/原本输出和推理过程/
 测试结果/原本问题/
 
-# 大文件 / 资料
+# 大文件 / 资料（非源码，体积大且可重新获取）
 *.pdf
 *.pptx
+*.docx
 *.rar
 *.zip
+*.zst                    # 大型压缩包（如 lean4 工具链）
 
-# 临时文件
+# Lean 工具链（约 1.2GB，含二进制与编译产物，由 lean-toolchain 自动下载）
+lean4-toolchain/
+
+# Lean 编译产物与依赖（由 lake 自动拉取/生成）
+*.olean
+*.ilean
+*.ir
+*.private
+*.server
+.lake/
+lake-packages/
+
+# 运行时生成的题库数据库（SQLite）
+*.db
+
+# 运行/构建临时文件
 *.tmp
 *.log
-"lean4-toolchain/"  
+~$*                      # Word 临时锁文件
+build_pid.txt
+*_done.txt
+__pycache__/

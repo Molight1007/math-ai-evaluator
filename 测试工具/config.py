@@ -24,9 +24,15 @@ _DEFAULT_LLM_TIMEOUT = 120.0           # 单次 API 请求超时（秒）
 _DEFAULT_LLM_MAX_RETRIES = 3           # 最大重试次数
 
 # 默认 Lean 配置
-_DEFAULT_LEAN_EXECUTABLE = "lake"      # Lean 4 可执行文件名
+_DEFAULT_LEAN_EXECUTABLE = "lake"      # Lean 4 lake 构建工具
+_DEFAULT_LEAN_COMPILER = "lean"        # Lean 4 编译器（用于直接编译单文件）
 _DEFAULT_LEAN_TIMEOUT = 60.0           # Lean 编译超时（秒）
 _LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
+
+# Lean 验证项目路径（不依赖 Mathlib 的轻量级项目）
+_LEAN_VERIFY_PROJECT_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "lean_verify")
+)
 
 # 默认 API 地址
 _DEFAULT_INTERN_BASE_URL = "https://internlm-chat.intern-ai.org.cn/puyu/api/v1"
@@ -60,8 +66,10 @@ class EvalConfig:
     """评测器完整配置 - 包含 Intern-S1、DeepSeek 和 Lean 验证的配置"""
     intern_s1: LLMConfig                          # Intern-S1 推理服务
     deepseek: LLMConfig                           # DeepSeek 评判服务
-    lean_executable: str = ""                     # Lean 4 可执行文件路径（如 lake）
+    lean_executable: str = ""                     # Lean 4 lake 可执行文件路径
+    lean_compiler: str = ""                       # Lean 4 编译器路径（lean.exe）
     lean_timeout: float = _DEFAULT_LEAN_TIMEOUT   # Lean 编译超时（秒）
+    lean_path: str = ""                           # LEAN_PATH 环境变量值（mathlib 源码目录）
 
 
 def get_user_env_path() -> str:
@@ -144,6 +152,7 @@ def save_config(
         f.write(f"LLM_MAX_RETRIES={_DEFAULT_LLM_MAX_RETRIES}\n\n")
         f.write("# Lean 4 形式化验证配置\n")
         f.write(f"LEAN_EXECUTABLE={_DEFAULT_LEAN_EXECUTABLE}\n")
+        f.write(f"LEAN_COMPILER={_DEFAULT_LEAN_COMPILER}\n")
         f.write(f"LEAN_TIMEOUT={int(_DEFAULT_LEAN_TIMEOUT)}\n")
 
     # 重新加载环境变量，使新保存的配置立即生效
@@ -212,25 +221,52 @@ def get_config() -> EvalConfig:
         lean_executable=os.getenv(
             "LEAN_EXECUTABLE", _DEFAULT_LEAN_EXECUTABLE
         ),
+        lean_compiler=os.getenv(
+            "LEAN_COMPILER", _DEFAULT_LEAN_COMPILER
+        ),
         lean_timeout=float(
             os.getenv("LEAN_TIMEOUT", str(int(_DEFAULT_LEAN_TIMEOUT)))
         ),
+        lean_path=get_lean_path(),
     )
 
 
-def detect_lean_environment(lean_executable: str = _DEFAULT_LEAN_EXECUTABLE) -> dict:
+def get_lean_path() -> str:
+    """
+    获取 LEAN_PATH 环境变量值，指向 Lean 4 验证项目目录。
+    
+    不再依赖 Mathlib，只使用 Lean 4 核心库。
+
+    返回:
+        LEAN_PATH 字符串，路径以分号分隔
+    """
+    paths = []
+    # 验证项目的源码目录
+    if os.path.isdir(_LEAN_VERIFY_PROJECT_DIR):
+        paths.append(_LEAN_VERIFY_PROJECT_DIR)
+    
+    # 也添加环境变量中已有的 LEAN_PATH
+    existing = os.environ.get("LEAN_PATH", "")
+    if existing:
+        paths.append(existing)
+    
+    return os.pathsep.join(paths)
+
+
+def detect_lean_environment(lean_executable: str = None) -> dict:
     """
     检测 Lean 4 环境是否可用。
 
-    通过调用 lean_executable --version 来检测，如果命令存在且
-    返回码为 0，则认为环境可用。
+    检测 lean 编译器（而非 lake）是否可用，通过调用 lean --version 来检测。
 
     参数:
-        lean_executable: Lean 可执行文件名或路径（默认 "lake"）
+        lean_executable: Lean 编译器可执行文件名或路径（默认 "lean"）
 
     返回:
         {"available": bool, "version": str, "error": str}
     """
+    if lean_executable is None:
+        lean_executable = _DEFAULT_LEAN_COMPILER  # "lean"
     try:
         result = subprocess.run(
             [lean_executable, "--version"],

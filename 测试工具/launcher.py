@@ -11,7 +11,6 @@
 """
 
 # ===== 标准库导入 =====
-# ===== 标准库导入 =====
 import asyncio       # 异步编程支持（用于评测流水线）
 import json          # JSON 数据处理
 import os            # 文件路径操作
@@ -20,8 +19,6 @@ import threading     # 多线程（GUI 后台任务不卡界面）
 import tkinter as tk # GUI 框架
 from tkinter import filedialog, messagebox, ttk  # GUI 组件
 import webbrowser    # 自动打开浏览器查看报告
-
-# ===== 项目路径配置 =====
 
 # ===== 项目路径配置 =====
 # 将项目根目录和各子目录加入 Python 搜索路径，确保模块导入正常
@@ -754,8 +751,7 @@ class BankBrowserPanel(ttk.Frame):
     # ===== 题库切换 =====
 
     def _init_banks(self):
-        """初始化题库下拉列表（启动时调用，自动加载第一个题库）"""
-        """初始化题库下拉列表"""
+        """初始化题库下拉列表：启动时调用，自动加载第一个题库"""
         banks = self.db.list_banks()
         names = [b["name"] for b in banks]
         self.bank_combo["values"] = names
@@ -1001,13 +997,12 @@ class BankBrowserPanel(ttk.Frame):
             if not new_q:
                 messagebox.showwarning("提示", "题干不能为空", parent=dlg); return
             try:
-                self.db._update_problem_text(p.id, self._current_bank,
-                                              question=new_q, reference_answer=new_a or None)
-                # 更新 domain 需要额外 SQL
-                if new_d != (p.domain or ""):
-                    with self.db._connect() as conn:
-                        conn.execute("UPDATE problems SET domain=? WHERE problem_id=? AND bank_name=?",
-                                     (new_d, p.id, self._current_bank))
+                self.db.update_problem(
+                    p.id, self._current_bank,
+                    question=new_q,
+                    reference_answer=new_a or None,
+                    domain=new_d or None,
+                )
                 self._reload_list()
                 self.status_var.set(f"题目 {p.id} 已更新")
                 dlg.destroy()

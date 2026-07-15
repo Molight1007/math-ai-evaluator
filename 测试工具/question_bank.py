@@ -322,9 +322,10 @@ class QuestionBankDB:
             )
             return cur.rowcount > 0
 
-    def _update_problem_text(self, problem_id: str, bank_name: str,
-                              question: str = None, reference_answer: str = None):
-        """更新题目的题干或参考答案（保留其他字段不变）"""
+    def update_problem(self, problem_id: str, bank_name: str,
+                        question: str = None, reference_answer: str = None,
+                        domain: str = None) -> bool:
+        """更新题目的题干、参考答案或领域（保留其他字段不变），返回是否成功"""
         sets = []
         params = []
         if question is not None:
@@ -333,12 +334,21 @@ class QuestionBankDB:
         if reference_answer is not None:
             sets.append("reference_answer = ?")
             params.append(reference_answer)
+        if domain is not None:
+            sets.append("domain = ?")
+            params.append(domain)
         if not sets:
-            return
+            return False
         params.extend([problem_id, bank_name])
         sql = f"UPDATE problems SET {', '.join(sets)} WHERE problem_id = ? AND bank_name = ?"
         with self._connect() as conn:
             conn.execute(sql, params)
+        return True
+
+    def _update_problem_text(self, problem_id: str, bank_name: str,
+                              question: str = None, reference_answer: str = None):
+        """内部方法：更新题目的题干或参考答案（委托给 update_problem）"""
+        self.update_problem(problem_id, bank_name, question=question, reference_answer=reference_answer)
 
     def search_problems(self, bank_name: str, keyword: str) -> list[Problem]:
         """按关键词搜索题目（匹配题干）"""

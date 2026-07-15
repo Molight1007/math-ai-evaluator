@@ -1,15 +1,18 @@
-"""从评测 JSON 提取判错题目，生成 HTML 判错列表表格"""
+"""
+从评测 JSON 提取判错题目，生成 HTML 判错列表表格。
+
+用法：
+    python _gen_error_table.py <json_path> [output_path]
+    若不提供 output_path，默认输出到 json_path 同目录下的 error_analysis_list.html
+"""
+import argparse
 import json
+import os
+import sys
 
-JSON_PATH = "D:/挑战杯/测试结果/原始输出和推理过程/report_20260615_222531.json"
-OUTPUT_PATH = "D:/挑战杯/测试工具/error_analysis_list.html"
+from utils import escape_html
 
-with open(JSON_PATH, "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-summary = data["summary"]
-errors = [r for r in data["results"] if not r["is_correct"]]
-
+# 错误类型中文映射
 ERROR_MAP = {
     "incomplete": "解答不完整",
     "logic_error": "逻辑错误",
@@ -18,59 +21,84 @@ ERROR_MAP = {
     None: "未分类",
 }
 
-def esc(s):
-    return (s or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+def _esc(s: str) -> str:
+    """对 HTML 特殊字符进行转义，防止 XSS。
+
+    委托给统一的 escape_html，补上此前遗漏的 & 转义（代码要求 1.2）。
+    """
+    return escape_html(s)
 
 
-# Build error type bars
-bar_html = ""
-for etype, count in summary["error_types"].items():
-    pct = round(count / len(errors) * 100)
-    css_cls = etype
-    label = ERROR_MAP.get(etype, etype)
-    bar_html += f'<div class="error-bar-item"><span class="bar-label">{label}</span>'
-    bar_html += f'<span class="bar-outer"><span class="bar-inner {css_cls}" style="width:{pct}%">{count}</span></span>'
-    bar_html += f'<span class="bar-count">{pct}%</span></div>\n'
+def _build_error_bars(summary: dict, errors: list) -> str:
+    """构建错误类型分布柱状图的 HTML"""
+    bar_html = ""
+    for etype, count in summary["error_types"].items():
+        pct = round(count / len(errors) * 100)
+        label = ERROR_MAP.get(etype, etype)
+        bar_html += (
+            f'<div class="error-bar-item"><span class="bar-label">{label}</span>'
+            f'<span class="bar-outer"><span class="bar-inner {etype}" style="width:{pct}%">{count}</span></span>'
+            f'<span class="bar-count">{pct}%</span></div>\n'
+        )
+    return bar_html
 
-# Build table rows
-rows_html = ""
-for i, e in enumerate(errors):
-    pid = esc(e["problem_id"])
-    domain = e.get("domain") or "未知"
-    question = esc(e.get("question", ""))
-    answer = esc(e.get("intern_answer", ""))[:200]
-    reasoning = esc(e.get("intern_reasoning", ""))[:250]
-    explanation = esc(e.get("judge_explanation", ""))[:300]
-    error_type = e.get("error_type")
-    conf = e.get("confidence", 0)
-    inf_lat = e.get("inference_latency", 0)
-    judge_lat = e.get("judge_latency", 0)
 
-    dcls = "d-unknown" if domain == "未知" else ""
-    etype_css = error_type or "other"
-    etype_label = ERROR_MAP.get(error_type, error_type or "未分类")
-    conf_cls = "conf-high" if conf >= 0.8 else "conf-low"
+def _build_table_rows(errors: list) -> str:
+    """构建错误题目表格行的 HTML"""
+    rows_html = ""
+    for i, e in enumerate(errors):
+        pid = _esc(e["problem_id"])
+        domain = e.get("domain") or "未知"
+        question = _esc(e.get("question", ""))
+        answer = _esc(e.get("intern_answer", ""))[:200]
+        reasoning = _esc(e.get("intern_reasoning", ""))[:250]
+        explanation = _esc(e.get("judge_explanation", ""))[:300]
+        error_type = e.get("error_type")
+        conf = e.get("confidence", 0)
+        inf_lat = e.get("inference_latency", 0)
+        judge_lat = e.get("judge_latency", 0)
 
-    rows_html += f'''<tr>
-<td class="num">{i+1}</td>
-<td class="id-cell">{pid}</td>
-<td><span class="domain-tag {dcls}">{domain}</span></td>
-<td class="question-text">{question}</td>
-<td class="answer-text">{answer[:150]}</td>
-<td class="reasoning-text" title="{reasoning}">{reasoning}</td>
-<td class="explanation-text">{explanation}</td>
-<td><span class="error-tag et-{etype_css}">{etype_label}</span></td>
-<td><span class="conf-badge {conf_cls}">{conf:.2f}</span></td>
-<td class="latency-cell">{inf_lat}s</td>
-<td class="latency-cell">{judge_lat}s</td>
-</tr>\n'''
+        dcls = "d-unknown" if domain == "未知" else ""
+        etype_css = error_type or "other"
+        etype_label = ERROR_MAP.get(error_type, error_type or "未分类")
+        conf_cls = "conf-high" if conf >= 0.8 else "conf-low"
 
-html = f"""<!DOCTYPE html>
+        rows_html += (
+            f"<tr>\n"
+            f'<td class="num">{i + 1}</td>\n'
+            f'<td class="id-cell">{pid}</td>\n'
+            f'<td><span class="domain-tag {dcls}">{domain}</span></td>\n'
+            f'<td class="question-text">{question}</td>\n'
+            f'<td class="answer-text">{answer[:150]}</td>\n'
+            f'<td class="reasoning-text" title="{reasoning}">{reasoning}</td>\n'
+            f'<td class="explanation-text">{explanation}</td>\n'
+            f'<td><span class="error-tag et-{etype_css}">{etype_label}</span></td>\n'
+            f'<td><span class="conf-badge {conf_cls}">{conf:.2f}</span></td>\n'
+            f'<td class="latency-cell">{inf_lat}s</td>\n'
+            f'<td class="latency-cell">{judge_lat}s</td>\n'
+            f"</tr>\n"
+        )
+    return rows_html
+
+
+def generate_error_table(json_path: str, output_path: str) -> int:
+    """从评测 JSON 生成 HTML 判错列表，返回错误题目数"""
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    summary = data["summary"]
+    errors = [r for r in data["results"] if not r["is_correct"]]
+
+    bar_html = _build_error_bars(summary, errors)
+    rows_html = _build_table_rows(errors)
+
+    html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Intern-S1 评测判错列表 - 100题</title>
+<title>Intern-S1 评测判错列表 - {len(errors)}题</title>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#f5f7fa; color:#333; padding:20px; }}
@@ -133,14 +161,14 @@ tbody td {{ padding:10px 8px; border-bottom:1px solid #f1f5f9; vertical-align:to
 
 <div class="header">
 <h1>Intern-S1 数学推理评测 — 判错列表</h1>
-<div class="meta">基于 100 道高等数学题目的评测结果 | 生成时间: {data.get('generated_at', '')}</div>
+<div class="meta">基于 {summary["total"]} 道数学题目的评测结果 | 生成时间: {data.get("generated_at", "")}</div>
 </div>
 
 <div class="stats">
-<div class="stat-card total"><div class="value">{summary['total']}</div><div class="label">总题数</div></div>
-<div class="stat-card correct"><div class="value">{summary['correct']}</div><div class="label">正确数</div></div>
+<div class="stat-card total"><div class="value">{summary["total"]}</div><div class="label">总题数</div></div>
+<div class="stat-card correct"><div class="value">{summary["correct"]}</div><div class="label">正确数</div></div>
 <div class="stat-card wrong"><div class="value">{len(errors)}</div><div class="label">错误数</div></div>
-<div class="stat-card accuracy"><div class="value">{summary['accuracy']}%</div><div class="label">准确率</div></div>
+<div class="stat-card accuracy"><div class="value">{summary["accuracy"]}%</div><div class="label">准确率</div></div>
 </div>
 
 <div class="error-dist">
@@ -162,13 +190,41 @@ tbody td {{ padding:10px 8px; border-bottom:1px solid #f1f5f9; vertical-align:to
 </table>
 </div>
 
-<div class="footer"><p>数据来源：report_20260615_222531.json | Intern-S1 推理 + DeepSeek 评判 | 不推送到 GitHub</p></div>
+<div class="footer"><p>数据来源：{os.path.basename(json_path)} | Intern-S1 推理 + DeepSeek 评判 | 不推送到 GitHub</p></div>
 
 </div>
 </body>
 </html>"""
 
-with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-    f.write(html)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
 
-print(f"Done! Generated error analysis with {len(errors)} wrong answers -> {OUTPUT_PATH}")
+    return len(errors)
+
+
+def main() -> None:
+    """命令行入口：解析参数 → 生成 HTML 判错列表"""
+    parser = argparse.ArgumentParser(
+        description="从评测 JSON 提取判错题目，生成 HTML 判错列表表格"
+    )
+    parser.add_argument("json_path", help="评测 JSON 文件路径")
+    parser.add_argument(
+        "output_path", nargs="?", default=None,
+        help="输出 HTML 路径（默认输出到 JSON 同目录下的 error_analysis_list.html）"
+    )
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.json_path):
+        print(f"错误: 文件不存在 — {args.json_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.output_path is None:
+        json_dir = os.path.dirname(os.path.abspath(args.json_path))
+        args.output_path = os.path.join(json_dir, "error_analysis_list.html")
+
+    error_count = generate_error_table(args.json_path, args.output_path)
+    print(f"完成！已生成包含 {error_count} 道错题的判错列表 → {args.output_path}")
+
+
+if __name__ == "__main__":
+    main()

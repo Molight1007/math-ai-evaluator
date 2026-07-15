@@ -45,22 +45,7 @@ from lean_verifier import (
 )
 
 # run_inference 延迟导入：默认使用原版，--optimized 时切换为独立版
-_run_inference_func = None
-
-
-def _get_run_inference():
-    """获取当前使用的 run_inference 函数（支持原版/独立版切换）"""
-    global _run_inference_func
-    if _run_inference_func is None:
-        from intern_s1 import run_inference as _default_inference
-        _run_inference_func = _default_inference
-    return _run_inference_func
-
-
-def _set_run_inference(func):
-    """设置 run_inference 函数（用于 --optimized 切换）"""
-    global _run_inference_func
-    _run_inference_func = func
+from intern_s1 import run_inference as _run_inference_func
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +221,7 @@ async def evaluate_single(problem, semaphore, bank_name=None):
         EvaluationResult 对象
     """
     async with semaphore:
-        inference = await _get_run_inference()(problem)
+        inference = await _run_inference_func(problem)
         if inference.error:
             judge = JudgeResult(
                 problem_id=problem.id,
@@ -275,7 +260,7 @@ async def _run_inference_stage(problems, concurrency, bank_name=None):
 
     async def _inference_task(problem):
         async with semaphore:
-            inference = await _get_run_inference()(problem)
+            inference = await _run_inference_func(problem)
             ref_answer, ref_source = _lookup_reference_answer(
                 bank_name, problem.id
             ) if bank_name and not inference.error else (None, None)
@@ -838,7 +823,8 @@ def main():
         if os.path.isdir(_optimized_dir):
             sys.path.insert(0, os.path.dirname(_optimized_dir))
             from intern_s1_optimized.intern_s1 import run_inference as _optimized_inference
-            _set_run_inference(_optimized_inference)
+            global _run_inference_func
+            _run_inference_func = _optimized_inference
             print("[INFO] 使用独立版 Intern-S1 推理模块 (intern_s1_optimized/)")
         else:
             print(f"[WARNING] 独立版目录不存在: {_optimized_dir}，回退到原版")

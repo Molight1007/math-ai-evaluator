@@ -26,6 +26,8 @@ import logging
 import os
 import re
 
+from utils import get_first_by_aliases
+
 logger = logging.getLogger(__name__)
 
 # 支持的文件扩展名集合（用于快速成员检查）
@@ -131,7 +133,7 @@ def extract_answers(filepath: str) -> list[dict]:
     """
     ext = os.path.splitext(filepath)[1].lower()
 
-    # 按扩展名分发到对应的提取函数
+    # 按扩展名分发到对应的提取函数（模块级字典延迟引用，避免循环导入）
     _dispatchers = {
         ".pptx": extract_from_pptx,
         ".ppt": extract_from_ppt,
@@ -437,6 +439,9 @@ def _find_value_by_keys(data: dict, keys: tuple[str, ...]) -> str | None:
     """
     在字典中按优先级查找第一个存在的 key 对应的值。
 
+    委托给 utils.get_first_by_aliases，统一别名解析逻辑（代码要求 1.2）。
+    此处将元组 keys 临时包装为单目标别名表，保持对外签名不变。
+
     参数:
         data: 待查找的字典
         keys: 候选 key 元组，按优先级从高到低排列
@@ -444,11 +449,8 @@ def _find_value_by_keys(data: dict, keys: tuple[str, ...]) -> str | None:
     返回:
         找到的值（字符串），未找到返回 None
     """
-    for key in keys:
-        value = data.get(key)
-        if value is not None and str(value).strip():
-            return str(value).strip()
-    return None
+    aliases = {"_": list(keys)}
+    return get_first_by_aliases(data, "_", aliases)
 
 
 def _parse_answer_pairs(text: str, page: int) -> list[dict]:
