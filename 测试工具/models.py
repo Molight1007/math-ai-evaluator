@@ -188,6 +188,9 @@ class LeanVerificationResult:
     # sorry 检测
     sorry_count: int = 0                          # Lean 代码中 sorry 出现次数
     has_incomplete_proof: bool = False            # 是否证明不完整（有 sorry）
+    # 反馈修正
+    revision_attempts: int = 0                    # 反馈修正尝试次数
+    revised_lean_code: str = ""                   # 修正后的 Lean 代码（最终版本）
     # 蓝图分解
     dag: Optional[dict] = None                    # AND-OR DAG 蓝图分解（ANDORDAG.to_dict()）
 
