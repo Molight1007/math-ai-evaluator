@@ -5,12 +5,14 @@ Lean 4 形式化验证模块。
 1. 将书生 AI 的自然语言推理过程通过 DeepSeek 转化为 Lean 4 代码
 2. 调用本地 Lean 编译器进行严格的逻辑验证
 3. 编译失败时，由 DeepSeek 分析错误根因，区分转化错误 vs 逻辑错误
-4. 对于逻辑错误，定位断点并生成修正提示词
+4. 对于翻译错误，自动修正 Lean 代码并重试编译（反馈修正循环）
+5. 对于逻辑错误，定位断点并生成修正提示词
 
-三阶段异步流水线：
+三阶段 + 反馈修正异步流水线：
   阶段一：转化 — DeepSeek 将推理 → Lean 4 代码
   阶段二：编译 — subprocess 调用 lake env lean
   阶段三：分析 — DeepSeek 分析编译错误根因
+  修正循环：翻译错误 → DeepSeek 修正代码 → 重新编译（最多 2 次）
 
 Lean 不可用时自动降级为纯 LLM 逻辑审查模式。
 """
@@ -66,28 +68,29 @@ CONVERSION_SYSTEM_PROMPT = (
     "The theorem should state that the model's conclusion follows from "
     "the problem's conditions.\n\n"
     "CRITICAL RULES:\n"
-    "- DO NOT use `import Mathlib` — Mathlib is NOT available.\n"
-    "- Only Lean 4 core tactics are available:\n"
-    "  * `native_decide` — for decidable arithmetic on Nat, Int, Fin\n"
-    "  * `simp` — for simplification\n"
-    "  * `omega` — for linear arithmetic on Nat\n"
-    "  * `ring` — for ring expressions\n"
-    "  * `field_simp` — for field simplifications\n"
-    "  * `positivity` — for proving positivity\n"
-    "  * `calc` — for chained calculations\n"
-    "  * `rw` — for rewriting\n"
-    "  * `apply`, `exact`, `intro`, `refine` — basic tactics\n"
-    "  * `cases`, `induction` — case analysis and induction\n"
-    "- NOT available: `linarith`, `nlinarith`, integrals, derivatives, limits, calculus.\n"
-    "- Use `Nat`, `Int`, `Rat`, `Real` types from Lean core as appropriate.\n"
+    "- You CAN and SHOULD use `import Mathlib` when needed. Mathlib4 provides "
+    "a vast library of theorems across analysis, algebra, topology, number theory, etc.\n"
+    "- Common Mathlib imports (use as appropriate):\n"
+    "  * `import Mathlib` — full library (preferred when in doubt)\n"
+    "  * `import Mathlib.Data.Real.Basic` — real number basics\n"
+    "  * `import Mathlib.Analysis.Calculus.MeanInequalities` — inequalities\n"
+    "  * `import Mathlib.Tactic` — linarith, nlinarith, positivity, ring, field_simp\n"
+    "  * `import Mathlib.Algebra.*` — algebraic structures\n"
+    "  * `import Mathlib.Topology.*` — topology\n"
+    "  * `import Mathlib.NumberTheory.*` — number theory\n"
+    "- All standard tactics are available (linarith, nlinarith, continuity, "
+    "differentiability, measurability, etc.) when Mathlib is imported.\n"
+    "- Use `Nat`, `Int`, `Rat`, `Real` types as appropriate.\n"
     "- Write a complete Lean 4 file that SHOULD compile.\n"
     "- Use `theorem` (not `example`) with a meaningful name.\n"
     "- Include all necessary hypotheses in the theorem statement.\n"
     "- If a proof is too complex, you may use `sorry` for some steps, "
     "but the THEOREM STATEMENT itself should still be correct and type-check.\n"
-    "- Even with `sorry`, the file should pass type-checking (no syntax/type errors).\n\n"
+    "- Even with `sorry`, the file should pass type-checking (no syntax/type errors).\n"
+    "- PREFER using Mathlib theorems (e.g., `Real.sqrt_mul_self`) over "
+    "reinventing the wheel with basic tactics.\n\n"
     "Output a JSON object with these fields:\n"
-    '- "lean_code": the COMPLETE Lean 4 code (NO import Mathlib, theorem + proof),\n'
+    '- "lean_code": the COMPLETE Lean 4 code (including proper Mathlib imports, theorem + proof),\n'
     '- "is_formalizable": true/false — whether this problem CAN be formalized,\n'
     '- "formalized_claim": description in Chinese of what the Lean code proves,\n'
     '- "expected_result": "pass" or "fail" — do you think this Lean code will compile?\n'
@@ -129,9 +132,43 @@ ANALYSIS_SYSTEM_PROMPT = (
     "Output ONLY the JSON object."
 )
 
-# 蓝图分解阶段：DeepSeek 模型参数
+# 反馈修正循环 — 根据错误分析结果修正 Lean 代码
+REVISER_SYSTEM_PROMPT = (
+    "You are a Lean 4 code fixer. Your task is to correct Lean 4 code "
+    "based on compilation error feedback and error analysis.\n\n"
+    "You will receive:\n"
+    "1. The original math problem\n"
+    "2. The original Lean 4 code that failed to compile\n"
+    "3. The Lean compiler error output\n"
+    "4. A detailed error analysis (including the root cause)\n\n"
+    "Your job: Fix the Lean 4 code so that it compiles correctly.\n"
+    "Focus on fixing syntax errors, type mismatches, missing imports, "
+    "incorrect theorem statements, and any other compilation issues.\n\n"
+    "CRITICAL RULES:\n"
+    "- Preserve the original theorem's intent — don't change the math, "
+    "only fix the Lean formalization\n"
+    "- Use `sorry` for sub-proofs you cannot immediately fix\n"
+    "- If Mathlib is used, ensure correct imports\n"
+    "- Fix ALL reported errors, not just the first one\n"
+    "- The output must be a syntactically valid, compilable Lean 4 file\n"
+    "- If the error is fundamentally unfixable (the reasoning itself is wrong), "
+    "add a comment explaining why and use `sorry` for the broken parts\n\n"
+    "Output a JSON object with these fields:\n"
+    '- "lean_code": the corrected COMPLETE Lean 4 code,\n'
+    '- "changes_summary": brief description of what was changed and why,\n'
+    '- "fixed_all_errors": true/false — whether you believe all compilation errors are fixed,\n'
+    '- "remaining_issues": if any issues remain, describe them briefly.\n'
+    "Output ONLY the JSON object."
+)
+
+# 分解阶段：DeepSeek 模型参数
 _BLUEPRINT_TEMPERATURE = 0.1           # 低温度以获得一致的分解输出
 _BLUEPRINT_MAX_TOKENS = 4096           # 足以容纳完整的 AND-OR DAG JSON
+
+# 修正阶段：DeepSeek 模型参数
+_REVISION_TEMPERATURE = 0.1            # 低温度以获得一致的修正输出
+_REVISION_MAX_TOKENS = 4096            # 足以容纳完整的 Lean 4 代码
+_MAX_REVISION_RETRIES = 2              # 反馈修正循环最大重试次数
 
 # 阶段四（可选）：蓝图分解 — 将推理过程分解为 AND-OR DAG 子引理树
 BLUEPRINT_SYSTEM_PROMPT = (
@@ -672,6 +709,73 @@ def _empty_analysis_result(error_msg: str = "") -> dict:
     }
 
 
+# ==================== 反馈修正循环 ====================
+
+async def _revise_lean_code(
+    inference: InferenceResult,
+    lean_code: str,
+    compile_output: str,
+    analysis: dict,
+    client: LLMClient,
+) -> Optional[dict]:
+    """
+    反馈修正循环：根据错误分析结果，调用 DeepSeek 修正 Lean 代码。
+
+    仅在 error_category 为 "translation_error" 或 "both" 时调用，
+    因为纯逻辑错误无法通过修改 Lean 代码来解决。
+
+    参数:
+        inference: 原始推理结果
+        lean_code: 编译失败的 Lean 4 代码
+        compile_output: Lean 编译器的错误输出
+        analysis: 阶段三的错误分析结果 dict
+        client: DeepSeek LLM 客户端实例
+
+    返回:
+        解析后的修正结果 dict，包含修正后的 lean_code、changes_summary 等，
+        失败时返回 None
+    """
+    revision_user_prompt = (
+        f"## 原始数学问题\n{inference.problem}\n\n"
+        f"## 原始 Lean 代码（编译失败）\n```lean\n{lean_code}\n```\n\n"
+        f"## 编译器错误输出\n```\n{compile_output[:2000]}\n```\n\n"
+        f"## 错误分析\n"
+        f"- 错误类别: {analysis.get('error_category', 'unknown')}\n"
+        f"- 根因: {analysis.get('root_cause', '无')}\n"
+        f"- 转化问题: {analysis.get('translation_issue', '无')}\n"
+        f"- 建议修改: {analysis.get('suggested_fix', '无')}\n\n"
+        f"请修正上述 Lean 代码，修复所有编译错误。"
+    )
+
+    messages = [
+        {"role": "system", "content": REVISER_SYSTEM_PROMPT},
+        {"role": "user", "content": revision_user_prompt},
+    ]
+
+    try:
+        response = await client.chat(
+            messages=messages,
+            temperature=_REVISION_TEMPERATURE,
+            max_tokens=_REVISION_MAX_TOKENS,
+        )
+        parsed = extract_json_from_text(response["content"])
+        if parsed and isinstance(parsed, dict):
+            result = {**parsed, "_tokens": response.get("tokens_used", 0)}
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Code revised. "
+                f"Changes: {parsed.get('changes_summary', 'N/A')[:100]}"
+            )
+            return result
+        else:
+            logger.warning(
+                f"[Lean] [{inference.problem_id}] Failed to parse reviser response"
+            )
+            return None
+    except Exception as e:
+        logger.error(f"[Lean] [{inference.problem_id}] Revision failed: {e}")
+        return None
+
+
 # ==================== 阶段四：蓝图分解 ====================
 
 async def _decompose_blueprint(
@@ -1029,6 +1133,100 @@ async def _run_full_lean_pipeline(
     )
     result.analysis_latency = round(time.time() - analysis_start, 2)
     _fill_analysis_fields(result, analysis)
+
+    # 反馈修正循环：如果是翻译错误，尝试自动修正后重新编译
+    _needs_revision = result.error_category in ("translation_error", "both")
+    if _needs_revision:
+        current_lean_code = lean_code
+        current_compile_output = compile_result["output"]
+        current_analysis = analysis
+
+        for retry_i in range(1, _MAX_REVISION_RETRIES + 1):
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Translation error detected, "
+                f"attempting revision {retry_i}/{_MAX_REVISION_RETRIES}..."
+            )
+            result.revision_attempts = retry_i
+
+            # 调用修正
+            revision_start = time.time()
+            revision = await _revise_lean_code(
+                inference, current_lean_code,
+                current_compile_output, current_analysis, deepseek_client
+            )
+            revision_latency = round(time.time() - revision_start, 2)
+
+            if not revision or not revision.get("lean_code"):
+                logger.warning(
+                    f"[Lean] [{inference.problem_id}] Revision {retry_i} "
+                    f"returned no code, stopping retries"
+                )
+                break
+
+            revised_code = revision["lean_code"]
+            result.revised_lean_code = revised_code
+
+            # 重新编译
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Re-compiling revised code "
+                f"(attempt {retry_i})..."
+            )
+            recompile_result = await _compile_lean(revised_code, config)
+            _fill_compile_fields(result, recompile_result)
+
+            # 重新检测 sorry
+            sorry_info = _detect_sorry(revised_code)
+            result.sorry_count = sorry_info["count"]
+            result.has_incomplete_proof = sorry_info["has_sorry"]
+
+            if recompile_result["passed"]:
+                logger.info(
+                    f"[Lean] [{inference.problem_id}] Revision {retry_i} "
+                    f"SUCCEEDED — compilation passed after fix "
+                    f"({revision_latency}s)"
+                )
+                # 清除之前的错误标记
+                result.error_category = None
+                result.analysis_confidence = 0.0
+                result.human_readable_error = (
+                    f"代码经过 {retry_i} 次自动修正后编译通过。"
+                )
+                result.root_cause = ""
+                result.logic_flaw_location = ""
+                result.logic_flaw_why = ""
+                result.fix_prompt_for_ai = ""
+                return result
+
+            # 重新分析修正后仍然失败的原因
+            logger.info(
+                f"[Lean] [{inference.problem_id}] Revision {retry_i} still "
+                f"failed, re-analyzing..."
+            )
+            new_analysis = await _analyze_error(
+                inference, revised_code,
+                recompile_result["output"], deepseek_client
+            )
+            _fill_analysis_fields(result, new_analysis)
+            result.analysis_latency += revision_latency
+
+            # 如果新分析发现是纯逻辑错误，停止修正
+            if new_analysis.get("error_category") == "logic_error":
+                logger.info(
+                    f"[Lean] [{inference.problem_id}] Root cause is logic_error, "
+                    f"stopping revision loop"
+                )
+                break
+
+            # 更新当前状态，准备下一轮修正
+            current_lean_code = revised_code
+            current_compile_output = recompile_result["output"]
+            current_analysis = new_analysis
+
+            if not revision.get("fixed_all_errors", False):
+                logger.info(
+                    f"[Lean] [{inference.problem_id}] Reviser indicates "
+                    f"remaining issues, continuing to next retry..."
+                )
 
     # 阶段四（可选）：编译失败且存在逻辑错误时 → 蓝图分解
     _is_logic_related = result.error_category in ("logic_error", "both")
