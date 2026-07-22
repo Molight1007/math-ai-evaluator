@@ -1,0 +1,32 @@
+[
+  {
+    "id": "gen_9810ba91",
+    "question": "求极限：lim_{x→0} (sin x - x)/x^3。",
+    "domain": "函数极限与连续",
+    "reference_answer": "-1/6"
+  },
+  {
+    "id": "一元函数微分学的计算_014",
+    "question": "设f(x)=\\max\\{x,x^2\\}，0<x<2，则f'(x)=_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "f'(x)=\\begin{cases} 1, & 0<x<1 \\\\ 2x, & 1<x<2 \\end{cases}，在x=1处不可导"
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_018",
+    "question": "函数y= 在区间[0,1 1-x2 [ 上的平均值为_____",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "多元函数微分学_029",
+    "question": "求曲线C:{{ 上距离xOy平面最远和最近的点的坐标. x+y+3z=5",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_005",
+    "question": "设 $u_n = \\arctan(n+k) - \\arctan n$，其中 $k$ 为正常数，则级数 $\\sum_{n=1}^{\\infty} (-1)^n u_n$ 的敛散性为（ ）。\nA. 绝对收敛\nB. 条件收敛\nC. 发散\nD. 敛散性与 $k$ 有关",
+    "domain": "无穷级数",
+    "reference_answer": "B"
+  }
+]

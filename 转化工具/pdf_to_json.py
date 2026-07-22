@@ -218,7 +218,7 @@ def main():
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, "测试结果", "原本问题")
         os.makedirs(output_dir, exist_ok=True)
-        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        pdf_name = os.path.splitext(os.path.basename(args.pdf))[0]
         args.output = os.path.join(output_dir, f"{pdf_name}.json")
     
     with open(args.output, "w", encoding="utf-8") as f:

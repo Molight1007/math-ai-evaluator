@@ -1,0 +1,32 @@
+[
+  {
+    "id": "gen_42d425ac",
+    "question": "计算二重积分 ∬_D (x^2 + y^2) dxdy，其中 D 是由曲线 y = x^2 和直线 y = 1 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "88/105"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0201",
+    "question": "已知函数 y = y(x) 由参数方程 { x = arctan(t + 1), y + t² = 2t - ∫₀ᵗ e^(-u²) du } 确定，求 dy/dx 在 t = 0 处的值。",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "dy/dx|_{t=0} = 2 / (1/2) = 4"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0312",
+    "question": "若可导函数f(x)满足f'(x) < 2f(x)，则当b > a > 0时，有( )。\nA. b²f(a) > a²f(b)\nB. b²f(ln a) > a²f(ln b)\nC. b²f(a) < a²f(b)\nD. b²f(ln a) < a²f(ln b)",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": "C"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0469",
+    "question": "设函数 f(x) 满足方程 x f(x) + f(1-x) = x^2，求定积分 ∫_0^1 f(x) dx。",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "1/6"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0545",
+    "question": "设函数f(x)非负连续，且f(x) ∫_0^1 f(xt) dt = 2x^2，求f(x)在区间[0, 2]上的平均值。",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": "平均值为 4/3"
+  }
+]

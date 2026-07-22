@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intern-S1 评测判错列表 - 100题</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#f5f7fa; color:#333; padding:20px; }
+.container { max-width:1400px; margin:0 auto; }
+
+.header { background:linear-gradient(135deg,#667eea,#764ba2); border-radius:16px; padding:32px; margin-bottom:24px; color:white; text-align:center; }
+.header h1 { font-size:28px; margin-bottom:12px; }
+.header .meta { font-size:14px; opacity:0.85; }
+
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+.stat-card { background:white; border-radius:12px; padding:20px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.06); transition:transform .2s; }
+.stat-card:hover { transform:translateY(-2px); }
+.stat-card .value { font-size:36px; font-weight:700; margin-bottom:4px; }
+.stat-card .label { font-size:14px; color:#666; }
+.stat-card.total .value { color:#3b82f6; }  .stat-card.correct .value { color:#10b981; }
+.stat-card.wrong .value { color:#ef4444; }   .stat-card.accuracy .value { color:#f59e0b; }
+
+.error-dist { background:white; border-radius:12px; padding:20px; margin-bottom:24px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+.error-dist h2 { font-size:18px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid #f0f0f0; }
+.error-bars { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.error-bar-item { display:flex; align-items:center; gap:8px; font-size:14px; }
+.bar-label { min-width:90px; }
+.bar-outer { width:200px; height:22px; background:#e9ecef; border-radius:11px; overflow:hidden; position:relative; }
+.bar-inner { height:100%; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:12px; color:white; font-weight:600; transition:width .6s ease; }
+.bar-inner.incomplete { background:linear-gradient(135deg,#f97316,#ea580c); }
+.bar-inner.logic_error { background:linear-gradient(135deg,#8b5cf6,#7c3aed); }
+.bar-inner.calculation_error { background:linear-gradient(135deg,#ec4899,#db2777); }
+.bar-inner.other { background:linear-gradient(135deg,#64748b,#475569); }
+.bar-count { font-weight:700; min-width:30px; text-align:right; }
+
+.table-section { background:white; border-radius:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow-x:auto; }
+.table-section h2 { font-size:18px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid #f0f0f0; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead th { background:#f8fafc; padding:12px 10px; text-align:left; font-weight:600; color:#475569; border-bottom:2px solid #e2e8f0; position:sticky; top:0; white-space:nowrap; }
+tbody tr:hover { background:#f8fafc; }
+tbody td { padding:10px 8px; border-bottom:1px solid #f1f5f9; vertical-align:top; line-height:1.5; }
+.num { font-weight:600; color:#94a3b8; width:36px; }
+.id-cell { font-family:monospace; color:#0369a1; font-size:11.5px; max-width:220px; word-break:break-all; }
+.domain-tag { display:inline-block; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:500; }
+.domain-tag.d-unknown { background:#fef3c7; color:#92400e; }
+.question-text { max-width:320px; color:#374151; word-break:break-word; }
+.answer-text { max-width:220px; color:#059669; font-weight:500; word-break:break-word; }
+.reasoning-text { max-width:280px; color:#6b7280; font-size:11.5px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
+.explanation-text { max-width:280px; color:#dc2626; font-size:11.5px; }
+.error-tag { display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; white-space:nowrap; }
+.error-tag.et-incomplete { background:#ffedd5; color:#c2410c; }
+.error-tag.et-logic { background:#ede9fe; color:#6d28d9; }
+.error-tag.et-calc { background:#fce7f3; color:#be185d; }
+.error-tag.et-other { background:#f1f5f9; color:#475569; }
+.conf-badge { display:inline-block; padding:2px 8px; border-radius:8px; font-size:12px; font-weight:600; }
+.conf-high { background:#d1fae5; color:#065f46; }
+.conf-low { background:#fee2e2; color:#991b1b; }
+.latency-cell { font-variant-numeric:tabular-nums; color:#6b7280; white-space:nowrap; }
+
+.footer { text-align:center; margin-top:24px; padding:16px; color:#94a3b8; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+<h1>Intern-S1 数学推理评测 — 判错列表</h1>
+<div class="meta">基于 100 道高等数学题目的评测结果 | 生成时间: 2026-06-15T22:25:31.932184</div>
+</div>
+
+<div class="stats">
+<div class="stat-card total"><div class="value">100</div><div class="label">总题数</div></div>
+<div class="stat-card correct"><div class="value">71</div><div class="label">正确数</div></div>
+<div class="stat-card wrong"><div class="value">29</div><div class="label">错误数</div></div>
+<div class="stat-card accuracy"><div class="value">71.0%</div><div class="label">准确率</div></div>
+</div>
+
+<div class="error-dist">
+<h2>错误类型分布（共 29 题）</h2>
+<div class="error-bars">
+<div class="error-bar-item"><span class="bar-label">解答不完整</span><span class="bar-outer"><span class="bar-inner incomplete" style="width:45%">13</span></span><span class="bar-count">45%</span></div>
+<div class="error-bar-item"><span class="bar-label">逻辑错误</span><span class="bar-outer"><span class="bar-inner logic_error" style="width:17%">5</span></span><span class="bar-count">17%</span></div>
+<div class="error-bar-item"><span class="bar-label">计算错误</span><span class="bar-outer"><span class="bar-inner calculation_error" style="width:21%">6</span></span><span class="bar-count">21%</span></div>
+<div class="error-bar-item"><span class="bar-label">其他错误</span><span class="bar-outer"><span class="bar-inner other" style="width:3%">1</span></span><span class="bar-count">3%</span></div>
+
+</div>
+</div>
+
+<div class="table-section">
+<h2>详细判错列表</h2>
+<table>
+<thead>
+<tr><th>#</th><th>题目ID</th><th>领域</th><th>题目内容</th><th>模型答案</th><th>推理摘要</th><th>评判解释</th><th>错误类型</th><th>置信度</th><th>推理耗时</th><th>评判耗时</th></tr>
+</thead>
+<tbody>
+<tr>
+<td class="num">1</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0023</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空题：
+(1) 点 (1, 2, 1) 到平面 x + 2y + 2z - 10 = 0 的距离为______。
+(2) 两平行平面 3x + 2y + 6z - 35 = 0 与 3x + 2y + 6z - 56 = 0 之间的距离为______。
+(3) 直线 { x + y + 3z = 0; x - y - z = 0 } 与平面 x - y - z + 1 = 0 的夹角为______。
+(4) 点 P(3, -1, 2) 到直线 { x + y - z + 1 = 0; 2x - y + z - 4 = 0 } 的距离为______。</td>
+<td class="answer-text">```json</td>
+<td class="reasoning-text" title="```json
+{
+  &quot;answer&quot;: {
+    &quot;(1)&quot;: 1,
+    &quot;(2)&quot;: 3,
+    &quot;(3)&quot;: &quot;0°&quot;,
+    &quot;(4)&quot;: &quot;3√2⁄2&quot;
+  },
+  &quot;reasoning&quot;: &quot;逐步解答如下：\n(1) 使用点到平面的距离公式：|Ax + By + Cz + D| / √(A² + B² ">```json
+{
+  &quot;answer&quot;: {
+    &quot;(1)&quot;: 1,
+    &quot;(2)&quot;: 3,
+    &quot;(3)&quot;: &quot;0°&quot;,
+    &quot;(4)&quot;: &quot;3√2⁄2&quot;
+  },
+  &quot;reasoning&quot;: &quot;逐步解答如下：\n(1) 使用点到平面的距离公式：|Ax + By + Cz + D| / √(A² + B² </td>
+<td class="explanation-text">第(1)题计算错误：分子应为|1+4+2-10|=3，分母√(1+4+4)=3，距离应为1，但步骤中分子写为3，结果却写1，实际正确结果为1，但推理中分子计算有误（应为3，但写成了3？实际上正确结果是1，但步骤中分子写3，分母3，结果1，这没问题。然而仔细检查：点(1,2,1)代入得1+4+2-10=-3，绝对值3，分母3，距离1，正确。但第(4)题：直线方向向量计算有误。直线由两平面交线给出，方向向量应为两平面法向量叉乘：n1=(1,1,-1), n2=(2,-1,1)，叉乘得(0,-3,-3)或(0,1,1)方向，但模型取v=(0,1,1)正确。点P(3,-1,2)，取直线上一点Q，需满足</td>
+<td><span class="error-tag et-other">未分类</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">95.42s</td>
+<td class="latency-cell">9.86s</td>
+</tr>
+<tr>
+<td class="num">2</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0039</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求曲线 { x^2 + y^2 + z^2 = a^2, x^2 + y^2 - ax = 0 } 在 xOy 面和 yOz 面上的投影曲线的方程。</td>
+<td class="answer-text">嗯，我现在要解决的问题是求由两个方程组成的曲线在xOy平面和yOz平面上的投影曲线的方程。这两个方程是x² + y² + z² = a²和x² + y² - a x = 0。首先，我需要理解题目要求的是什么。投影曲线应该是指将这条空间曲线沿着某个坐标轴方向投影到对应的坐标平面上，比如xOy平面就是忽</td>
+<td class="reasoning-text" title="嗯，我现在要解决的问题是求由两个方程组成的曲线在xOy平面和yOz平面上的投影曲线的方程。这两个方程是x² + y² + z² = a²和x² + y² - a x = 0。首先，我需要理解题目要求的是什么。投影曲线应该是指将这条空间曲线沿着某个坐标轴方向投影到对应的坐标平面上，比如xOy平面就是忽略z坐标，而yOz平面则是忽略x坐标。不过可能需要更仔细的分析。
+
+首先，我应该先明确这两个方程所代表的几何图形。第一个方程x² + y² + z² = a²显然是一个球面，半径为a，中心在原点。第二">嗯，我现在要解决的问题是求由两个方程组成的曲线在xOy平面和yOz平面上的投影曲线的方程。这两个方程是x² + y² + z² = a²和x² + y² - a x = 0。首先，我需要理解题目要求的是什么。投影曲线应该是指将这条空间曲线沿着某个坐标轴方向投影到对应的坐标平面上，比如xOy平面就是忽略z坐标，而yOz平面则是忽略x坐标。不过可能需要更仔细的分析。
+
+首先，我应该先明确这两个方程所代表的几何图形。第一个方程x² + y² + z² = a²显然是一个球面，半径为a，中心在原点。第二</td>
+<td class="explanation-text">模型在求yOz平面投影时，推导过程正确但最终未给出明确的投影曲线方程，且存在大量无意义的重复内容，导致答案不完整。正确投影方程应为 y² = z² - z⁴/a² 或等价形式。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">100.93s</td>
+<td class="latency-cell">8.42s</td>
+</tr>
+<tr>
+<td class="num">3</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0072</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求下列极限：
+(1) lim_{(x,y)→(0,0)} (1 - cos(x^2 + y^2)) / (x^2 y^2 (x^2 + y^2))
+(2) lim_{(x,y)→(+∞,+∞)} (x^2 + y^2) e^{-(x+y)}</td>
+<td class="answer-text">{'(1)': '+∞', '(2)': '0'}</td>
+<td class="reasoning-text" title="对于第一个极限，使用泰勒展开将分子近似为(x² + y²)²/2，分母为x²y²(x² + y²)，化简后得到(x² + y²)/(2x²y²)。通过极坐标变换或沿不同路径分析，发现极限趋向于正无穷大。对于第二个极限，将表达式转化为(x² + y²)/e^{x+y}，利用指数函数增长速度远快于多项式，结合夹逼定理或路径分析，得出极限为0。">对于第一个极限，使用泰勒展开将分子近似为(x² + y²)²/2，分母为x²y²(x² + y²)，化简后得到(x² + y²)/(2x²y²)。通过极坐标变换或沿不同路径分析，发现极限趋向于正无穷大。对于第二个极限，将表达式转化为(x² + y²)/e^{x+y}，利用指数函数增长速度远快于多项式，结合夹逼定理或路径分析，得出极限为0。</td>
+<td class="explanation-text">第一个极限的答案错误。虽然泰勒展开正确，但化简后的表达式 (x²+y²)/(2x²y²) 在 (0,0) 处沿不同路径极限不同（例如沿 y=x 趋于无穷，沿 y=0 或 x=0 时分母为零但分子也为零，需更细致分析），实际上该极限不存在（不是无穷大），因为沿路径 y=0 或 x=0 时原式分母为零但分子也为零，极限为0，而沿 y=x 时趋于无穷，故极限不存在。第二个极限正确。</td>
+<td><span class="error-tag et-logic_error">逻辑错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">100.94s</td>
+<td class="latency-cell">9.91s</td>
+</tr>
+<tr>
+<td class="num">4</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0078</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求下列函数的偏导数：
+(1) z = e^(xy) + yx²
+(2) z = e^(sin x) · cos y
+(3) z = (1 + xy)^y
+(4) u = x^(y/z)</td>
+<td class="answer-text">嗯，我现在要解决这四个函数的偏导数问题。让我一个一个来仔细想想。首先，我得回忆一下偏导数的定义和求导法则，尤其是涉及到多个变量的时候，要注意对哪个变量求导，其他变量暂时当作常数处理。好的，先看第一个函数。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这四个函数的偏导数问题。让我一个一个来仔细想想。首先，我得回忆一下偏导数的定义和求导法则，尤其是涉及到多个变量的时候，要注意对哪个变量求导，其他变量暂时当作常数处理。好的，先看第一个函数。
+
+第一个函数是z = e^(xy) + yx²。这里有两个变量x和y，所以我要分别求对x和y的偏导数。先求对x的偏导数。对于e^(xy)这一项，对x求导的话，应该用链式法则，导数是e^(xy)乘以y，因为y当作常数。然后第二项是yx²，对x求导的话，y是常数，所以导数是2yx。所以∂z/∂x">
+嗯，我现在要解决这四个函数的偏导数问题。让我一个一个来仔细想想。首先，我得回忆一下偏导数的定义和求导法则，尤其是涉及到多个变量的时候，要注意对哪个变量求导，其他变量暂时当作常数处理。好的，先看第一个函数。
+
+第一个函数是z = e^(xy) + yx²。这里有两个变量x和y，所以我要分别求对x和y的偏导数。先求对x的偏导数。对于e^(xy)这一项，对x求导的话，应该用链式法则，导数是e^(xy)乘以y，因为y当作常数。然后第二项是yx²，对x求导的话，y是常数，所以导数是2yx。所以∂z/∂x</td>
+<td class="explanation-text">模型在第四个函数u = x^(y/z)的偏导数求解中，没有给出任何具体的导数表达式，而是陷入了重复的、无意义的思考循环，未能完成计算。因此答案不完整，不符合题目要求。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">89.2s</td>
+<td class="latency-cell">3.21s</td>
+</tr>
+<tr>
+<td class="num">5</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0088</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空题：
+(1) 设 z = x²y³，则当 x = 2, y = -1, Δx = 0.02, Δy = -0.01 时，Δz = ______，dz = ______。
+(2) 设 z = ln(1 + x² + y²)，则 dz 在 x=1, y=2 处的值为 ______。</td>
+<td class="answer-text">嗯，我现在要解决这两个填空题，都是关于微分和全微分的。让我仔细看看题目，然后一步步来思考。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这两个填空题，都是关于微分和全微分的。让我仔细看看题目，然后一步步来思考。
+
+首先看第一个问题：设z = x²y³，当x=2，y=-1，Δx=0.02，Δy=-0.01时，求Δz和dz。第二个问题是求z=ln(1+x²+y²)在x=1，y=2处的全微分dz的值。
+
+先处理第一个问题。Δz应该是指函数z在x和y变化后的实际变化量，也就是z(x+Δx, y+Δy) - z(x,y)。而dz则是全微分，用全微分公式计算。所以需要分别计算这两个值。
+
+首先计算Δz。原来的x=2，y=-">
+嗯，我现在要解决这两个填空题，都是关于微分和全微分的。让我仔细看看题目，然后一步步来思考。
+
+首先看第一个问题：设z = x²y³，当x=2，y=-1，Δx=0.02，Δy=-0.01时，求Δz和dz。第二个问题是求z=ln(1+x²+y²)在x=1，y=2处的全微分dz的值。
+
+先处理第一个问题。Δz应该是指函数z在x和y变化后的实际变化量，也就是z(x+Δx, y+Δy) - z(x,y)。而dz则是全微分，用全微分公式计算。所以需要分别计算这两个值。
+
+首先计算Δz。原来的x=2，y=-</td>
+<td class="explanation-text">模型对第(1)题的计算正确，但第(2)题的回答不完整：题目要求的是dz在x=1,y=2处的具体数值，而模型只给出了含dx,dy的表达式，未代入dx,dy的值（题目未给出dx,dy，通常理解为求全微分表达式，但填空题应填写具体数值或表达式，此处模型未明确给出最终答案形式，且与常见答案格式不符）。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.90</span></td>
+<td class="latency-cell">100.95s</td>
+<td class="latency-cell">4.34s</td>
+</tr>
+<tr>
+<td class="num">6</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0096</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">1. 设 $z = e^{x - 2y}$，其中 $x = \sin t$，$y = t^3$，求 $\frac{dz}{dt}$。
+2. 设 $z = u^2 v$，其中 $u = x \cos y$，$v = x \sin y$，求 $\frac{\partial z}{\partial x}$ 和 $\frac{\partial z}{\partial y}$。
+3. 设 $y^x = x^y$，求 $\frac{dy}{dx}$。</td>
+<td class="answer-text">{'1': '\\frac{dz}{dt} = e^{\\sin t - 2t^3} (\\cos t - 6t^2)', '2': {'\\frac{\\partial z}{\\partial x}': '3x^2 \\cos^2 y \\sin y', '\\frac{\\partial z}</td>
+<td class="reasoning-text" title="1. 使用链式法则，计算z对x和y的偏导数，再乘以x和y对t的导数，合并后得到结果。
+2. 通过代入u和v的表达式后直接求导，或使用链式法则，两种方法均得到一致结果。
+3. 对原方程取自然对数后隐函数求导，整理方程解出dy/dx，并化简。">1. 使用链式法则，计算z对x和y的偏导数，再乘以x和y对t的导数，合并后得到结果。
+2. 通过代入u和v的表达式后直接求导，或使用链式法则，两种方法均得到一致结果。
+3. 对原方程取自然对数后隐函数求导，整理方程解出dy/dx，并化简。</td>
+<td class="explanation-text">第3题答案错误。正确结果应为 dy/dx = (y (x ln y - y)) / (x (y ln x - x))，而模型给出的分子分母符号相反。</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">1.00</span></td>
+<td class="latency-cell">77.92s</td>
+<td class="latency-cell">3.64s</td>
+</tr>
+<tr>
+<td class="num">7</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0147</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">设 z = z(x, y) 是由方程 x² - 6xy + 10y² - 2yz - z² + 18 = 0 确定的函数，求 z = z(x, y) 的极值。</td>
+<td class="answer-text">嗯，我现在要解决的问题是，给定方程x² -6xy +10y² -2yz -z² +18=0确定的函数z=z(x,y)，求它的极值。首先，我需要回忆一下如何求隐函数的极值。可能需要用到隐函数定理，或者通过求偏导数来找到临界点，然后判断这些点是否为极值点。</td>
+<td class="reasoning-text" title="嗯，我现在要解决的问题是，给定方程x² -6xy +10y² -2yz -z² +18=0确定的函数z=z(x,y)，求它的极值。首先，我需要回忆一下如何求隐函数的极值。可能需要用到隐函数定理，或者通过求偏导数来找到临界点，然后判断这些点是否为极值点。
+
+首先，我应该确定这个方程是否能确定z作为x和y的函数。根据隐函数定理，如果在某个点处，关于z的偏导数不为零，那么在该点附近可以确定z是x和y的函数。这里方程是F(x,y,z)=x² -6xy +10y² -2yz -z² +18=0。那么，对z">嗯，我现在要解决的问题是，给定方程x² -6xy +10y² -2yz -z² +18=0确定的函数z=z(x,y)，求它的极值。首先，我需要回忆一下如何求隐函数的极值。可能需要用到隐函数定理，或者通过求偏导数来找到临界点，然后判断这些点是否为极值点。
+
+首先，我应该确定这个方程是否能确定z作为x和y的函数。根据隐函数定理，如果在某个点处，关于z的偏导数不为零，那么在该点附近可以确定z是x和y的函数。这里方程是F(x,y,z)=x² -6xy +10y² -2yz -z² +18=0。那么，对z</td>
+<td class="explanation-text">模型找到了两个临界点(9,3,3)和(-9,-3,-3)，但未完成极值判断（未进行二阶导数检验或等价分析），因此答案不完整。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.90</span></td>
+<td class="latency-cell">102.99s</td>
+<td class="latency-cell">6.41s</td>
+</tr>
+<tr>
+<td class="num">8</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0162</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">选择题：
+（1）二重积分 $\iint_D f(x,y) \, ds = \lim_{\lambda \to 0} \sum_{i=1}^n f(\xi_i, \eta_i) \Delta \sigma_i$ 中的 $\lambda$ 为（ ）
+A. 最大小区间长  B. 小区域最大面积  C. 小区域直径  D. 小区域最大直径
+
+（2）二重积分 $\iint_D f(x,y) \, dxdy$ 的值与（ ）
+A. 函数 $f$ 及变量 $x,y$ 有关  B. 区域 $D$ 及变量 $x,y$ 无关  C. 函数 $f$ 及区域 $D$ 有关  D. 函数 $f$ 无关，区域 $D$ 有关
+
+（3）函数 $f(x,y)$ 在有界闭域 $D$ 上连续是二重积分 $\iint_D f(x,y) \, ds$ 存在的（ ）
+A. 充分必要条件  B. 充分条件，但非必要条件  C. 必要条件，但非充分条件  D. 既非充分条件，又非必要条件
+
+（4）设平面区域 $D = \{ (x,y) \mid x^2 + y^2 \leq 1 \}$，$D_1 = \{ (x,y) \mid x^2 + y^2 \leq 1, x \geq 0, y \geq 0 \}$，则下列等式一定成立的是（ ）
+A. $\iint_D f(x,y) \, dxdy = 4 \iint_{D_1} f(x,y) \, dxdy$  B. $\iint_D xy \, dxdy = 4 \iint_{D_1} xy \, dxdy$  C. $\iint_D \sqrt{x^2+y^2} \, dxdy = 4 \iint_{D_1} \sqrt{x^2+y^2} \, dxdy$  D. $\iint_D x \, dxdy = 4 \iint_{D_1} x \, dxdy$
+
+（5）设平面区域 $D = \{ (x,y) \mid -a \leq x \leq a, x \leq y \leq a \}$，$D_1 = \{ (x,y) \mid 0 \leq x \leq a, x \leq y \leq a \}$，则 $\iint_D (xy + \cos x \sin y) \, dxdy =$（ ）
+A. $2 \iint_{D_1} \cos x \sin y \, dxdy$  B. $2 \iint_{D_1} xy \, dxdy$  C. $4 \iint_{D_1} (xy + \cos x \sin y) \, dxdy$  D. $0$</td>
+<td class="answer-text">嗯，我现在要解决这五道关于二重积分的选择题。让我一个一个仔细想想看，可能有些地方需要回忆课本里的知识点，或者通过例子来验证选项是否正确。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这五道关于二重积分的选择题。让我一个一个仔细想想看，可能有些地方需要回忆课本里的知识点，或者通过例子来验证选项是否正确。
+
+首先看第一题：
+
+（1）二重积分 $\iint_D f(x,y) \, ds = \lim_{\lambda \to 0} \sum_{i=1}^n f(\xi_i, \eta_i) \Delta \sigma_i$ 中的 $\lambda$ 为（ ）
+选项是A到D四个选项，我需要确定这里的λ代表什么。
+
+我记得二重积分的定义是将区域D分割成n个小区域Δσ">
+嗯，我现在要解决这五道关于二重积分的选择题。让我一个一个仔细想想看，可能有些地方需要回忆课本里的知识点，或者通过例子来验证选项是否正确。
+
+首先看第一题：
+
+（1）二重积分 $\iint_D f(x,y) \, ds = \lim_{\lambda \to 0} \sum_{i=1}^n f(\xi_i, \eta_i) \Delta \sigma_i$ 中的 $\lambda$ 为（ ）
+选项是A到D四个选项，我需要确定这里的λ代表什么。
+
+我记得二重积分的定义是将区域D分割成n个小区域Δσ</td>
+<td class="explanation-text">模型对第5题的推理不完整，未能得出最终答案，且推理过程中存在计算错误和逻辑不清晰，导致无法正确判断选项。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.90</span></td>
+<td class="latency-cell">98.23s</td>
+<td class="latency-cell">6.95s</td>
+</tr>
+<tr>
+<td class="num">9</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0163</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">（5）设平面区域 $D = \{ (x,y) \mid -a \leq x \leq a, x \leq y \leq a \}$，$D_1 = \{ (x,y) \mid 0 \leq x \leq a, x \leq y \leq a \}$，则 $\iint_D (xy + \cos x \sin y) \, dxdy =$（ ）
+A. $2 \iint_{D_1} \cos x \sin y \, dxdy$  B. $2 \iint_{D_1} xy \, dxdy$  C. $4 \iint_{D_1} (xy + \cos x \sin y) \, dxdy$  D. $0$</td>
+<td class="answer-text">嗯，我现在要解决这个二重积分的问题，题目是给定平面区域D和D1，然后求积分的结果等于哪一个选项。首先，我需要仔细理解题目中的区域D和D1的定义，然后分析被积函数的对称性，看看能不能利用对称性来简化计算。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这个二重积分的问题，题目是给定平面区域D和D1，然后求积分的结果等于哪一个选项。首先，我需要仔细理解题目中的区域D和D1的定义，然后分析被积函数的对称性，看看能不能利用对称性来简化计算。
+
+首先，题目中的区域D是{(x,y) | -a ≤x ≤a, x ≤ y ≤a}，而D1是{(x,y) | 0 ≤x ≤a, x ≤ y ≤a}。看起来D1是D在x≥0的部分，而D则是从x=-a到x=a，但y的范围是从x到a。所以可能D关于y轴对称吗？或者说有没有其他的对称性？
+
+接下来，被积">
+嗯，我现在要解决这个二重积分的问题，题目是给定平面区域D和D1，然后求积分的结果等于哪一个选项。首先，我需要仔细理解题目中的区域D和D1的定义，然后分析被积函数的对称性，看看能不能利用对称性来简化计算。
+
+首先，题目中的区域D是{(x,y) | -a ≤x ≤a, x ≤ y ≤a}，而D1是{(x,y) | 0 ≤x ≤a, x ≤ y ≤a}。看起来D1是D在x≥0的部分，而D则是从x=-a到x=a，但y的范围是从x到a。所以可能D关于y轴对称吗？或者说有没有其他的对称性？
+
+接下来，被积</td>
+<td class="explanation-text">模型在推理过程中正确得出xy项积分为0，但未能完成cosx siny项积分的最终判断。实际上，通过对称性分析，cosx siny在D上的积分等于2倍在D1上的积分，因此正确答案应为A。模型未给出最终答案，属于不完整。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">93.42s</td>
+<td class="latency-cell">3.72s</td>
+</tr>
+<tr>
+<td class="num">10</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0164</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空题：
+（1）设 $D$ 是由 $x$ 轴、$y$ 轴及直线 $x+y=1$ 所围成的三角形闭区域，则比较二重积分的值的大小，有 $\iint_D \ln(x+y)^2 \, ds$ ______ $\iint_D \ln(x+y)^3 \, ds$（填“&gt;”、“&lt;”或“=”）。
+
+（2）设 $I = \iint_D (x^2 + 4y^2 + 9) \, ds$，其中 $D = \{ (x,y) \mid x^2 + y^2 \leq 4 \}$，则估计二重积分的值，有 ______ $\leq I \leq$ ______。
+
+（3）设积分区域 $D$ 的面积为 $S$，则 $\iint_D 2 \, ds =$ ______。
+
+（4）设 $D: x^2 + y^2 \leq 1$，根据二重积分的几何意义，$\iint_D \sqrt{1-x^2-y^2} \, dxdy =$ ______。</td>
+<td class="answer-text">{'1': '&gt;', '2': ['36π', '100π'], '3': '2S', '4': '2π/3'}</td>
+<td class="reasoning-text" title="（1）在区域D内，x+y∈(0,1]，故ln(x+y)为负数。因此(ln(x+y))²为正，(ln(x+y))³为负，积分结果前者为正，后者为负，故前者大于后者。
+（2）被积函数x²+4y²+9在D内的最小值为9（当x=0,y=0时），最大值为25（当x=0,y=±2时）。区域D的面积为4π，故积分范围为9×4π到25×4π。
+（3）二重积分∬_D 2 dσ等于2乘以区域D的面积S，即2S。
+（4）积分∬_D √(1−x²−y²) dxdy表示半径为1的上半球体积，其值为(2/3)π。">（1）在区域D内，x+y∈(0,1]，故ln(x+y)为负数。因此(ln(x+y))²为正，(ln(x+y))³为负，积分结果前者为正，后者为负，故前者大于后者。
+（2）被积函数x²+4y²+9在D内的最小值为9（当x=0,y=0时），最大值为25（当x=0,y=±2时）。区域D的面积为4π，故积分范围为9×4π到25×4π。
+（3）二重积分∬_D 2 dσ等于2乘以区域D的面积S，即2S。
+（4）积分∬_D √(1−x²−y²) dxdy表示半径为1的上半球体积，其值为(2/3)π。</td>
+<td class="explanation-text">第（2）题答案错误。被积函数 x^2+4y^2+9 在区域 D: x^2+y^2≤4 上的最小值应为 9（在 (0,0) 处），最大值应为 4*4+9=25？实际上，x^2+4y^2 在边界上最大值：令 x=2cosθ, y=2sinθ，则 x^2+4y^2=4cos^2θ+16sin^2θ=4+12sin^2θ，最大值为 16（当 sinθ=±1 时），故被积函数最大值为 16+9=25。区域面积 4π，所以积分范围应为 9×4π=36π 到 25×4π=100π，但模型给出的答案 ['36π', '100π'] 格式正确，然而实际计算中最大值应为 25，但 25×4π=100π，所以数值正</td>
+<td><span class="error-tag et-other">未分类</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">68.5s</td>
+<td class="latency-cell">6.83s</td>
+</tr>
+<tr>
+<td class="num">11</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0179</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算下列二重积分：
+(1) ∬_D (x^2 / y^2) dxdy，其中D是由xy=2, x=2, y=1+x^2所围成的闭区域。
+(2) ∬_D (x-1)y dxdy，其中D是由y=(x-1)^2, y=1-x, y=1所围成的闭区域。
+(3) ∬_D x dxdy，其中D是由y=x, y=x^2-2x所围成的闭区域。
+(4) ∬_D (x^2+y^2) dxdy，其中D={(x,y) | 2x-x^2 ≤ y ≤ 4-x^2}。</td>
+<td class="answer-text">嗯，我现在要解决这四个二重积分的问题，看起来每个题目都需要不同的方法和步骤。让我一个一个来仔细思考，先从第一个开始。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这四个二重积分的问题，看起来每个题目都需要不同的方法和步骤。让我一个一个来仔细思考，先从第一个开始。
+
+**问题（1）：计算∬_D (x² / y²) dxdy，其中D是由xy=2, x=2, y=1+x²所围成的闭区域。**
+
+首先，我需要明确积分区域D的形状，这样才能确定积分的上下限。题目中给出的三个曲线是xy=2，x=2，和y=1+x²。我需要找到这三个曲线的交点，从而确定积分区域的边界。
+
+首先，找到xy=2和x=2的交点。当x=2时，代入xy=2得y=1，所以交点是(">
+嗯，我现在要解决这四个二重积分的问题，看起来每个题目都需要不同的方法和步骤。让我一个一个来仔细思考，先从第一个开始。
+
+**问题（1）：计算∬_D (x² / y²) dxdy，其中D是由xy=2, x=2, y=1+x²所围成的闭区域。**
+
+首先，我需要明确积分区域D的形状，这样才能确定积分的上下限。题目中给出的三个曲线是xy=2，x=2，和y=1+x²。我需要找到这三个曲线的交点，从而确定积分区域的边界。
+
+首先，找到xy=2和x=2的交点。当x=2时，代入xy=2得y=1，所以交点是(</td>
+<td class="explanation-text">模型只完成了问题(1)和(2)的部分计算，且问题(2)的计算未完成，问题(3)和(4)完全没有处理。因此答案不完整，无法判定正确性。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.90</span></td>
+<td class="latency-cell">96.69s</td>
+<td class="latency-cell">4.56s</td>
+</tr>
+<tr>
+<td class="num">12</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0192</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算下列二重积分：
+(1) ∬_D (x^2 + y^2 - 1) dσ，其中D={(x,y) | 0≤x≤1, 0≤y≤1}。
+(2) 设二元函数 f(x,y) = { x^2, x+y≤1; 1/(x^2+y^2), 1&lt;x+y≤2 }，计算二重积分 ∬_D f(x,y) dσ，其中D={(x,y) | x+y≤2}。</td>
+<td class="answer-text">{</td>
+<td class="reasoning-text" title="{
+  &quot;answer&quot;: {
+    &quot;(1)&quot;: &quot;-\\frac{1}{3}&quot;,
+    &quot;(2)&quot;: &quot;\\frac{1}{12} + \\frac{\\pi \\ln 2}{2}&quot;
+  },
+  &quot;reasoning&quot;: &quot;对于问题(1)，将二重积分拆分为累次积分，先对x积分再对y积分。计算内部积分时，将被积函数分解为x²和y²−1两部分，分别积分后合并结果">{
+  &quot;answer&quot;: {
+    &quot;(1)&quot;: &quot;-\\frac{1}{3}&quot;,
+    &quot;(2)&quot;: &quot;\\frac{1}{12} + \\frac{\\pi \\ln 2}{2}&quot;
+  },
+  &quot;reasoning&quot;: &quot;对于问题(1)，将二重积分拆分为累次积分，先对x积分再对y积分。计算内部积分时，将被积函数分解为x²和y²−1两部分，分别积分后合并结果</td>
+<td class="explanation-text">第(1)问答案正确，但第(2)问答案错误。第(2)问中，D2区域被积函数为1/(x^2+y^2)，转换为极坐标后积分应为∫_{0}^{π/2} ∫_{1/(cosθ+sinθ)}^{2/(cosθ+sinθ)} (1/r^2) * r dr dθ = ∫_{0}^{π/2} ∫_{1/(cosθ+sinθ)}^{2/(cosθ+sinθ)} (1/r) dr dθ = ∫_{0}^{π/2} ln(2) dθ = (π/2) ln2，但D1积分计算有误：D1区域为x+y≤1，被积函数为x^2，积分应为∫_{0}^{1} ∫_{0}^{1-x} x^2 dy dx = ∫_{0}^{1} x^2</td>
+<td><span class="error-tag et-other">未分类</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">105.06s</td>
+<td class="latency-cell">19.9s</td>
+</tr>
+<tr>
+<td class="num">13</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0197</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空：
+(1) 设f(x,y,z)为连续函数，空间闭区域Ω={(x,y,z) | x^2+y^2+z^2 ≤ r^2} (r&gt;0)，则 lim_{r→0} (1/(4πr^3)) ∭_Ω f(x,y,z) dv = ______。
+(2) 设Ω是由z=x^2+y^2, z=1所围成的闭区域，则把三重积分∭_Ω f(x,y,z) dv化成积分次序为z→y→x的三次积分是______，化成积分次序为x→y→z的三次积分是______。</td>
+<td class="answer-text">{'1': 'f(0,0,0)/3', '2': ['∫_{-1}^1 ∫_{-√(1−x²)}^{√(1−x²)} ∫_{x²+y²}^1 f(x,y,z) dz dy dx', '∫_{0}^1 ∫_{-√z}^{√z} ∫_{-√(z−y²)}^{√(z−y²)} f(x,y,z) dx dy</td>
+<td class="reasoning-text" title="对于问题(1)，利用积分中值定理，当r→0时，积分平均值趋近于f在原点的值，结合体积系数推导得极限为f(0,0,0)/3。对于问题(2)，分析区域Ω的几何形状，确定积分限：先z后y再x时，z从抛物面到1，x和y在单位圆内；先x后y再z时，z从0到1，y和x在抛物面截面圆内。">对于问题(1)，利用积分中值定理，当r→0时，积分平均值趋近于f在原点的值，结合体积系数推导得极限为f(0,0,0)/3。对于问题(2)，分析区域Ω的几何形状，确定积分限：先z后y再x时，z从抛物面到1，x和y在单位圆内；先x后y再z时，z从0到1，y和x在抛物面截面圆内。</td>
+<td class="explanation-text">问题(1)的极限应为f(0,0,0)，而不是f(0,0,0)/3。错误在于将体积4πr³误当作球体积，实际上球体积是(4/3)πr³，但分母是4πr³，所以极限应为f(0,0,0)。问题(2)的第一个积分次序正确，但第二个积分次序中z的范围应为从0到1，但积分限中y的范围从-√z到√z，x的范围从-√(z-y²)到√(z-y²)是正确的，然而模型答案中写的是∫_{0}^1 ∫_{-√z}^{√z} ∫_{-√(z−y²)}^{√(z−y²)} f(x,y,z) dx dy dz，这实际上是先x后y再z，但题目要求的是先x→y→z，即先对x积分，再对y，最后对z，这个写法符合要求，但需注意积分次</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">1.00</span></td>
+<td class="latency-cell">60.52s</td>
+<td class="latency-cell">6.09s</td>
+</tr>
+<tr>
+<td class="num">14</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0210</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求由 y² = x 与 x = 1 围成的匀质薄板 D (密度ρ=1) 关于通过原点的任一轴的转动惯量，并求其最大值和最小值。</td>
+<td class="answer-text">嗯，我现在要解决的问题是求由y² = x和x = 1围成的匀质薄板D（密度ρ=1）关于通过原点的任一轴的转动惯量，并求其最大值和最小值。这个问题看起来有点挑战性，不过让我慢慢理清楚思路。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决的问题是求由y² = x和x = 1围成的匀质薄板D（密度ρ=1）关于通过原点的任一轴的转动惯量，并求其最大值和最小值。这个问题看起来有点挑战性，不过让我慢慢理清楚思路。
+
+首先，我需要明确这个区域D的形状。y² = x是一个开口向右的抛物线，而x = 1是一条垂直于x轴的直线。它们的交点应该是在x=1时，y²=1，所以y=1和y=-1，也就是点(1,1)和(1,-1)。所以区域D应该是由抛物线y²=x左侧和x=1右侧围成的区域，也就是从x=0到x=1之间，抛物线和直线x=1之">
+嗯，我现在要解决的问题是求由y² = x和x = 1围成的匀质薄板D（密度ρ=1）关于通过原点的任一轴的转动惯量，并求其最大值和最小值。这个问题看起来有点挑战性，不过让我慢慢理清楚思路。
+
+首先，我需要明确这个区域D的形状。y² = x是一个开口向右的抛物线，而x = 1是一条垂直于x轴的直线。它们的交点应该是在x=1时，y²=1，所以y=1和y=-1，也就是点(1,1)和(1,-1)。所以区域D应该是由抛物线y²=x左侧和x=1右侧围成的区域，也就是从x=0到x=1之间，抛物线和直线x=1之</td>
+<td class="explanation-text">模型在推导转动惯量表达式时出现错误：最初使用点到轴距离平方的公式有误，导致得到 I(θ) = I_x sin²θ + I_y cos²θ，但正确表达式应为 I(θ) = I_y sin²θ + I_x cos²θ。虽然最终因惯性积为零而巧合地得到相同数值结果（最大值4/7，最小值4/15），但推理过程存在逻辑错误，且未完成最终答案的完整表述。</td>
+<td><span class="error-tag et-logic_error">逻辑错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">92.43s</td>
+<td class="latency-cell">9.61s</td>
+</tr>
+<tr>
+<td class="num">15</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0227</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算由曲面 y = √(a^2 - x^2)，平面 z = x + 2y，x = 0，y = 0，z = 0 所围成的第一卦限部分的立体体积。</td>
+<td class="answer-text">a³</td>
+<td class="reasoning-text" title="首先，确定积分区域D为xy平面上由x=0，y=0，和y=√(a²−x²)所围成的区域。体积V通过二重积分计算，积分函数为z=x+2y。将二重积分转化为累次积分，先对y积分，再对x积分。计算内部积分得到x√(a²−x²) + a²−x²，然后分别计算两部分积分，得到(1/3)a³和(2/3)a³，相加得到V=a³。">首先，确定积分区域D为xy平面上由x=0，y=0，和y=√(a²−x²)所围成的区域。体积V通过二重积分计算，积分函数为z=x+2y。将二重积分转化为累次积分，先对y积分，再对x积分。计算内部积分得到x√(a²−x²) + a²−x²，然后分别计算两部分积分，得到(1/3)a³和(2/3)a³，相加得到V=a³。</td>
+<td class="explanation-text">模型计算有误。正确体积应为 (2/3)a³。错误在于计算 ∫₀ᵃ x√(a²−x²) dx 时得到 (1/3)a³，实际应为 (1/3)a³？但更关键的是，积分区域应为第一卦限，由曲面 y=√(a²−x²) 与坐标平面围成，但该曲面是圆柱面的一部分，在 xOy 平面上的投影是四分之一圆，而模型正确。然而，计算 ∫₀ᵃ (a²−x²) dx 得到 (2/3)a³，但 ∫₀ᵃ x√(a²−x²) dx 应为 (1/3)a³，总和为 a³。但正确体积应为 (2/3)a³，因为积分函数 z=x+2y 在区域上的积分结果应为 (2/3)a³。模型在计算内部积分时可能出错，或者积分限有误。实际上，该立体体</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">1.00</span></td>
+<td class="latency-cell">41.08s</td>
+<td class="latency-cell">6.37s</td>
+</tr>
+<tr>
+<td class="num">16</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0231</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空：设 l 为椭圆 x^2/4 + y^2/3 = 1，其周长记为 a，则 ∮_l (2xy + 3x^2 + 4y^2) ds = ______。</td>
+<td class="answer-text">12a</td>
+<td class="reasoning-text" title="首先，椭圆的参数方程为x=2cosθ，y=√3 sinθ，θ∈[0,2π]。计算曲线积分时，利用对称性分析：2xy项在积分中因对称性相互抵消，结果为0。剩余项3x²+4y²代入参数方程后化简为12(cos²θ + sin²θ)=12。积分结果为12乘以椭圆周长a，故最终结果为12a。">首先，椭圆的参数方程为x=2cosθ，y=√3 sinθ，θ∈[0,2π]。计算曲线积分时，利用对称性分析：2xy项在积分中因对称性相互抵消，结果为0。剩余项3x²+4y²代入参数方程后化简为12(cos²θ + sin²θ)=12。积分结果为12乘以椭圆周长a，故最终结果为12a。</td>
+<td class="explanation-text">模型错误地将3x²+4y²在椭圆上简化为常数12，但实际代入参数方程后得到3*(4cos²θ)+4*(3sin²θ)=12cos²θ+12sin²θ=12，这一步正确。然而，模型忽略了ds的表达式并非常数，导致积分结果不等于12乘以周长a。正确的做法是计算∮_l (3x²+4y²) ds时，需考虑ds的具体形式，不能简单提取常数。因此最终答案12a是错误的。</td>
+<td><span class="error-tag et-logic_error">逻辑错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">40.71s</td>
+<td class="latency-cell">8.91s</td>
+</tr>
+<tr>
+<td class="num">17</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0247</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">设 S 是平面 x + z = a 在柱面 x^2 + y^2 = a^2 内的部分，则 ∬_S (x + z) dS = ( )。
+A. π a^2
+B. π a^3
+C. 2π a^2
+D. 2π a^3</td>
+<td class="answer-text">嗯，好的，我现在要解决这个曲面积分的问题。题目是说，S是平面x + z = a在柱面x² + y² = a²内的部分，然后计算曲面积分∬_S (x + z) dS。选项是四个关于a的表达式，我需要仔细分析一下怎么做。</td>
+<td class="reasoning-text" title="
+嗯，好的，我现在要解决这个曲面积分的问题。题目是说，S是平面x + z = a在柱面x² + y² = a²内的部分，然后计算曲面积分∬_S (x + z) dS。选项是四个关于a的表达式，我需要仔细分析一下怎么做。
+
+首先，我应该回忆一下曲面积分的计算方法。曲面积分通常有两种，一种是标量场的积分，另一种是向量场的积分。这里题目中的被积函数是(x + z)，看起来像是标量场的积分，所以应该是第一类曲面积分，也就是对面积的曲面积分。
+
+第一类曲面积分的计算方法通常是将曲面参数化，然后用参数化的变">
+嗯，好的，我现在要解决这个曲面积分的问题。题目是说，S是平面x + z = a在柱面x² + y² = a²内的部分，然后计算曲面积分∬_S (x + z) dS。选项是四个关于a的表达式，我需要仔细分析一下怎么做。
+
+首先，我应该回忆一下曲面积分的计算方法。曲面积分通常有两种，一种是标量场的积分，另一种是向量场的积分。这里题目中的被积函数是(x + z)，看起来像是标量场的积分，所以应该是第一类曲面积分，也就是对面积的曲面积分。
+
+第一类曲面积分的计算方法通常是将曲面参数化，然后用参数化的变</td>
+<td class="explanation-text">模型的计算过程正确，但最终结果√2 π a^3与选项不符。由于选项中没有该结果，且题目为选择题，模型未能选出正确选项，因此答案错误。</td>
+<td><span class="error-tag et-other">其他错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">100.45s</td>
+<td class="latency-cell">3.33s</td>
+</tr>
+<tr>
+<td class="num">18</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0250</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算曲面积分 ∬_S (x^2 + y^2 + z^2) dS，其中 S 是两球 x^2 + y^2 + z^2 ≤ R^2 与 x^2 + y^2 + z^2 ≤ 2Rz (R &gt; 0) 公共部分的表面。</td>
+<td class="answer-text">\frac{3}{2} \pi R^4</td>
+<td class="reasoning-text" title="首先，确定两个球体的交线位于z = R/2，半径为(√3 R)/2。公共部分的表面由两个部分组成：第一个球体z ≥ R/2的部分和第二个球体z ≤ R/2的部分。计算这两个部分的曲面积分并相加，得到总积分为\frac{3}{2} \pi R^4。">首先，确定两个球体的交线位于z = R/2，半径为(√3 R)/2。公共部分的表面由两个部分组成：第一个球体z ≥ R/2的部分和第二个球体z ≤ R/2的部分。计算这两个部分的曲面积分并相加，得到总积分为\frac{3}{2} \pi R^4。</td>
+<td class="explanation-text">模型计算的两个部分积分之和与正确结果不符。正确结果应为(5/2)πR^4，而模型得到(3/2)πR^4，存在计算错误。</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">0.90</span></td>
+<td class="latency-cell">75.79s</td>
+<td class="latency-cell">4.5s</td>
+</tr>
+<tr>
+<td class="num">19</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0252</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算下列曲面积分：
+(1) ∬_S (z^3 + 1) dxdy，其中 S 为球面 x^2 + y^2 + z^2 = R^2 (R &gt; 0) 的外侧。
+(2) ∬_S x dy dz + y dz dx + z dx dy，其中 S 为旋转抛物面 z = x^2 + y^2 (z ≤ 1) 的上侧。</td>
+<td class="answer-text">嗯，我现在要解决这两个曲面积分的问题。让我一个一个来仔细想想看。首先第一个问题，计算曲面积分∬_S (z³ +1) dxdy，其中S是球面x²+y²+z²=R²的外侧。第二个问题是计算∬_S x dydz + y dzdx + z dxdy，其中S是旋转抛物面z=x²+y²（z≤1）的上侧。好，先处</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这两个曲面积分的问题。让我一个一个来仔细想想看。首先第一个问题，计算曲面积分∬_S (z³ +1) dxdy，其中S是球面x²+y²+z²=R²的外侧。第二个问题是计算∬_S x dydz + y dzdx + z dxdy，其中S是旋转抛物面z=x²+y²（z≤1）的上侧。好，先处理第一个问题。
+
+首先，第一个积分是关于dxdy的，也就是说这是一个第二类曲面积分，对吧？第二类曲面积分通常需要考虑曲面的侧，也就是方向的问题。这里S是球面的外侧，所以方向应该是向外的。不过对于dx">
+嗯，我现在要解决这两个曲面积分的问题。让我一个一个来仔细想想看。首先第一个问题，计算曲面积分∬_S (z³ +1) dxdy，其中S是球面x²+y²+z²=R²的外侧。第二个问题是计算∬_S x dydz + y dzdx + z dxdy，其中S是旋转抛物面z=x²+y²（z≤1）的上侧。好，先处理第一个问题。
+
+首先，第一个积分是关于dxdy的，也就是说这是一个第二类曲面积分，对吧？第二类曲面积分通常需要考虑曲面的侧，也就是方向的问题。这里S是球面的外侧，所以方向应该是向外的。不过对于dx</td>
+<td class="explanation-text">模型在问题(1)中正确使用了高斯公式，但计算三重积分时出错：∭ z² dV 应为 (4πR^5)/15，乘以3后得 (4πR^5)/5，但模型最终结果正确（4πR^5/5）。然而，问题(2)中模型计算三重积分体积时出错：体积应为 π/2，但模型计算正确（π/2），但随后在计算平面S2上的积分时符号处理错误。实际上，对于平面z=1下侧，法向量为(0,0,-1)，积分应为 -∬ z dxdy = -∬ 1 dxdy = -π，但模型得到-π正确，但原积分应为 3*(π/2) - (-π) = 5π/2，而模型最终写为3*(π/2)未完成计算，且未给出最终答案。因此答案不完整且存在符号错误。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">98.17s</td>
+<td class="latency-cell">5.34s</td>
+</tr>
+<tr>
+<td class="num">20</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0257</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算曲面积分 ∯_S x^3 dy dz + y^3 dz dx + z^3 dx dy，其中：
+(1) S为球面 x^2+y^2+z^2=R^2 (R&gt;0) 的外侧；
+(2) S为锥面 z=√(x^2+y^2) 与 z=1 所围成的立体的表面的外侧。</td>
+<td class="answer-text">嗯，我现在要解决这个曲面积分的问题，题目有两个部分，都是计算曲面积分∯_S x³ dy dz + y³ dz dx + z³ dx dy。首先我得仔细看一下题目，确保自己理解正确。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决这个曲面积分的问题，题目有两个部分，都是计算曲面积分∯_S x³ dy dz + y³ dz dx + z³ dx dy。首先我得仔细看一下题目，确保自己理解正确。
+
+首先，第一个情况是S为球面x²+y²+z²=R²的外侧。第二个情况是S为锥面z=√(x²+y²)和z=1所围成的立体的表面的外侧。我需要分别计算这两个曲面积分。
+
+先处理第一个问题，也就是球面的情况。曲面积分的计算通常有两种方法：直接计算或者使用高斯公式。这里被积函数是向量场的通量积分，所以可能用高斯公式比较方便">
+嗯，我现在要解决这个曲面积分的问题，题目有两个部分，都是计算曲面积分∯_S x³ dy dz + y³ dz dx + z³ dx dy。首先我得仔细看一下题目，确保自己理解正确。
+
+首先，第一个情况是S为球面x²+y²+z²=R²的外侧。第二个情况是S为锥面z=√(x²+y²)和z=1所围成的立体的表面的外侧。我需要分别计算这两个曲面积分。
+
+先处理第一个问题，也就是球面的情况。曲面积分的计算通常有两种方法：直接计算或者使用高斯公式。这里被积函数是向量场的通量积分，所以可能用高斯公式比较方便</td>
+<td class="explanation-text">模型在第二部分（锥面与平面围成的立体）的计算中，错误地使用了高斯公式。该立体表面不封闭（缺少底面），因此不能直接应用高斯公式。正确的做法是分别计算锥面和底面的曲面积分，或者补上底面后使用高斯公式再减去底面的贡献。模型直接对锥面区域进行三重积分，导致结果错误。</td>
+<td><span class="error-tag et-logic_error">逻辑错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">92.92s</td>
+<td class="latency-cell">4.29s</td>
+</tr>
+<tr>
+<td class="num">21</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0258</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算曲面积分 ∯_S 2xz dy dz + yz dz dx - z^2 dx dy，其中S是由曲面 z=√(x^2+y^2) 与 z=2-√(x^2+y^2) 所围成的立体的表面的外侧。</td>
+<td class="answer-text">2π/3</td>
+<td class="reasoning-text" title="首先，将曲面积分转换为向量场的通量积分，应用高斯定理，计算散度后得到体积分。选择柱坐标系，确定积分区域，计算得到结果为2π/3。">首先，将曲面积分转换为向量场的通量积分，应用高斯定理，计算散度后得到体积分。选择柱坐标系，确定积分区域，计算得到结果为2π/3。</td>
+<td class="explanation-text">模型计算散度时出错，正确散度应为2z，而非z。因此后续积分结果2π/3不正确，正确结果应为π。</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">52.72s</td>
+<td class="latency-cell">4.3s</td>
+</tr>
+<tr>
+<td class="num">22</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0260</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算曲面积分 I = ∬_S (y^2 - x) dy dz + (z^2 - y) dz dx + (x^2 - z) dx dy，其中S为抛物面 z=2-(x^2+y^2) (1≤z≤2) 的上侧。</td>
+<td class="answer-text">嗯，我现在要计算这个曲面积分I，题目是∬_S (y² - x) dy dz + (z² - y) dz dx + (x² - z) dx dy，其中S是抛物面z=2−(x²+y²)，并且z在1到2之间的上侧。首先，我需要回忆一下曲面积分的计算方法，可能要用到高斯公式或者直接参数化曲面来计算。</td>
+<td class="reasoning-text" title="嗯，我现在要计算这个曲面积分I，题目是∬_S (y² - x) dy dz + (z² - y) dz dx + (x² - z) dx dy，其中S是抛物面z=2−(x²+y²)，并且z在1到2之间的上侧。首先，我需要回忆一下曲面积分的计算方法，可能要用到高斯公式或者直接参数化曲面来计算。
+
+首先，题目中的积分是第二类曲面积分，也就是对向量场的通量积分。积分表达式是三个分量的组合，分别是(y² -x) dy dz，(z² - y) dz dx，和(x² - z) dx dy。这可能对应向量场F">嗯，我现在要计算这个曲面积分I，题目是∬_S (y² - x) dy dz + (z² - y) dz dx + (x² - z) dx dy，其中S是抛物面z=2−(x²+y²)，并且z在1到2之间的上侧。首先，我需要回忆一下曲面积分的计算方法，可能要用到高斯公式或者直接参数化曲面来计算。
+
+首先，题目中的积分是第二类曲面积分，也就是对向量场的通量积分。积分表达式是三个分量的组合，分别是(y² -x) dy dz，(z² - y) dz dx，和(x² - z) dx dy。这可能对应向量场F</td>
+<td class="explanation-text">模型在应用高斯公式时，对底面D的积分符号处理有误。底面法向量向下，但模型在计算∫_D F·dS时，将F·(0,0,-1)写成了(x²-z)*(-1)，实际上应为(x²-z)*(-1) = -(x²-z)，但后续积分时却写成了(1-x²)，导致符号错误。正确计算应为∫∫ (x²-1)*(-1) dxdy = ∫∫ (1-x²) dxdy，但模型在极坐标积分中正确计算了该值，然而在代入高斯公式时，闭合曲面积分应为I + ∫_D F·dS = -3π/2，但模型将底面D的积分方向搞反，导致最终结果符号错误。正确结果应为-3π/2 + 3π/4 = -3π/4。</td>
+<td><span class="error-tag et-logic_error">逻辑错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">89.22s</td>
+<td class="latency-cell">5.64s</td>
+</tr>
+<tr>
+<td class="num">23</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0263</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算 ∮_Γ (z-y) dx + (x-z) dy + (y-x) dz，其中Γ是从点(a,0,0)经(0,a,0)和(0,0,a)再回到(a,0,0)的三角形。</td>
+<td class="answer-text">为了计算曲线积分  </td>
+<td class="reasoning-text" title="为了计算曲线积分  
+$$
+\oint_{\Gamma} (z - y) \, dx + (x - z) \, dy + (y - x) \, dz
+$$  
+其中 $\Gamma$ 是从点 $(a, 0, 0)$ 经 $(0, a, 0)$ 和 $(0, 0, a)$ 再回到 $(a, 0, 0)$ 的三角形路径，我们可以使用 **斯托克斯定理（Stokes' Theorem）** 来简化计算。
+
+---
+
+### 一、应用斯托克斯定理
+
+斯托克斯定理指出：
+$$
+\oint_{\Gamma}">为了计算曲线积分  
+$$
+\oint_{\Gamma} (z - y) \, dx + (x - z) \, dy + (y - x) \, dz
+$$  
+其中 $\Gamma$ 是从点 $(a, 0, 0)$ 经 $(0, a, 0)$ 和 $(0, 0, a)$ 再回到 $(a, 0, 0)$ 的三角形路径，我们可以使用 **斯托克斯定理（Stokes' Theorem）** 来简化计算。
+
+---
+
+### 一、应用斯托克斯定理
+
+斯托克斯定理指出：
+$$
+\oint_{\Gamma}</td>
+<td class="explanation-text">模型回答不完整，只给出了应用斯托克斯定理的初步思路，没有完成计算，也没有给出最终答案。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">97.48s</td>
+<td class="latency-cell">3.03s</td>
+</tr>
+<tr>
+<td class="num">24</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0264</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算 ∮_L x^2 y dx + (x^2+y^2) dy + (x+y+z) dz，其中L是 x^2+y^2+z^2=11 与 z=x^2+y^2+1 的交线，其方向与z轴正向成右手系。</td>
+<td class="answer-text">-π</td>
+<td class="reasoning-text" title="首先，确定曲线L是球面x²+y²+z²=11与抛物面z=x²+y²+1的交线。联立方程得x²+y²=2，z=3，即L为z=3平面上半径为√2的圆。方向为逆时针（右手系）。应用斯托克斯定理，将曲线积分转化为旋度的曲面积分。计算向量场F=(x²y, x²+y², x+y+z)的旋度∇×F=(1, -1, 2x−x²)。曲面S取为z=3平面内的圆盘，法向量为(0,0,1)，旋度与法向量的点积为2x−x²。利用极坐标计算二重积分∬(2x−x²)dA，其中2x的积分为0（对称性），x²的积分结果为π，故总">首先，确定曲线L是球面x²+y²+z²=11与抛物面z=x²+y²+1的交线。联立方程得x²+y²=2，z=3，即L为z=3平面上半径为√2的圆。方向为逆时针（右手系）。应用斯托克斯定理，将曲线积分转化为旋度的曲面积分。计算向量场F=(x²y, x²+y², x+y+z)的旋度∇×F=(1, -1, 2x−x²)。曲面S取为z=3平面内的圆盘，法向量为(0,0,1)，旋度与法向量的点积为2x−x²。利用极坐标计算二重积分∬(2x−x²)dA，其中2x的积分为0（对称性），x²的积分结果为π，故总</td>
+<td class="explanation-text">模型在计算旋度时出错。向量场F=(x²y, x²+y², x+y+z)的旋度应为(1, -1, 2x-2xy)，但模型写成了(1, -1, 2x−x²)。因此后续积分结果错误，正确答案应为0。</td>
+<td><span class="error-tag et-calculation_error">计算错误</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">81.74s</td>
+<td class="latency-cell">3.34s</td>
+</tr>
+<tr>
+<td class="num">25</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0272</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">计算 ∮_L ds/(|x| + |y|)，其中L是以点A(1,0), B(0,1), C(-1,0), D(0,-1)为顶点的正方形。</td>
+<td class="answer-text">4√2</td>
+<td class="reasoning-text" title="首先，确定正方形的四条边，每条边的参数化后，分母|x| + |y|在每条边上均为1，因此每条边的积分结果为√2。四条边总和为4√2。">首先，确定正方形的四条边，每条边的参数化后，分母|x| + |y|在每条边上均为1，因此每条边的积分结果为√2。四条边总和为4√2。</td>
+<td class="explanation-text">模型错误地认为在每条边上分母|x|+|y|恒为1。实际上，在正方形的边上，例如AB边（从(1,0)到(0,1)），x+y=1，但|x|+|y|=x+y=1，正确；但在BC边（从(0,1)到(-1,0)），x为负，y为正，|x|+|y|=-x+y，该边参数为x=-t, y=1-t（t从0到1），则|x|+|y|=t+1-t=1，也正确；类似地，CD边和DA边也均为1。因此分母确实恒为1。但每条边的弧长ds积分应为边长√2，所以每条边积分∫ ds = √2，总和为4√2。然而，这里需要计算的是∮ ds/(|x|+|y|)，由于分母为1，结果就是周长4√2。但注意：正方形顶点坐标给出，边长为√2，周</td>
+<td><span class="error-tag et-other">未分类</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">54.97s</td>
+<td class="latency-cell">6.47s</td>
+</tr>
+<tr>
+<td class="num">26</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0303</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求下列幂级数的收敛域：
+(1) ∑_{n=1}^{∞} x^n / (n+1)
+(2) ∑_{n=1}^{∞} (x-3)^n / n^2
+(3) ∑_{n=1}^{∞} (x-2)^{2n} / (n * 4^n)
+(4) ∑_{n=1}^{∞} ((-1)^n + 6^n) / (2^n) * x^n</td>
+<td class="answer-text">{'(1)': '收敛域为 [-1, 1)', '(2)': '收敛域为 [2, 4]', '(3)': '收敛域为 (0, 4)', '(4)': '收敛域为 (-1/3, 1/3)'}</td>
+<td class="reasoning-text" title="通过比值法、根值法确定收敛半径，并检查端点处的收敛性：
+
+(1) 使用比值法得收敛半径R=1，x=1时发散，x=-1时收敛。
+(2) 收敛半径R=1，端点x=2和x=4均收敛。
+(3) 通过变量替换y=(x-2)^2，转化为∑(y/4)^n/n，收敛半径R=2，端点x=0和x=4均发散。
+(4) 根值法得收敛半径R=1/3，端点x=±1/3均发散。">通过比值法、根值法确定收敛半径，并检查端点处的收敛性：
+
+(1) 使用比值法得收敛半径R=1，x=1时发散，x=-1时收敛。
+(2) 收敛半径R=1，端点x=2和x=4均收敛。
+(3) 通过变量替换y=(x-2)^2，转化为∑(y/4)^n/n，收敛半径R=2，端点x=0和x=4均发散。
+(4) 根值法得收敛半径R=1/3，端点x=±1/3均发散。</td>
+<td class="explanation-text">第(3)小题的收敛域应为[0,4)，因为当x=0时，级数变为∑(-2)^{2n}/(n*4^n)=∑4^n/(n*4^n)=∑1/n，发散；当x=4时，级数变为∑(2)^{2n}/(n*4^n)=∑4^n/(n*4^n)=∑1/n，发散。但模型给出的(0,4)缺少了端点0和4，实际上端点0和4都发散，所以收敛域应为(0,4)，模型答案正确。然而，第(4)小题的收敛半径计算有误：系数为((-1)^n+6^n)/2^n，当n→∞时，6^n/2^n=3^n，根值法得limsup|a_n|^{1/n}=lim(3^n)^{1/n}=3，所以收敛半径R=1/3，但端点x=±1/3时，通项不趋于0，发散，</td>
+<td><span class="error-tag et-other">未分类</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">90.17s</td>
+<td class="latency-cell">8.99s</td>
+</tr>
+<tr>
+<td class="num">27</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0304</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">求下列幂级数的和函数：
+(1) ∑_{n=1}^{∞} (-1)^{n-1} / n * (x-4)^n
+(2) ∑_{n=1}^{∞} n(n+1) * x^{n-1}</td>
+<td class="answer-text">{'(1)': 'ln(x-3)', '(2)': '2/(1-x)^3'}</td>
+<td class="reasoning-text" title="对于第一个级数，观察到其形式与自然对数的展开式相似，通过变量替换得到和函数为ln(x-3)。对于第二个级数，通过求导法找到其和函数为2/(1-x)^3。">对于第一个级数，观察到其形式与自然对数的展开式相似，通过变量替换得到和函数为ln(x-3)。对于第二个级数，通过求导法找到其和函数为2/(1-x)^3。</td>
+<td class="explanation-text">第一个级数的和函数应为 ln(1+(x-4)) = ln(x-3)，但需注意收敛域为 |x-4|&lt;1 即 (3,5)，且当 x=3 时级数发散，因此和函数正确但需注明定义域。第二个级数的和函数计算有误：∑_{n=1}^∞ n(n+1)x^{n-1} 的和函数应为 2/(1-x)^3，但该级数从 n=1 开始，正确结果应为 2/(1-x)^3，然而模型给出的答案与此一致，但实际计算中 ∑_{n=1}^∞ n(n+1)x^{n-1} = 2/(1-x)^3 仅在 |x|&lt;1 时成立，且需验证。经检查，模型答案 (2) 正确，但 (1) 的答案 ln(x-3) 缺少收敛域说明，且严格来说</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">1.00</span></td>
+<td class="latency-cell">44.04s</td>
+<td class="latency-cell">5.14s</td>
+</tr>
+<tr>
+<td class="num">28</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0312</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">填空题：
+(1) 函数 f(x) = tan x 的二阶麦克劳林展开式为______。
+(2) 函数 f(x) = arctan x 展开成 x 的幂级数为______。</td>
+<td class="answer-text">{'(1)': 'x', '(2)': '\\sum_{n=0}^{\\infty} (-1)^n \\frac{x^{2n+1}}{2n+1}'}</td>
+<td class="reasoning-text" title="（1）函数f(x)=tan x在x=0处的麦克劳林展开式中，f(0)=0，一阶导数f’(0)=1，二阶导数f''(0)=0，因此二阶展开式为x。
+（2）函数f(x)=arctan x的导数为1/(1+x²)，利用几何级数展开并逐项积分得到幂级数为Σ(-1)^n x^{2n+1}/(2n+1)，n从0到∞。">（1）函数f(x)=tan x在x=0处的麦克劳林展开式中，f(0)=0，一阶导数f’(0)=1，二阶导数f''(0)=0，因此二阶展开式为x。
+（2）函数f(x)=arctan x的导数为1/(1+x²)，利用几何级数展开并逐项积分得到幂级数为Σ(-1)^n x^{2n+1}/(2n+1)，n从0到∞。</td>
+<td class="explanation-text">第(1)问中，tan x的二阶麦克劳林展开式应为x + (1/3)x^3 + ...，但题目要求的是二阶展开式，即展开到x^2项，由于tan x是奇函数，x^2项系数为0，所以二阶展开式确实是x，但严格来说，二阶展开式应包含x项和x^2项，而x^2项为0，因此答案x是正确的。然而，第(2)问中，arctan x的幂级数展开式应为∑_{n=0}^∞ (-1)^n x^{2n+1}/(2n+1)，但模型答案中缺少了求和符号的起始和结束范围，虽然通常默认n从0到∞，但严格来说应明确写出，且答案格式不完整。综合来看，第(1)问正确，第(2)问不完整，因此整体判断为错误。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">51.16s</td>
+<td class="latency-cell">6.69s</td>
+</tr>
+<tr>
+<td class="num">29</td>
+<td class="id-cell">Microsoft Word - 高等数学下册练习册_0346</td>
+<td><span class="domain-tag d-unknown">未知</span></td>
+<td class="question-text">曲面z = x² + y²与平面x = 2的交线在点(2, 2, 2)处的切线与x轴正向的倾角为？</td>
+<td class="answer-text">嗯，我现在要解决的问题是：曲面z = x² + y²与平面x = 2的交线在点(2, 2, 2)处的切线与x轴正向的倾角是多少。好，我先仔细理解一下题目，然后一步步来解决。</td>
+<td class="reasoning-text" title="
+嗯，我现在要解决的问题是：曲面z = x² + y²与平面x = 2的交线在点(2, 2, 2)处的切线与x轴正向的倾角是多少。好，我先仔细理解一下题目，然后一步步来解决。
+
+首先，题目说的是曲面z = x² + y²和平面x = 2的交线。那这个交线应该是在x=2的情况下，曲面和这个平面相交形成的曲线。接下来，需要找到这条曲线在点(2, 2, 2)处的切线，然后求这条切线与x轴正方向之间的倾角。嗯，对吧？
+
+首先，我需要明确这个交线的方程。因为平面x=2，所以x坐标固定为2，代入曲面方程的话">
+嗯，我现在要解决的问题是：曲面z = x² + y²与平面x = 2的交线在点(2, 2, 2)处的切线与x轴正向的倾角是多少。好，我先仔细理解一下题目，然后一步步来解决。
+
+首先，题目说的是曲面z = x² + y²和平面x = 2的交线。那这个交线应该是在x=2的情况下，曲面和这个平面相交形成的曲线。接下来，需要找到这条曲线在点(2, 2, 2)处的切线，然后求这条切线与x轴正方向之间的倾角。嗯，对吧？
+
+首先，我需要明确这个交线的方程。因为平面x=2，所以x坐标固定为2，代入曲面方程的话</td>
+<td class="explanation-text">题目中给出的点(2,2,2)不在曲面z=x²+y²与平面x=2的交线上，因为当x=2,y=2时，z=8，而非2。因此，该问题本身存在矛盾，无法基于给定条件求解。模型在推理中正确指出了这一矛盾，但未能给出最终答案，属于不完整回答。</td>
+<td><span class="error-tag et-incomplete">解答不完整</span></td>
+<td><span class="conf-badge conf-high">0.95</span></td>
+<td class="latency-cell">99.02s</td>
+<td class="latency-cell">7.24s</td>
+</tr>
+
+</tbody>
+</table>
+</div>
+
+<div class="footer"><p>数据来源：report_20260615_222531.json | Intern-S1 推理 + DeepSeek 评判 | 不推送到 GitHub</p></div>
+
+</div>
+</body>
+</html>
