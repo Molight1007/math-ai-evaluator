@@ -1,0 +1,50 @@
+﻿# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+*.db
+
+# Env
+.env
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+
+# Test results (generated at runtime)
+测试结果/
+100题测试结果/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloaded copies
+下载版/
+
+# Plans / docs
+计划文件夹/
+代码要求.txt
+make_ppt.js
+启动评测器.bat
+项目进度与未来发展方向.md
+LEAN环境使用指南.md
+leanrun.bat
+hello.lean
+run_lake_update.py
+
+# Deploy config (not needed in image)
+deploy/docker-compose.yml
+deploy/.env
+deploy/.dockerignore
+deploy/教程.txt
+deploy/results/
+deploy/banks/
