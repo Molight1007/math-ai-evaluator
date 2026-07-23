@@ -505,7 +505,7 @@ def _empty_conversion_result(error_msg: str = "") -> dict:
 
 # 轻量级 Lean 4 验证项目根目录（不依赖 Mathlib）
 _LEAN_VERIFY_PROJECT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "lean_verify")
+    os.path.join(os.path.dirname(__file__), "..", "与lean相关的插件", "lean_verify")
 )
 
 

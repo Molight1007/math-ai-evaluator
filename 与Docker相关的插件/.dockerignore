@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+venv/
+.venv/
+env/
+
+# Node
+node_modules/
+package-lock.json
+package.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 大文件
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 测试结果（运行时生成，不需要构建进镜像）
+测试结果/
+
+# 系统文件
+Thumbs.db
+.DS_Store
+*.bat
+*.ppt

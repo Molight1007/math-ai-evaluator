@@ -31,7 +31,7 @@ _LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
 
 # Lean 验证项目路径（不依赖 Mathlib 的轻量级项目）
 _LEAN_VERIFY_PROJECT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "lean_verify")
+    os.path.join(os.path.dirname(__file__), "..", "与lean相关的插件", "lean_verify")
 )
 
 # 默认 API 地址

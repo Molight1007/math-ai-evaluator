@@ -125,17 +125,35 @@ class Problem:
 
 @dataclass
 class InferenceResult:
-    """推理结果 - Intern-S1 模型对单题的推理输出"""
+    """推理结果 - Intern-S1 模型对单题的推理输出
+
+    支持两种模式：
+    1. 单候选模式（旧）：answer / reasoning / steps / verification
+    2. 多候选模式（新）：模型内部生成 3 个候选答案，自评估后选出最优
+    """
     problem_id: str                               # 对应的题目ID
     question: str                                 # 原题内容
-    answer: str = ""                              # 模型给出的最终答案
-    reasoning: str = ""                           # 推理过程文本
+    answer: str = ""                              # 模型给出的最终答案（多候选模式 = 选出的最优答案）
+    reasoning: str = ""                           # 推理过程文本（多候选模式 = 选择理由）
     steps: list[str] = field(default_factory=list)# 分步骤推理列表
     verification: str = ""                        # 自验证过程
     raw_response: str = ""                        # API 返回的原始响应
     tokens_used: int = 0                          # 推理消耗的 token 数
     latency_seconds: float = 0.0                  # 推理耗时（秒）
     error: Optional[str] = None                   # 推理过程中的错误信息
+    sample_index: int = 0                         # 多样本编号（0-based，单样本模式下为0）
+    # 多候选模式专用字段
+    candidates: Optional[list[dict]] = None       # 候选答案列表 [{"index":0,"answer":"...","reasoning":"...","confidence":0.9}, ...]
+    selected_candidate_index: Optional[int] = None  # 最终选中的候选编号
+    selection_reasoning: str = ""                 # 选择最优候选的理由
+    # 自审核相关字段
+    review_passed: Optional[bool] = None          # 自审核是否通过（None=未执行审核）
+    review_feedback: Optional[dict] = None        # 审核反馈详情 {"verdict","scores","issues","suggestions","summary"}
+    review_attempts: int = 0                      # 审核/重试总次数
+    review_tokens_used: int = 0                   # 审核消耗 token 数
+    review_latency_seconds: float = 0.0           # 审核耗时（秒）
+    total_tokens_used: int = 0                    # 总 token（推理+审核+重试）
+    total_latency_seconds: float = 0.0            # 总耗时（推理+审核+重试，秒）
 
 
 @dataclass
@@ -222,6 +240,11 @@ class EvaluationResult:
     inference_error: Optional[str] = None         # 推理错误
     judge_error: Optional[str] = None             # 评判错误
     lean_verification: Optional[dict] = None      # Lean 验证结果（LeanVerificationResult.to_dict()）
+    sample_index: int = 0                         # 多样本编号（0-based，单样本模式下为0）
+    # 自审核相关字段（从 InferenceResult 透传）
+    review_passed: Optional[bool] = None          # 自审核是否通过
+    review_attempts: int = 0                      # 审核/重试次数
+    total_tokens_used: int = 0                    # 总 token（推理+审核）
 
     def to_dict(self) -> dict:
         """将结果转为字典，用于 JSON 序列化"""

@@ -116,6 +116,11 @@ class QuestionBankPanel(ttk.Frame):
                                           state="readonly", font=("Microsoft YaHei", 10), width=12)
         self.domain_combo.pack(side="left", padx=(4, 15))
 
+        # 多智能体版开关（默认开启，使用 submit/user_agent.py ReasoningAgent）
+        self.multi_agent_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(eval_inner, text="多智能体版", variable=self.multi_agent_var,
+                        font=("Microsoft YaHei", 9)).pack(side="left", padx=(0, 12))
+
         self.bank_eval_btn = ttk.Button(eval_inner, text="🎯 从题库随机评测",
                                          command=self._start_bank_eval, width=18)
         self.bank_eval_btn.pack(side="left")
@@ -428,10 +433,11 @@ class QuestionBankPanel(ttk.Frame):
         self.bank_status_var.set(f"正在从题库「{bank}」随机选取 {count} 道题目评测...")
 
         thread = threading.Thread(target=self._run_bank_eval_async,
-                                  args=(bank, count, domain), daemon=True)
+                                  args=(bank, count, domain, self.multi_agent_var.get()),
+                                  daemon=True)
         thread.start()
 
-    def _run_bank_eval_async(self, bank_name, count, domain):
+    def _run_bank_eval_async(self, bank_name, count, domain, multi_agent):
         """后台线程：调用 main.run_evaluation_from_bank 执行完整评测流水线"""
         try:
             from main import run_evaluation_from_bank
@@ -440,7 +446,10 @@ class QuestionBankPanel(ttk.Frame):
                 f"[题库评测] 从「{bank_name}」随机选题 {count} 道，正在评测..."))
 
             html_path = asyncio.run(
-                run_evaluation_from_bank(bank_name, count, concurrency=10, domain=domain)
+                run_evaluation_from_bank(
+                    bank_name, count, concurrency=10, domain=domain,
+                    multi_agent=multi_agent,
+                )
             )
 
             if html_path and os.path.exists(html_path):
@@ -1128,6 +1137,13 @@ class EvalLauncher:
             bg="#f0f4f8", fg="#a0aec0"
         ).pack(side="left")
 
+        # 多智能体版开关（默认开启，使用 submit/user_agent.py ReasoningAgent）
+        self.multi_agent_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            settings_frame, text="多智能体版", variable=self.multi_agent_var,
+            font=("Microsoft YaHei", 9),
+        ).pack(side="left", padx=(12, 0))
+
         # 操作按钮行（选择文件 / 开始评测 / 设置 API Key / 清理结果）
         btn_frame = tk.Frame(self.file_tab, bg="#f0f4f8")
         btn_frame.pack(padx=15, pady=(5, 10), fill="x")
@@ -1365,7 +1381,11 @@ class EvalLauncher:
                     pct = int(current / total * 100) if total > 0 else 0
                     self.root.after(0, lambda p=pct: self.progress.configure(value=p))
 
-            html_path = asyncio.run(run_evaluation(json_path, self.concurrency_var.get(), progress_callback=_on_progress))
+            html_path = asyncio.run(run_evaluation(
+                json_path, self.concurrency_var.get(),
+                progress_callback=_on_progress,
+                multi_agent=self.multi_agent_var.get(),
+            ))
 
             self._update_status("[3/3] 评测完成！正在打开报告...")
             if html_path and os.path.exists(html_path):

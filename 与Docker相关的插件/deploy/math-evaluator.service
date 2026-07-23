@@ -1,0 +1,27 @@
+[Unit]
+Description=Math Evaluator (优化版书生 AI) FastAPI 服务
+After=network.target
+
+[Service]
+# 运行用户：使用 www-data（Nginx 同名用户），请确保对该目录有读权限
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/math-evaluator
+
+# 关键环境变量（请务必修改下方默认值！）
+Environment=PYTHONUNBUFFERED=1
+Environment=JWT_SECRET_KEY=__CHANGE_ME_TO_A_LONG_RANDOM_STRING__
+Environment=ALLOW_PUBLIC=false
+Environment=ADMIN_USERNAME=admin
+Environment=ADMIN_PASSWORD=__CHANGE_ME_ADMIN_PASSWORD__
+# 如需切换为公开注册（无需审批），改为 true：
+# Environment=ALLOW_PUBLIC=true
+
+# 虚拟环境路径（按实际调整）
+ExecStart=/opt/math-evaluator/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 1
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
