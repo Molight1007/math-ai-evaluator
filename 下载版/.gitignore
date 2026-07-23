@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CodeBuddy
+.codebuddy/
+.workbuddy/
+
+# 敏感配置（含 API Key）
+.env
+
+# 测试结果（运行时生成）
+测试结果/测试结果展示/
+测试结果/原本输出和推理过程/
+测试结果/原本问题/
+
+# 大文件 / 资料
+*.pdf
+*.pptx
+*.rar
+*.zip
+
+# 临时文件
+*.tmp
+*.log
