@@ -118,8 +118,8 @@ class QuestionBankPanel(ttk.Frame):
 
         # 多智能体版开关（默认开启，使用 submit/user_agent.py ReasoningAgent）
         self.multi_agent_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(eval_inner, text="多智能体版", variable=self.multi_agent_var,
-                        font=("Microsoft YaHei", 9)).pack(side="left", padx=(0, 12))
+        ttk.Checkbutton(eval_inner, text="多智能体版", variable=self.multi_agent_var
+                        ).pack(side="left", padx=(0, 12))
 
         self.bank_eval_btn = ttk.Button(eval_inner, text="🎯 从题库随机评测",
                                          command=self._start_bank_eval, width=18)
@@ -1056,6 +1056,9 @@ class EvalLauncher:
         self.root.configure(bg="#f0f4f8")
         self.root.minsize(520, 500)
 
+        # ttk.Checkbutton 不支持直接传入 font 参数，通过全局样式配置字体
+        ttk.Style().configure("TCheckbutton", font=("Microsoft YaHei", 9))
+
         # ---- 标题栏 ----
 
         title_frame = tk.Frame(self.root, bg="#f0f4f8")
@@ -1141,7 +1144,6 @@ class EvalLauncher:
         self.multi_agent_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             settings_frame, text="多智能体版", variable=self.multi_agent_var,
-            font=("Microsoft YaHei", 9),
         ).pack(side="left", padx=(12, 0))
 
         # 操作按钮行（选择文件 / 开始评测 / 设置 API Key / 清理结果）
