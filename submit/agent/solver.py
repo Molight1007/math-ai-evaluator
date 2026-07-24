@@ -9,8 +9,12 @@
 - 重解模式：当 ``ctx.revise_feedback`` 非空且处于 revise 轮次时，改用
   ``prompts/revise`` 的纠错提示词，针对验证器指出的错误定向修正；
 - 追加候选：中置信度分支调用 ``add_candidates`` 补充采样。
+
+性能优化：
+- 初始候选生成和纠错重解改为内部多线程并行，缩短单题推理等待时间。
 """
 
+import concurrent.futures
 import logging
 
 from .base import BaseAgent, TaskContext, Candidate
@@ -66,8 +70,10 @@ class SolverAgent(BaseAgent):
             if ctx.domain:
                 user_content = get_domain_hint(ctx.domain) + "\n" + ctx.problem
 
-        for _ in range(count):
-            cid = len(ctx.candidates)
+        base_cid = len(ctx.candidates)
+
+        def _make_one(i: int):
+            cid = base_cid + i
             resp = self.llm(
                 ctx,
                 [
@@ -77,6 +83,16 @@ class SolverAgent(BaseAgent):
                 self.config.policy_temperature,
                 self.config.policy_max_tokens,
             )
+            return cid, resp
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=count) as pool:
+            futures = [pool.submit(_make_one, i) for i in range(count)]
+            for fut in concurrent.futures.as_completed(futures):
+                results.append(fut.result())
+        results.sort(key=lambda x: x[0])
+
+        for cid, resp in results:
             if resp is None:
                 # 预算不足 / 调用失败：占位候选，验证器会给 0 置信度
                 ctx.candidates.append(Candidate(
@@ -105,8 +121,10 @@ class SolverAgent(BaseAgent):
         feedback_text = "\n".join(f"- {fb}" for fb in ctx.revise_feedback)
         count = self.config.revise_sample_times
 
-        for _ in range(count):
-            cid = len(ctx.candidates)
+        base_cid = len(ctx.candidates)
+
+        def _make_one(i: int):
+            cid = base_cid + i
             user_content = REVISE_USER_TEMPLATE.format(
                 problem=ctx.problem, feedback=feedback_text)
             resp = self.llm(
@@ -118,6 +136,16 @@ class SolverAgent(BaseAgent):
                 self.config.policy_temperature,
                 self.config.policy_max_tokens,
             )
+            return cid, resp
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=count) as pool:
+            futures = [pool.submit(_make_one, i) for i in range(count)]
+            for fut in concurrent.futures.as_completed(futures):
+                results.append(fut.result())
+        results.sort(key=lambda x: x[0])
+
+        for cid, resp in results:
             if resp is None:
                 ctx.candidates.append(Candidate(
                     id=cid, answer="", reasoning="[重解失败] 调用受限"))

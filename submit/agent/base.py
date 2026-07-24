@@ -12,6 +12,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Optional
 
 logger = logging.getLogger("MathPilot")
@@ -43,19 +44,28 @@ class Verdict:
 
 @dataclass
 class Budget:
-    """LLM 调用预算控制器"""
+    """LLM 调用预算控制器（线程安全）"""
     max_calls: int
     used_calls: int = 0
+    _lock: RLock = field(default_factory=RLock, repr=False)
 
     def can_spend(self, n: int = 1) -> bool:
         """是否还有余额"""
-        return self.used_calls + n <= self.max_calls
+        with self._lock:
+            return self.used_calls + n <= self.max_calls
 
     def spend(self, n: int = 1) -> None:
-        self.used_calls += n
+        with self._lock:
+            self.used_calls += n
+
+    def refund(self, n: int = 1) -> None:
+        """调用失败/异常时回退预算"""
+        with self._lock:
+            self.used_calls = max(0, self.used_calls - n)
 
     def remaining(self) -> int:
-        return max(0, self.max_calls - self.used_calls)
+        with self._lock:
+            return max(0, self.max_calls - self.used_calls)
 
 
 @dataclass
@@ -107,20 +117,25 @@ class BaseAgent(ABC):
     def llm(self, ctx: TaskContext, messages: list, temperature: float,
             max_tokens: int) -> Optional[str]:
         """
-        带预算管控与降级的安全 LLM 调用。
+        带预算管控与降级的安全 LLM 调用（支持并发线程）。
 
         - 预算不足时直接返回 None（不调用，避免超时/超额）；
-        - 调用异常时返回 None（由调用方决定降级策略）。
-        成功时自动扣减预算。
+        - 调用异常时返回 None，并回退本次预扣预算；
+        成功时预算已在调用前扣减。
         """
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
-            logger.debug("[%s] Budget exhausted, skip LLM call", self.name)
-            return None
+        reserved = False
+        if ctx.budget is not None:
+            with ctx.budget._lock:
+                if not ctx.budget.can_spend(1):
+                    logger.debug("[%s] Budget exhausted, skip LLM call", self.name)
+                    return None
+                ctx.budget.spend(1)
+                reserved = True
         try:
             resp = self.client.chat(messages, temperature, max_tokens)
-            if ctx.budget is not None:
-                ctx.budget.spend(1)
             return resp
         except Exception as e:  # noqa: BLE001
+            if reserved and ctx.budget is not None:
+                ctx.budget.refund(1)
             logger.warning("[%s] LLM call failed: %s", self.name, e)
             return None

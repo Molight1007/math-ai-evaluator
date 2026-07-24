@@ -8,8 +8,13 @@
 - 仅对尚未验证的候选投票（支持 revise / 追加候选后的增量验证）；
 - 投票结果写入 ``ctx.verdicts``，按置信度降序；
 - ``feedback`` 方法在被判定为错误的候选上，额外调用一次验证器提取错因。
+
+性能优化：
+- 多候选验证并行执行；
+- 单个候选的多轮投票并行执行。
 """
 
+import concurrent.futures
 import logging
 
 from .base import BaseAgent, TaskContext, Candidate, Verdict
@@ -35,10 +40,21 @@ class VerifierAgent(BaseAgent):
     name = "Verifier"
 
     def run(self, ctx: TaskContext) -> TaskContext:
-        for c in ctx.candidates:
-            if c.id in ctx.verified_ids():
-                continue
-            ctx.verdicts.append(self._vote(ctx, c))
+        to_verify = [c for c in ctx.candidates if c.id not in ctx.verified_ids()]
+        if not to_verify:
+            ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
+            self.record(ctx, "verify", "无需验证候选")
+            return ctx
+
+        # 并行验证所有未验证候选
+        new_verdicts = []
+        workers = max(1, min(8, len(to_verify)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(self._vote, ctx, c) for c in to_verify]
+            for fut in concurrent.futures.as_completed(futures):
+                new_verdicts.append(fut.result())
+
+        ctx.verdicts.extend(new_verdicts)
         ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
         self.record(
             ctx, "verify", "验证候选解答",
@@ -48,19 +64,18 @@ class VerifierAgent(BaseAgent):
         return ctx
 
     def _vote(self, ctx: TaskContext, c: Candidate) -> Verdict:
-        """对单个候选多轮投票，返回带置信度的验证结果"""
+        """对单个候选多轮投票，返回带置信度的验证结果（投票并行）"""
         if not c.answer:
             return Verdict(c.id, c.answer, c.reasoning, 0.0, 0, 0)
 
-        correct_votes = 0
         total_votes = self.config.verifier_voting_times
 
-        for _ in range(total_votes):
+        def _do_one_vote(_: int):
             user_msg = VERIFIER_USER_TEMPLATE.format(
                 problem=ctx.problem,
                 candidate_answer=c.reasoning[:3000],
             )
-            resp = self.llm(
+            return self.llm(
                 ctx,
                 [
                     {"role": "system", "content": VERIFIER_SYSTEM},
@@ -69,13 +84,17 @@ class VerifierAgent(BaseAgent):
                 self.config.verifier_temperature,
                 256,
             )
-            if resp is None:
-                total_votes -= 1
-                continue
-            if self._is_correct_vote(resp):
-                correct_votes += 1
 
-        total = max(total_votes, 1)
+        valid_responses = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=total_votes) as pool:
+            futures = [pool.submit(_do_one_vote, i) for i in range(total_votes)]
+            for fut in concurrent.futures.as_completed(futures):
+                resp = fut.result()
+                if resp is not None:
+                    valid_responses.append(resp)
+
+        correct_votes = sum(1 for resp in valid_responses if self._is_correct_vote(resp))
+        total = max(len(valid_responses), 1)
         return Verdict(
             c.id, c.answer, c.reasoning,
             round(correct_votes / total, 4), correct_votes, total,

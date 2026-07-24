@@ -19,6 +19,7 @@
 import asyncio
 import os
 import sys
+import threading
 import time
 from typing import List, Optional
 
@@ -49,6 +50,7 @@ class EvalSyncClient:
         self.config = config
         self._url = f"{config.base_url.rstrip('/')}/chat/completions"
         self.total_tokens = 0
+        self._token_lock = threading.Lock()
 
     def chat(self, messages, temperature=0.3, max_tokens=4096):
         headers = {
@@ -69,9 +71,10 @@ class EvalSyncClient:
                     resp.raise_for_status()
                     data = resp.json()
                     choice = data["choices"][0]
-                    self.total_tokens += int(
-                        data.get("usage", {}).get("total_tokens", 0) or 0
-                    )
+                    with self._token_lock:
+                        self.total_tokens += int(
+                            data.get("usage", {}).get("total_tokens", 0) or 0
+                        )
                     return choice["message"]["content"] or ""
             except httpx.HTTPStatusError as e:
                 last_error = e
