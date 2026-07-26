@@ -10,12 +10,13 @@ Intern-S1 推理模块（独立版）。
     result = await run_inference(problem)
 """
 
-from .intern_s1 import run_inference, SYSTEM_PROMPT, parse_intern_response
+from .intern_s1 import run_inference, run_inference_multi, SYSTEM_PROMPT, parse_intern_response
 from .config import get_config, load_config, validate_config, ConfigError
 from .models import Problem, InferenceResult
 
 __all__ = [
     "run_inference",
+    "run_inference_multi",
     "SYSTEM_PROMPT",
     "parse_intern_response",
     "get_config",

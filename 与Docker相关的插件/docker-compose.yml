@@ -1,0 +1,63 @@
+version: "3.9"
+
+# ============================================================
+# 优化版书生 AI · 数学智能体评测器 — Compose 编排
+# 启动:  docker compose up -d
+# 更新:  git pull && docker compose up -d --build
+# 查看:  docker compose logs -f
+# ============================================================
+
+services:
+
+  # ---------- FastAPI 后端 ----------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: math-evaluator:latest
+    container_name: math-eval-web
+    restart: unless-stopped
+
+    # API 密钥（从宿主机环境变量或 .env 文件注入）
+    environment:
+      - LEAN_KEY=${LEAN_KEY:-}
+      - ARK_API_KEY=${ARK_API_KEY:-}
+
+    volumes:
+      # 持久化数据卷（users.db + 题库 + 评测结果）
+      - persist_data:/app/data
+
+      # 评测结果同步到宿主机（方便直接查看）
+      - ./测试结果:/app/测试结果
+
+    expose:
+      - "8000"
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------- Nginx：前端 + 反向代理 ----------
+  nginx:
+    image: nginx:alpine
+    container_name: math-eval-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      # - "443:443"      # HTTPS（启用时取消注释）
+
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html/frontend:ro
+
+    depends_on:
+      web:
+        condition: service_healthy
+
+# ========== 命名卷 ==========
+volumes:
+  persist_data:

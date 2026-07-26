@@ -12,7 +12,19 @@ def merge_result(
     inference: InferenceResult,
     judge: JudgeResult,
 ) -> EvaluationResult:
-    """将 Problem + InferenceResult + JudgeResult 合并为一条完整的 EvaluationResult"""
+    """将 Problem + InferenceResult + JudgeResult 合并为一条完整的 EvaluationResult。
+
+    合并时透传推理阶段的答案、推理过程、自审核状态及所有 token/延迟数据，
+    方便后续统计报告使用。
+
+    参数:
+        problem: 原始题目对象
+        inference: 推理阶段产出（含审核状态）
+        judge: 评判阶段产出（正确性、置信度等）
+
+    返回:
+        EvaluationResult — 完整的评测记录
+    """
     return EvaluationResult(
         problem_id=problem.id,
         question=problem.question,
@@ -33,6 +45,11 @@ def merge_result(
         judge_latency=judge.latency_seconds,
         inference_error=inference.error,
         judge_error=judge.error,
+        sample_index=inference.sample_index,
+        # 自审核信息透传
+        review_passed=inference.review_passed,
+        review_attempts=inference.review_attempts,
+        total_tokens_used=inference.total_tokens_used,
     )
 
 

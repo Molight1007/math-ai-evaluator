@@ -27,13 +27,20 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ===== 项目模块导入 =====
-from config import load_config, validate_config, ConfigError, save_config, has_config
-from loader import load_problems           # 题目文件加载（JSON/CSV）
-from intern_s1 import run_inference        # Intern-S1 推理引擎
-from deepseek import run_judge             # DeepSeek 评判引擎
-from aggregator import merge_result        # 合并推理+评判结果
-from reporter import generate_json_report, generate_html_report, print_summary  # 报告生成
-from models import JudgeResult             # 数据模型
+from config import load_config, validate_config, ConfigError
+from loader import load_problems
+from deepseek import run_judge, run_judge_batch
+from aggregator import merge_result
+from reporter import generate_json_report, generate_html_report, print_summary
+from models import JudgeResult, InferenceResult
+from lean_verifier import (
+    should_verify_lean,
+    run_lean_verification_batch,
+)
+
+# run_inference 延迟导入：默认使用原版，--optimized 时切换为独立版
+from intern_s1 import run_inference as _run_inference_func
+from intern_s1 import run_inference_multi as _run_inference_multi_func
 
 logger = logging.getLogger(__name__)
 
@@ -111,53 +118,118 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     return json_path
 
 
-async def evaluate_single(problem, semaphore, bank_name=None):
+# ==================== 答案查找辅助函数 ====================
+
+def _lookup_reference_answer(bank_name: str, problem_id: str) -> tuple:
     """
-    评测单道题目的完整流程：
-    1. 调用 Intern-S1 进行数学推理
+    从答案库查找某道题的参考答案。
+
+    参数:
+        bank_name: 题库名称
+        problem_id: 题目 ID
+
+    返回:
+        (reference_answer, source) 元组，未找到时返回 (None, None)
+    """
+    if not bank_name:
+        return None, None
+    try:
+        from question_bank import get_db
+        db = get_db()
+        mapping = db.get_answer_for_problem(bank_name, problem_id)
+        if mapping:
+            ref_answer = mapping["answer_text"]
+            ref_source = mapping.get("source_file", "")
+            logger.info(
+                f"[{problem_id}] 使用参考答案 "
+                f"(来源: {ref_source}, 置信度: {mapping['confidence']})"
+            )
+            return ref_answer, ref_source
+    except Exception as e:
+        logger.debug(f"[{problem_id}] 获取参考答案失败: {e}")
+    return None, None
+
+
+# ==================== 逐题评测模式 ====================
+
+async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
+                           enable_review=True, max_review_retries=2):
+    """
+    评测单道题目的完整流程（逐题模式）：
+    1. 调用 Intern-S1 进行数学推理（支持多样本模式）
     2. 推理失败时构造失败结果，否则获取参考答案（若有）
     3. 调用 DeepSeek 进行正确性评判（有参考答案则辅助提升准确率）
     4. 合并推理和评判为最终 EvaluationResult
+
+    参数:
+        problem: Problem 对象
+        semaphore: asyncio.Semaphore 控制并发
+        bank_name: 题库名称（用于查找参考答案）
+        multi_sample: 每道题生成几个答案（0=单次推理）
+        enable_review: 是否启用自审核（默认 True）
+        max_review_retries: 审核不通过时的最大重试次数（默认 2）
+
+    返回:
+        list[EvaluationResult] — 单样本时长度为 1，多样本时长度为 multi_sample
     """
     async with semaphore:
-        inference = await run_inference(problem)
-        if inference.error:
-            # 推理失败时，构造一个"失败"的评判结果
-            judge = JudgeResult(
-                problem_id=problem.id,
-                is_correct=False,
-                confidence=0.0,
-                explanation=f"Inference error: {inference.error}",
-                error=inference.error,
-            )
+        # 多样本模式：并行生成 N 个不同答案
+        if multi_sample > 0:
+            inferences = await _run_inference_multi_func(problem, num_samples=multi_sample)
         else:
-            # 尝试从答案库获取匹配的参考答案
-            ref_answer = None
-            ref_source = None
-            if bank_name:
-                try:
-                    from question_bank import get_db
-                    db = get_db()
-                    mapping = db.get_answer_for_problem(bank_name, problem.id)
-                    if mapping:
-                        ref_answer = mapping["answer_text"]
-                        ref_source = mapping.get("source_file", "")
-                        logger.info(f"[{problem.id}] 使用参考答案 (来源: {ref_source}, 置信度: {mapping['confidence']})")
-                except Exception as e:
-                    logger.debug(f"[{problem.id}] 获取参考答案失败: {e}")
+            inferences = [await _run_inference_func(
+                problem, enable_review=enable_review, max_review_retries=max_review_retries
+            )]
 
-            judge = await run_judge(inference, reference_answer=ref_answer, answer_source=ref_source)
-        return merge_result(problem, inference, judge)
+        # 查参考答案（所有样本共用同一个参考答案）
+        ref_answer, ref_source = _lookup_reference_answer(
+            bank_name, problem.id
+        ) if bank_name else (None, None)
+        # 数据集内置参考答案兜底（JSONL 的 answer/reference_answer 字段）
+        if not ref_answer and getattr(problem, "reference_answer", None):
+            ref_answer = problem.reference_answer
+            ref_source = ref_source or "数据集内置"
+
+        # 对每个推理结果进行评判
+        results = []
+        for inference in inferences:
+            if inference.error:
+                judge = JudgeResult(
+                    problem_id=problem.id,
+                    is_correct=False,
+                    confidence=0.0,
+                    explanation=f"Inference error: {inference.error}",
+                    error=inference.error,
+                )
+            else:
+                judge = await run_judge(
+                    inference,
+                    reference_answer=ref_answer,
+                    answer_source=ref_source,
+                )
+            results.append(merge_result(problem, inference, judge))
+        return results
 
 
-async def run_evaluation(problems_path, concurrency=3, progress_callback=None, bank_name=None):
+# ==================== 批量评测模式 ====================
+
+async def _run_inference_stage(problems, concurrency, bank_name=None, multi_sample=0,
+                               enable_review=True, max_review_retries=2):
     """
-    执行完整评测流水线：
-    1. 从 JSON/CSV 加载题目列表
-    2. 检查答案库覆盖率并记录日志
-    3. 使用信号量控制并发数，逐题异步执行 evaluate_single
-    4. 按题目 ID 排序后生成 JSON + HTML 报告
-    5. 返回 HTML 报告路径供 GUI 打开
+    阶段一：并发执行 Intern-S1 推理，同时收集每道题的参考答案。
+    多样本模式下，每道题生成多个答案。
+
+    参数:
+        problems: 题目列表
+        concurrency: 最大并发数
+        bank_name: 题库名称（可选）
+        multi_sample: 每道题生成几个答案（0=单次）
+        enable_review: 是否启用自审核（默认 True）
+        max_review_retries: 审核不通过时的最大重试次数（默认 2）
+
+    返回:
+        [(Problem, InferenceResult, ref_answer, ref_source), ...] 列表
+        多样本模式下，每道题产生 multi_sample 个条目
     """
     problems = load_problems(problems_path)
     if not problems:
@@ -165,22 +237,38 @@ async def run_evaluation(problems_path, concurrency=3, progress_callback=None, b
         return
     logger.info(f"Loaded {len(problems)} problems. Starting evaluation...")
 
-    # 检查是否有可用的答案映射
-    if bank_name:
-        try:
-            from question_bank import get_db
-            db = get_db()
-            stats = db.get_answer_mapping_stats(bank_name)
-            if stats["covered_problems"] > 0:
-                logger.info(f"题库 {bank_name} 已有答案映射: {stats['covered_problems']}/{stats['total_problems']} 道题有参考答案")
-                print(f"\n[答案库] {bank_name}: {stats['covered_problems']}/{stats['total_problems']} 道题有参考答案 (覆盖率 {stats['coverage_rate']}%)")
-        except Exception as e:
-            logger.debug(f"检查答案映射失败: {e}")
+    if multi_sample > 0:
+        # 多样本模式：每道题并行生成 N 个推理结果
+        async def _inference_task(problem):
+            async with semaphore:
+                inferences = await _run_inference_multi_func(problem, num_samples=multi_sample)
+                ref_answer, ref_source = _lookup_reference_answer(
+                    bank_name, problem.id
+                ) if bank_name else (None, None)
+                # 每个样本各自产生一条记录
+                return [(problem, inf, ref_answer, ref_source) for inf in inferences]
 
-    # 并发数不应超过实际题目数量
-    actual_concurrency = min(concurrency, len(problems))
-    semaphore = asyncio.Semaphore(actual_concurrency)
-    tasks = [evaluate_single(p, semaphore, bank_name=bank_name) for p in problems]
+        tasks = [_inference_task(p) for p in problems]
+        grouped = await asyncio.gather(*tasks)
+        # 展平列表
+        result = []
+        for group in grouped:
+            result.extend(group)
+        return result
+    else:
+        # 单样本模式（原有逻辑）
+        async def _inference_task(problem):
+            async with semaphore:
+                inference = await _run_inference_func(
+                    problem, enable_review=enable_review, max_review_retries=max_review_retries
+                )
+                ref_answer, ref_source = _lookup_reference_answer(
+                    bank_name, problem.id
+                ) if bank_name and not inference.error else (None, None)
+                return problem, inference, ref_answer, ref_source
+
+        tasks = [_inference_task(p) for p in problems]
+        return await asyncio.gather(*tasks)
 
     print(f"\nEvaluating {len(problems)} problems (concurrency={actual_concurrency})...\n")
     results = []
@@ -193,7 +281,284 @@ async def run_evaluation(problems_path, concurrency=3, progress_callback=None, b
 
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # 1) 保存 JSON 报告到"原始输出和推理过程"
+    分离成功推理和失败推理：失败的直接生成失败评判结果，
+    成功的收集后统一批量评判。
+
+    参数:
+        inference_results: _run_inference_stage 的输出
+
+    返回:
+        EvaluationResult 列表
+    """
+    success_items = []
+    failed_results = []
+
+    for problem, inference, ref_answer, ref_source in inference_results:
+        if inference.error:
+            failed_results.append(merge_result(
+                problem, inference,
+                JudgeResult(
+                    problem_id=problem.id,
+                    is_correct=False,
+                    confidence=0.0,
+                    explanation=f"Inference error: {inference.error}",
+                    error=inference.error,
+                ),
+            ))
+        else:
+            success_items.append(
+                (problem, inference, ref_answer, ref_source)
+            )
+
+    if not success_items:
+        return failed_results
+
+    # 构建参考答案映射
+    reference_map = {}
+    for _, inf, ref_ans, ref_src in success_items:
+        if ref_ans:
+            reference_map[inf.problem_id] = (ref_ans, ref_src)
+
+    # 批量评判
+    inferences_to_judge = [inf for _, inf, _, _ in success_items]
+    count = len(inferences_to_judge)
+    print(f"\n  [Batch Judging] Sending {count} problems together...")
+    judge_results = await run_judge_batch(
+        inferences_to_judge,
+        reference_map=reference_map if reference_map else None,
+    )
+
+    # 合并结果
+    batch_eval_results = []
+    for (problem, inference, _, _), judge in zip(
+        success_items, judge_results
+    ):
+        batch_eval_results.append(merge_result(problem, inference, judge))
+
+    return failed_results + batch_eval_results
+
+
+async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sample=0,
+                              enable_review=True, max_review_retries=2):
+    """
+    批量评测模式（两阶段流水线）：
+    阶段一：并发执行 Intern-S1 推理
+    阶段二：收集全部推理结果后，一次性调用 DeepSeek 批量评判
+
+    相比逐题模式减少约 45% 的 API 调用次数。
+
+    参数:
+        problems: 题目列表
+        concurrency: 推理并发数
+        bank_name: 题库名称（可选）
+        multi_sample: 每道题生成几个答案（0=单次）
+        enable_review: 是否启用自审核（默认 True）
+        max_review_retries: 审核不通过时的最大重试次数（默认 2）
+
+    返回:
+        EvaluationResult 列表
+    """
+    total = len(problems)
+    if multi_sample > 0:
+        print(
+            f"\nEvaluating {total} problems x {multi_sample} samples = "
+            f"{total * multi_sample} total inferences "
+            f"(batch mode, concurrency={concurrency})..."
+        )
+    else:
+        print(
+            f"\nEvaluating {total} problems "
+            f"(batch mode, concurrency={concurrency})..."
+        )
+    print(
+        f"  Stage 1/2: Running {total * max(1, multi_sample) if multi_sample else total} "
+        f"inferences with concurrency={concurrency}..."
+    )
+
+    inference_results = await _run_inference_stage(
+        problems, concurrency, bank_name=bank_name, multi_sample=multi_sample,
+        enable_review=enable_review, max_review_retries=max_review_retries,
+    )
+
+    total_inferences = len(inference_results)
+    success_count = sum(
+        1 for _, inf, _, _ in inference_results if not inf.error
+    )
+    print(
+        f"  Stage 1/2 complete: {success_count}/{total_inferences} succeeded, "
+        f"{total_inferences - success_count} failed"
+    )
+
+    print(f"  Stage 2/2: Batch judging {success_count} results...")
+    return await _run_judge_batch_stage(inference_results)
+
+
+# ==================== Lean 验证阶段 ====================
+
+def _build_inference_for_verify(eval_result) -> InferenceResult:
+    """
+    从 EvaluationResult 构建用于 Lean 验证的 InferenceResult。
+
+    参数:
+        eval_result: 评测最终结果
+
+    返回:
+        提取了关键字段的 InferenceResult
+    """
+    return InferenceResult(
+        problem_id=eval_result.problem_id,
+        question=eval_result.question,
+        answer=eval_result.intern_answer,
+        reasoning=eval_result.intern_reasoning,
+        steps=eval_result.intern_steps,
+        verification=eval_result.intern_verification,
+    )
+
+
+def _print_lean_summary(candidates, verify_results) -> None:
+    """
+    打印 Lean 验证阶段的统计摘要。
+
+    参数:
+        candidates: 候选验证的题目数量
+        verify_results: LeanVerificationResult 列表
+    """
+    verified_count = sum(1 for v in verify_results if v.verified)
+    compile_pass = sum(1 for v in verify_results if v.compile_passed is True)
+    compile_fail = sum(1 for v in verify_results if v.compile_passed is False)
+    not_compiled = sum(1 for v in verify_results if v.compile_passed is None)
+    logic_errors = sum(
+        1 for v in verify_results if v.error_category == "logic_error"
+    )
+
+    print(f"  [Lean] Stage 3/3 complete:")
+    print(f"    Verified: {verified_count}/{candidates}")
+    if compile_pass + compile_fail + not_compiled > 0:
+        print(
+            f"    Compilation: {compile_pass} passed, {compile_fail} failed, "
+            f"{not_compiled} not compiled"
+        )
+    print(f"    Logic errors found: {logic_errors}")
+
+
+async def _run_lean_verification_stage(results: list) -> list:
+    """
+    阶段三（可选）：对评判为错误或低置信度的题目执行 Lean 形式化验证。
+
+    筛选出需要验证的题目，并发执行 Lean 验证，将结果写入
+    EvaluationResult.lean_verification 字段。
+
+    参数:
+        results: EvaluationResult 列表
+
+    返回:
+        更新后的 results 列表（原地修改）
+    """
+    # 筛选需要验证的题目
+    candidates = []
+    candidate_indices = []
+    for i, r in enumerate(results):
+        if should_verify_lean(r):
+            candidates.append(r)
+            candidate_indices.append(i)
+
+    if not candidates:
+        print(
+            "\n  [Lean] No problems need verification "
+            "(all correct with high confidence)"
+        )
+        return results
+
+    print(
+        f"\n  [Lean] Stage 3/3: Verifying {len(candidates)} "
+        f"suspicious problems..."
+    )
+
+    # 构建 InferenceResult 列表
+    inferences_to_verify = [
+        _build_inference_for_verify(r) for r in candidates
+    ]
+
+    # 并发执行 Lean 验证
+    verify_results = await run_lean_verification_batch(
+        inferences_to_verify, concurrency=_LEAN_VERIFY_CONCURRENCY
+    )
+
+    # 将验证结果写回原始结果
+    for idx, verify_result in zip(candidate_indices, verify_results):
+        results[idx].lean_verification = verify_result.to_dict()
+
+    _print_lean_summary(len(candidates), verify_results)
+    return results
+
+
+# ==================== 报告保存辅助函数 ====================
+
+def _save_lean_files(results: list, ts: str) -> int:
+    """
+    将所有评测结果中的 Lean 4 代码保存到「测试lean文件」目录。
+
+    每个 .lean 文件以题目 ID 命名，方便用户手动用 lake build / lean --run 验证。
+    只保存实际包含 Lean 代码的题目（非空的 lean_code）。
+
+    参数:
+        results: EvaluationResult 列表
+        ts: 时间戳字符串，用于子目录命名
+
+    返回:
+        保存的 .lean 文件数量
+    """
+    count = 0
+    for r in results:
+        lv = getattr(r, "lean_verification", None)
+        if not lv or not isinstance(lv, dict):
+            continue
+        lean_code = lv.get("lean_code", "")
+        if not lean_code or not lean_code.strip():
+            continue
+
+        # 子目录按时间戳分组，避免多次评测的文件混在一起
+        lean_dir = os.path.join(DIR_LEAN, ts)
+        os.makedirs(lean_dir, exist_ok=True)
+
+        # 文件名使用题目 ID，特殊字符替换为下划线
+        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in r.problem_id)
+        filename = f"{safe_id}.lean"
+        filepath = os.path.join(lean_dir, filename)
+
+        # 如果同 ID 重复（罕见情况），追加序号
+        if os.path.exists(filepath):
+            base = safe_id
+            i = 2
+            while os.path.exists(os.path.join(lean_dir, f"{base}_{i}.lean")):
+                i += 1
+            filepath = os.path.join(lean_dir, f"{base}_{i}.lean")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            # 添加元数据注释头
+            f.write(f"-- 题目ID: {r.problem_id}\n")
+            f.write(f"-- 评测时间: {ts}\n")
+            f.write(f"-- 编译结果: {'PASSED' if lv.get('compile_passed') else 'FAILED' if lv.get('compile_passed') is False else 'N/A'}\n")
+            f.write(f"-- 原始问题: {r.question[:100]}\n")
+            f.write("\n")
+            f.write(lean_code)
+        count += 1
+
+    return count
+
+
+def _save_reports(results, problems_path, ts: str) -> str:
+    """
+    保存 JSON 和 HTML 报告，并复制题目文件到「原始问题」目录。
+
+    参数:
+        results: EvaluationResult 列表
+        problems_path: 原始题目文件路径
+        ts: 时间戳字符串
+
+    返回:
+        HTML 报告路径
+    """
     os.makedirs(DIR_OUTPUT, exist_ok=True)
     json_path = os.path.join(DIR_OUTPUT, f"report_{ts}.json")
     generate_json_report(results, json_path)
@@ -221,8 +586,266 @@ async def run_evaluation(problems_path, concurrency=3, progress_callback=None, b
     return html_path  # 返回 HTML 路径供 GUI 打开
 
 
-async def run_evaluation_from_bank(bank_name: str, count: int, concurrency: int = 10,
-                                      domain: Optional[str] = None, progress_callback=None) -> Optional[str]:
+# ==================== 主评测流水线 ====================
+
+async def _print_problem_results(results: list) -> None:
+    """
+    按题目 ID + 样本编号排序后打印逐题结果。
+
+    参数:
+        results: EvaluationResult 列表
+    """
+    sorted_results = sorted(results, key=lambda r: (r.problem_id, r.sample_index))
+    has_multi = any(r.sample_index > 0 for r in sorted_results)
+    for i, result in enumerate(sorted_results, 1):
+        status = "PASS" if result.is_correct else "FAIL"
+        sample_tag = f" [S{result.sample_index}]" if has_multi else ""
+        print(
+            f"  [{i}/{len(results)}] {status} "
+            f"{result.problem_id}{sample_tag}: {_safe_str(result.intern_answer)}"
+        )
+
+
+def _print_review_summary(results: list) -> None:
+    """
+    打印自审核统计摘要。
+
+    兼容旧数据（无 review_passed 字段），仅统计有审核记录的条目。
+    输出审核通过率与平均重试次数。
+
+    参数:
+        results: EvaluationResult 列表
+    """
+    # 筛选有审核记录的条目（review_passed 不为 None 表示审核已执行）
+    reviewed = [r for r in results if getattr(r, "review_passed", None) is not None]
+    if not reviewed:
+        # 尝试回退：通过 total_tokens_used 字段判断是否执行过审核
+        reviewed = [r for r in results
+                    if hasattr(r, "total_tokens_used") and r.total_tokens_used]
+        if not reviewed:
+            return
+
+    passed = sum(1 for r in reviewed if getattr(r, "review_passed", False))
+    failed = sum(1 for r in reviewed if getattr(r, "review_passed", None) is False)
+    total_reviewed = passed + failed
+    if total_reviewed == 0:
+        return
+
+    total_retries = sum(getattr(r, "review_attempts", 0) for r in reviewed)
+    passed_retries = sum(
+        getattr(r, "review_attempts", 0) for r in reviewed
+        if getattr(r, "review_passed", False)
+    )
+    passed_count = max(passed, 1)
+
+    print(
+        f"\n  [自审核统计] 共审核 {total_reviewed} 题: "
+        f"{passed} 通过, {failed} 未通过 → "
+        f"通过率 {passed / total_reviewed * 100:.1f}%"
+    )
+    if total_retries > 0:
+        print(
+            f"    总重试 {total_retries} 次, "
+            f"通过题目平均重试 {passed_retries / passed_count:.1f} 次"
+        )
+
+
+async def run_evaluation(
+    problems_path,
+    concurrency=3,
+    progress_callback=None,
+    bank_name=None,
+    use_batch_judge=True,
+    enable_lean=True,
+    multi_sample=0,
+    enable_review=True,
+    max_review_retries=2,
+    multi_agent=False,
+):
+    """
+    执行完整评测流水线：
+    1. 从 JSON/CSV 加载题目列表
+    2. 检查答案库覆盖率
+    3. 执行推理 + 评判（批量或逐题模式）
+    4. Lean 形式化验证（可选）
+    5. 生成 JSON + HTML 报告
+
+    参数:
+        problems_path: 题目文件路径
+        concurrency: 最大并发数
+        progress_callback: 进度回调 (current, total) — 暂未使用
+        bank_name: 题库名称（可选，用于答案库辅助评判）
+        use_batch_judge: 是否使用批量评判模式（默认 True）
+        enable_lean: 是否启用 Lean 验证阶段（默认 True）
+        multi_sample: 每道题生成几个不同答案（0=禁用，建议 3）
+        enable_review: 是否启用自审核（默认 True）
+        max_review_retries: 审核不通过时的最大重试次数（默认 2）
+
+    返回:
+        HTML 报告路径，加载失败返回 None
+    """
+    global _run_inference_func, _run_inference_multi_func
+    # 多智能体版推理入口切换：GUI 勾选「多智能体版」或代码调用 multi_agent=True 时生效。
+    # 无论开关如何都显式设定，避免上一次运行残留的模块级变量影响本次结果。
+    if multi_agent:
+        try:
+            from multi_agent_runner import (
+                run_inference as _ma_inf,
+                run_inference_multi as _ma_inf_multi,
+            )
+            _run_inference_func = _ma_inf
+            _run_inference_multi_func = _ma_inf_multi
+            print("[INFO] 使用多智能体版推理模块 (submit/user_agent.py ReasoningAgent)")
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERROR] 多智能体版加载失败，回退到原版 intern_s1: {e}")
+            from intern_s1 import run_inference as _orig_inf, run_inference_multi as _orig_inf_multi
+            _run_inference_func = _orig_inf
+            _run_inference_multi_func = _orig_inf_multi
+    else:
+        from intern_s1 import run_inference as _orig_inf, run_inference_multi as _orig_inf_multi
+        _run_inference_func = _orig_inf
+        _run_inference_multi_func = _orig_inf_multi
+
+    problems = load_problems(problems_path)
+    if not problems:
+        logger.error("No problems loaded!")
+        return None
+    logger.info(f"Loaded {len(problems)} problems. Starting evaluation...")
+
+    # 打印推理策略
+    if multi_sample > 0:
+        review_str = "(自审核 ON)" if enable_review else "(自审核 OFF)"
+        print(f"  [策略] 并行多样本：每道题 {multi_sample} 次独立 API 调用 {review_str} "
+              f"(温度梯度: {[0.5, 0.7, 0.9][:multi_sample]})")
+    else:
+        review_str = "(自审核 ON)" if enable_review else "(自审核 OFF)"
+        print(f"  [策略] 单次调用 + 模型内部生成 3 候选 + 自剪枝 + 自审核 {review_str} "
+              f"(temperature=0.6, max_review_retries={max_review_retries})")
+
+    # 检查答案库覆盖率
+    _check_answer_coverage(bank_name)
+
+    actual_concurrency = min(concurrency, len(problems))
+
+    # 选择评测模式并执行
+    if use_batch_judge and len(problems) > 1:
+        results = await evaluate_batch_mode(
+            problems, actual_concurrency, bank_name=bank_name,
+            multi_sample=multi_sample,
+            enable_review=enable_review, max_review_retries=max_review_retries,
+        )
+        await _print_problem_results(results)
+    else:
+        results = await _run_single_mode(
+            problems, actual_concurrency, bank_name, multi_sample,
+            enable_review=enable_review, max_review_retries=max_review_retries,
+        )
+
+    results.sort(key=lambda r: r.problem_id)
+
+    # 打印自审核统计
+    if enable_review:
+        _print_review_summary(results)
+
+    # Lean 验证阶段
+    if enable_lean:
+        try:
+            results = await _run_lean_verification_stage(results)
+        except Exception as e:
+            logger.warning(
+                f"Lean verification stage failed (non-fatal): {e}"
+            )
+            print(
+                f"\n  [Lean] Verification stage error "
+                f"(continuing without Lean results): {e}"
+            )
+
+    # 保存报告
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return _save_reports(results, problems_path, ts)
+
+
+def _check_answer_coverage(bank_name: str) -> None:
+    """
+    检查并打印答案库覆盖率。
+
+    参数:
+        bank_name: 题库名称
+    """
+    if not bank_name:
+        return
+    try:
+        from question_bank import get_db
+        db = get_db()
+        stats = db.get_answer_mapping_stats(bank_name)
+        if stats["covered_problems"] > 0:
+            logger.info(
+                f"题库 {bank_name} 已有答案映射: "
+                f"{stats['covered_problems']}/{stats['total_problems']} "
+                f"道题有参考答案"
+            )
+            print(
+                f"\n[答案库] {bank_name}: "
+                f"{stats['covered_problems']}/{stats['total_problems']} "
+                f"道题有参考答案 (覆盖率 {stats['coverage_rate']}%)"
+            )
+    except Exception as e:
+        logger.debug(f"检查答案映射失败: {e}")
+
+
+async def _run_single_mode(problems, concurrency, bank_name=None, multi_sample=0,
+                            enable_review=True, max_review_retries=2):
+    """
+    逐题评测模式：每道题独立推理 + 评判。
+
+    参数:
+        problems: 题目列表
+        concurrency: 并发数
+        bank_name: 题库名称
+        multi_sample: 每道题生成几个不同答案
+        enable_review: 是否启用自审核（默认 True）
+        max_review_retries: 审核不通过时的最大重试次数（默认 2）
+
+    返回:
+        EvaluationResult 列表
+    """
+    semaphore = asyncio.Semaphore(concurrency)
+    tasks = [
+        evaluate_single(p, semaphore, bank_name=bank_name, multi_sample=multi_sample,
+                        enable_review=enable_review, max_review_retries=max_review_retries)
+        for p in problems
+    ]
+    total_label = f"{len(problems)} problems"
+    if multi_sample > 0:
+        total_label += f" x {multi_sample} samples = {len(problems) * multi_sample} results"
+    print(
+        f"\nEvaluating {total_label} "
+        f"(concurrency={concurrency})...\n"
+    )
+    results = []
+    for i, coro in enumerate(asyncio.as_completed(tasks), 1):
+        sample_results = await coro  # list[EvaluationResult]
+        for sr in sample_results:
+            results.append(sr)
+            status = "PASS" if sr.is_correct else "FAIL"
+            sample_tag = f" [S{sr.sample_index}]" if multi_sample > 0 else ""
+            print(
+                f"  [{i}/{len(problems)}] {status} "
+                f"{sr.problem_id}{sample_tag}: {_safe_str(sr.intern_answer)}"
+            )
+    return results
+
+
+# ==================== 题库随机评测 ====================
+
+async def run_evaluation_from_bank(
+    bank_name: str,
+    count: int,
+    concurrency: int = 10,
+    domain: Optional[str] = None,
+    progress_callback=None,
+    multi_agent: bool = False,
+) -> Optional[str]:
     """
     从题库随机选题并评测的完整流程。
 
@@ -268,7 +891,11 @@ async def run_evaluation_from_bank(bank_name: str, count: int, concurrency: int 
     logger.info(f"从题库 {bank_name} 随机选取 {len(problems)} 道题目，开始评测...")
 
     # 复用现有评测流水线（传入 bank_name 以启用答案库辅助评判）
-    html_path = await run_evaluation(temp_path, concurrency, progress_callback=progress_callback, bank_name=bank_name)
+    html_path = await run_evaluation(
+        temp_path, concurrency,
+        progress_callback=progress_callback, bank_name=bank_name,
+        multi_agent=multi_agent,
+    )
 
     # 将临时文件重命名为有意义的名字（保留原始题目副本）
     import shutil
@@ -291,6 +918,7 @@ def main():
     2. 答案导入：--import-answers <文件> --bank <题库名> → 提取+匹配+入库
     3. 统计查询：--bank-stats <题库名> → 显示答案覆盖率
     """
+    global _run_inference_func, _run_inference_multi_func
     parser = argparse.ArgumentParser(
         description="Math Agent Evaluator - 支持 PDF/Word/JSON/CSV 自动转化 + 答案导入匹配",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -303,10 +931,25 @@ def main():
   python 测试工具/main.py --bank-stats 我的题库
         """
     )
-    parser.add_argument("-i", "--input", required=False, help="输入文件路径（.pdf / .docx / .json / .csv）")
-    parser.add_argument("-c", "--concurrency", type=int, default=3, help="最大并发数（默认 3）")
-    parser.add_argument("--max", type=int, default=0, help="最多评测题目数（0=全部，仅 PDF/Word 有效）")
-    parser.add_argument("-v", "--verbose", action="store_true", help="详细日志")
+    parser.add_argument(
+        "--multi-agent", action="store_true",
+        help="使用多智能体版推理模块（submit/user_agent.py ReasoningAgent："
+             "题型识别→求解→验证→自主调控）。注意：多智能体版内置投票验证，"
+             "评测器自审核循环不再重复执行。",
+    )
+    parser.add_argument(
+        "--multi-sample", type=int, default=0, metavar="N",
+        help="（备选方案）每道题并行调用 N 次 API，每次用不同温度获得多个独立答案。"
+             "默认 0 禁用，此时使用单次 API 调用 + 模型内部多候选自剪枝策略。",
+    )
+    parser.add_argument(
+        "--no-review", action="store_true",
+        help="禁用自审核功能（默认启用自审核，检测答案漏洞/不完整/错误并自动重试修正）",
+    )
+    parser.add_argument(
+        "--max-review-retries", type=int, default=2, metavar="N",
+        help="自审核不通过时的最大重试次数（默认 2）",
+    )
 
     # 答案导入相关参数
     parser.add_argument("--import-answers", help="导入答案文档（.pptx / .docx / .txt）并智能匹配到题库")
@@ -320,6 +963,36 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    # 切换为独立版 Intern-S1 推理模块
+    if args.optimized:
+        _optimized_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "intern_s1_optimized",
+        )
+        if os.path.isdir(_optimized_dir):
+            sys.path.insert(0, os.path.dirname(_optimized_dir))
+            from intern_s1_optimized.intern_s1 import run_inference as _optimized_inference
+            from intern_s1_optimized.intern_s1 import run_inference_multi as _optimized_inference_multi
+            global _run_inference_func, _run_inference_multi_func
+            _run_inference_func = _optimized_inference
+            _run_inference_multi_func = _optimized_inference_multi
+            print("[INFO] 使用独立版 Intern-S1 推理模块 (intern_s1_optimized/)")
+        else:
+            print(f"[WARNING] 独立版目录不存在: {_optimized_dir}，回退到原版")
+
+    # 切换为多智能体版推理模块（submit/user_agent.py ReasoningAgent）
+    if args.multi_agent:
+        try:
+            from multi_agent_runner import (
+                run_inference as _ma_run,
+                run_inference_multi as _ma_run_multi,
+            )
+            _run_inference_func = _ma_run
+            _run_inference_multi_func = _ma_run_multi
+            print("[INFO] 使用多智能体版推理模块 (submit/user_agent.py ReasoningAgent)")
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERROR] 多智能体版加载失败: {e}，回退到原版: {e}")
 
     # 命令: 查看答案映射统计
     if args.bank_stats:
@@ -404,7 +1077,16 @@ def main():
         sys.exit(1)
 
     # 步骤2: 执行评测
-    html_path = asyncio.run(run_evaluation(json_path, args.concurrency))
+    html_path = asyncio.run(
+        run_evaluation(
+            json_path, args.concurrency,
+            enable_lean=not args.no_lean,
+            multi_sample=args.multi_sample,
+            enable_review=not args.no_review,
+            max_review_retries=args.max_review_retries,
+            multi_agent=args.multi_agent,
+        )
+    )
 
     # 步骤3: 自动打开报告
     if html_path:

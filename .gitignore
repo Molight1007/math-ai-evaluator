@@ -62,3 +62,14 @@ lake-packages/
 build_pid.txt
 *_done.txt
 __pycache__/
+
+# 临时评测输出（运行时生成）
+*_out.txt
+*_pilot*.jsonl
+*_pilot*.json
+题库_*.json
+题库_*.jsonl
+
+# Node.js
+node_modules/
+package-lock.json

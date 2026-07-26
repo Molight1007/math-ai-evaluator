@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>优化版书生 AI · 数学智能体评测器</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- ===================== 登录 / 注册 门禁 ===================== -->
+  <div id="login-view" class="login-view">
+    <div class="login-bg"></div>
+    <div class="login-card glass">
+      <div class="brand">
+        <div class="brand-logo">📐</div>
+        <div>
+          <h1 class="brand-title">优化版书生 AI</h1>
+          <p class="brand-sub">数学智能体评测器 · Math Agent Evaluator</p>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login">登录</button>
+        <button class="tab" data-tab="register">注册申请</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form id="login-form" class="auth-form" autocomplete="off">
+        <label class="field">
+          <span>用户名</span>
+          <input type="text" id="login-username" placeholder="请输入用户名" required />
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input type="password" id="login-password" placeholder="请输入密码" required />
+        </label>
+        <button type="submit" class="btn-primary">登 录</button>
+        <p id="login-msg" class="form-msg"></p>
+      </form>
+
+      <!-- 注册表单 -->
+      <form id="register-form" class="auth-form hidden" autocomplete="off">
+        <label class="field">
+          <span>用户名（3-32 个字符）</span>
+          <input type="text" id="register-username" placeholder="设置用户名" required />
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input type="password" id="register-password" placeholder="设置密码" required />
+        </label>
+        <button type="submit" class="btn-primary">提交申请</button>
+        <p id="register-msg" class="form-msg"></p>
+        <p class="hint">内部测试阶段：注册后需管理员审批通过方可使用。</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== 主应用 ===================== -->
+  <div id="app-view" class="app-view hidden">
+    <!-- 侧边栏 -->
+    <aside class="sidebar glass">
+      <div class="brand compact">
+        <div class="brand-logo small">📐</div>
+        <div class="brand-text">
+          <div class="brand-title small">优化版书生 AI</div>
+          <div class="brand-sub small">评测工作台</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-page="eval"><span class="ico">⚡</span>快速评测</button>
+        <button class="nav-item" data-page="bank"><span class="ico">📚</span>题库管理</button>
+        <button class="nav-item admin-only hidden" data-page="approve"><span class="ico">✅</span>审批后台</button>
+      </nav>
+
+      <div class="key-settings">
+        <div class="key-head" id="key-head">
+          <span>🔑 API 密钥</span>
+          <span class="chev">▾</span>
+        </div>
+        <div class="key-body" id="key-body">
+          <p class="hint">密钥仅用于本次会话，不会保存在服务器。</p>
+          <label class="field">
+            <span>Intern-S1 Key</span>
+            <div class="pw-wrap">
+              <input type="password" id="intern-key" placeholder="填写你的 Intern-S1 Key" />
+              <button type="button" class="pw-toggle" data-target="intern-key">显示</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>DeepSeek Key</span>
+            <div class="pw-wrap">
+              <input type="password" id="deepseek-key" placeholder="填写你的 DeepSeek Key" />
+              <button type="button" class="pw-toggle" data-target="deepseek-key">显示</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>并发数：<b id="conc-val">3</b></span>
+            <input type="range" id="concurrency" min="1" max="10" value="3" />
+          </label>
+        </div>
+      </div>
+
+      <div class="user-foot">
+        <div class="uinfo">
+          <div class="avatar" id="user-avatar">U</div>
+          <div>
+            <div class="uname" id="user-name">user</div>
+            <div class="urole" id="user-role">成员</div>
+          </div>
+        </div>
+        <button class="btn-ghost" id="logout-btn">退出</button>
+      </div>
+    </aside>
+
+    <!-- 主内容 -->
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h2 id="page-title">快速评测</h2>
+          <p id="page-desc" class="muted">上传题目文件或选择题库，一键触发数学智能体评测。</p>
+        </div>
+        <div class="badge" id="mode-badge">内部测试模式</div>
+      </header>
+
+      <!-- 快速评测页 -->
+      <section id="page-eval" class="page">
+        <div class="card">
+          <h3 class="card-title">① 选择评测来源</h3>
+          <div class="source-tabs">
+            <button class="src-tab active" data-src="file">📄 上传文件</button>
+            <button class="src-tab" data-src="bank">📚 选择题库</button>
+          </div>
+
+          <div id="src-file" class="src-panel">
+            <label class="dropzone" id="dropzone">
+              <input type="file" id="file-input" hidden />
+              <div class="dz-icon">⬆</div>
+              <div class="dz-text">点击或拖拽文件到此处</div>
+              <div class="dz-hint">支持 PDF / Word / PPT / Markdown / Excel / JSON / CSV</div>
+            </label>
+            <div id="file-chip" class="file-chip hidden"></div>
+          </div>
+
+          <div id="src-bank" class="src-panel hidden">
+            <select id="bank-select" class="select"></select>
+            <div class="row">
+              <label class="field inline">
+                <span>题目数量</span>
+                <input type="number" id="bank-count" value="10" min="1" max="200" />
+              </label>
+              <label class="field inline">
+                <span>领域（可选）</span>
+                <input type="text" id="bank-domain" placeholder="如 代数" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">② 评测选项</h3>
+          <div id="key-mirror" class="key-mirror"></div>
+          <label class="check">
+            <input type="checkbox" id="enable-lean" />
+            <span>启用 Lean 形式化验证（服务器未安装 Lean 时建议关闭）</span>
+          </label>
+          <button class="btn-primary lg" id="start-btn">🚀 开始评测</button>
+        </div>
+
+        <div class="card" id="progress-card">
+          <h3 class="card-title">③ 评测进度</h3>
+          <div id="progress-wrap" class="progress-wrap hidden">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progress-meta">
+              <span id="progress-text">准备中…</span>
+              <span id="progress-pct">0%</span>
+            </div>
+          </div>
+          <div id="eval-idle" class="empty">尚未开始评测。</div>
+        </div>
+
+        <div class="card hidden" id="report-card">
+          <div class="report-head">
+            <h3 class="card-title">④ 评测报告</h3>
+            <button class="btn-ghost" id="download-btn">⬇ 下载 HTML</button>
+          </div>
+          <iframe id="report-frame" class="report-frame" title="评测报告"></iframe>
+        </div>
+      </section>
+
+      <!-- 题库管理页 -->
+      <section id="page-bank" class="page hidden">
+        <div class="card">
+          <h3 class="card-title">创建题库</h3>
+          <div class="row">
+            <input type="text" id="new-bank-name" class="flex1" placeholder="输入新题库名称" />
+            <button class="btn-primary" id="create-bank-btn">创建</button>
+          </div>
+          <p id="bank-msg" class="form-msg"></p>
+        </div>
+        <div class="card">
+          <h3 class="card-title">题库列表</h3>
+          <div id="bank-grid" class="bank-grid"></div>
+          <div id="bank-empty" class="empty">暂无题库。</div>
+        </div>
+      </section>
+
+      <!-- 审批后台页 -->
+      <section id="page-approve" class="page hidden">
+        <div class="card">
+          <h3 class="card-title">待审批用户</h3>
+          <div id="pending-list" class="pending-list"></div>
+          <div id="pending-empty" class="empty">暂无待审批用户 🎉</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/eval.js"></script>
+  <script src="js/bank.js"></script>
+</body>
+</html>

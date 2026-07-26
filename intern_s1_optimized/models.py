@@ -6,6 +6,114 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 
+# ==================== AND-OR DAG 数据模型 ====================
+
+@dataclass
+class ANDORDAGNode:
+    """AND-OR DAG 树节点。
+
+    表示证明蓝图分解中的一个节点。节点有三种类型：
+    - OR：待证明的目标（需要选择一种分解方案）
+    - AND：分解方案（所有子目标都需要证明）
+    - LEAF：叶子节点（sorry 占位或已验证的子目标）
+
+    属性:
+        node_id: 节点唯一标识
+        node_type: 节点类型，取值为 "OR" / "AND" / "LEAF"
+        label: 节点显示标签（如"证明目标"、"子引理1"）
+        statement: 节点对应的数学命题文本
+        status: 节点状态，取值为 "open" / "decomposed" / "verified" / "sorry"
+        children: 子节点 ID 列表
+        detail: 节点补充说明（可选，如子引理的推理思路）
+    """
+    node_id: str
+    node_type: str  # "OR" | "AND" | "LEAF"
+    label: str = ""
+    statement: str = ""
+    status: str = "open"  # "open" | "decomposed" | "verified" | "sorry"
+    children: list[str] = field(default_factory=list)
+    detail: str = ""
+
+    def to_dict(self) -> dict:
+        """将节点转为可 JSON 序列化的字典。"""
+        return {
+            "node_id": self.node_id,
+            "node_type": self.node_type,
+            "label": self.label,
+            "statement": self.statement,
+            "status": self.status,
+            "children": self.children,
+            "detail": self.detail,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ANDORDAGNode":
+        """从字典还原节点对象。"""
+        return cls(
+            node_id=data.get("node_id", ""),
+            node_type=data.get("node_type", "LEAF"),
+            label=data.get("label", ""),
+            statement=data.get("statement", ""),
+            status=data.get("status", "open"),
+            children=data.get("children", []),
+            detail=data.get("detail", ""),
+        )
+
+
+@dataclass
+class ANDORDAG:
+    """AND-OR DAG 蓝图分解树。
+
+    表示一个证明被分解为子引理的 AND-OR 树形结构。
+    根节点为待证明的总目标（OR 类型），子节点为分解方案或叶子引理。
+
+    属性:
+        root_id: 根节点 ID
+        nodes: 节点字典，key 为 node_id，value 为 ANDORDAGNode
+    """
+    root_id: str = ""
+    nodes: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """将 DAG 树转为可 JSON 序列化的字典。
+
+        返回:
+            {"root_id": str, "nodes": {node_id: node_dict, ...}}
+        """
+        return {
+            "root_id": self.root_id,
+            "nodes": {k: v.to_dict() for k, v in self.nodes.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ANDORDAG":
+        """从字典还原 DAG 树对象。
+
+        参数:
+            data: to_dict() 输出的字典
+
+        返回:
+            ANDORDAG 实例。若 data 为空或缺失关键字段，返回空 DAG。
+        """
+        if not data or not isinstance(data, dict):
+            return cls()
+        root_id = data.get("root_id", "")
+        raw_nodes = data.get("nodes", {})
+        nodes = {}
+        for nid, ndata in raw_nodes.items():
+            if isinstance(ndata, dict):
+                nodes[nid] = ANDORDAGNode.from_dict(ndata)
+            elif isinstance(ndata, ANDORDAGNode):
+                nodes[nid] = ndata
+        return cls(root_id=root_id, nodes=nodes)
+
+    def is_empty(self) -> bool:
+        """检查 DAG 是否为空（无有效节点）。"""
+        return not self.root_id or not self.nodes
+
+
+# ==================== 核心数据模型 ====================
+
 @dataclass
 class Problem:
     """题目数据模型 - 从题库/文件中加载的原始数学题"""
@@ -17,17 +125,35 @@ class Problem:
 
 @dataclass
 class InferenceResult:
-    """推理结果 - Intern-S1 模型对单题的推理输出"""
+    """推理结果 - Intern-S1 模型对单题的推理输出
+
+    支持两种模式：
+    1. 单候选模式（旧）：answer / reasoning / steps / verification
+    2. 多候选模式（新）：模型内部生成 3 个候选答案，自评估后选出最优
+    """
     problem_id: str                               # 对应的题目ID
     question: str                                 # 原题内容
-    answer: str = ""                              # 模型给出的最终答案
-    reasoning: str = ""                           # 推理过程文本
+    answer: str = ""                              # 模型给出的最终答案（多候选模式 = 选出的最优答案）
+    reasoning: str = ""                           # 推理过程文本（多候选模式 = 选择理由）
     steps: list[str] = field(default_factory=list)# 分步骤推理列表
     verification: str = ""                        # 自验证过程
     raw_response: str = ""                        # API 返回的原始响应
     tokens_used: int = 0                          # 推理消耗的 token 数
     latency_seconds: float = 0.0                  # 推理耗时（秒）
     error: Optional[str] = None                   # 推理过程中的错误信息
+    sample_index: int = 0                         # 多样本编号（0-based，单样本模式下为0）
+    # 多候选模式专用字段
+    candidates: Optional[list[dict]] = None       # 候选答案列表 [{"index":0,"answer":"...","reasoning":"...","confidence":0.9}, ...]
+    selected_candidate_index: Optional[int] = None  # 最终选中的候选编号
+    selection_reasoning: str = ""                 # 选择最优候选的理由
+    # 自审核相关字段
+    review_passed: Optional[bool] = None          # 自审核是否通过（None=未执行审核）
+    review_feedback: Optional[dict] = None        # 审核反馈详情 {"verdict","scores","issues","suggestions","summary"}
+    review_attempts: int = 0                      # 审核/重试总次数
+    review_tokens_used: int = 0                   # 审核消耗 token 数
+    review_latency_seconds: float = 0.0           # 审核耗时（秒）
+    total_tokens_used: int = 0                    # 总 token（推理+审核+重试）
+    total_latency_seconds: float = 0.0            # 总耗时（推理+审核+重试，秒）
 
 
 @dataclass
@@ -80,8 +206,14 @@ class LeanVerificationResult:
     # sorry 检测
     sorry_count: int = 0                          # Lean 代码中 sorry 出现次数
     has_incomplete_proof: bool = False            # 是否证明不完整（有 sorry）
+    # 反馈修正
+    revision_attempts: int = 0                    # 反馈修正尝试次数
+    revised_lean_code: str = ""                   # 修正后的 Lean 代码（最终版本）
+    # 蓝图分解
+    dag: Optional[dict] = None                    # AND-OR DAG 蓝图分解（ANDORDAG.to_dict()）
 
     def to_dict(self) -> dict:
+        """将结果转为字典，用于 JSON 序列化。"""
         return asdict(self)
 
 
@@ -108,6 +240,11 @@ class EvaluationResult:
     inference_error: Optional[str] = None         # 推理错误
     judge_error: Optional[str] = None             # 评判错误
     lean_verification: Optional[dict] = None      # Lean 验证结果（LeanVerificationResult.to_dict()）
+    sample_index: int = 0                         # 多样本编号（0-based，单样本模式下为0）
+    # 自审核相关字段（从 InferenceResult 透传）
+    review_passed: Optional[bool] = None          # 自审核是否通过
+    review_attempts: int = 0                      # 审核/重试次数
+    total_tokens_used: int = 0                    # 总 token（推理+审核）
 
     def to_dict(self) -> dict:
         """将结果转为字典，用于 JSON 序列化"""
