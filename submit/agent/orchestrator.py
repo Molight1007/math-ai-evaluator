@@ -19,7 +19,7 @@
 import logging
 
 from .base import BaseAgent, TaskContext, Budget
-from .classifier import ClassifierAgent
+from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .verifier import VerifierAgent
 from .formatter import FormatterAgent
@@ -51,10 +51,47 @@ class Orchestrator(BaseAgent):
             budget=Budget(max_calls=self.config.max_total_calls),
         )
         try:
-            self.classifier.run(ctx)       # 题型识别
+            # 元数据中已知领域 -> 跳过分类器 LLM 调用，直接复用
+            pre_known_domain = (metadata or {}).get("domain", "")
+            if pre_known_domain and pre_known_domain in _KNOWN_DOMAINS:
+                ctx.domain = pre_known_domain
+                self.record(
+                    ctx, "classify",
+                    f"题型分类结果（元数据已知）: {pre_known_domain}",
+                    domain=pre_known_domain)
+            else:
+                self.classifier.run(ctx)       # 题型识别
             self.solver.run(ctx)           # 初始候选
             self.verifier.run(ctx)         # 验证
             self._regulate(ctx)            # 自主调控（回环 / 增强 / 提前退出）
+
+            # 答案完整性审核：检查最佳答案是否截断，不完整则续写
+            self._ensure_completeness(ctx)
+
+            # 兜底：所有验证结果均为 0/0 票（模型空响应 + 回环也失败）
+            # → 跳过复杂流水线，直接用最简提示词让模型单次求解
+            if ctx.verdicts and all(v.total_votes == 0 for v in ctx.verdicts):
+                self.record(ctx, "control", "所有候选验证投票均为 0，触发兜底直接求解")
+                direct_answer = self.solver.direct_solve(ctx)
+                if direct_answer:
+                    ctx.final_response = direct_answer
+                    self.record(ctx, "finalize",
+                               f"兜底直接求解结果: {direct_answer[:200]}")
+                    return safe_json_serialize({
+                        "final_response": direct_answer,
+                        "trace": ctx.trace,
+                    })
+                # 直接求解也失败 → 从所有候选中选最有内容的答案
+                best_candidate = self._pick_best_from_candidates(ctx)
+                if best_candidate:
+                    ctx.final_response = best_candidate
+                    self.record(ctx, "finalize",
+                               f"兜底也失败，使用最佳候选答案: {best_candidate[:200]}")
+                    return safe_json_serialize({
+                        "final_response": best_candidate,
+                        "trace": ctx.trace,
+                    })
+
             self.formatter.run(ctx)        # 规范化输出
             # 候选与验证结果（纯 dict，便于评测器报告与调试；不破坏平台契约）
             candidates_out = [
@@ -85,17 +122,27 @@ class Orchestrator(BaseAgent):
     # ----------------------------------------------------------
     def _regulate(self, ctx: TaskContext) -> None:
         max_iter = self.config.max_revise_rounds + 2  # 防死循环硬上限
+        min_votes_for_high_conf = 2  # 至少 2 票才允许高置信度提前退出
         for _ in range(max_iter):
             if not ctx.verdicts:
                 break
 
-            best = max(ctx.verdicts, key=lambda v: v.confidence)
+            # 过滤掉验证失败的候选（total_votes=0）后再做决策
+            valid_verdicts = [v for v in ctx.verdicts if v.total_votes > 0]
+            if not valid_verdicts:
+                self.record(ctx, "control", "所有候选验证均失败，停止调控")
+                break
+
+            best = max(valid_verdicts, key=lambda v: v.confidence)
 
             # 1) 高置信度 -> 提前退出（节省增强调用）
-            if best.confidence >= self.config.conf_high:
+            # 必须同时满足：置信度够高，且有效票数不少于阈值
+            if (best.confidence >= self.config.conf_high
+                    and best.total_votes >= min_votes_for_high_conf):
                 self.record(
                     ctx, "control",
-                    f"高置信度 {best.confidence:.2f} ≥ {self.config.conf_high}，"
+                    f"高置信度 {best.confidence:.2f} ≥ {self.config.conf_high} "
+                    f"({best.correct_votes}/{best.total_votes} 票)，"
                     f"提前退出（节省增强调用）")
                 break
 
@@ -113,7 +160,8 @@ class Orchestrator(BaseAgent):
                     ctx.revise_round += 1
                     self.record(
                         ctx, "control",
-                        f"低置信度 {best.confidence:.2f} < {self.config.conf_low}，"
+                        f"低置信度 {best.confidence:.2f} < {self.config.conf_low} "
+                        f"({best.correct_votes}/{best.total_votes} 票)，"
                         f"触发自纠错回环 R{ctx.revise_round}：{feedback[:120]}")
                     self.solver.run(ctx)    # 定向重解（追加修正候选）
                     self.verifier.run(ctx)  # 重新验证（含旧候选，最差退化为多一个候选）
@@ -134,6 +182,85 @@ class Orchestrator(BaseAgent):
         if cand is None or not cand.reasoning:
             return ""
         return self.verifier.feedback(ctx, cand)
+
+    def _pick_best_from_candidates(self, ctx: TaskContext) -> str:
+        """
+        从所有候选中选择最有价值的答案（无正确答案时的兜底选择）。
+        优先级：有答案内容的 verdict > 有答案内容的 candidate > 有推理内容的 candidate
+        """
+        import re as _re
+        # 1) 从 verdicts 找有非拒绝答案的
+        if ctx.verdicts:
+            sorted_v = sorted(ctx.verdicts, key=lambda v: v.confidence, reverse=True)
+            for v in sorted_v:
+                ans = getattr(v, "answer", "") or ""
+                if ans and len(ans) > 3 and not _re.search(r"无法求解|无法解决|不能解决", ans):
+                    return ans
+        # 2) 从 candidates 找有非拒绝答案的（按推理长度排序 → 越详细越可信）
+        if ctx.candidates:
+            sorted_c = sorted(ctx.candidates, key=lambda c: len(c.reasoning or ""), reverse=True)
+            for c in sorted_c:
+                if c.answer and len(c.answer) > 3 and not _re.search(r"无法求解|无法解决|不能解决", c.answer):
+                    return c.answer
+        # 3) 最后防线：取最详细推理的尾部
+        if ctx.candidates:
+            best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
+            if best.reasoning and len(best.reasoning) > 50:
+                return best.reasoning.strip()[-500:]
+        return ""
+
+    def _ensure_completeness(self, ctx: TaskContext) -> None:
+        """
+        自我审核：检查最佳候选答案是否完整。
+        - 先用 solver 启发式检查，再用 verifier LLM 检查
+        - 完整：直接通过
+        - 不完整：调用 solver 续写，然后重新验证
+        """
+        if not ctx.candidates:
+            return
+
+        # 找到当前最佳候选（对应最高置信度且验证有效的 verdict 的候选）
+        best_cand = None
+        valid_verdicts = [v for v in ctx.verdicts if v.total_votes > 0]
+        if valid_verdicts:
+            best_verdict = max(valid_verdicts, key=lambda v: v.confidence)
+            best_cand = next(
+                (c for c in ctx.candidates if c.id == best_verdict.id), None)
+
+        if best_cand is None:
+            # 没有 verdict，取最详细推理的候选
+            if ctx.candidates:
+                best_cand = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
+
+        if best_cand is None:
+            return
+
+        # 双重检查完整性：启发式 + LLM 确认
+        heuristic_ok = self.solver.is_answer_complete(best_cand.reasoning, best_cand.answer)
+        if heuristic_ok:
+            self.record(ctx, "complete", "答案完整性检查通过（启发式）")
+            return
+
+        # 启发式判断不完整 → 用 LLM 二次确认
+        llm_ok = self.verifier.check_completeness(ctx, best_cand)
+        if llm_ok:
+            self.record(ctx, "complete", "答案完整性检查通过（LLM确认完整）")
+            return
+
+        # LLM 也认为不完整 → 续写
+        self.record(ctx, "complete",
+                   f"答案不完整，触发续写 (候选 #{best_cand.id})")
+        completed = self.solver.complete_answer(ctx, best_cand)
+
+        if completed and completed.answer != best_cand.answer:
+            # 替换原候选
+            for i, cand in enumerate(ctx.candidates):
+                if cand.id == best_cand.id:
+                    ctx.candidates[i] = completed
+                    break
+            # 重新验证续写后的候选
+            self.verifier.run(ctx)
+            self.record(ctx, "complete", "续写后重新验证完成")
 
     # ----------------------------------------------------------
     # 兜底：单次直接求解，保证 final_response 非空

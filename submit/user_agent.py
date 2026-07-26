@@ -40,14 +40,14 @@ class AgentConfig:
     """智能体可调参数（选手可自由优化）"""
     # 策略模型（解题）
     policy_sample_times: int = 4       # 候选解答数量
-    policy_temperature: float = 0.6    # 策略采样温度
-    policy_max_tokens: int = 4096      # 策略最大 token
+    policy_temperature: float = 0.2    # 策略采样温度
+    policy_max_tokens: int = 8192      # 策略最大 token
 
     # 蓝图分解（LEAP 启发：先拆后解）
     use_blueprint: bool = True         # 是否启用蓝图分解策略
 
     # 验证模型（评判）
-    verifier_voting_times: int = 2     # 每个候选的投票次数
+    verifier_voting_times: int = 3     # 每个候选的投票次数（多次投票交叉验证）
     verifier_temperature: float = 0.0  # 验证温度（贪婪解码）
 
     # 题型分类（可选）
@@ -61,7 +61,7 @@ class AgentConfig:
     conf_low: float = 0.4              # 低置信度阈值：触发自纠错回环
     max_revise_rounds: int = 2         # 自纠错回环最大轮数
     revise_sample_times: int = 2       # 每轮纠错重解生成的候选数
-    max_total_calls: int = 60          # LLM 调用预算硬上限（防超时/超额）
+    max_total_calls: int = 150         # LLM 调用预算硬上限（防超时/超额）
 
 
 # ============================================================

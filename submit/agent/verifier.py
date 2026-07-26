@@ -9,13 +9,13 @@
 - 投票结果写入 ``ctx.verdicts``，按置信度降序；
 - ``feedback`` 方法在被判定为错误的候选上，额外调用一次验证器提取错因。
 
-性能优化：
-- 多候选验证并行执行；
-- 单个候选的多轮投票并行执行。
+执行策略：
+- 候选之间、同一候选的各轮投票均串行执行，避免并发 API 调用触发速率限制；
+- 置信度分母固定为配置的投票次数，确保少量有效投票时不会虚高到 1.0。
 """
 
-import concurrent.futures
 import logging
+import time
 
 from .base import BaseAgent, TaskContext, Candidate, Verdict
 try:
@@ -46,34 +46,49 @@ class VerifierAgent(BaseAgent):
             self.record(ctx, "verify", "无需验证候选")
             return ctx
 
-        # 并行验证所有未验证候选
+        # 串行验证所有未验证候选，避免 API 请求风暴
         new_verdicts = []
-        workers = max(1, min(8, len(to_verify)))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(self._vote, ctx, c) for c in to_verify]
-            for fut in concurrent.futures.as_completed(futures):
-                new_verdicts.append(fut.result())
+        for c in to_verify:
+            verdict = self._vote(ctx, c)
+            new_verdicts.append(verdict)
+            # 候选之间短暂间隔，进一步降低并发压力
+            time.sleep(0.5)
 
         ctx.verdicts.extend(new_verdicts)
         ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
         self.record(
             ctx, "verify", "验证候选解答",
-            verification=[{"id": v.id, "confidence": v.confidence}
+            verification=[{"id": v.id, "confidence": v.confidence,
+                           "correct_votes": v.correct_votes, "total_votes": v.total_votes}
                           for v in ctx.verdicts],
         )
         return ctx
 
     def _vote(self, ctx: TaskContext, c: Candidate) -> Verdict:
-        """对单个候选多轮投票，返回带置信度的验证结果（投票并行）"""
+        """对单个候选多轮投票，返回带置信度的验证结果（投票串行+重试）"""
         if not c.answer:
-            return Verdict(c.id, c.answer, c.reasoning, 0.0, 0, 0)
+            # 兜底：answer 为空时尝试从 reasoning 尾部提取（最多 500 字符）
+            reasoning_text = c.reasoning.strip() if c.reasoning else ""
+            if not reasoning_text or reasoning_text.startswith("[生成失败]") or reasoning_text.startswith("[重解失败]"):
+                return Verdict(c.id, c.answer, c.reasoning, 0.0, 0, 0)
+            try:
+                from utils.extract import extract_final_answer
+            except ImportError:
+                from submit.utils.extract import extract_final_answer
+            fallback_answer = extract_final_answer(reasoning_text)
+            if not fallback_answer:
+                fallback_answer = reasoning_text[-500:]
+            c.answer = fallback_answer
 
         total_votes = self.config.verifier_voting_times
 
-        def _do_one_vote(_: int):
+        def _do_one_vote():
+            # 把答案 + 尾部推理（而非头部）传给验证器，确保答案被看到
+            reasoning_tail = c.reasoning[-2500:] if len(c.reasoning) > 2500 else c.reasoning
+            combined = f"最终答案：{c.answer}\n\n推理尾部：\n{reasoning_tail}"
             user_msg = VERIFIER_USER_TEMPLATE.format(
                 problem=ctx.problem,
-                candidate_answer=c.reasoning[:3000],
+                candidate_answer=combined,
             )
             return self.llm(
                 ctx,
@@ -86,18 +101,32 @@ class VerifierAgent(BaseAgent):
             )
 
         valid_responses = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=total_votes) as pool:
-            futures = [pool.submit(_do_one_vote, i) for i in range(total_votes)]
-            for fut in concurrent.futures.as_completed(futures):
-                resp = fut.result()
+        # 串行投票 + 失败重试（避免并发 API 调用触发速率限制）
+        for i in range(total_votes):
+            resp = None
+            for retry in range(2):
+                resp = _do_one_vote()
                 if resp is not None:
-                    valid_responses.append(resp)
+                    break
+                if retry == 0:
+                    logger.warning("Verifier vote %d for candidate %d empty, retry", i, c.id)
+                    time.sleep(1.0)
+            if resp is not None:
+                valid_responses.append(resp)
+            if i < total_votes - 1:
+                time.sleep(0.5)
 
         correct_votes = sum(1 for resp in valid_responses if self._is_correct_vote(resp))
-        total = max(len(valid_responses), 1)
+
+        # 没有任何有效投票 → 返回 total_votes=0，让 orchestrator 感知验证失败
+        if not valid_responses:
+            return Verdict(c.id, c.answer, c.reasoning, 0.0, 0, 0)
+
+        # 使用配置的 total_votes 作为分母，避免 1/1 变成 1.0
+        confidence = round(correct_votes / total_votes, 4)
         return Verdict(
             c.id, c.answer, c.reasoning,
-            round(correct_votes / total, 4), correct_votes, total,
+            confidence, correct_votes, total_votes,
         )
 
     def feedback(self, ctx: TaskContext, candidate: Candidate) -> str:
@@ -115,6 +144,35 @@ class VerifierAgent(BaseAgent):
             0.0, 512,
         )
         return (resp or "未提供错误分析").strip()
+
+    def check_completeness(self, ctx: TaskContext, candidate: Candidate) -> bool:
+        """
+        用 LLM 检查答案是否完整（未被截断、有明确结论）。
+        返回 True 表示完整，False 表示不完整。
+        """
+        check_prompt = (
+            "请判断以下数学推理是否完整（未被截断，有明确的最终答案）。\n"
+            "只回复 YES 或 NO，不要任何解释。\n\n"
+            f"提取的答案：{candidate.answer or '(空)'}\n"
+            f"推理尾部（最后 600 字符）：\n{candidate.reasoning[-600:] if candidate.reasoning else '(空)'}"
+        )
+        try:
+            resp = self.llm(
+                ctx,
+                [{"role": "system", "content": "只回复 YES 或 NO。"},
+                 {"role": "user", "content": check_prompt}],
+                0.0, 16,
+            )
+        except Exception:
+            return True  # 网络错误时保守认为完整
+        if resp is None:
+            return True
+        resp_upper = resp.strip().upper()
+        if "YES" in resp_upper and "NO" not in resp_upper:
+            return True
+        if "NO" in resp_upper:
+            return False
+        return True  # 默认认为完整
 
     @staticmethod
     def _is_correct_vote(response: str) -> bool:
@@ -138,4 +196,4 @@ class VerifierAgent(BaseAgent):
         last = lines[-1].strip().upper() if lines else ""
         if last in ("A", "B"):
             return last == "A"
-        return True
+        return False
