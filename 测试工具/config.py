@@ -175,3 +175,19 @@ def validate_config(cfg: EvalConfig = None) -> EvalConfig:
             f"Please configure API keys in the settings dialog."
         )
     return cfg
+
+
+def detect_lean_environment() -> dict:
+    """检测 Lean 4 环境是否可用。
+    返回: {"available": bool, "lean_version": str, "lake_version": str, "error": str}
+    """
+    result = {"available": False, "lean_version": "", "lake_version": "", "error": ""}
+    try:
+        import subprocess
+        r = subprocess.run(["lean", "--version"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            result["lean_version"] = r.stdout.strip().split("\n")[0]
+            result["available"] = True
+    except Exception as e:
+        result["error"] = str(e)
+    return result

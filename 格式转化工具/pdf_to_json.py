@@ -93,15 +93,19 @@ def is_continuation_line(line):
     return not is_chapter_header(line) and not is_section_header(line) and not is_problem_start(line) and not is_answer_section(line)
 
 
-def extract_text_from_pdf(pdf_path, start_page=0):
+def extract_text_from_pdf(pdf_path, start_page=0, progress_callback=None):
     pages_text = []
     with pdfplumber.open(pdf_path) as pdf:
+        total = len(pdf.pages) - start_page
         for i, page in enumerate(pdf.pages):
             if i < start_page:
                 continue
             text = page.extract_text()
             if text:
                 pages_text.append(text)
+            current = i - start_page + 1
+            if progress_callback and (current % 5 == 0 or current == total):
+                progress_callback(current, total)
     return pages_text
 
 
@@ -188,12 +192,12 @@ def parse_problems(pages_text):
     return problems
 
 
-def convert_pdf(pdf_path, max_problems=0, start_page=0):
+def convert_pdf(pdf_path, max_problems=0, start_page=0, progress_callback=None):
     """可导出的 PDF 转换函数"""
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"文件不存在: {pdf_path}")
     print(f"正在提取 PDF: {pdf_path}")
-    pages_text = extract_text_from_pdf(pdf_path, start_page=start_page)
+    pages_text = extract_text_from_pdf(pdf_path, start_page=start_page, progress_callback=progress_callback)
     print(f"共 {len(pages_text)} 页文本")
     problems = parse_problems(pages_text)
     print(f"解析出 {len(problems)} 道题目")

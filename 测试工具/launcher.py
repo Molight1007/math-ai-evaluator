@@ -1349,44 +1349,45 @@ class EvalLauncher:
         thread.start()
 
     def _run_async(self):
-        """
-        后台线程执行完整评测流水线：
-        1. 验证 API 配置是否完整
-        2. 自动转化文件格式（PDF/Word → JSON）
-        3. 调用 asyncio.run() 执行并发异步评测
-        4. 自动打开生成的 HTML 报告
-        """
+        """?????????????"""
         try:
             from main import auto_convert, run_evaluation
-
             validate_config(load_config())
 
-            self._update_status("[1/3] 正在转化文件...")
+            # Phase 1: Convert
+            self._update_status("[1/3] ??????...")
+            self._update_progress(0)
             json_path = auto_convert(self.file_path, max_problems=self.max_var.get())
+            self._update_progress(100)
 
-            self._update_status("[2/3] 正在评测题目...")
-            def _on_progress(current, total):
-                    pct = int(current / total * 100) if total > 0 else 0
-                    self.root.after(0, lambda p=pct: self.progress.configure(value=p))
-
+            # Phase 2: Evaluate
+            self._update_status("[2/3] ??????...")
+            self._update_progress(0)
+            
             html_path = asyncio.run(run_evaluation(
                 json_path, self.concurrency_var.get(),
-                progress_callback=_on_progress,
+                progress_callback=lambda c, t: self._update_progress(int(c/t*100) if t else 0),
                 multi_agent=self.multi_agent_var.get(),
             ))
 
-            self._update_status("[3/3] 评测完成！正在打开报告...")
+            self._update_status("[3/3] ???????????...")
+            self._update_progress(100)
             if html_path and os.path.exists(html_path):
                 webbrowser.open(f"file:///{html_path.replace(os.sep, '/')}")
 
-            self.root.after(0, lambda: self._on_done(True, "评测完成！报告已打开。"))
+            self.root.after(0, lambda: self._on_done(True, "???????????"))
 
         except ConfigError as e:
             self.root.after(0, lambda: self._on_done(False, str(e)))
             return
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.root.after(0, lambda: self._on_done(False, str(e)))
 
+    def _update_progress(self, value: int):
+        """??????????"""
+        self.root.after(0, lambda v=value: self.progress.configure(value=v))
     def _update_status(self, text: str):
         """线程安全的状态更新（通过 root.after 回到主线程）"""
         self.root.after(0, lambda: self.status_var.set(text))

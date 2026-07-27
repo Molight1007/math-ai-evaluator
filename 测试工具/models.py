@@ -95,3 +95,24 @@ class EvaluationResult:
     def to_dict(self) -> dict:
         """将结果转为字典，用于 JSON 序列化"""
         return asdict(self)
+
+
+@dataclass
+class ANDORDAG:
+    """AND-OR DAG 表示的数学证明结构"""
+    problem_id: str = ""
+    nodes: list = field(default_factory=list)
+    edges: list = field(default_factory=list)
+
+
+@dataclass
+class LeanVerificationResult:
+    """Lean 4 验证结果"""
+    problem_id: str = ""
+    passed: bool = False
+    lean_code: str = ""
+    error_message: str = ""
+    latency_seconds: float = 0.0
+
+    def to_dict(self) -> dict:
+        return asdict(self)

@@ -19,6 +19,7 @@ import logging
 import os
 import sys
 import datetime
+import time
 import io
 import tempfile
 from typing import Optional
@@ -83,7 +84,28 @@ def _safe_str(s, maxlen=50):
         return repr(s)
 
 
-def auto_convert(file_path: str, max_problems: int = 0) -> str:
+
+# ==================== ???? ====================
+
+def _progress_bar(current: int, total: int, label: str = "", width: int = 30) -> str:
+    """????????????????"""
+    if total <= 0:
+        return ""
+    pct = current / total
+    filled = int(width * pct)
+    bar = "█" * filled + "░" * (width - filled)
+    return f"  [{bar}] {current}/{total} ({pct*100:.0f}%) {label}"
+
+def _format_eta(seconds: float) -> str:
+    """??????????"""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    elif seconds < 3600:
+        return f"{seconds/60:.1f}min"
+    else:
+        return f"{seconds/3600:.1f}h"
+
+def auto_convert(file_path: str, max_problems: int = 0, progress_callback=None) -> str:
     """
     智能文件格式转化：PDF/Word → JSON，JSON/CSV 直接返回原路径。
     转化后的 JSON 保存到「原始问题」目录供后续使用。
@@ -96,7 +118,7 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     if ext == ".pdf":
         print(f"\n[转化] 检测到 PDF 文件，正在转化...")
         from 转化工具.pdf_to_json import convert_pdf
-        problems = convert_pdf(file_path, max_problems=max_problems)
+        problems = convert_pdf(file_path, max_problems=max_problems, progress_callback=progress_callback)
     elif ext == ".docx":
         print(f"\n[转化] 检测到 Word 文件，正在转化...")
         from 转化工具.docx_to_json import convert_docx
@@ -214,7 +236,8 @@ async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
 # ==================== 批量评测模式 ====================
 
 async def _run_inference_stage(problems, concurrency, bank_name=None, multi_sample=0,
-                               enable_review=True, max_review_retries=2):
+                               enable_review=True, max_review_retries=2,
+                               progress_callback=None):
     """
     阶段一：并发执行 Intern-S1 推理，同时收集每道题的参考答案。
     多样本模式下，每道题生成多个答案。
@@ -231,11 +254,11 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         [(Problem, InferenceResult, ref_answer, ref_source), ...] 列表
         多样本模式下，每道题产生 multi_sample 个条目
     """
-    problems = load_problems(problems_path)
+    semaphore = asyncio.Semaphore(concurrency)
+    _stage_start = time.time()
     if not problems:
-        logger.error("No problems loaded!")
-        return
-    logger.info(f"Loaded {len(problems)} problems. Starting evaluation...")
+        logger.error("No problems provided!")
+        return []
 
     if multi_sample > 0:
         # 多样本模式：每道题并行生成 N 个推理结果
@@ -254,6 +277,8 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         result = []
         for group in grouped:
             result.extend(group)
+        elapsed = time.time() - _stage_start
+        print(_progress_bar(len(result), len(problems) * max(1, multi_sample), f"inf done in {elapsed:.0f}s"), flush=True)
         return result
     else:
         # 单样本模式（原有逻辑）
@@ -268,20 +293,23 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
                 return problem, inference, ref_answer, ref_source
 
         tasks = [_inference_task(p) for p in problems]
-        return await asyncio.gather(*tasks)
+        results = []
+        completed = 0
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            results.append(result)
+            completed += 1
+            elapsed = time.time() - _stage_start
+            eta = (elapsed / completed) * (len(problems) - completed) if completed > 0 else 0
+            print(_progress_bar(completed, len(problems), f"inf ETA {_format_eta(eta)}"), flush=True)
+            if progress_callback:
+                progress_callback(completed, len(problems))
+        print()  # newline after progress bar
+        return results
 
-    print(f"\nEvaluating {len(problems)} problems (concurrency={actual_concurrency})...\n")
-    results = []
-    for i, coro in enumerate(asyncio.as_completed(tasks), 1):
-        result = await coro
-        results.append(result)
-        status = "PASS" if result.is_correct else "FAIL"
-        print(f"  [{i}/{len(problems)}] {status} {result.problem_id}: {_safe_str(result.intern_answer)}")
-    results.sort(key=lambda r: r.problem_id)
 
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    分离成功推理和失败推理：失败的直接生成失败评判结果，
+async def _run_judge_batch_stage(inference_results):
+    """分离成功推理和失败推理：失败的直接生成失败评判结果，
     成功的收集后统一批量评判。
 
     参数:
@@ -327,6 +355,7 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         inferences_to_judge,
         reference_map=reference_map if reference_map else None,
     )
+    print(_progress_bar(len(judge_results), count, "Stage 2/2 judging done"), flush=True)
 
     # 合并结果
     batch_eval_results = []
@@ -339,7 +368,8 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
 
 
 async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sample=0,
-                              enable_review=True, max_review_retries=2):
+                              enable_review=True, max_review_retries=2,
+                              progress_callback=None):
     """
     批量评测模式（两阶段流水线）：
     阶段一：并发执行 Intern-S1 推理
@@ -378,6 +408,7 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
     inference_results = await _run_inference_stage(
         problems, concurrency, bank_name=bank_name, multi_sample=multi_sample,
         enable_review=enable_review, max_review_retries=max_review_retries,
+        progress_callback=progress_callback,
     )
 
     total_inferences = len(inference_results)
@@ -388,6 +419,7 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
         f"  Stage 1/2 complete: {success_count}/{total_inferences} succeeded, "
         f"{total_inferences - success_count} failed"
     )
+    print(_progress_bar(success_count, total_inferences, "Stage 1/2 done"), flush=True)
 
     print(f"  Stage 2/2: Batch judging {success_count} results...")
     return await _run_judge_batch_stage(inference_results)
@@ -733,6 +765,7 @@ async def run_evaluation(
             problems, actual_concurrency, bank_name=bank_name,
             multi_sample=multi_sample,
             enable_review=enable_review, max_review_retries=max_review_retries,
+            progress_callback=progress_callback,
         )
         await _print_problem_results(results)
     else:

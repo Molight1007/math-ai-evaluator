@@ -14,6 +14,7 @@
 性能优化：
 - 候选生成和纠错重解改为串行请求（每次间隔 0.3s），避免 API 请求风暴。
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 import logging
@@ -159,12 +160,12 @@ class SolverAgent(BaseAgent):
             # 全部重试失败，返回最后一次响应
             return cid, resp, True
 
-        # 串行生成候选（避免并发 API 调用触发速率限制导致空响应）
+        # ??????
         results = []
-        for i in range(count):
-            results.append(_make_one(i))
-            if i < count - 1:
-                time.sleep(0.3)  # 交错请求，防止 API 过载
+        with ThreadPoolExecutor(max_workers=min(count, 4)) as executor:
+            futures = {executor.submit(_make_one, i): i for i in range(count)}
+            for f in as_completed(futures):
+                results.append(f.result())
         results.sort(key=lambda x: x[0])
 
         for cid, resp, is_fallback in results:
@@ -223,12 +224,12 @@ class SolverAgent(BaseAgent):
                     time.sleep(1)
             return cid, resp
 
-        # 串行生成修正候选（避免并发 API 调用触发速率限制）
+        # ????????
         results = []
-        for i in range(count):
-            results.append(_make_one(i))
-            if i < count - 1:
-                time.sleep(0.3)
+        with ThreadPoolExecutor(max_workers=min(count, 4)) as executor:
+            futures = {executor.submit(_make_one, i): i for i in range(count)}
+            for f in as_completed(futures):
+                results.append(f.result())
         results.sort(key=lambda x: x[0])
 
         for cid, resp in results:
