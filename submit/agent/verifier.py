@@ -13,7 +13,6 @@
 - 候选之间、同一候选的各轮投票均串行执行，避免并发 API 调用触发速率限制；
 - 置信度分母固定为配置的投票次数，确保少量有效投票时不会虚高到 1.0。
 """
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import logging
 import time
@@ -49,10 +48,10 @@ class VerifierAgent(BaseAgent):
 
         # ???????????
         new_verdicts = []
-        with ThreadPoolExecutor(max_workers=min(len(to_verify), 3)) as executor:
-            futures = {executor.submit(self._vote, ctx, c): c for c in to_verify}
-            for f in as_completed(futures):
-                new_verdicts.append(f.result())
+        for c in to_verify:
+            verdict = self._vote(ctx, c)
+            new_verdicts.append(verdict)
+            time.sleep(0.3)
         ctx.verdicts.extend(new_verdicts)
         ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
         self.record(
@@ -100,24 +99,20 @@ class VerifierAgent(BaseAgent):
             )
 
         valid_responses = []
-        # ????
-        def _vote_with_retry(vote_idx):
+        # ???? + ????
+        for i in range(total_votes):
+            resp = None
             for retry in range(2):
                 resp = _do_one_vote()
                 if resp is not None:
-                    return resp
+                    break
                 if retry == 0:
-                    logger.warning("Verifier vote %d for candidate %d empty, retry", vote_idx, c.id)
+                    logger.warning("Verifier vote %d for candidate %d empty, retry", i, c.id)
                     time.sleep(0.5)
-            return None
-
-        valid_responses = []
-        with ThreadPoolExecutor(max_workers=min(total_votes, 3)) as executor:
-            futures = [executor.submit(_vote_with_retry, i) for i in range(total_votes)]
-            for f in as_completed(futures):
-                resp = f.result()
-                if resp is not None:
-                    valid_responses.append(resp)
+            if resp is not None:
+                valid_responses.append(resp)
+            if i < total_votes - 1:
+                time.sleep(0.3)
         correct_votes = sum(1 for resp in valid_responses if self._is_correct_vote(resp))
 
         # 没有任何有效投票 → 返回 total_votes=0，让 orchestrator 感知验证失败
