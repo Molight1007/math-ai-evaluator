@@ -52,6 +52,9 @@ class FormatterAgent(BaseAgent):
                            f"最佳候选答案为拒绝/不完整，改用候选兜底答案")
                 confidence = 0.0
 
+        # 答案质量终检 + 自动修复
+        answer = self._diagnose_and_repair(answer, ctx)
+
         ctx.final_response = format_response(answer)
         self.record(
             ctx, "finalize",
@@ -107,3 +110,73 @@ class FormatterAgent(BaseAgent):
                             and not _INCOMPLETE_RE.search(fallback)):
                         return fallback
         return ""
+
+    @staticmethod
+    def _diagnose_and_repair(answer: str, ctx: TaskContext) -> str:
+        """
+        答案质量终检 + 自动修复。
+
+        检测项:
+        - 42 幻觉兜底（孤立的 42）
+        - 截断 LaTeX（未闭合的 $ / { / \\begin）
+        - markdown 污染（**...** 残留）
+        - 多余包装文字
+
+        返回修复后的答案（或原答案）。
+        """
+        if not answer or answer == "无法求解":
+            return answer
+
+        fixed = answer
+
+        # 1. markdown 污染检测与修复
+        if "**" in fixed or "__" in fixed:
+            fixed = fixed.replace("**", "").replace("__", "")
+            logger.info("Formatter 终检: 移除 markdown 标记")
+
+        # 2. 42 幻觉检测（孤立的 42 / 42.0）
+        stripped = fixed.strip()
+        if re.fullmatch(r"42(?:\.0+)?", stripped):
+            logger.warning("Formatter 终检: 检测到 42 兜底幻觉 → 尝试回溯")
+            # 从其他候选中找到非 42 的答案
+            for v in (ctx.verdicts or []):
+                ans = (getattr(v, "answer", "") or "").strip()
+                if ans and not re.fullmatch(r"42(?:\.0+)?", ans) and len(ans) > 1:
+                    return ans
+            for c in (ctx.candidates or []):
+                ans = (c.answer or "").strip()
+                if ans and not re.fullmatch(r"42(?:\.0+)?", ans) and len(ans) > 1:
+                    return ans
+
+        # 3. 截断 LaTeX 检测
+        if re.search(r"\\begin\{[^}]*\}\s*$", fixed):
+            logger.warning("Formatter 终检: 答案以 \\begin 结尾（截断）→ 尝试补全")
+            # 从 reasoning 找对应的完整表达式
+            for c in (ctx.candidates or []):
+                if not c.reasoning:
+                    continue
+                env_match = re.search(
+                    r"\\begin\{([^}]+)\}.*?\\end\{\1\}",
+                    c.reasoning, re.DOTALL,
+                )
+                if env_match:
+                    return env_match.group().strip()
+        # 未闭合的 $ 或 {
+        if fixed.count("$") % 2 == 1:
+            fixed = fixed.rstrip("$")  # 移除不配对的 $
+        open_braces = fixed.count("{") - fixed.count("}")
+        if open_braces > 0:
+            fixed = fixed + "}" * open_braces  # 补全大括号
+
+        # 4. 多余包装文字剥离（如「因此答案是 x」→「x」）
+        wrapped = re.match(
+            r"^(?:因此|所以|故|综上[所]?述|答案为?|最终答案[为是]?)[,，:：]?\s*(.+?)\s*(?:。|$)",
+            fixed, re.DOTALL | re.IGNORECASE,
+        )
+        if wrapped and len(wrapped.group(1)) > 1:
+            inner = wrapped.group(1).strip()
+            if inner != fixed.strip():
+                logger.info("Formatter 终检: 剥离包装文字")
+                return inner
+
+        return fixed

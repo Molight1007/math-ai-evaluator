@@ -199,6 +199,41 @@ def format_response(answer: str) -> str:
     return answer
 
 
+def smart_fallback_answer(text: str) -> str:
+    """
+    当 extract_final_answer 返回空或不理想时的智能回退。
+    从文本尾部找最后一个有实质内容（数学/答案关键词）的行，
+    优于盲目的 [-500:] 截取——避免长 CoT 中取到验证/总结文字而非答案。
+    """
+    if not text or not text.strip():
+        return ""
+    text = text.strip()
+
+    # 先试 extract_final_answer，有时它内部的多级策略能命中
+    ans = extract_final_answer(text)
+    if ans and len(ans) > 1 and not _is_incomplete_answer(ans) and ans != text.strip():
+        return ans
+
+    lines = text.split('\n')
+
+    # 策略 1：从后往前找第一个含数学符号/答案关键词的非元行
+    for i in range(len(lines) - 1, max(len(lines) - 30, -1), -1):
+        line = lines[i].strip()
+        if not line or _is_meta_line(line):
+            continue
+        if re.search(r'[$\\=]|\d{2,}|答案|故选|boxed|正确|选项', line):
+            return clean_answer(line)
+
+    # 策略 2：从后往前找第一个有实质内容的非空行
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i].strip()
+        if line and len(line) > 2 and not _is_meta_line(line):
+            return clean_answer(line)[:500]
+
+    # 兜底：取尾部但限制长度
+    return clean_answer(text[-500:])
+
+
 def safe_json_serialize(obj: dict) -> dict:
     """
     安全地将字典转为 JSON 可序列化格式。
@@ -220,3 +255,103 @@ def safe_json_serialize(obj: dict) -> dict:
         else:
             result[key] = str(value)
     return result
+
+
+# ============================================================
+# 答案规范化管道 (Normalization Pipeline)
+# ============================================================
+
+# 单位后缀模式（按优先级排序，长模式优先）
+_UNIT_PATTERNS = [
+    re.compile(r"\s*(?:厘米|cm|毫米|mm|米|m|千米|km|公里)\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:千克|kg|克|g|吨|吨|斤|磅|lb)\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:秒|s|分钟|min|小时|h|小时|天|d|年|year)\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:度|°|°C|°F|开尔文|K|弧度|rad)\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:元|美元|USD|欧元|EUR|日元|JPY|英镑|GBP)\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:人|个|次|倍|%|％|百分比)\s*$", re.IGNORECASE),
+]
+
+
+def normalize_answer(raw: str) -> str:
+    """
+    6 步规范化管道，将 LLM 输出的答案转为可比较的规范形式。
+
+    步骤:
+    1. LaTeX 指令归一化（\\frac → /, \\sqrt → sqrt(), \\times → *）
+    2. 隐式乘法补全（2x → 2*x）
+    3. 空白与混合标点清洗
+    4. 数值格式统一（1/2 → 0.5, 2.0 → 2）
+    5. 单位剥离
+    6. 集合/区间格式标准化
+
+    返回归一化后的字符串。
+    """
+    if not raw:
+        return ""
+    s = raw.strip()
+
+    # 步骤 1: LaTeX 归一化
+    # \frac{a}{b} → a/b
+    s = re.sub(r"\\frac\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}",
+               r"(\1)/(\2)", s)
+    # \sqrt[n]{x} → root(n, x) 或 sqrt(x)
+    s = re.sub(r"\\sqrt\s*\[([^\]]+)\]\s*\{([^}]+)\}", r"root(\1,\2)", s)
+    s = re.sub(r"\\sqrt\s*\{([^}]+)\}", r"sqrt(\1)", s)
+    # \times → *, \div → /, \cdot → *
+    s = s.replace("\\times", "*").replace("\\cdot", "*").replace("\\div", "/")
+    # \pm → +- ; \mp → -+
+    s = s.replace("\\pm", "+-").replace("\\mp", "-+")
+    # \infty → inf, \pi → pi, \theta → theta
+    for cmd, sub in [("\\infty", "inf"), ("\\pi", "pi"), ("\\theta", "theta"),
+                     ("\\alpha", "alpha"), ("\\beta", "beta"), ("\\gamma", "gamma")]:
+        s = s.replace(cmd, sub)
+    # 清理多余的 LaTeX 命令参数
+    s = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", s)
+
+    # 步骤 2: 隐式乘法补全
+    # 数字后接变量: 2x → 2*x, 3.14r → 3.14*r
+    s = re.sub(r"(\d)([a-zA-Zα-ω])", r"\1*\2", s)
+    # 右括号后接数字/变量: (x+1)x → (x+1)*x
+    s = re.sub(r"\)\s*(\d|[a-zA-Zα-ω])", r")*\1", s)
+    # 变量后接左括号: x(x+1) → x*(x+1)
+    s = re.sub(r"([a-zA-Zα-ω])\s*(\()", r"\1*\2", s)
+    # 右括号后接左括号: (x+1)(x-1) → (x+1)*(x-1)
+    s = re.sub(r"\)\s*\(", r")*(", s)
+
+    # 步骤 3: 空白与标点清洗
+    s = re.sub(r"\s+", "", s)
+    s = s.replace("，", ",").replace("。", ".").replace("；", ";")
+    s = s.replace("：", ":").replace("（", "(").replace("）", ")")
+    s = s.replace("【", "[").replace("】", "]")
+    # 去掉前导标签文字
+    s = re.sub(r"^(?:答案|最终答案|结果|选择|选项)[:：=＝]?\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^(?:故|所以|因此|综上)[,:]?\s*", "", s, flags=re.IGNORECASE)
+
+    # 步骤 4: 数值格式统一
+    # 分数 a/b → 浮点（当 a 和 b 都是纯数字时）
+    def _frac_to_decimal(m):
+        try:
+            return f"{float(m.group(1)) / float(m.group(2)):.6g}"
+        except (ValueError, ZeroDivisionError):
+            return m.group()
+    s = re.sub(r"\(?(-?\d+(?:\.\d+)?)\)?/\s*\(?(\d+(?:\.\d+)?)\)?", _frac_to_decimal, s)
+    # 整数去尾零: 2.0 → 2
+    s = re.sub(r"(?<!\d)0(?:\.0+)?(?!\d)", "0", s)  # 零保持
+    s = re.sub(r"(?<=\d)\.0+(?!\d)", "", s)
+
+    # 步骤 5: 单位剥离
+    for pat in _UNIT_PATTERNS:
+        s_new = pat.sub("", s)
+        if s_new:
+            s = s_new
+
+    # 步骤 6: 集合/区间标准化
+    # {1,2,3} → [1,2,3] 统一用方括号
+    if s.startswith("{") and s.endswith("}") and not any(ch in s for ch in ":"):
+        s = "[" + s[1:-1] + "]"
+    # 分隔符统一为逗号
+    s = s.replace(";", ",").replace("，", ",")
+    # 去除多余逗号
+    s = re.sub(r",+", ",", s)
+
+    return s.strip()

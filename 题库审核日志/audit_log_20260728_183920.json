@@ -1,0 +1,58 @@
+{
+  "timestamp": "20260728_183920",
+  "summary": {
+    "filled": 3,
+    "confirmed": 1
+  },
+  "details": [
+    {
+      "db": "示例题库.db",
+      "bank_name": "高数a",
+      "problem_id": "零基础_009",
+      "question": "设实数x,y满足3x2+2y2=6,求2x+y的最大值",
+      "old_answer": "",
+      "new_answer": "√11",
+      "action": "filled",
+      "explanation": "DeepSeek 生成"
+    },
+    {
+      "db": "示例题库.db",
+      "bank_name": "高数a",
+      "problem_id": "零基础_003",
+      "question": "设实数a∈(0,1 ( .数列{x n { 满足x =1,且对任意正整数n,均有x = +a.证明:对任意正整 0 n x n-1 数n,有x >1. n",
+      "old_answer": "",
+      "new_answer": "x_n = 1 + na > 1",
+      "action": "filled",
+      "explanation": "Intern-S1(兜底) 生成"
+    },
+    {
+      "db": "示例题库.db",
+      "bank_name": "高数a",
+      "problem_id": "零基础_015",
+      "question": "函数y=-x2+(ex-e-x ( sinx在区间[-2.8,2.8 [ 的图像大致为( )",
+      "old_answer": "",
+      "new_answer": "Parse error: Failed to parse JSON from response",
+      "action": "filled",
+      "explanation": "Intern-S1(兜底) 生成"
+    },
+    {
+      "db": "示例题库.db",
+      "bank_name": "高数a",
+      "problem_id": "gen_3989f0b9",
+      "question": "求极限：\\(\\lim_{x \\to 0} \\frac{\\sin 3x}{x}\\)",
+      "old_answer": "3",
+      "new_answer": "3",
+      "action": "confirmed",
+      "explanation": "利用等价无穷小或重要极限 sin(ax)/x → a，得 lim_{x→0} sin(3x)/x = 3"
+    }
+  ],
+  "extra": {
+    "total_records": 2672,
+    "unique_problems": 1870,
+    "filled": 3,
+    "failed_fill": 0,
+    "confirmed": 1,
+    "corrected": 0,
+    "skipped": 0
+  }
+}

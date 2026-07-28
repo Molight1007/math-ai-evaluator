@@ -9,7 +9,7 @@ Markdown (.md) → JSON 题目转换工具。
 - 参考答案区域（以 "答案" 开头）→ 跳过
 
 用法:
-    python 转化工具/md_to_json.py <md路径> [-o 输出.json] [--max N]
+    python 格式转化工具/md_to_json.py <md路径> [-o 输出.json] [--max N]
 
 输出 JSON 格式:
 [
@@ -189,7 +189,7 @@ def main() -> None:
     # 默认输出路径
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "测试结果", "原本问题")
+        output_dir = os.path.join(base_dir, "测试结果", "原始问题")
         os.makedirs(output_dir, exist_ok=True)
         md_name = os.path.splitext(os.path.basename(md_path))[0]
         args.output = os.path.join(output_dir, f"{md_name}.json")
