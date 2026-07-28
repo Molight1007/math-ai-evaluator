@@ -27,6 +27,11 @@ from typing import Optional
 # 将当前目录添加到 import 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 将项目根目录加入 import 路径，使 格式转化工具 / intern_s1_optimized 等顶层包可被导入
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 # 确保 Lean 4 (elan) 在 PATH 中
 _ELAN_BIN = os.path.join(os.path.expanduser("~"), ".elan", "bin")
 if os.path.isdir(_ELAN_BIN) and _ELAN_BIN not in os.environ.get("PATH", ""):
@@ -137,27 +142,43 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext in (".json", ".csv"):
+        # JSON/CSV 也支持按 max_problems 截断，保证“题目上限”设置生效
+        problems = load_problems(file_path)
+        if max_problems and max_problems > 0 and len(problems) > max_problems:
+            print(
+                f"[转化] {ext} 文件包含 {len(problems)} 道题，"
+                f"按题目上限截取前 {max_problems} 道"
+            )
+            problems = problems[:max_problems]
+            os.makedirs(DIR_PROBLEMS, exist_ok=True)
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            json_path = os.path.join(DIR_PROBLEMS, f"{base_name}_limited.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                from dataclasses import asdict
+                json.dump([asdict(p) for p in problems], f, ensure_ascii=False, indent=2)
+            print(f"[转化] 截取后保存到 {json_path}")
+            return json_path
         return file_path
 
     if ext == ".pdf":
         print("\n[转化] 检测到 PDF 文件，正在转化...")
-        from 转化工具.pdf_to_json import convert_pdf
+        from 格式转化工具.pdf_to_json import convert_pdf
         problems = convert_pdf(file_path, max_problems=max_problems)
     elif ext == ".docx":
         print("\n[转化] 检测到 Word 文件，正在转化...")
-        from 转化工具.docx_to_json import convert_docx
+        from 格式转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
     elif ext in (".pptx", ".ppt"):
         print("\n[转化] 检测到 PowerPoint 文件，正在转化...")
-        from 转化工具.ppt_to_json import convert_ppt
+        from 格式转化工具.ppt_to_json import convert_ppt
         problems = convert_ppt(file_path, max_problems=max_problems)
     elif ext == ".md":
         print("\n[转化] 检测到 Markdown 文件，正在转化...")
-        from 转化工具.md_to_json import convert_md
+        from 格式转化工具.md_to_json import convert_md
         problems = convert_md(file_path, max_problems=max_problems)
     elif ext == ".xlsx":
         print("\n[转化] 检测到 Excel 文件，正在转化...")
-        from 转化工具.xlsx_to_json import convert_xlsx
+        from 格式转化工具.xlsx_to_json import convert_xlsx
         problems = convert_xlsx(file_path, max_problems=max_problems)
     else:
         raise ValueError(
@@ -780,6 +801,7 @@ async def run_evaluation(
     # 检查答案库覆盖率
     _check_answer_coverage(bank_name)
 
+    print(f"  [题目数量] 本次将评测 {len(problems)} 道题目")
     actual_concurrency = min(concurrency, len(problems))
 
     # 选择评测模式并执行
@@ -947,6 +969,10 @@ async def run_evaluation_from_bank(
     logger.info(
         f"从题库 {bank_name} 随机选取 {len(problems)} 道题目，开始评测..."
     )
+    print(
+        f"\n[题库选题] 从 {bank_name} 随机选取 {len(problems)} 道题目 "
+        f"(请求 {count} 道)"
+    )
 
     # 复用现有评测流水线（传入 bank_name 以启用答案库辅助评判）
     html_path = await run_evaluation(
@@ -1009,7 +1035,7 @@ def main():
     )
     parser.add_argument(
         "--max", type=int, default=0,
-        help="最多评测题目数（0=全部，仅 PDF/Word 有效）",
+        help="最多评测题目数（0=全部，对所有输入格式均有效）",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="详细日志",

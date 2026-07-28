@@ -4,6 +4,7 @@ DeepSeek 评判模块。
 支持利用题库中已匹配的参考答案辅助评判，提高准确率。
 支持单题评判和批量评判两种模式。
 """
+import asyncio
 import logging
 import time
 from config import get_config
@@ -252,6 +253,10 @@ async def run_judge(
         {"role": "user", "content": user_content},
     ]
 
+    logger.info(
+        f"[Judge {inference.problem_id}] prompt length: "
+        f"system={len(JUDGE_SYSTEM_PROMPT)}, user={len(user_content)}"
+    )
     start_time = time.time()
     try:
         response = await client.chat(
@@ -272,6 +277,18 @@ async def run_judge(
             tokens_used=response.get("tokens_used", 0),
             latency_seconds=latency,
         )
+    except asyncio.TimeoutError as te:
+        latency = round(time.time() - start_time, 2)
+        logger.error(f"Judge timeout for [{inference.problem_id}]: {te}")
+        return JudgeResult(
+            problem_id=inference.problem_id,
+            is_correct=False,
+            confidence=0.0,
+            explanation="Judge timeout: answer may be too long or service is slow.",
+            raw_response="",
+            latency_seconds=latency,
+            error=str(te),
+        )
     except Exception as e:
         latency = round(time.time() - start_time, 2)
         logger.error(f"Judge failed for [{inference.problem_id}]: {e}")
@@ -289,21 +306,46 @@ async def run_judge(
 async def run_judge_batch(
     inferences: list[InferenceResult],
     reference_map: dict[str, tuple[str, str]] | None = None,
+    batch_size: int = 3,
 ) -> list[JudgeResult]:
     """
-    对多道推理结果进行批量评判，一次 API 调用同时评判所有题目。
+    对多道推理结果进行批量评判，按 batch_size 分批调用，避免上下文过长
+    导致答案被截断或 JSON 解析失败。
 
     参数:
         inferences: 多个 InferenceResult 列表
         reference_map: {problem_id: (answer_text, source)} 可选参考答案映射
+        batch_size: 每批最多评判的题目数，默认 3
 
     返回:
         与 inferences 等长的 JudgeResult 列表。
-        如果整批调用失败，所有题目都标记为错误。
+        如果某一批调用失败，该批内题目单独走逐题评判作为兜底。
     """
+    if not inferences:
+        return []
+
     cfg = get_config()
     client = LLMClient(cfg.deepseek)
+    all_results: list[JudgeResult] = []
 
+    total = len(inferences)
+    for start in range(0, total, batch_size):
+        chunk = inferences[start:start + batch_size]
+        chunk_results = await _run_judge_batch_chunk(
+            client, chunk, reference_map, start // batch_size + 1
+        )
+        all_results.extend(chunk_results)
+
+    return all_results
+
+
+async def _run_judge_batch_chunk(
+    client: LLMClient,
+    inferences: list[InferenceResult],
+    reference_map: dict[str, tuple[str, str]] | None,
+    chunk_index: int,
+) -> list[JudgeResult]:
+    """评判一个批次，失败时自动 fallback 到单题评判。"""
     # 构建批量 prompt：依次列出每道题的信息
     items_text = ""
     for i, inf in enumerate(inferences):
@@ -321,13 +363,30 @@ async def run_judge_batch(
                 f"{source_info}\n**Use this as ground truth.**"
             )
 
+        # 对超长答案/推理做截断提示，防止整批 prompt 超出模型上下文
+        answer_text = inf.answer
+        reasoning_text = inf.reasoning
+        max_item_len = 8000
+        if len(answer_text) > max_item_len:
+            answer_text = (
+                answer_text[:max_item_len // 2]
+                + "\n...[答案中间部分已省略]\n"
+                + answer_text[-max_item_len // 2:]
+            )
+        if len(reasoning_text) > max_item_len:
+            reasoning_text = (
+                reasoning_text[:max_item_len // 2]
+                + "\n...[推理中间部分已省略]\n"
+                + reasoning_text[-max_item_len // 2:]
+            )
+
         items_text += (
             f"\n--- Problem #{i + 1} ---\n"
             f"**ID**: {inf.problem_id}\n\n"
             f"**Question**: {inf.question}\n"
             f"{ref_section}\n\n"
-            f"**Model's Answer**: {inf.answer}\n\n"
-            f"**Model's Reasoning**: {inf.reasoning}\n\n"
+            f"**Model's Answer**: {answer_text}\n\n"
+            f"**Model's Reasoning**: {reasoning_text}\n\n"
             f"**Model's Steps**:\n{steps_text}\n"
         )
 
@@ -346,10 +405,15 @@ async def run_judge_batch(
         {"role": "user", "content": user_content},
     ]
 
+    logger.info(
+        f"[Batch Judge] Chunk {chunk_index}: prompt length "
+        f"system={len(system_prompt)}, user={len(user_content)}"
+    )
     start_time = time.time()
     try:
         logger.info(
-            f"[Batch Judge] Sending {len(inferences)} problems together..."
+            f"[Batch Judge] Chunk {chunk_index}: sending {len(inferences)} "
+            f"problems together..."
         )
         response = await client.chat(
             messages=messages,
@@ -373,28 +437,45 @@ async def run_judge_batch(
                 correct_answer=parsed.get("correct_answer"),
                 raw_response=response["content"],
                 tokens_used=response.get("tokens_used", 0),
-                latency_seconds=latency,  # 整批共享延迟
+                latency_seconds=latency,
             ))
 
         logger.info(
-            f"[Batch Judge] Completed {len(judge_results)} judgments "
-            f"in {latency}s"
+            f"[Batch Judge] Chunk {chunk_index}: completed {len(judge_results)} "
+            f"judgments in {latency}s"
         )
         return judge_results
 
     except Exception as e:
         latency = round(time.time() - start_time, 2)
-        logger.error(f"[Batch Judge] Failed: {e}")
-        # 所有题目都标记为失败
-        return [
-            JudgeResult(
-                problem_id=inf.problem_id,
-                is_correct=False,
-                confidence=0.0,
-                explanation=f"Batch judge error: {e}",
-                raw_response="",
-                latency_seconds=latency,
-                error=str(e),
-            )
-            for inf in inferences
-        ]
+        logger.error(
+            f"[Batch Judge] Chunk {chunk_index} failed: {e}. "
+            f"Falling back to single judge for {len(inferences)} problems."
+        )
+        # 该批次失败时，逐题兜底评判
+        fallback_results = []
+        for inf in inferences:
+            try:
+                ref = reference_map.get(inf.problem_id) if reference_map else None
+                ref_answer = ref[0] if ref else None
+                ref_source = ref[1] if ref else None
+                judge = await run_judge(
+                    inf,
+                    reference_answer=ref_answer,
+                    answer_source=ref_source,
+                )
+                fallback_results.append(judge)
+            except Exception as inner_e:
+                logger.error(
+                    f"[Batch Judge] Single fallback failed for {inf.problem_id}: {inner_e}"
+                )
+                fallback_results.append(JudgeResult(
+                    problem_id=inf.problem_id,
+                    is_correct=False,
+                    confidence=0.0,
+                    explanation=f"Judge fallback error: {inner_e}",
+                    raw_response="",
+                    latency_seconds=latency,
+                    error=str(inner_e),
+                ))
+        return fallback_results

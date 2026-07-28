@@ -6,7 +6,7 @@ Excel (.xlsx) → JSON 题目转换工具。
 支持选项列的自动合并。
 
 用法:
-    python 转化工具/xlsx_to_json.py <xlsx路径> [-o 输出.json] [--max N]
+    python 格式转化工具/xlsx_to_json.py <xlsx路径> [-o 输出.json] [--max N]
 
 输出 JSON 格式:
 [
@@ -148,7 +148,7 @@ def main() -> None:
     # 默认输出路径
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "测试结果", "原本问题")
+        output_dir = os.path.join(base_dir, "测试结果", "原始问题")
         os.makedirs(output_dir, exist_ok=True)
         xlsx_name = os.path.splitext(os.path.basename(xlsx_path))[0]
         args.output = os.path.join(output_dir, f"{xlsx_name}.json")

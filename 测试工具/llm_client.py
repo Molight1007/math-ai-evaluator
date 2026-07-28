@@ -93,10 +93,12 @@ class LLMClient:
             payload["response_format"] = response_format
 
         last_error = None
+        # timeout <= 0 时视为 None（httpx 无限制），避免 API 调用被强制中断
+        timeout = self.config.timeout if self.config.timeout > 0 else None
         for attempt in range(self.config.max_retries):
             try:
                 async with httpx.AsyncClient(
-                    timeout=self.config.timeout
+                    timeout=timeout
                 ) as client:
                     resp = await client.post(
                         self._url, headers=headers, json=payload

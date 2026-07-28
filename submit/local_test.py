@@ -47,7 +47,7 @@ class InternChatClient:
         client.chat(messages, temperature, max_tokens) -> str
     """
 
-    def __init__(self, timeout: int = 120, retry: int = 3):
+    def __init__(self, timeout: int = 0, retry: int = 3):
         self.api_key = os.getenv("INTERN_API_KEY", "")
         if not self.api_key:
             raise RuntimeError(
@@ -94,7 +94,9 @@ class InternChatClient:
                         "Content-Type": "application/json",
                     },
                 )
-                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                # timeout=0 或负数表示不设置超时，避免长推理被强制中断
+                urlopen_timeout = self.timeout if self.timeout > 0 else None
+                with urllib.request.urlopen(req, timeout=urlopen_timeout) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     return data["choices"][0]["message"]["content"]
             except Exception as e:

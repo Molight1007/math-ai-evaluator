@@ -25,7 +25,7 @@ import webbrowser    # 自动打开浏览器查看报告
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "测试工具"))
-sys.path.insert(0, os.path.join(PROJECT_ROOT, "转化工具"))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "格式转化工具"))
 
 # ===== Lean 4 环境配置 =====
 # 确保 elan bin 目录在 PATH 中，以便 lake/lean 命令可用

@@ -1,0 +1,22 @@
+[
+  {
+    "problem_id": "【A4基础强化合并】1000题数一高数篇_0507",
+    "is_correct": false,
+    "error_type": "incomplete",
+    "intern_answer": "",
+    "intern_reasoning_len": 47,
+    "intern_reasoning": "Parse error: Failed to parse JSON from response",
+    "judge_explanation": "模型答案为空，未给出任何结果。",
+    "inference_error": null
+  },
+  {
+    "problem_id": "【A4基础强化合并】1000题数一高数篇_0920",
+    "is_correct": false,
+    "error_type": "incomplete",
+    "intern_answer": "",
+    "intern_reasoning_len": 47,
+    "intern_reasoning": "Parse error: Failed to parse JSON from response",
+    "judge_explanation": "模型答案为空，未给出任何结果。",
+    "inference_error": null
+  }
+]

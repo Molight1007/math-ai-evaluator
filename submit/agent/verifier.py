@@ -14,8 +14,11 @@
 - 置信度分母固定为配置的投票次数，确保少量有效投票时不会虚高到 1.0。
 """
 
+import json
 import logging
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .base import BaseAgent, TaskContext, Candidate, Verdict
 try:
@@ -24,14 +27,20 @@ try:
         VERIFIER_USER_TEMPLATE,
         VERIFIER_FEEDBACK_SYSTEM,
         VERIFIER_FEEDBACK_TEMPLATE,
+        VERIFIER_SCORING_SYSTEM,
+        VERIFIER_SCORING_TEMPLATE,
     )
+    from utils.extract import smart_fallback_answer
 except ImportError:  # 作为 submit 子包导入时
     from submit.prompts.verifier import (
         VERIFIER_SYSTEM,
         VERIFIER_USER_TEMPLATE,
         VERIFIER_FEEDBACK_SYSTEM,
         VERIFIER_FEEDBACK_TEMPLATE,
+        VERIFIER_SCORING_SYSTEM,
+        VERIFIER_SCORING_TEMPLATE,
     )
+    from submit.utils.extract import smart_fallback_answer
 
 logger = logging.getLogger("MathPilot")
 
@@ -46,13 +55,32 @@ class VerifierAgent(BaseAgent):
             self.record(ctx, "verify", "无需验证候选")
             return ctx
 
-        # 串行验证所有未验证候选，避免 API 请求风暴
+        # 1) 规则预筛：快速拒绝明显格式错误的答案（零 LLM 成本）
+        pre_rejected = self._rule_prescreen(ctx, to_verify)
+        active = [c for c in to_verify if c.id not in pre_rejected]
+        for cid in pre_rejected:
+            c = ctx.candidates[cid]
+            ctx.verdicts.append(Verdict(
+                id=cid, answer=c.answer or "", reasoning=c.reasoning,
+                confidence=0.0, correct_votes=0, total_votes=1,
+                feedback="规则预筛: 答案格式无效",
+            ))
+
+        if not active:
+            ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
+            self.record(ctx, "verify", "全部候选被规则预筛拒绝")
+            return ctx
+
+        # 2) 等价分组（同一组内答案数学等价）
+        self._equiv_group(ctx, active)
+
+        # 3) 并行验证所有未验证候选
         new_verdicts = []
-        for c in to_verify:
-            verdict = self._vote(ctx, c)
-            new_verdicts.append(verdict)
-            # 候选之间短暂间隔，进一步降低并发压力
-            time.sleep(0.5)
+        max_workers = min(len(active), 6)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(self._vote, ctx, c): c for c in active}
+            for future in as_completed(futures):
+                new_verdicts.append(future.result())
 
         ctx.verdicts.extend(new_verdicts)
         ctx.verdicts.sort(key=lambda v: v.confidence, reverse=True)
@@ -77,15 +105,23 @@ class VerifierAgent(BaseAgent):
                 from submit.utils.extract import extract_final_answer
             fallback_answer = extract_final_answer(reasoning_text)
             if not fallback_answer:
-                fallback_answer = reasoning_text[-500:]
+                fallback_answer = smart_fallback_answer(reasoning_text)
             c.answer = fallback_answer
 
         total_votes = self.config.verifier_voting_times
 
         def _do_one_vote():
-            # 把答案 + 尾部推理（而非头部）传给验证器，确保答案被看到
-            reasoning_tail = c.reasoning[-2500:] if len(c.reasoning) > 2500 else c.reasoning
-            combined = f"最终答案：{c.answer}\n\n推理尾部：\n{reasoning_tail}"
+            # 把完整答案 + 尽量完整的推理传给验证器，避免截断导致误判
+            max_reasoning_len = 12000
+            if len(c.reasoning) > max_reasoning_len:
+                reasoning_text = (
+                    c.reasoning[:max_reasoning_len // 2]
+                    + "\n...[中间推理已省略]\n"
+                    + c.reasoning[-max_reasoning_len // 2:]
+                )
+            else:
+                reasoning_text = c.reasoning
+            combined = f"完整推理过程：\n{reasoning_text}\n\n请基于以上推理过程，判断以下答案是否正确：{c.answer}"
             user_msg = VERIFIER_USER_TEMPLATE.format(
                 problem=ctx.problem,
                 candidate_answer=combined,
@@ -100,21 +136,24 @@ class VerifierAgent(BaseAgent):
                 256,
             )
 
-        valid_responses = []
-        # 串行投票 + 失败重试（避免并发 API 调用触发速率限制）
-        for i in range(total_votes):
-            resp = None
+        # 并行投票 + 失败重试
+        def _vote_with_retry(vote_idx: int) -> str | None:
             for retry in range(2):
                 resp = _do_one_vote()
                 if resp is not None:
-                    break
+                    return resp
                 if retry == 0:
-                    logger.warning("Verifier vote %d for candidate %d empty, retry", i, c.id)
+                    logger.warning("Verifier vote %d for candidate %d empty, retry", vote_idx, c.id)
                     time.sleep(1.0)
-            if resp is not None:
-                valid_responses.append(resp)
-            if i < total_votes - 1:
-                time.sleep(0.5)
+            return None
+
+        valid_responses = []
+        with ThreadPoolExecutor(max_workers=min(total_votes, 2)) as pool:
+            futures = [pool.submit(_vote_with_retry, i) for i in range(total_votes)]
+            for f in futures:
+                resp = f.result()
+                if resp is not None:
+                    valid_responses.append(resp)
 
         correct_votes = sum(1 for resp in valid_responses if self._is_correct_vote(resp))
 
@@ -131,9 +170,17 @@ class VerifierAgent(BaseAgent):
 
     def feedback(self, ctx: TaskContext, candidate: Candidate) -> str:
         """提取候选解答的错误原因（自纠错回环用）"""
+        # 提取尽量完整的推理用于错因分析（优先保留尾部结论）
+        feedback_reasoning = candidate.reasoning
+        if len(feedback_reasoning) > 12000:
+            feedback_reasoning = (
+                feedback_reasoning[:6000]
+                + "\n...[中间推理已省略]\n"
+                + feedback_reasoning[-6000:]
+            )
         user_msg = VERIFIER_FEEDBACK_TEMPLATE.format(
             problem=ctx.problem,
-            candidate_answer=candidate.reasoning[:3000],
+            candidate_answer=feedback_reasoning,
         )
         resp = self.llm(
             ctx,
@@ -150,11 +197,17 @@ class VerifierAgent(BaseAgent):
         用 LLM 检查答案是否完整（未被截断、有明确结论）。
         返回 True 表示完整，False 表示不完整。
         """
+        # 取 reasoning 尾部，通常包含结论和“答案”；保留更多上下文防止误判
+        tail_len = 2500
+        if candidate.reasoning and len(candidate.reasoning) > tail_len:
+            tail = "...[中间推理已省略]\n" + candidate.reasoning[-tail_len:]
+        else:
+            tail = candidate.reasoning or "(空)"
         check_prompt = (
             "请判断以下数学推理是否完整（未被截断，有明确的最终答案）。\n"
             "只回复 YES 或 NO，不要任何解释。\n\n"
             f"提取的答案：{candidate.answer or '(空)'}\n"
-            f"推理尾部（最后 600 字符）：\n{candidate.reasoning[-600:] if candidate.reasoning else '(空)'}"
+            f"推理尾部（最后 {tail_len} 字符）：\n{tail}"
         )
         try:
             resp = self.llm(
@@ -194,6 +247,86 @@ class VerifierAgent(BaseAgent):
             return False
         lines = response.strip().split("\n")
         last = lines[-1].strip().upper() if lines else ""
+        # 容忍尾部杂音：A. / (A) / "A" 等变形
+        last_clean = re.sub(r'[^\w]', '', last)
+        if last_clean and last_clean[-1:] in ("A", "B"):
+            return last_clean[-1:] == "A"
+        # 精确匹配单字符
         if last in ("A", "B"):
             return last == "A"
         return False
+
+    # ── 规则预筛 & 等价分组 ──────────────────────────────
+
+    # 明显无意义的答案模式
+    _EMPTY_ANSWER_PATTERNS = [
+        re.compile(r"^\s*$"),                          # 纯空白
+        re.compile(r"^(N/?A|null|none|undefined)\s*$", re.IGNORECASE),
+        re.compile(r"^[，,。.;；:：!！?？…\-—\s]+$"),   # 纯标点
+        re.compile(r"^(答案|结果)(：|:)?\s*$"),          # 有标签无内容
+    ]
+
+    @classmethod
+    def _rule_prescreen(cls, ctx, candidates: list) -> set:
+        """快速排除明显无效的答案（answer 和 reasoning 同时为空时才拒绝）。"""
+        rejected = set()
+        for c in candidates:
+            ans = (c.answer or "").strip()
+            # 如果 answer 为空，用 reasoning 作为判断依据
+            if not ans:
+                ans = (c.reasoning or "").strip()
+            if not ans or any(p.search(ans) for p in cls._EMPTY_ANSWER_PATTERNS):
+                logger.info("Verifier 规则预筛: candidate %d 答案为空/无意义 → 拒绝", c.id)
+                rejected.add(c.id)
+        return rejected
+
+    @staticmethod
+    def _equiv_group(ctx, candidates: list) -> list[list[int]]:
+        """
+        将候选按答案数学等价性分组（纯文本策略）。
+
+        分组规则：
+        1) 归一化后完全相同的答案 → 同一组
+        2) 归一化后差异仅在精度上的数值 → 同一组
+
+        返回: [[cid1, cid2, ...], [cid3, ...], ...]
+        """
+        if not candidates:
+            return []
+
+        def _norm(s: str) -> str:
+            """轻量归一化：去空白、去 LaTeX 外壳、数值归精度"""
+            s = s.strip()
+            if s.startswith("$$") and s.endswith("$$"):
+                s = s[2:-2].strip()
+            if s.startswith("$") and s.endswith("$"):
+                s = s[1:-1].strip()
+            s = re.sub(r"\s+", "", s)
+            def _round_num(m):
+                try:
+                    return f"{float(m.group()):.6g}"
+                except ValueError:
+                    return m.group()
+            s = re.sub(r"\d+\.\d+", _round_num, s)
+            return s
+
+        groups: list[set[int]] = []
+        for c in candidates:
+            ans = _norm(c.answer or "")
+            if not ans:
+                continue
+            found = False
+            for g in groups:
+                ref_cid = next(iter(g))
+                ref_ans = _norm((ctx.candidates[ref_cid].answer or ""))
+                if ans == ref_ans:
+                    g.add(c.id)
+                    found = True
+                    break
+            if not found:
+                groups.append({c.id})
+
+        result = [sorted(g) for g in groups]
+        if len(result) < len(candidates):
+            logger.info("Verifier 等价分组: %d 候选 → %d 组", len(candidates), len(result))
+        return result

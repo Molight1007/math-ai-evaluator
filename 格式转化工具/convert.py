@@ -3,7 +3,7 @@
 支持 PDF 和 Word (.docx) → JSON 格式转换。
 
 用法:
-    python 转化工具/convert.py <文件路径> [-o 输出.json] [--max N] [--start-page N]
+    python 格式转化工具/convert.py <文件路径> [-o 输出.json] [--max N] [--start-page N]
 
 自动识别文件类型:
   - .pdf  → 使用 pdf_to_json 模块
@@ -11,13 +11,13 @@
 
 示例:
     # 转换 PDF
-    python 转化工具/convert.py "题目.pdf" --max 50
+    python 格式转化工具/convert.py "题目.pdf" --max 50
 
     # 转换 Word
-    python 转化工具/convert.py "题目.docx" --max 100
+    python 格式转化工具/convert.py "题目.docx" --max 100
 
     # 指定输出路径
-    python 转化工具/convert.py "题目.pdf" -o "my_problems.json"
+    python 格式转化工具/convert.py "题目.pdf" -o "my_problems.json"
 """
 import argparse
 import json
@@ -38,7 +38,7 @@ def main():
 输出 JSON 格式:
   [{"id": "xxx", "question": "题目内容", "domain": "领域", "reference_answer": ""}]
 
-输出默认保存在: 测试结果/原本问题/
+输出默认保存在: 测试结果/原始问题/
         """
     )
     parser.add_argument("file", help="输入文件路径（.pdf 或 .docx）")
@@ -69,10 +69,10 @@ def main():
         print("[警告] 未解析出任何题目，请检查文件内容格式。")
         sys.exit(1)
 
-    # 默认输出路径：测试结果/原本问题/
+    # 默认输出路径：测试结果/原始问题/
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "测试结果", "原本问题")
+        output_dir = os.path.join(base_dir, "测试结果", "原始问题")
         os.makedirs(output_dir, exist_ok=True)
         file_name = os.path.splitext(os.path.basename(file_path))[0]
         args.output = os.path.join(output_dir, f"{file_name}.json")

@@ -171,19 +171,19 @@ class QuestionBankDB:
 
         # 需要转化的格式 → 调用转化工具转为 Problem 列表
         if ext == ".docx":
-            from 转化工具.docx_to_json import convert_docx
+            from 格式转化工具.docx_to_json import convert_docx
             raw_problems = convert_docx(filepath)
         elif ext == ".pdf":
-            from 转化工具.pdf_to_json import convert_pdf
+            from 格式转化工具.pdf_to_json import convert_pdf
             raw_problems = convert_pdf(filepath)
         elif ext in (".pptx", ".ppt"):
-            from 转化工具.ppt_to_json import convert_ppt
+            from 格式转化工具.ppt_to_json import convert_ppt
             raw_problems = convert_ppt(filepath)
         elif ext == ".md":
-            from 转化工具.md_to_json import convert_md
+            from 格式转化工具.md_to_json import convert_md
             raw_problems = convert_md(filepath)
         elif ext == ".xlsx":
-            from 转化工具.xlsx_to_json import convert_xlsx
+            from 格式转化工具.xlsx_to_json import convert_xlsx
             raw_problems = convert_xlsx(filepath)
         elif ext in (".json", ".csv"):
             raw_problems = load_problems(filepath)

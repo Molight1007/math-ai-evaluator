@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interns1-math-agent"
+version = "0.1.0"
+description = "Mock-first math agent scaffold for Intern-S1 style competition"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic==2.13.4",
+  "PyYAML==6.0.3",
+  "sympy==1.14.0",
+  "requests==2.34.2",
+  "python-dotenv==1.2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "streamlit",
+  "ruff",
+  "black",
+  "isort",
+  "mypy",
+  "pyright",
+]
+
+[project.scripts]
+math-agent = "math_agent.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["user_agent"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+math_agent = ["configs/*.yaml"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["math_agent*"]
+
+[tool.isort]
+profile = "black"

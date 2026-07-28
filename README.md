@@ -65,7 +65,7 @@
 │   ├── question_bank.db        # 题库数据库
 │   └── templates/              # HTML 报告模板
 │       └── report.html
-├── 转化工具/                   # 格式转化工具
+├── 格式转化工具/                 # 题目格式转化工具（PDF/Word/PPT/MD/Excel → JSON）
 │   ├── convert.py              # 统一入口（PDF/Word → JSON）
 │   ├── pdf_to_json.py          # PDF 解析转化
 │   └── docx_to_json.py         # Word 解析转化
@@ -173,13 +173,13 @@ python 测试工具/main.py -i 题目.json -c 5
 
 ```bash
 # PDF → JSON
-python 转化工具/convert.py 题目.pdf --max 50
+python 格式转化工具/convert.py 题目.pdf --max 50
 
 # Word → JSON
-python 转化工具/convert.py 题目.docx
+python 格式转化工具/convert.py 题目.docx
 
 # 指定输出路径
-python 转化工具/convert.py 题目.pdf -o 输出.json
+python 格式转化工具/convert.py 题目.pdf -o 输出.json
 ```
 
 ---
