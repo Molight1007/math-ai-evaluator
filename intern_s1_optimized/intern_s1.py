@@ -164,6 +164,19 @@ IMPORTANT RULES:
   insufficient explanation should be treated as an incompleteness issue,
   not a mathematical correctness failure.
 
+- Always evaluate the final mathematical answer first.
+- The final answer has priority over explanation style.
+- If the final answer matches the reference answer mathematically, it should normally PASS.
+
+- A missing detailed explanation alone is NOT a mathematical failure.
+- If the final answer is correct but the explanation is absent or too short:
+  classify it as "incomplete" instead of "fail".
+
+- Do NOT mark fail only because:
+  * no derivation is shown
+  * proof steps are omitted
+  * explanation is shorter than reference
+
 - Only give fail when:
   the mathematical conclusion is wrong,
   reasoning contains serious logical errors,
