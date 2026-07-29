@@ -2,9 +2,10 @@
 
 WORKDIR /app
 
-# 先升级 pip
-RUN pip install --no-cache-dir --upgrade pip
+# 使用清华镜像源加速
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
+RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir flask gunicorn
