@@ -16,6 +16,8 @@ import json
 import logging
 import re
 import time
+from typing import Optional
+from typing import Optional
 from config import get_config
 from llm_client import LLMClient, extract_json_from_text
 from models import Problem, InferenceResult
