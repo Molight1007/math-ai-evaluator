@@ -24,21 +24,39 @@ from .models import Problem, InferenceResult
 
 logger = logging.getLogger(__name__)
 
+def safe_float(value, default=0.0):
+    """安全转换数字，避免 LLM 返回异常类型导致程序崩溃。"""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 # ==================== 模块级常量 ====================
 
-# 推理参数
-_INFERENCE_TEMPERATURE = 0.6      # 适中温度，保证多样性又不失稳定性
-_INFERENCE_MAX_TOKENS = 6144      # 多候选输出需要更多 token
+# ==================== Agent 温度配置 ====================
 
-# 自审核参数
-_REVIEW_TEMPERATURE = 0.2         # 低温度保证审核一致性
-_REVIEW_MAX_TOKENS = 2048         # 审核输出长度限制
+AGENT_CONFIG = {
+    "solver_temperature": 0.6,
+    "solver_max_tokens": 6144,
 
-# 重试参数
-_RETRY_TEMPERATURE_FACTOR = 0.8   # 重试时温度下调系数，使输出更聚焦
+    "reviewer_temperature": 0.2,
+    "reviewer_max_tokens": 2048,
 
-# 多样本并行调用备选方案参数（run_inference_multi）
-_DEFAULT_MULTI_TEMPERATURES = [0.5, 0.7, 0.9]
+    "retry_temperature_factor": 0.8,
+
+    "multi_temperatures": [0.5, 0.7, 0.9],
+}
+
+_INFERENCE_TEMPERATURE = AGENT_CONFIG["solver_temperature"]
+_INFERENCE_MAX_TOKENS = AGENT_CONFIG["solver_max_tokens"]
+
+_REVIEW_TEMPERATURE = AGENT_CONFIG["reviewer_temperature"]
+_REVIEW_MAX_TOKENS = AGENT_CONFIG["reviewer_max_tokens"]
+
+_RETRY_TEMPERATURE_FACTOR = AGENT_CONFIG["retry_temperature_factor"]
+
+_DEFAULT_MULTI_TEMPERATURES = AGENT_CONFIG["multi_temperatures"]
 
 # ==================== 系统提示词 ====================
 
@@ -193,7 +211,7 @@ def parse_multi_candidate_response(text: str) -> dict:
             "index": c.get("index", i),
             "answer": ans,
             "reasoning": c.get("reasoning", ""),
-            "confidence": float(c.get("confidence", 0.0)),
+            "confidence": safe_float(c.get("confidence", 0.0)),
             "strength": c.get("strength", ""),
             "weakness": c.get("weakness", ""),
         })
@@ -515,7 +533,7 @@ async def _self_review(
         latency = round(time.time() - start_time, 2)
         logger.warning(f"Self-review call failed [{problem.id}]: {e}")
         return {
-            "verdict": "pass",
+            "verdict": "unknown",
             "scores": {"completeness": 0, "correctness": 0, "relevance": 0, "format": 0},
             "issues": [],
             "suggestions": "",
