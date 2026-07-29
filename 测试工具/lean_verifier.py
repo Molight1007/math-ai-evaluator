@@ -552,11 +552,19 @@ async def _compile_lean(lean_code: str, config) -> dict:
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=config.lean_timeout
-            )
+            # lean_timeout <= 0 表示不设置超时，避免 Lean 编译被强制中断
+            if config.lean_timeout and config.lean_timeout > 0:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=config.lean_timeout
+                )
+            else:
+                stdout, stderr = await proc.communicate()
         except asyncio.TimeoutError:
-            proc.kill()
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
             latency = round(time.time() - start_time, 2)
             return {
                 "passed": False,

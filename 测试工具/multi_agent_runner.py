@@ -64,9 +64,11 @@ class EvalSyncClient:
             "max_tokens": max_tokens,
         }
         last_error = None
+        # timeout <= 0 时视为 None（httpx 无限制），避免长推理被强制中断
+        timeout = self.config.timeout if self.config.timeout > 0 else None
         for attempt in range(self.config.max_retries):
             try:
-                with httpx.Client(timeout=self.config.timeout) as client:
+                with httpx.Client(timeout=timeout) as client:
                     resp = client.post(self._url, headers=headers, json=payload)
                     resp.raise_for_status()
                     data = resp.json()

@@ -142,27 +142,54 @@ class QuestionBankDB:
             logger.warning(f"题目 {problem.id} 在题库 {bank_name} 中已存在，跳过")
             return False
 
+    # 支持导入的文件扩展名集合
+    SUPPORTED_IMPORT_EXTS: set = {
+        ".json", ".csv", ".docx", ".pdf",
+        ".pptx", ".ppt", ".md", ".xlsx",
+    }
+
     def import_from_file(self, filepath: str, bank_name: str) -> dict:
         """
-        从 JSON/CSV/Word/PDF 文件批量导入题目到题库。
-        返回 {"added": int, "skipped": int, "total": int}
+        从多种格式文件批量导入题目到题库。
+
+        支持格式: .json / .csv / .docx / .pdf / .pptx / .ppt / .md / .xlsx
+
+        参数:
+            filepath: 题目文件路径
+            bank_name: 目标题库名称
+
+        返回:
+            {"added": int, "skipped": int, "total": int}
+
+        异常:
+            ValueError: 题库不存在或文件格式不支持
         """
         if not self.bank_exists(bank_name):
             raise ValueError(f"题库不存在: {bank_name}，请先创建")
 
         ext = os.path.splitext(filepath)[1].lower()
 
-        # Word / PDF → 先转化为 Problem 列表
+        # 需要转化的格式 → 调用转化工具转为 Problem 列表
         if ext == ".docx":
-            from 转化工具.docx_to_json import convert_docx
+            from 格式转化工具.docx_to_json import convert_docx
             raw_problems = convert_docx(filepath)
         elif ext == ".pdf":
-            from 转化工具.pdf_to_json import convert_pdf
+            from 格式转化工具.pdf_to_json import convert_pdf
             raw_problems = convert_pdf(filepath)
+        elif ext in (".pptx", ".ppt"):
+            from 格式转化工具.ppt_to_json import convert_ppt
+            raw_problems = convert_ppt(filepath)
+        elif ext == ".md":
+            from 格式转化工具.md_to_json import convert_md
+            raw_problems = convert_md(filepath)
+        elif ext == ".xlsx":
+            from 格式转化工具.xlsx_to_json import convert_xlsx
+            raw_problems = convert_xlsx(filepath)
         elif ext in (".json", ".csv"):
             raw_problems = load_problems(filepath)
         else:
-            raise ValueError(f"不支持的文件格式: {ext}（支持 .json / .csv / .docx / .pdf）")
+            supported = ", ".join(sorted(self.SUPPORTED_IMPORT_EXTS))
+            raise ValueError(f"不支持的文件格式: {ext}（支持 {supported}）")
 
         # 统一转为 Problem 对象
         problems = []
@@ -218,17 +245,34 @@ class QuestionBankDB:
         """
         从指定题库中随机选取 count 道题目。
         domain 可选，用于按领域筛选。
+
+        优化：用 Python random.sample + 两步查询替代 ORDER BY RANDOM()，
+        避免 SQLite 全表扫描+排序的 O(n log n) 开销。
         """
-        query = "SELECT problem_id, question, domain, reference_answer FROM problems WHERE bank_name = ?"
-        params = [bank_name]
+        # 第一步：只查询符合条件的 ID 列表（轻量查询）
+        id_query = "SELECT problem_id FROM problems WHERE bank_name = ?"
+        params: list = [bank_name]
         if domain:
-            query += " AND domain = ?"
+            id_query += " AND domain = ?"
             params.append(domain)
-        query += " ORDER BY RANDOM() LIMIT ?"
-        params.append(count)
 
         with self._connect() as conn:
-            rows = conn.execute(query, params).fetchall()
+            rows = conn.execute(id_query, params).fetchall()
+        all_ids = [r["problem_id"] for r in rows]
+
+        if not all_ids:
+            return []
+
+        # Python 层随机采样（O(k) 操作，远快于 SQL 层 RANDOM 排序）
+        sampled_ids = random.sample(all_ids, min(count, len(all_ids)))
+
+        # 第二步：精确查询选中的题目内容
+        placeholders = ",".join("?" for _ in sampled_ids)
+        query = f"SELECT problem_id, question, domain, reference_answer FROM problems WHERE problem_id IN ({placeholders})"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, sampled_ids).fetchall()
+
         return [
             Problem(id=r["problem_id"], question=r["question"], domain=r["domain"] or None, reference_answer=r["reference_answer"] or None)
             for r in rows
@@ -278,9 +322,10 @@ class QuestionBankDB:
             )
             return cur.rowcount > 0
 
-    def _update_problem_text(self, problem_id: str, bank_name: str,
-                              question: str = None, reference_answer: str = None):
-        """更新题目的题干或参考答案（保留其他字段不变）"""
+    def update_problem(self, problem_id: str, bank_name: str,
+                        question: str = None, reference_answer: str = None,
+                        domain: str = None) -> bool:
+        """更新题目的题干、参考答案或领域（保留其他字段不变），返回是否成功"""
         sets = []
         params = []
         if question is not None:
@@ -289,12 +334,21 @@ class QuestionBankDB:
         if reference_answer is not None:
             sets.append("reference_answer = ?")
             params.append(reference_answer)
+        if domain is not None:
+            sets.append("domain = ?")
+            params.append(domain)
         if not sets:
-            return
+            return False
         params.extend([problem_id, bank_name])
         sql = f"UPDATE problems SET {', '.join(sets)} WHERE problem_id = ? AND bank_name = ?"
         with self._connect() as conn:
             conn.execute(sql, params)
+        return True
+
+    def _update_problem_text(self, problem_id: str, bank_name: str,
+                              question: str = None, reference_answer: str = None):
+        """内部方法：更新题目的题干或参考答案（委托给 update_problem）"""
+        self.update_problem(problem_id, bank_name, question=question, reference_answer=reference_answer)
 
     def search_problems(self, bank_name: str, keyword: str) -> list[Problem]:
         """按关键词搜索题目（匹配题干）"""

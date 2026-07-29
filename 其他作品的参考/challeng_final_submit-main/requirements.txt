@@ -1,0 +1,5 @@
+pydantic==2.13.4
+PyYAML==6.0.3
+sympy==1.14.0
+requests==2.34.2
+python-dotenv==1.2.2

@@ -2,8 +2,8 @@
 数学智能体评测器 - 主入口模块
 ================================
 功能：
-- 支持直接输入 PDF / Word (.docx) / JSON / CSV 文件，自动识别并转化
-- 执行并发评测流水线（Intern-S1 推理 → DeepSeek 评判）
+- 支持 PDF/Word/PPT/Markdown/Excel/JSON/CSV 文件自动识别并转化
+- 执行并发评测流水线（Intern-S1 推理 → DeepSeek 评判 → Lean 验证）
 - 支持从题库随机选题评测，自动使用答案库辅助评判
 - 支持命令行答案导入和统计查询
 
@@ -15,17 +15,27 @@
 # ===== 标准库导入 =====
 import argparse
 import asyncio
+import datetime
+import glob
+import json
 import logging
 import os
+import shutil
 import sys
-import datetime
-import time
-import io
-import tempfile
 from typing import Optional
 
 # 将当前目录添加到 import 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# 将项目根目录加入 import 路径，使 格式转化工具 / intern_s1_optimized 等顶层包可被导入
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+# 确保 Lean 4 (elan) 在 PATH 中
+_ELAN_BIN = os.path.join(os.path.expanduser("~"), ".elan", "bin")
+if os.path.isdir(_ELAN_BIN) and _ELAN_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _ELAN_BIN + os.pathsep + os.environ.get("PATH", "")
 
 # ===== 项目模块导入 =====
 from config import load_config, validate_config, ConfigError
@@ -45,28 +55,48 @@ from intern_s1 import run_inference_multi as _run_inference_multi_func
 
 logger = logging.getLogger(__name__)
 
-# ===== 评测结果输出目录配置 =====
-# 所有输出统一存放在项目根目录的"测试结果"子目录下
-BASE_RESULT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "测试结果")
-DIR_DISPLAY = os.path.join(BASE_RESULT, "测试结果展示")      # HTML 报告
-DIR_OUTPUT = os.path.join(BASE_RESULT, "原始输出和推理过程")  # JSON 原始数据
-DIR_PROBLEMS = os.path.join(BASE_RESULT, "原始问题")         # 题目文件副本
+# ==================== 模块级常量 ====================
+
+# 评测结果输出目录配置（所有输出统一存放在项目根目录的"测试结果"子目录下）
+_RESULT_BASE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "测试结果"
+)
+DIR_DISPLAY = os.path.join(_RESULT_BASE, "测试结果展示")      # HTML 报告
+DIR_OUTPUT = os.path.join(_RESULT_BASE, "原始输出和推理过程")  # JSON 原始数据
+DIR_PROBLEMS = os.path.join(_RESULT_BASE, "原始问题")         # 题目文件副本
+DIR_LEAN = os.path.join(_RESULT_BASE, "测试lean文件")         # Lean 4 验证代码存档
+
+# 终端输出安全截断长度
+_SAFE_STR_MAXLEN = 50
+
+# Lean 验证并发数（避免 LLM API 限流）
+_LEAN_VERIFY_CONCURRENCY = 3
 
 
 def clear_all_results() -> dict:
-    """清除所有评测结果文件（HTML/JSON/临时题目），返回各目录删除数量"""
-    import glob
+    """
+    清除所有评测结果文件（HTML/JSON/临时题目/Lean 文件）。
+
+    返回:
+        {"测试结果展示": N, "原始输出和推理过程": N, "原始问题": N, "测试lean文件": N}
+    """
     counts = {}
     for name, path in [
         ("测试结果展示", DIR_DISPLAY),
         ("原始输出和推理过程", DIR_OUTPUT),
         ("原始问题", DIR_PROBLEMS),
+        ("测试lean文件", DIR_LEAN),
     ]:
         n = 0
         if os.path.isdir(path):
-            for f in glob.glob(os.path.join(path, "*")):
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
                 try:
-                    os.remove(f)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    elif os.path.isdir(item_path):
+                        import shutil
+                        shutil.rmtree(item_path)
                     n += 1
                 except OSError:
                     pass
@@ -74,8 +104,17 @@ def clear_all_results() -> dict:
     return counts
 
 
-def _safe_str(s, maxlen=50):
-    """截断字符串并确保 UTF-8 编码安全，用于终端输出（避免乱码）"""
+def _safe_str(s, maxlen: int = _SAFE_STR_MAXLEN) -> str:
+    """
+    截断字符串并确保 UTF-8 编码安全，用于终端输出（避免乱码）。
+
+    参数:
+        s: 原始字符串
+        maxlen: 最大显示长度
+
+    返回:
+        安全的截断字符串
+    """
     s = str(s)[:maxlen]
     try:
         s.encode("utf-8")
@@ -84,54 +123,74 @@ def _safe_str(s, maxlen=50):
         return repr(s)
 
 
-
-# ==================== ???? ====================
-
-def _progress_bar(current: int, total: int, label: str = "", width: int = 30) -> str:
-    """????????????????"""
-    if total <= 0:
-        return ""
-    pct = current / total
-    filled = int(width * pct)
-    bar = "█" * filled + "░" * (width - filled)
-    return f"  [{bar}] {current}/{total} ({pct*100:.0f}%) {label}"
-
-def _format_eta(seconds: float) -> str:
-    """??????????"""
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    elif seconds < 3600:
-        return f"{seconds/60:.1f}min"
-    else:
-        return f"{seconds/3600:.1f}h"
-
-def auto_convert(file_path: str, max_problems: int = 0, progress_callback=None) -> str:
+def auto_convert(file_path: str, max_problems: int = 0) -> str:
     """
-    智能文件格式转化：PDF/Word → JSON，JSON/CSV 直接返回原路径。
+    智能文件格式转化：PDF/Word/PPT/Markdown/Excel → JSON，JSON/CSV 直接返回原路径。
+
     转化后的 JSON 保存到「原始问题」目录供后续使用。
+
+    参数:
+        file_path: 输入文件路径
+        max_problems: 最大转化题目数（0 表示全部）
+
+    返回:
+        转化后的 JSON 文件路径
+
+    异常:
+        ValueError: 不支持的文件格式或未解析出题目
     """
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext in (".json", ".csv"):
-        return file_path  # JSON/CSV 无需转化
+        # JSON/CSV 也支持按 max_problems 截断，保证“题目上限”设置生效
+        problems = load_problems(file_path)
+        if max_problems and max_problems > 0 and len(problems) > max_problems:
+            print(
+                f"[转化] {ext} 文件包含 {len(problems)} 道题，"
+                f"按题目上限截取前 {max_problems} 道"
+            )
+            problems = problems[:max_problems]
+            os.makedirs(DIR_PROBLEMS, exist_ok=True)
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            json_path = os.path.join(DIR_PROBLEMS, f"{base_name}_limited.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                from dataclasses import asdict
+                json.dump([asdict(p) for p in problems], f, ensure_ascii=False, indent=2)
+            print(f"[转化] 截取后保存到 {json_path}")
+            return json_path
+        return file_path
 
     if ext == ".pdf":
-        print(f"\n[转化] 检测到 PDF 文件，正在转化...")
-        from 转化工具.pdf_to_json import convert_pdf
-        problems = convert_pdf(file_path, max_problems=max_problems, progress_callback=progress_callback)
+        print("\n[转化] 检测到 PDF 文件，正在转化...")
+        from 格式转化工具.pdf_to_json import convert_pdf
+        problems = convert_pdf(file_path, max_problems=max_problems)
     elif ext == ".docx":
-        print(f"\n[转化] 检测到 Word 文件，正在转化...")
-        from 转化工具.docx_to_json import convert_docx
+        print("\n[转化] 检测到 Word 文件，正在转化...")
+        from 格式转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
+    elif ext in (".pptx", ".ppt"):
+        print("\n[转化] 检测到 PowerPoint 文件，正在转化...")
+        from 格式转化工具.ppt_to_json import convert_ppt
+        problems = convert_ppt(file_path, max_problems=max_problems)
+    elif ext == ".md":
+        print("\n[转化] 检测到 Markdown 文件，正在转化...")
+        from 格式转化工具.md_to_json import convert_md
+        problems = convert_md(file_path, max_problems=max_problems)
+    elif ext == ".xlsx":
+        print("\n[转化] 检测到 Excel 文件，正在转化...")
+        from 格式转化工具.xlsx_to_json import convert_xlsx
+        problems = convert_xlsx(file_path, max_problems=max_problems)
     else:
-        raise ValueError(f"不支持的文件格式: {ext}（支持 .pdf / .docx / .json / .csv）")
+        raise ValueError(
+            f"不支持的文件格式: {ext}"
+            f"（支持 .pdf / .docx / .pptx / .ppt / .md / .xlsx / .json / .csv）"
+        )
 
     if not problems:
         raise ValueError("未解析出任何题目，请检查文件内容。")
 
-    # 保存为临时 JSON 并复制到"原始问题"目录
+    # 保存为 JSON 到「原始问题」目录
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
-    import json
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     json_path = os.path.join(DIR_PROBLEMS, f"{base_name}.json")
     with open(json_path, "w", encoding="utf-8") as f:
@@ -180,7 +239,7 @@ async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
     评测单道题目的完整流程（逐题模式）：
     1. 调用 Intern-S1 进行数学推理（支持多样本模式）
     2. 推理失败时构造失败结果，否则获取参考答案（若有）
-    3. 调用 DeepSeek 进行正确性评判（有参考答案则辅助提升准确率）
+    3. 调用 DeepSeek 进行正确性评判
     4. 合并推理和评判为最终 EvaluationResult
 
     参数:
@@ -236,8 +295,7 @@ async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
 # ==================== 批量评测模式 ====================
 
 async def _run_inference_stage(problems, concurrency, bank_name=None, multi_sample=0,
-                               enable_review=True, max_review_retries=2,
-                               progress_callback=None):
+                               enable_review=True, max_review_retries=2):
     """
     阶段一：并发执行 Intern-S1 推理，同时收集每道题的参考答案。
     多样本模式下，每道题生成多个答案。
@@ -254,11 +312,7 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         [(Problem, InferenceResult, ref_answer, ref_source), ...] 列表
         多样本模式下，每道题产生 multi_sample 个条目
     """
-    semaphore = asyncio.Semaphore(concurrency)
-    _stage_start = time.time()
-    if not problems:
-        logger.error("No problems provided!")
-        return []
+    semaphore = asyncio.Semaphore(min(concurrency, len(problems)))
 
     if multi_sample > 0:
         # 多样本模式：每道题并行生成 N 个推理结果
@@ -277,8 +331,6 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         result = []
         for group in grouped:
             result.extend(group)
-        elapsed = time.time() - _stage_start
-        print(_progress_bar(len(result), len(problems) * max(1, multi_sample), f"inf done in {elapsed:.0f}s"), flush=True)
         return result
     else:
         # 单样本模式（原有逻辑）
@@ -293,23 +345,14 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
                 return problem, inference, ref_answer, ref_source
 
         tasks = [_inference_task(p) for p in problems]
-        results = []
-        completed = 0
-        for coro in asyncio.as_completed(tasks):
-            result = await coro
-            results.append(result)
-            completed += 1
-            elapsed = time.time() - _stage_start
-            eta = (elapsed / completed) * (len(problems) - completed) if completed > 0 else 0
-            print(_progress_bar(completed, len(problems), f"inf ETA {_format_eta(eta)}"), flush=True)
-            if progress_callback:
-                progress_callback(completed, len(problems))
-        print()  # newline after progress bar
-        return results
+        return await asyncio.gather(*tasks)
 
 
 async def _run_judge_batch_stage(inference_results):
-    """分离成功推理和失败推理：失败的直接生成失败评判结果，
+    """
+    阶段二：将推理结果分批进行 DeepSeek 批量评判。
+
+    分离成功推理和失败推理：失败的直接生成失败评判结果，
     成功的收集后统一批量评判。
 
     参数:
@@ -355,7 +398,6 @@ async def _run_judge_batch_stage(inference_results):
         inferences_to_judge,
         reference_map=reference_map if reference_map else None,
     )
-    print(_progress_bar(len(judge_results), count, "Stage 2/2 judging done"), flush=True)
 
     # 合并结果
     batch_eval_results = []
@@ -368,8 +410,7 @@ async def _run_judge_batch_stage(inference_results):
 
 
 async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sample=0,
-                              enable_review=True, max_review_retries=2,
-                              progress_callback=None):
+                              enable_review=True, max_review_retries=2):
     """
     批量评测模式（两阶段流水线）：
     阶段一：并发执行 Intern-S1 推理
@@ -408,7 +449,6 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
     inference_results = await _run_inference_stage(
         problems, concurrency, bank_name=bank_name, multi_sample=multi_sample,
         enable_review=enable_review, max_review_retries=max_review_retries,
-        progress_callback=progress_callback,
     )
 
     total_inferences = len(inference_results)
@@ -419,7 +459,6 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
         f"  Stage 1/2 complete: {success_count}/{total_inferences} succeeded, "
         f"{total_inferences - success_count} failed"
     )
-    print(_progress_bar(success_count, total_inferences, "Stage 1/2 done"), flush=True)
 
     print(f"  Stage 2/2: Batch judging {success_count} results...")
     return await _run_judge_batch_stage(inference_results)
@@ -595,27 +634,32 @@ def _save_reports(results, problems_path, ts: str) -> str:
     json_path = os.path.join(DIR_OUTPUT, f"report_{ts}.json")
     generate_json_report(results, json_path)
 
-    # 2) 保存 HTML 报告到"测试结果展示"
     os.makedirs(DIR_DISPLAY, exist_ok=True)
     html_path = os.path.join(DIR_DISPLAY, f"report_{ts}.html")
     generate_html_report(results, html_path)
 
-    # 3) 复制题目文件到"原始问题"
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
-    problems_copy = os.path.join(DIR_PROBLEMS, os.path.basename(problems_path))
+    problems_copy = os.path.join(
+        DIR_PROBLEMS, os.path.basename(problems_path)
+    )
     if os.path.abspath(problems_path) != os.path.abspath(problems_copy):
         with open(problems_path, "r", encoding="utf-8") as fsrc:
             content = fsrc.read()
         with open(problems_copy, "w", encoding="utf-8") as fdst:
             fdst.write(content)
 
+    # 保存 Lean 4 验证代码到独立目录，方便手动 lake build 验证
+    lean_count = _save_lean_files(results, ts)
+
     print_summary(results)
     print(f"\nReports saved:")
     print(f"  测试结果展示:  {os.path.basename(html_path)}")
     print(f"  原始输出和推理过程: {os.path.basename(json_path)}")
     print(f"  原始问题:  {os.path.basename(problems_copy)}")
+    if lean_count > 0:
+        print(f"  测试lean文件:  {lean_count} 个 .lean 文件")
 
-    return html_path  # 返回 HTML 路径供 GUI 打开
+    return html_path
 
 
 # ==================== 主评测流水线 ====================
@@ -757,6 +801,7 @@ async def run_evaluation(
     # 检查答案库覆盖率
     _check_answer_coverage(bank_name)
 
+    print(f"  [题目数量] 本次将评测 {len(problems)} 道题目")
     actual_concurrency = min(concurrency, len(problems))
 
     # 选择评测模式并执行
@@ -765,7 +810,6 @@ async def run_evaluation(
             problems, actual_concurrency, bank_name=bank_name,
             multi_sample=multi_sample,
             enable_review=enable_review, max_review_retries=max_review_retries,
-            progress_callback=progress_callback,
         )
         await _print_problem_results(results)
     else:
@@ -882,7 +926,7 @@ async def run_evaluation_from_bank(
     """
     从题库随机选题并评测的完整流程。
 
-    流程：验证题库存在 → 随机选题 → 写入临时 JSON → 复用 run_evaluation → 重命名临时文件
+    流程：验证题库 → 随机选题 → 写入临时 JSON → 评测 → 重命名临时文件
 
     参数:
         bank_name: 题库名称
@@ -905,10 +949,11 @@ async def run_evaluation_from_bank(
     if not problems:
         raise ValueError(f"题库 {bank_name} 中没有符合条件的题目")
 
-    # 将题目写入临时 JSON 文件
-    import json
+    # 写入临时 JSON 文件
     os.makedirs(DIR_PROBLEMS, exist_ok=True)
-    temp_path = os.path.join(DIR_PROBLEMS, f"_bank_temp_{bank_name}.json")
+    temp_path = os.path.join(
+        DIR_PROBLEMS, f"_bank_temp_{bank_name}.json"
+    )
     problems_data = [
         {
             "id": p.id,
@@ -921,7 +966,13 @@ async def run_evaluation_from_bank(
     with open(temp_path, "w", encoding="utf-8") as f:
         json.dump(problems_data, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"从题库 {bank_name} 随机选取 {len(problems)} 道题目，开始评测...")
+    logger.info(
+        f"从题库 {bank_name} 随机选取 {len(problems)} 道题目，开始评测..."
+    )
+    print(
+        f"\n[题库选题] 从 {bank_name} 随机选取 {len(problems)} 道题目 "
+        f"(请求 {count} 道)"
+    )
 
     # 复用现有评测流水线（传入 bank_name 以启用答案库辅助评判）
     html_path = await run_evaluation(
@@ -930,19 +981,24 @@ async def run_evaluation_from_bank(
         multi_agent=multi_agent,
     )
 
-    # 将临时文件重命名为有意义的名字（保留原始题目副本）
-    import shutil
+    # 将临时文件重命名为有意义的名字
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    final_path = os.path.join(DIR_PROBLEMS, f"bank_{bank_name}_{ts}_{count}questions.json")
+    final_path = os.path.join(
+        DIR_PROBLEMS,
+        f"bank_{bank_name}_{ts}_{count}questions.json",
+    )
     try:
         shutil.move(temp_path, final_path)
         logger.info(f"原始问题已保存: {final_path}")
     except OSError:
-        # 如果 move 失败，至少保留 temp 文件不删除
-        logger.warning(f"无法重命名临时问题文件，保留原文件: {temp_path}")
+        logger.warning(
+            f"无法重命名临时问题文件，保留原文件: {temp_path}"
+        )
 
     return html_path
 
+
+# ==================== 命令行入口 ====================
 
 def main():
     """
@@ -953,16 +1009,44 @@ def main():
     """
     global _run_inference_func, _run_inference_multi_func
     parser = argparse.ArgumentParser(
-        description="Math Agent Evaluator - 支持 PDF/Word/JSON/CSV 自动转化 + 答案导入匹配",
+        description=(
+            "Math Agent Evaluator - "
+            "支持 PDF/Word/PPT/Markdown/Excel/JSON/CSV 自动转化 + 答案导入匹配"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
   python 测试工具/main.py -i 题目.pdf
   python 测试工具/main.py -i 题目.docx --max 10
   python 测试工具/main.py -i 题目.json -c 5
+  python 测试工具/main.py -i 题目.xlsx --max 50
   python 测试工具/main.py --import-answers 答案.pptx --bank 我的题库
-  python 测试工具/main.py --import-answers 答案.docx --bank 我的题库 --batch 20
+  python 测试工具/main.py --import-answers 答案.pdf --bank 我的题库
+  python 测试工具/main.py --import-answers 答案.xlsx --bank 我的题库 --batch 20
   python 测试工具/main.py --bank-stats 我的题库
-        """
+        """,
+    )
+    parser.add_argument(
+        "-i", "--input", required=False,
+        help="输入文件路径（.pdf / .docx / .pptx / .ppt / .md / .xlsx / .json / .csv）",
+    )
+    parser.add_argument(
+        "-c", "--concurrency", type=int, default=3,
+        help="最大并发数（默认 3）",
+    )
+    parser.add_argument(
+        "--max", type=int, default=0,
+        help="最多评测题目数（0=全部，对所有输入格式均有效）",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="详细日志",
+    )
+    parser.add_argument(
+        "--no-lean", action="store_true",
+        help="跳过 Lean 形式化验证阶段",
+    )
+    parser.add_argument(
+        "--optimized", action="store_true",
+        help="使用独立版 Intern-S1 推理模块（intern_s1_optimized/）",
     )
     parser.add_argument(
         "--multi-agent", action="store_true",
@@ -985,10 +1069,22 @@ def main():
     )
 
     # 答案导入相关参数
-    parser.add_argument("--import-answers", help="导入答案文档（.pptx / .docx / .txt）并智能匹配到题库")
-    parser.add_argument("--bank", default=None, help="目标题库名称（与 --import-answers 配合使用）")
-    parser.add_argument("--batch", type=int, default=15, help="匹配批处理大小（默认 15）")
-    parser.add_argument("--bank-stats", help="查看指定题库的答案映射统计")
+    parser.add_argument(
+        "--import-answers",
+        help="导入答案文档（.pptx / .ppt / .docx / .txt / .md / .pdf / .csv / .xlsx / .json）"
+             "并智能匹配到题库",
+    )
+    parser.add_argument(
+        "--bank", default=None,
+        help="目标题库名称（与 --import-answers 配合使用）",
+    )
+    parser.add_argument(
+        "--batch", type=int, default=15,
+        help="匹配批处理大小（默认 15）",
+    )
+    parser.add_argument(
+        "--bank-stats", help="查看指定题库的答案映射统计",
+    )
 
     args = parser.parse_args()
 
@@ -1029,65 +1125,12 @@ def main():
 
     # 命令: 查看答案映射统计
     if args.bank_stats:
-        from question_bank import get_db
-        db = get_db()
-        stats = db.get_answer_mapping_stats(args.bank_stats)
-        print(f"\n题库「{args.bank_stats}」答案映射统计:")
-        print(f"  总映射数: {stats['total_mappings']}")
-        print(f"  已覆盖题目: {stats['covered_problems']}/{stats['total_problems']}")
-        print(f"  覆盖率: {stats['coverage_rate']}%")
+        _handle_bank_stats(args.bank_stats)
         return
 
     # 命令: 导入答案文档
     if args.import_answers:
-        if not args.bank:
-            print("[ERROR] --import-answers 需要同时指定 --bank 题库名称")
-            sys.exit(1)
-
-        validate_config(load_config())
-
-        from question_bank import get_db
-        db = get_db()
-
-        if not db.bank_exists(args.bank):
-            print(f"[ERROR] 题库不存在: {args.bank}，请先在 GUI 中创建")
-            sys.exit(1)
-
-        print(f"\n{'='*50}")
-        print(f"  答案导入与智能匹配")
-        print(f"  答案文件: {args.import_answers}")
-        print(f"  目标题库: {args.bank}")
-        print(f"{'='*50}\n")
-
-        def cli_progress(current, total, message):
-            pct = int(current / total * 100) if total > 0 else 0
-            bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
-            print(f"\r  [{bar}] {pct:3d}% {message}", end="", flush=True)
-
-        try:
-            result = db.import_answers_from_file(
-                args.import_answers,
-                args.bank,
-                batch_size=args.batch,
-                progress_callback=cli_progress,
-            )
-            print()  # 换行
-            print(f"\n{'='*50}")
-            print(f"  导入完成！")
-            print(f"  提取答案: {result['extracted_count']} 条")
-            print(f"  成功匹配: {result['matched_count']} 条")
-            print(f"  已入库:   {result['imported_count']} 条")
-            print(f"  题库覆盖率: {result['coverage_rate']}%")
-            print(f"  Token 消耗: {result['tokens_used']}")
-            print(f"  总耗时:    {result['latency']}s")
-            if result["errors"]:
-                print(f"  错误: {len(result['errors'])} 条")
-                for e in result["errors"][:3]:
-                    print(f"    - {e}")
-            print(f"{'='*50}")
-        except Exception as e:
-            print(f"\n[ERROR] 导入失败: {e}")
-            sys.exit(1)
+        _handle_import_answers(args)
         return
 
     # 原有评测流程
@@ -1095,7 +1138,7 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # 加载并验证配置（缺少 API Key 时快速失败）
+    # 加载并验证配置
     try:
         validate_config(load_config())
     except ConfigError as e:
@@ -1125,9 +1168,78 @@ def main():
     if html_path:
         try:
             os.startfile(html_path)
-            print(f"\n[报告] 已在浏览器中打开。")
+            print("\n[报告] 已在浏览器中打开。")
         except Exception:
             pass
+
+
+def _handle_bank_stats(bank_name: str) -> None:
+    """处理 --bank-stats 命令：显示答案映射统计"""
+    from question_bank import get_db
+    db = get_db()
+    stats = db.get_answer_mapping_stats(bank_name)
+    print(f"\n题库「{bank_name}」答案映射统计:")
+    print(f"  总映射数: {stats['total_mappings']}")
+    print(
+        f"  已覆盖题目: "
+        f"{stats['covered_problems']}/{stats['total_problems']}"
+    )
+    print(f"  覆盖率: {stats['coverage_rate']}%")
+
+
+def _handle_import_answers(args) -> None:
+    """处理 --import-answers 命令：导入答案文档"""
+    if not args.bank:
+        print("[ERROR] --import-answers 需要同时指定 --bank 题库名称")
+        sys.exit(1)
+
+    validate_config(load_config())
+
+    from question_bank import get_db
+    db = get_db()
+
+    if not db.bank_exists(args.bank):
+        print(f"[ERROR] 题库不存在: {args.bank}，请先在 GUI 中创建")
+        sys.exit(1)
+
+    print(f"\n{'='*50}")
+    print("  答案导入与智能匹配")
+    print(f"  答案文件: {args.import_answers}")
+    print(f"  目标题库: {args.bank}")
+    print(f"{'='*50}\n")
+
+    def cli_progress(current, total, message):
+        """CLI 进度条回调"""
+        pct = int(current / total * 100) if total > 0 else 0
+        bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+        print(
+            f"\r  [{bar}] {pct:3d}% {message}", end="", flush=True
+        )
+
+    try:
+        result = db.import_answers_from_file(
+            args.import_answers,
+            args.bank,
+            batch_size=args.batch,
+            progress_callback=cli_progress,
+        )
+        print()  # 换行
+        print(f"\n{'='*50}")
+        print("  导入完成！")
+        print(f"  提取答案: {result['extracted_count']} 条")
+        print(f"  成功匹配: {result['matched_count']} 条")
+        print(f"  已入库:   {result['imported_count']} 条")
+        print(f"  题库覆盖率: {result['coverage_rate']}%")
+        print(f"  Token 消耗: {result['tokens_used']}")
+        print(f"  总耗时:    {result['latency']}s")
+        if result["errors"]:
+            print(f"  错误: {len(result['errors'])} 条")
+            for e in result["errors"][:3]:
+                print(f"    - {e}")
+        print(f"{'='*50}")
+    except Exception as e:
+        print(f"\n[ERROR] 导入失败: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

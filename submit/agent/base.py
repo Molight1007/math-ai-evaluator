@@ -10,10 +10,13 @@
 """
 
 import logging
+import re
+import threading
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import Optional
+from typing import Optional, Iterator
 
 logger = logging.getLogger("MathPilot")
 
@@ -139,3 +142,131 @@ class BaseAgent(ABC):
                 ctx.budget.refund(1)
             logger.warning("[%s] LLM call failed: %s", self.name, e)
             return None
+
+
+# ============================================================
+# 安全防护工具
+# ============================================================
+
+class TimeoutError(Exception):
+    """wall-clock 超时异常"""
+
+
+@contextmanager
+def wall_clock_timeout(seconds: float, label: str = "") -> Iterator[None]:
+    """
+    wall-clock 超时上下文管理器。
+
+    在 Windows 上使用 threading.Timer 实现（signal.alarm 不可用），
+    超时时会终止当前线程内的阻塞调用。
+
+    用法::
+
+        try:
+            with wall_clock_timeout(30, "Solver"):
+                resp = client.chat(...)
+        except TimeoutError:
+            # 超时处理
+    """
+    timer = [None]  # mutable 闭包
+
+    def _raise():
+        import _thread
+        _thread.interrupt_main()
+
+    if seconds <= 0:
+        yield  # 不限制
+        return
+
+    try:
+        timer[0] = threading.Timer(seconds, _raise)
+        timer[0].daemon = True
+        timer[0].start()
+        yield
+    except KeyboardInterrupt:
+        raise TimeoutError(f"{label} timed out after {seconds}s")
+    finally:
+        if timer[0] is not None:
+            timer[0].cancel()
+
+
+# 模型常见幻觉模式
+_HALLUCINATION_PATTERNS = [
+    # 孤立的 42/42.0 作为答案（避免误匹配 142、42x 等）
+    (re.compile(r"(?:^|(?<=\s))42(?:\.0+)?\s*(?:[，,。.\n]|$)", re.MULTILINE),
+     "42 魔法数字兜底"),
+    (re.compile(r"I am (?:sorry|unable).*?(?:\n|$)", re.IGNORECASE),
+     "英文拒绝回答"),
+    (re.compile(r"as an AI.*?(?:\n|$)", re.IGNORECASE),
+     "AI 身份声明"),
+    (re.compile(r"我(?:无法|不能|没办法|不擅长).{0,20}(?:解|答|计算)", re.IGNORECASE),
+     "中文拒绝回答"),
+    (re.compile(r"根据.{0,10}安全.{0,10}政策", re.IGNORECASE),
+     "安全策略拒绝"),
+]
+
+
+def detect_hallucination(text: str) -> list[tuple[str, float]]:
+    """
+    检测 LLM 输出中的已知幻觉模式。
+
+    返回: [(模式名, 置信度), ...]，空列表表示无检测。
+    """
+    if not text:
+        return [("空响应", 1.0)]
+    findings = []
+    for pattern, label in _HALLUCINATION_PATTERNS:
+        matches = pattern.findall(text)
+        if matches:
+            # 置信度基于匹配次数（但不超过 0.9）
+            confidence = min(0.5 + 0.15 * len(matches), 0.9)
+            findings.append((label, confidence))
+    return findings
+
+
+def detect_truncated(text: str) -> bool:
+    """
+    检测 LLM 输出是否被 max_tokens 截断（代码/LaTeX 不完整）。
+
+    检测规则:
+    - 以不闭合的 LaTeX 环境结尾（\\begin 无 \\end）
+    - 以不闭合的 markdown 代码块结尾
+    - 以不闭合的大括号/中括号/括号结尾
+    - 以行内 $$ 无闭合结尾
+    """
+    if not text:
+        return False
+    stripped = text.rstrip()
+    # 未闭合 LaTeX 环境
+    begins = len(re.findall(r"\\begin\{([^}]+)\}", stripped))
+    ends = len(re.findall(r"\\end\{([^}]+)\}", stripped))
+    if begins > ends:
+        return True
+    # 未闭合的代码块
+    code_fences = len(re.findall(r"^```", stripped, re.MULTILINE))
+    if code_fences % 2 == 1:
+        return True
+    # 未闭合的括号（排除 LaTeX 转义的 \{ \}）
+    bracket_pairs = {"{": "}", "[": "]", "(": ")"}
+    stack: list[str] = []
+    i = 0
+    while i < len(stripped):
+        ch = stripped[i]
+        # 跳过转义字符（如 \{, \}）
+        if ch == "\\" and i + 1 < len(stripped) and stripped[i + 1] in ("{", "}", "[", "]", "(", ")"):
+            i += 2
+            continue
+        if ch in bracket_pairs:
+            stack.append(bracket_pairs[ch])
+        elif ch in bracket_pairs.values():
+            if stack and stack[-1] == ch:
+                stack.pop()
+        i += 1
+    if stack:
+        return True
+    # 未闭合的 $ 标记（$$ 算作双美元符号，检查偶数对）
+    # 移除转义后的 $ 计数
+    dollar_count = len(re.findall(r"(?<!\\)\$", stripped))
+    if dollar_count % 2 == 1:
+        return True
+    return False

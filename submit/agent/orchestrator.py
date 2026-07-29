@@ -17,6 +17,7 @@
 """
 
 import logging
+import re as _re
 
 from .base import BaseAgent, TaskContext, Budget
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
@@ -61,6 +62,19 @@ class Orchestrator(BaseAgent):
                     domain=pre_known_domain)
             else:
                 self.classifier.run(ctx)       # 题型识别
+
+            # ── 快车道：可确定性求解的题目跳过完整流水线 ──
+            fast_result = self._fast_path(ctx)
+            if fast_result is not None:
+                ctx.final_response = fast_result
+                self.record(ctx, "fast_path", f"快车道直接求解: {fast_result[:200]}")
+                return safe_json_serialize({
+                    "final_response": fast_result,
+                    "trace": ctx.trace,
+                    "candidates": [],
+                    "verdicts": [],
+                })
+
             self.solver.run(ctx)           # 初始候选
             self.verifier.run(ctx)         # 验证
             self._regulate(ctx)            # 自主调控（回环 / 增强 / 提前退出）
@@ -116,6 +130,34 @@ class Orchestrator(BaseAgent):
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
             return self._fallback(ctx, problem, e)
+
+    # ----------------------------------------------------------
+    # 快车道：可确定性求解的题目
+    # ----------------------------------------------------------
+    # 预检模式 → 题库分类关键词映射
+    _FAST_PATH_PATTERNS = [
+        (r"\d+\s*[\+\-\*/×÷]\s*\d+", "arithmetic"),
+        (r"(?:calculate|compute|evaluate)\b", "arithmetic"),
+        (r"(?:求导|导数|微分|derivative?|differentiate|f'|f''|d/dx)", "derivative"),
+        (r"(?:积分|∫|integral|integrate)", "integral"),
+        (r"(?:行列式|determinant|det\s*\(|矩阵的?行列式)", "determinant"),
+        (r"(?:解(?:方程|方程组)|solve.{0,6}equation)", "equation"),
+        (r"(?:一元二次|二次方程|quadratic)", "quadratic"),
+        (r"(?:极限|limit)", "limit"),
+    ]
+
+    def _fast_path(self, ctx: TaskContext) -> str | None:
+        """
+        尝试用确定性方法快速求解。成功返回答案，失败返回 None（回退正常工作流）。
+
+        当前策略：仅做预检记录，不拦截流水线。
+        未来将集成 SymPy 进行自动求解。
+        """
+        problem = ctx.problem or ""
+        for pattern, tag in self._FAST_PATH_PATTERNS:
+            if _re.search(pattern, problem, _re.IGNORECASE):
+                self.record(ctx, "fast_path", f"检测到可快车道求解题型: {tag}")
+        return None
 
     # ----------------------------------------------------------
     # 自主调控核心
@@ -276,12 +318,27 @@ class Orchestrator(BaseAgent):
             resp = self.client.chat(
                 [
                     {"role": "system",
-                     "content": "你是数学解题专家，请仔细分析并给出最终答案。"},
+                     "content": "你是数学解题专家，请仔细分析并给出最终答案。确保输出完整，不要截断。"},
                     {"role": "user", "content": problem},
                 ],
                 0.3, self.config.policy_max_tokens,
             )
             answer = (resp or "").strip() or "无法求解"
+            # 截断/幻觉检测
+            from .base import detect_hallucination, detect_truncated
+            if detect_truncated(answer):
+                trace.append({
+                    "agent": self.name,
+                    "step": "fallback",
+                    "content": "WARNING: 兜底答案可能被截断",
+                })
+            hallu = detect_hallucination(answer)
+            if hallu:
+                trace.append({
+                    "agent": self.name,
+                    "step": "fallback",
+                    "content": f"WARNING: 兜底答案包含幻觉模式 {hallu}",
+                })
         except Exception:  # noqa: BLE001
             answer = "无法求解"
         return {

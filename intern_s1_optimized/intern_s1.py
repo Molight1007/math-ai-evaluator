@@ -16,9 +16,11 @@ import json
 import logging
 import re
 import time
-from config import get_config
-from llm_client import LLMClient, extract_json_from_text
-from models import Problem, InferenceResult
+from typing import Optional
+
+from .config import get_config
+from .llm_client import LLMClient, extract_json_from_text
+from .models import Problem, InferenceResult
 
 logger = logging.getLogger(__name__)
 
@@ -629,7 +631,7 @@ async def _run_inference_with_sample(
     封装 _do_inference，为多样本并行调用提供统一入口，消除重复代码。
 
     参数:
-        problem: MasterProblem 数学题目
+        problem: Problem 数学题目
         sample_index: 样本编号（0-based，用于区分同一题目的不同答案）
         temperature: 推理温度
 

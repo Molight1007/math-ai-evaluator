@@ -127,7 +127,7 @@ async def start_eval(
 
     if file is not None and file.filename:
         ext = os.path.splitext(file.filename)[1].lower()
-        upload_dir = os.path.join(os.getcwd(), "测试结果", "_web_uploads")
+        upload_dir = os.path.join(os.path.dirname(_TEST_TOOLS), "测试结果", "_web_uploads")
         os.makedirs(upload_dir, exist_ok=True)
         raw_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{ext}")
         with open(raw_path, "wb") as f:

@@ -1,0 +1,15 @@
+{
+  "include": [
+    "src",
+    "tests",
+    "user_agent.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".tmp_*",
+    "build"
+  ],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": "none"
+}

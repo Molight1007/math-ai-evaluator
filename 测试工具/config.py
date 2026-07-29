@@ -17,13 +17,14 @@ USER_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".math_evaluator")
 USER_ENV_PATH = os.path.join(USER_CONFIG_DIR, ".env")
 
 # 默认 LLM 超时和重试配置
-_DEFAULT_LLM_TIMEOUT = 120.0           # 单次 API 请求超时（秒）
+# 说明：0 或负数表示不设置超时，避免推理/验证被强制中断。
+_DEFAULT_LLM_TIMEOUT = 0.0             # 单次 API 请求超时（秒），0=无限制
 _DEFAULT_LLM_MAX_RETRIES = 3           # 最大重试次数
 
 # 默认 Lean 配置
 _DEFAULT_LEAN_EXECUTABLE = "lake"      # Lean 4 lake 构建工具
 _DEFAULT_LEAN_COMPILER = "lean"        # Lean 4 编译器（用于直接编译单文件）
-_DEFAULT_LEAN_TIMEOUT = 60.0           # Lean 编译超时（秒）
+_DEFAULT_LEAN_TIMEOUT = 0.0            # Lean 编译超时（秒），0=无限制
 _LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
 
 # Lean 验证项目路径（不依赖 Mathlib 的轻量级项目）

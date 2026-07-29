@@ -14,14 +14,17 @@
 性能优化：
 - 候选生成和纠错重解改为串行请求（每次间隔 0.3s），避免 API 请求风暴。
 """
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .base import BaseAgent, TaskContext, Candidate
+from .base import (
+    BaseAgent, TaskContext, Candidate,
+    detect_hallucination, detect_truncated,
+)
 try:
     from prompts.policy import (
         POLICY_SYSTEM,
@@ -30,7 +33,7 @@ try:
         build_blueprint_user_message,
     )
     from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
-    from utils.extract import extract_final_answer
+    from utils.extract import extract_final_answer, smart_fallback_answer
 except ImportError:  # 作为 submit 子包导入时（如评测器以项目根为 sys.path）
     from submit.prompts.policy import (
         POLICY_SYSTEM,
@@ -39,7 +42,7 @@ except ImportError:  # 作为 submit 子包导入时（如评测器以项目根�
         build_blueprint_user_message,
     )
     from submit.prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
-    from submit.utils.extract import extract_final_answer
+    from submit.utils.extract import extract_final_answer, smart_fallback_answer
 
 logger = logging.getLogger("MathPilot")
 
@@ -105,11 +108,37 @@ class SolverAgent(BaseAgent):
         self._generate_initial(ctx, count or self.config.policy_sample_times)
         return ctx
 
+    @staticmethod
+    def _adaptive_count(ctx: TaskContext, default_count: int) -> int:
+        """根据题目领域自适应调整候选数量"""
+        domain = (ctx.domain or "").lower()
+        problem_len = len(ctx.problem)
+        # 证明题（proof/inequality/geometry theorem）→ 1 个候选即可
+        proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
+        if any(k in domain for k in proof_keywords):
+            return 1
+        # 高难度计算题 → 增加候选
+        hard_signals = [
+            problem_len > 500,  # 长题目
+            any(k in domain for k in ("differential_equation", "微分方程")),
+            any(k in domain for k in ("series", "级数")),
+            any(k in domain for k in ("integral", "不定积分", "indefinite_integral",
+                                        "重积分", "曲线积分", "曲面积分")),
+        ]
+        if sum(hard_signals) >= 2:
+            return max(default_count, 3)
+        # 单选题/填空题 → 3 个候选互相验证
+        if any(k in domain for k in ("choice", "fill", "选择", "填空")):
+            return max(default_count, 3)
+        return default_count
+
     # ----------------------------------------------------------
     # 初始求解（蓝图分解 + 领域提示）
     # ----------------------------------------------------------
     def _generate_initial(self, ctx: TaskContext, count: int = None) -> None:
         count = count or self.config.policy_sample_times
+        # 领域自适应候选数：证明题少生成，计算题多生成
+        count = self._adaptive_count(ctx, count)
 
         if self.config.use_blueprint:
             system_prompt = get_policy_system(use_blueprint=True)
@@ -122,23 +151,35 @@ class SolverAgent(BaseAgent):
                 user_content = get_domain_hint(ctx.domain) + "\n" + ctx.problem
 
         base_cid = len(ctx.candidates)
+        # 温度分层：不同候选使用不同温度以增加多样性
+        _STRATIFIED_TEMPS = [0.1, 0.3, 0.5]
 
         def _make_one(i: int):
             cid = base_cid + i
+            # 温度分层：按索引轮转取值（count>=3 时生效）
+            base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
+            # 候选 2+ 追加微扰动提示，引导不同解题思路
+            _perturb_hints = [
+                "",  # 候选 0: 无扰动
+                "\n请特别注意计算过程中的每一步细节，确保数值精确。",  # 候选 1
+                "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2
+            ]
+
             # 最多重试 3 次（原始请求 + 2 次重试），避免空响应/拒绝回答
             for retry in range(3):
-                current_temp = self.config.policy_temperature
+                current_temp = base_temp
                 current_system = system_prompt
                 # 如果是拒绝回答后的重试，用强化提示词和更高温度
                 if retry > 0:
                     current_system = _REINFORCED_SYSTEM
-                    current_temp = 0.5  # 提高温度以生成不同输出
+                    current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
 
                 resp = self.llm(
                     ctx,
                     [
                         {"role": "system", "content": current_system},
-                        {"role": "user", "content": user_content},
+                        {"role": "user",
+                         "content": user_content + (_perturb_hints[i % len(_perturb_hints)] if retry == 0 else "")},
                     ],
                     current_temp,
                     self.config.policy_max_tokens,
@@ -149,6 +190,19 @@ class SolverAgent(BaseAgent):
                         logger.warning("Candidate %d empty response (retry %d/2)", cid, retry + 1)
                         time.sleep(1)
                     continue
+                # 幻觉检测
+                hallu = detect_hallucination(resp)
+                if hallu:
+                    logger.warning("Candidate %d hallucination detected: %s", cid,
+                                   ", ".join(f"{h[0]}({h[1]:.0%})" for h in hallu))
+                    # 42 兜底 → 尝试重试
+                    if any("42" in h[0] for h in hallu) and retry < 2:
+                        logger.warning("Candidate %d 42-dodge, retry", cid)
+                        time.sleep(1)
+                        continue
+                # 截断检测 → 记录但不拒绝（后续由 orchestrator 续写）
+                if detect_truncated(resp):
+                    logger.info("Candidate %d truncated; will attempt completion", cid)
                 # 拒绝回答 -> 重试
                 if _is_refusal(resp):
                     if retry < 2:
@@ -160,12 +214,13 @@ class SolverAgent(BaseAgent):
             # 全部重试失败，返回最后一次响应
             return cid, resp, True
 
-        # ??????
+        # 并行生成候选（用线程池提高吞吐，限制最大并发防止 API 过载）
         results = []
-        with ThreadPoolExecutor(max_workers=min(count, 4)) as executor:
-            futures = {executor.submit(_make_one, i): i for i in range(count)}
-            for f in as_completed(futures):
-                results.append(f.result())
+        max_workers = min(count, 6)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_make_one, i): i for i in range(count)}
+            for future in as_completed(futures):
+                results.append(future.result())
         results.sort(key=lambda x: x[0])
 
         for cid, resp, is_fallback in results:
@@ -178,7 +233,7 @@ class SolverAgent(BaseAgent):
             answer = extract_final_answer(resp)
             # 如果提取不到答案但推理内容存在，取尾部作为答案
             if not answer and resp.strip():
-                answer = resp.strip()[-500:]
+                answer = smart_fallback_answer(resp)
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,
@@ -218,18 +273,31 @@ class SolverAgent(BaseAgent):
                     self.config.policy_max_tokens,
                 )
                 if resp is not None and resp.strip():
+                    # 幻觉/拒绝检测（与 _generate_initial 一致）
+                    hallu = detect_hallucination(resp)
+                    if any("42" in h[0] for h in hallu) and retry < 2:
+                        logger.warning("Revise %d 42-dodge (retry %d/2)", cid, retry + 1)
+                        time.sleep(1)
+                        continue
+                    if _is_refusal(resp) and retry < 2:
+                        logger.warning("Revise %d refused (retry %d/2)", cid, retry + 1)
+                        time.sleep(1)
+                        continue
+                    if detect_truncated(resp):
+                        logger.info("Revise %d truncated; will attempt completion", cid)
                     return cid, resp
                 if retry < 2:
                     logger.warning("Revise candidate %d empty response (retry %d/2)", cid, retry + 1)
                     time.sleep(1)
             return cid, resp
 
-        # ????????
+        # 并行生成修正候选
         results = []
-        with ThreadPoolExecutor(max_workers=min(count, 4)) as executor:
-            futures = {executor.submit(_make_one, i): i for i in range(count)}
-            for f in as_completed(futures):
-                results.append(f.result())
+        max_workers = min(count, 6)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_make_one, i): i for i in range(count)}
+            for future in as_completed(futures):
+                results.append(future.result())
         results.sort(key=lambda x: x[0])
 
         for cid, resp in results:
@@ -278,6 +346,25 @@ class SolverAgent(BaseAgent):
                 resp = None
 
             if resp and resp.strip() and not _is_refusal(resp):
+                # 幻觉检测：42 兜底 → 重试
+                hallu = detect_hallucination(resp)
+                if any("42" in h[0] for h in hallu) and attempt < 2:
+                    logger.warning("Direct solve %d 42-dodge (retry)", attempt + 1)
+                    time.sleep(1)
+                    continue
+                # 截断检测 → 要求模型补充
+                if detect_truncated(resp):
+                    logger.warning("Direct solve %d truncated → retry with continuation prompt", attempt + 1)
+                    if attempt < 2:
+                        continuation = (
+                            direct_system + "\n\n上一轮回答被截断，请继续完成推理并确保输出完整的【最终答案】。"
+                        )
+                        user_content = (
+                            f"上一轮你的回答被截断在：{resp[-200:]}\n\n"
+                            f"请从截断处续写，给出完整的最终答案。原题目：\n{ctx.problem}"
+                        )
+                        self.record(ctx, "direct_solve", f"截断重试 (attempt {attempt + 2})")
+                        continue
                 answer = extract_final_answer(resp)
                 if answer:
                     self.record(ctx, "direct_solve", f"兜底直接求解成功 (attempt {attempt + 1})")
@@ -285,7 +372,7 @@ class SolverAgent(BaseAgent):
                 # 提取失败，取全文作为答案
                 self.record(ctx, "direct_solve",
                            f"兜底求解成功但提取失败，使用全文 (attempt {attempt + 1})")
-                return resp.strip()[-500:]
+                return smart_fallback_answer(resp)
             logger.warning("Direct solve attempt %d/3 returned empty or refused", attempt + 1)
             time.sleep(1)
 
@@ -373,7 +460,7 @@ class SolverAgent(BaseAgent):
                 full_reasoning = reasoning + "\n\n[续写]\n" + continuation.strip()
                 new_answer = extract_final_answer(full_reasoning)
                 if not new_answer:
-                    new_answer = continuation.strip()[-500:]
+                    new_answer = smart_fallback_answer(continuation)
                 self.record(ctx, "complete",
                            f"答案续写成功 (attempt {attempt + 1})")
                 return Candidate(

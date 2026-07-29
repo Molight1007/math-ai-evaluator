@@ -3,7 +3,9 @@ import sys
 import os
 from datetime import datetime
 
-os.chdir(r"d:\挑战杯\test_mathlib")
+# 基于脚本自身位置定位 test_mathlib，避免硬编码绝对路径
+_MATHLIB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_mathlib")
+os.chdir(_MATHLIB_DIR)
 
 # Clean up any stale state
 for d in [".lake/packages", "lake-packages"]:
@@ -20,7 +22,7 @@ for d in [".lake/packages", "lake-packages"]:
 # Create packages dir
 os.makedirs(".lake/packages", exist_ok=True)
 
-log_path = r"d:\挑战杯\test_mathlib\lake_update.log"
+log_path = os.path.join(_MATHLIB_DIR, "lake_update.log")
 start_time = datetime.now()
 with open(log_path, "w", encoding="utf-8") as f:
     f.write(f"=== lake update started at {start_time} ===\n")
@@ -43,7 +45,7 @@ with open(log_path, "a", encoding="utf-8") as f:
     f.write(f"\n=== STDERR ===\n{result.stderr}\n")
 
 # Write result marker
-with open(r"d:\挑战杯\test_mathlib\lake_update_done.txt", "w") as f:
+with open(os.path.join(_MATHLIB_DIR, "lake_update_done.txt"), "w") as f:
     f.write(f"SUCCESS:{result.returncode}" if result.returncode == 0 else f"FAILED:{result.returncode}")
 
 print(f"Done. Exit code: {result.returncode}, Duration: {duration:.0f}s")
