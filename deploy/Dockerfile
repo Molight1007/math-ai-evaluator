@@ -1,7 +1,9 @@
-﻿# ========== 数学智能体评测器 - Docker 镜像 ==========
-FROM python:3.11-slim
+﻿FROM python:3.11-slim
 
 WORKDIR /app
+
+# 先升级 pip
+RUN pip install --no-cache-dir --upgrade pip
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
