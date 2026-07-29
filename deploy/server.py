@@ -43,7 +43,7 @@ tasks: dict = _load_tasks()
 tasks_lock = threading.Lock()
 
 # ---------- HTML 首页 ----------
-INDEX_HTML = r"""<!DOCTYPE html>
+INDEX_HTML = r"""{% raw %}<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -163,7 +163,7 @@ loadTasks();
 setInterval(loadTasks, 5000);
 </script>
 </body>
-</html>"""
+</html>{% endraw %}"""
 
 
 @app.route("/")
