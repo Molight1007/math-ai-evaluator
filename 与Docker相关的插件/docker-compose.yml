@@ -13,7 +13,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: 与Docker相关的插件/Dockerfile
     image: math-evaluator:latest
     container_name: math-eval-web
     restart: unless-stopped
@@ -51,8 +51,8 @@ services:
       # - "443:443"      # HTTPS（启用时取消注释）
 
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html/frontend:ro
+      - ./与Docker相关的插件/deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./Web服务模块/frontend:/usr/share/nginx/html/frontend:ro
 
     depends_on:
       web:

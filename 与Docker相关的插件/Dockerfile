@@ -24,11 +24,12 @@ RUN mkdir -p 测试结果/测试结果展示 \
     测试结果/原始问题 \
     测试结果/测试lean文件
 
-# 入口脚本
-COPY deploy/entrypoint.sh /entrypoint.sh
+# 入口脚本（路径适配：与Docker相关的插件/deploy/）
+COPY 与Docker相关的插件/deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
+# uvicorn 在 entrypoint.sh 中 cd 到 Web服务模块/ 后执行，相对导入正常工作
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
