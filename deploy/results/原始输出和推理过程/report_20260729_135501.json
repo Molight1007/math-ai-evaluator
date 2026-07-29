@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-07-29T13:55:01.619829",
+  "summary": {
+    "total": 1,
+    "correct": 1,
+    "accuracy": 100.0,
+    "avg_confidence": 1.0,
+    "avg_inference_latency": 37.91,
+    "avg_judge_latency": 1.37,
+    "total_inference_tokens": 2272,
+    "total_judge_tokens": 410,
+    "error_types": {},
+    "domain_stats": {
+      "微积分": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100.0
+      }
+    }
+  },
+  "results": [
+    {
+      "problem_id": "gen_2e15b579",
+      "question": "计算定积分：∫_0^π x sin x dx。",
+      "domain": "微积分",
+      "reference_answer": "π",
+      "intern_answer": "π",
+      "intern_reasoning": "候选0正确应用分部积分法，步骤严谨且结果一致；候选1和2的方法存在根本性错误，无法得到正确结果。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": true,
+      "confidence": 1.0,
+      "judge_explanation": "模型答案与参考答案一致，均为π，因此正确。",
+      "error_type": null,
+      "correct_answer_judge": "π",
+      "inference_tokens": 2272,
+      "judge_tokens": 410,
+      "inference_latency": 37.91,
+      "judge_latency": 1.37,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 2272
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "gen_2e15b579",
+    "question": "计算定积分：∫_0^π x sin x dx。",
+    "domain": "微积分",
+    "reference_answer": "π"
+  }
+]

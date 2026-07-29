@@ -1,0 +1,8 @@
+[
+  {
+    "id": "gen_ecf8cbdd",
+    "question": "求函数 f(x)=x^3-3x+1 的极值点",
+    "domain": "导数",
+    "reference_answer": "极大值点 x=-1，极小值点 x=1"
+  }
+]

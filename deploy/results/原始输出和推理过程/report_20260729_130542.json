@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-07-29T13:05:42.782393",
+  "summary": {
+    "total": 1,
+    "correct": 0,
+    "accuracy": 0.0,
+    "avg_confidence": 0.0,
+    "avg_inference_latency": 0.0,
+    "avg_judge_latency": 0.0,
+    "total_inference_tokens": 0,
+    "total_judge_tokens": 0,
+    "error_types": {},
+    "domain_stats": {
+      "多元函数微分学": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "problem_id": "gen_91515bdd",
+      "question": "求函数f(x, y) = x^2 + y^2在约束条件x + y = 1下的最小值。",
+      "domain": "多元函数微分学",
+      "reference_answer": "1/2",
+      "intern_answer": "",
+      "intern_reasoning": "",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": false,
+      "confidence": 0.0,
+      "judge_explanation": "Inference error: HTTP 401",
+      "error_type": null,
+      "correct_answer_judge": null,
+      "inference_tokens": 0,
+      "judge_tokens": 0,
+      "inference_latency": 0.21,
+      "judge_latency": 0.0,
+      "inference_error": "HTTP 401",
+      "judge_error": "HTTP 401",
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": null,
+      "review_attempts": 0,
+      "total_tokens_used": 0
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "gen_271f03ca",
+    "question": "计算二重积分 $\\iint_D (x^2 + y^2) \\, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "$\\frac{\\pi}{2}$"
+  }
+]
