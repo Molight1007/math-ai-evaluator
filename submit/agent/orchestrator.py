@@ -22,6 +22,7 @@ import re as _re
 from .base import BaseAgent, TaskContext, Budget
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
+from .sub_goal_solver import SubGoalSolverAgent
 from .verifier import VerifierAgent
 from .formatter import FormatterAgent
 try:
@@ -41,6 +42,7 @@ class Orchestrator(BaseAgent):
         self.solver = SolverAgent(client, config)
         self.verifier = VerifierAgent(client, config)
         self.formatter = FormatterAgent(client, config)
+        self.sub_goal_solver = SubGoalSolverAgent(client, config)
 
     # ----------------------------------------------------------
     # 主入口
@@ -75,7 +77,11 @@ class Orchestrator(BaseAgent):
                     "verdicts": [],
                 })
 
-            self.solver.run(ctx)           # 初始候选
+            # ─── 子目标模式：先规划子目标树，再逐步求解 ───
+            if getattr(self.config, "use_subgoal", False):
+                self.sub_goal_solver.run(ctx)
+            else:
+                self.solver.run(ctx)           # 初始候选
             self.verifier.run(ctx)         # 验证
             self._regulate(ctx)            # 自主调控（回环 / 增强 / 提前退出）
 

@@ -310,7 +310,7 @@ def api_evaluate():
                 tasks[task_id]["progress"] = f"评测中 ({num} 道题)..."
             _save_tasks()
             async def _eval():
-                return await run_evaluation(json_path, concurrency, multi_agent=multi_agent, use_lean=use_lean)
+                return await run_evaluation(json_path, concurrency, multi_agent=multi_agent, enable_lean=use_lean)
             html_path = asyncio.run(_eval())
             result_dir = Path(DIR_DISPLAY) / task_id
             result_dir.mkdir(parents=True, exist_ok=True)
@@ -490,7 +490,7 @@ def api_bank_import_answers():
     file.save(str(saved_path))
     try:
         db = _get_db()
-        result = db.import_answers_from_doc(bank_name, str(saved_path))
+        result = db.import_answers_from_file(bank_name, str(saved_path))
         matched = result.get("matched", 0)
         total = result.get("total", 0)
         return jsonify({"matched": matched, "total": total, "match_rate": round(matched/total*100, 1) if total > 0 else 0})

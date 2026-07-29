@@ -46,6 +46,9 @@ class AgentConfig:
     # 蓝图分解（LEAP 启发：先拆后解）
     use_blueprint: bool = True         # 是否启用蓝图分解策略
 
+    # 子目标逐步求解（先规划子目标树，再逐步求解每个子目标，最后合并）
+    use_subgoal: bool = False        # 是否启用子目标逐步求解策略（与 use_blueprint 互斥，优先使用子目标）
+
     # 验证模型（评判）
     verifier_voting_times: int = 5     # 每个候选的投票次数（多次投票交叉验证）
     verifier_temperature: float = 0.0  # 验证温度（贪婪解码）
@@ -87,7 +90,7 @@ class ReasoningAgent:
             "verifier_voting_times", "verifier_temperature",
             "enable_domain_hint", "use_blueprint", "extraction_mode",
             "conf_high", "conf_low", "max_revise_rounds",
-            "revise_sample_times", "max_total_calls",
+            "revise_sample_times", "max_total_calls", "use_subgoal",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
@@ -119,3 +122,5 @@ class ReasoningAgent:
             {"final_response": str, "trace": list[dict]}
         """
         return self.orchestrator.run(problem, metadata)
+
+
