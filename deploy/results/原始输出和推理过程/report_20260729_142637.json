@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-07-29T14:26:37.256600",
+  "summary": {
+    "total": 1,
+    "correct": 0,
+    "accuracy": 0.0,
+    "avg_confidence": 1.0,
+    "avg_inference_latency": 52.02,
+    "avg_judge_latency": 1.32,
+    "total_inference_tokens": 2849,
+    "total_judge_tokens": 466,
+    "error_types": {
+      "other": 1
+    },
+    "domain_stats": {
+      "未知": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "problem_id": "Microsoft Word - 高等数学下册练习册_0262",
+      "question": "计算 ∮_Γ 3ydx - xzdy + yz^2 dz，其中Γ是曲线 { x^2+y^2=2z, z=2 }，从z轴正向看去为逆时针方向。",
+      "domain": "未知",
+      "reference_answer": "0",
+      "intern_answer": "-20π",
+      "intern_reasoning": "候选0和1均通过不同方法验证结果一致，但候选0直接参数化更直观，且计算过程详细，斯托克斯定理验证进一步确认正确性，因此选择候选0。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": false,
+      "confidence": 1.0,
+      "judge_explanation": "参考答案为0，模型答案为-20π，两者不一致，因此模型答案错误。",
+      "error_type": "other",
+      "correct_answer_judge": 0,
+      "inference_tokens": 2849,
+      "judge_tokens": 466,
+      "inference_latency": 52.02,
+      "judge_latency": 1.32,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 2849
+    }
+  ]
+}

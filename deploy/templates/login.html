@@ -1,0 +1,23 @@
+﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 - 数学智能体评测器</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;background:linear-gradient(135deg,#4361ee,#7209b7);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:16px;padding:40px;width:90%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.card h1{text-align:center;font-size:22px;margin-bottom:8px;color:#1a1a2e}
+.card .sub{text-align:center;color:#64748b;font-size:13px;margin-bottom:28px}
+label{display:block;margin-bottom:4px;font-weight:600;font-size:13px;color:#64748b}
+input{width:100%;padding:10px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:0;transition:.2s;margin-bottom:14px}
+input:focus{border-color:#4361ee;box-shadow:0 0 0 3px rgba(67,97,238,.12)}
+.btn{width:100%;padding:11px;border:none;border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;background:#4361ee;color:#fff;transition:.2s}
+.btn:hover{background:#3a56d4}
+.err{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;display:none}
+</style></head><body><div class="card"><h1>数学智能体评测器</h1><div class="sub">请登录以继续</div><label>用户名</label><input type="text" id="un" placeholder="输入用户名" autofocus><label>密码</label><input type="password" id="pw" placeholder="输入密码"><button class="btn" onclick="login()">登录</button><div class="err" id="err"></div></div><script>
+async function login(){
+var u=document.getElementById('un').value.trim();
+var p=document.getElementById('pw').value;
+if(!u||!p)return;
+var r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+var j=await r.json();
+if(j.ok){location.href='/'}else{document.getElementById('err').textContent=j.error||'登录失败';document.getElementById('err').style.display='block'}
+}
+document.getElementById('pw').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
+</script></body></html>

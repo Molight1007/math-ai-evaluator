@@ -1,68 +1,57 @@
-
 # -*- coding: utf-8 -*-
-"""数学智能体评测器 - Web 服务 v3"""
+"""数学智能体评测器 - Web v4 (多用户版)"""
 
-import asyncio, datetime, json, os, sys, threading, uuid, shutil
+import asyncio, datetime, hashlib, json, os, sys, threading, uuid, shutil, secrets
 from pathlib import Path
 
 _DEPLOY_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_DEPLOY_DIR)
-if not os.path.isdir(os.path.join(_PROJECT_ROOT, '测试工具')):
+if not os.path.isdir(os.path.join(_PROJECT_ROOT, "测试工具")):
     _PROJECT_ROOT = _DEPLOY_DIR
 sys.path.insert(0, _PROJECT_ROOT)
 sys.path.insert(0, os.path.join(_PROJECT_ROOT, "测试工具"))
 sys.path.insert(0, os.path.join(_PROJECT_ROOT, "转化工具"))
 
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect
 
 app = Flask(__name__, static_folder=None)
+app.secret_key = secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
-# ===== Basic Auth =====
-import functools
-AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
-
-def check_auth(password):
-    return AUTH_PASSWORD and password == AUTH_PASSWORD
-
-def authenticate():
-    return jsonify({"error": "Unauthorized"}), 401, {"WWW-Authenticate": "Basic realm=Math Evaluator"}
-
-def require_auth(f):
-    @functools.wraps(f)
-    def decorated(*args, **kwargs):
-        if not AUTH_PASSWORD:
-            return f(*args, **kwargs)
-        auth = request.authorization
-        if not auth or not check_auth(auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
-
-# Apply auth to all routes via before_request
-@app.before_request
-def before_request():
-    if not AUTH_PASSWORD:
-        return None
-    # Skip auth for static files
-    if request.path.startswith("/api/results/") and request.endpoint == "serve_result":
-        return None
-    auth = request.authorization
-    if not auth or not check_auth(auth.password):
-        return authenticate()
-
 
 _RESULT_BASE = "测试结果"
 DIR_DISPLAY = os.path.join(_RESULT_BASE, "测试结果展示")
 DIR_OUTPUT = os.path.join(_RESULT_BASE, "原始输出和推理过程")
 DIR_PROBLEMS = os.path.join(_RESULT_BASE, "原始问题")
-DIR_LEAN = os.path.join(_RESULT_BASE, "测试lean文件")
-for d in [DIR_DISPLAY, DIR_OUTPUT, DIR_PROBLEMS, DIR_LEAN]:
+for d in [DIR_DISPLAY, DIR_OUTPUT, DIR_PROBLEMS]:
     os.makedirs(d, exist_ok=True)
 
 TASKS_FILE = os.path.join(_RESULT_BASE, "任务记录.json")
 BANK_DIR = "题库"
 os.makedirs(BANK_DIR, exist_ok=True)
 
+# ===== User System =====
+USERS_FILE = "users.json"
+
+def _load_users():
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        # Create default admin
+        default = {"admin": {"password": _hash_pw("admin"), "role": "admin"}}
+        _save_users(default)
+        return default
+
+def _save_users(data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+users_db = _load_users()
+
+# ===== Task Management =====
 tasks: dict = {}
 tasks_lock = threading.Lock()
 
@@ -78,7 +67,7 @@ def _load_tasks():
 def _save_tasks():
     os.makedirs(_RESULT_BASE, exist_ok=True)
     with tasks_lock:
-        items = sorted(tasks.items(), key=lambda x: x[1].get("created_at", ""), reverse=True)[:50]
+        items = sorted(tasks.items(), key=lambda x: x[1].get("created_at", ""), reverse=True)[:200]
     with open(TASKS_FILE, "w", encoding="utf-8") as f:
         json.dump(dict(items), f, ensure_ascii=False, indent=2)
 
@@ -93,7 +82,6 @@ def _get_db():
         db_path = os.path.abspath(os.path.join(BANK_DIR, "示例题库.db"))
         from question_bank import QuestionBankDB
         _db_instance = QuestionBankDB(db_path)
-        # Fix WAL permission issue on Docker volumes: use DELETE mode
         orig_connect = _db_instance._connect
         def _safe_connect():
             conn = sqlite3.connect(db_path)
@@ -114,7 +102,77 @@ def _count_problems(path: str) -> int:
     except Exception:
         return 0
 
-# ===== Routes =====
+def _get_user():
+    return session.get("user", "")
+
+def _auth_required(f):
+    def wrapper(*args, **kwargs):
+        if not _get_user():
+            return jsonify({"error": "请先登录"}), 401
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+# ===== Auth Routes =====
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if username in users_db and users_db[username]["password"] == _hash_pw(password):
+        session["user"] = username
+        session["role"] = users_db[username].get("role", "user")
+        return jsonify({"ok": True, "username": username, "role": session["role"]})
+    return jsonify({"error": "用户名或密码错误"}), 401
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+@app.route("/api/me", methods=["GET"])
+def api_me():
+    user = _get_user()
+    if not user:
+        return jsonify({"logged_in": False})
+    return jsonify({"logged_in": True, "username": user, "role": session.get("role", "user")})
+
+# ===== User Management (admin) =====
+@app.route("/api/users", methods=["GET"])
+def api_users():
+    if session.get("role") != "admin":
+        return jsonify({"error": "需要管理员权限"}), 403
+    return jsonify([{"username": u, "role": d.get("role","user")} for u, d in users_db.items()])
+
+@app.route("/api/users", methods=["POST"])
+def api_create_user():
+    if session.get("role") != "admin":
+        return jsonify({"error": "需要管理员权限"}), 403
+    data = request.get_json()
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    if not username or not password:
+        return jsonify({"error": "用户名和密码不能为空"}), 400
+    if len(username) < 2:
+        return jsonify({"error": "用户名至少2个字符"}), 400
+    if username in users_db:
+        return jsonify({"error": "用户已存在"}), 400
+    users_db[username] = {"password": _hash_pw(password), "role": "user"}
+    _save_users(users_db)
+    return jsonify({"ok": True, "username": username})
+
+@app.route("/api/users/<username>", methods=["DELETE"])
+def api_delete_user(username):
+    if session.get("role") != "admin":
+        return jsonify({"error": "需要管理员权限"}), 403
+    if username == "admin":
+        return jsonify({"error": "不能删除admin"}), 400
+    if username in users_db:
+        del users_db[username]
+        _save_users(users_db)
+    return jsonify({"ok": True})
+
+# ===== Main Page =====
 @app.route("/")
 def index():
     tpl_path = os.path.join(_DEPLOY_DIR, "templates", "index.html")
@@ -122,14 +180,37 @@ def index():
         with open(tpl_path, "r", encoding="utf-8") as f:
             return render_template_string(f.read())
     except Exception as e:
-        return render_template_string("<h1>Template Error</h1><pre>" + str(e) + "</pre>")
+        return render_template_string("<h1>Error</h1><pre>" + str(e) + "</pre>")
 
+@app.route("/login.html")
+def login_page():
+    tpl_path = os.path.join(_DEPLOY_DIR, "templates", "login.html")
+    try:
+        with open(tpl_path, "r", encoding="utf-8") as f:
+            return render_template_string(f.read())
+    except Exception:
+        return render_template_string("<h1>Login</h1>")
+
+# ===== Task API (with user filter) =====
 @app.route("/api/tasks", methods=["GET"])
 def api_tasks():
-    return jsonify(list(_load_tasks().values())[:30])
+    user = _get_user()
+    if not user:
+        return jsonify([])
+    all_tasks = list(_load_tasks().values())
+    # Filter by user; admin sees all
+    if session.get("role") == "admin":
+        user_tasks = all_tasks
+    else:
+        user_tasks = [t for t in all_tasks if t.get("user", "") == user]
+    user_tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    return jsonify(user_tasks[:50])
 
 @app.route("/api/evaluate", methods=["POST"])
 def api_evaluate():
+    user = _get_user()
+    if not user:
+        return jsonify({"error": "请先登录"}), 401
     if "file" not in request.files:
         return jsonify({"error": "请上传文件"}), 400
     file = request.files["file"]
@@ -150,6 +231,7 @@ def api_evaluate():
             "id": task_id, "filename": file.filename,
             "status": "running", "progress": "准备中...",
             "created_at": datetime.datetime.now().isoformat(),
+            "user": user,
         }
     _save_tasks()
     def _run():
@@ -194,10 +276,14 @@ def serve_result(task_id, filename):
 
 @app.route("/api/banks", methods=["GET"])
 def api_banks():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     return jsonify(_get_db().list_banks())
 
 @app.route("/api/bank/create", methods=["POST"])
 def api_bank_create():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     data = request.get_json()
     name = data.get("name", "").strip()
     if not name:
@@ -205,15 +291,19 @@ def api_bank_create():
     ok = _get_db().create_bank(name)
     if not ok:
         return jsonify({"error": "题库已存在"}), 400
-    return jsonify({"message": f"题库「{name}」创建成功"})
+    return jsonify({"message": f"题库创建成功"})
 
 @app.route("/api/bank/<bank_name>/delete", methods=["POST"])
 def api_bank_delete(bank_name):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     _get_db().delete_bank(bank_name)
-    return jsonify({"message": f"题库「{bank_name}」已删除"})
+    return jsonify({"message": "已删除"})
 
 @app.route("/api/bank/<bank_name>/stats", methods=["GET"])
 def api_bank_stats(bank_name):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     db = _get_db()
     problems = db.get_all_problems(bank_name)
     domains = sorted(set(p.domain for p in problems if p.domain))
@@ -223,6 +313,8 @@ def api_bank_stats(bank_name):
 
 @app.route("/api/bank/<bank_name>/problems", methods=["GET"])
 def api_bank_problems(bank_name):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     db = _get_db()
     all_p = db.get_all_problems(bank_name)
     search = request.args.get("search", "").strip()
@@ -242,6 +334,8 @@ def api_bank_problems(bank_name):
 
 @app.route("/api/bank/<bank_name>/problem/<problem_id>", methods=["GET"])
 def api_bank_problem_detail(bank_name, problem_id):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     p = _get_db().get_problem(problem_id, bank_name)
     if not p:
         return jsonify({"error": "题目不存在"}), 404
@@ -249,11 +343,15 @@ def api_bank_problem_detail(bank_name, problem_id):
 
 @app.route("/api/bank/<bank_name>/problem/<problem_id>/delete", methods=["POST"])
 def api_bank_problem_delete(bank_name, problem_id):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     _get_db().remove_problem(problem_id, bank_name)
-    return jsonify({"message": f"题目 {problem_id} 已删除"})
+    return jsonify({"message": "已删除"})
 
 @app.route("/api/bank/import", methods=["POST"])
 def api_bank_import():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     if "file" not in request.files:
         return jsonify({"error": "请上传文件"}), 400
     file = request.files["file"]
@@ -279,6 +377,8 @@ def api_bank_import():
 
 @app.route("/api/bank/manual-add", methods=["POST"])
 def api_bank_manual_add():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     data = request.get_json()
     bank_name = data.get("bank_name", "").strip()
     question = data.get("question", "").strip()
@@ -294,6 +394,8 @@ def api_bank_manual_add():
 
 @app.route("/api/bank/<bank_name>/audit", methods=["POST"])
 def api_bank_audit(bank_name):
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     try:
         result = _get_db().audit_quality(bank_name)
         return jsonify(result)
@@ -302,6 +404,8 @@ def api_bank_audit(bank_name):
 
 @app.route("/api/bank/import-answers", methods=["POST"])
 def api_bank_import_answers():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     if "file" not in request.files:
         return jsonify({"error": "请上传文件"}), 400
     file = request.files["file"]
@@ -322,6 +426,9 @@ def api_bank_import_answers():
 
 @app.route("/api/bank/<bank_name>/random-eval", methods=["POST"])
 def api_bank_random_eval(bank_name):
+    user = _get_user()
+    if not user:
+        return jsonify({"error": "请先登录"}), 401
     data = request.get_json()
     count = int(data.get("count", 5))
     domain = data.get("domain") or None
@@ -339,7 +446,7 @@ def api_bank_random_eval(bank_name):
         json.dump([{"id": p.id, "question": p.question, "domain": p.domain or "", "reference_answer": p.reference_answer or ""} for p in selected], f, ensure_ascii=False, indent=2)
     task_id = uuid.uuid4().hex
     with tasks_lock:
-        tasks[task_id] = {"id": task_id, "filename": f"[题库]{bank_name}-随机{len(selected)}题", "status": "running", "progress": f"准备评测 {len(selected)} 道题...", "created_at": datetime.datetime.now().isoformat()}
+        tasks[task_id] = {"id": task_id, "filename": f"[题库]{bank_name}-随机{len(selected)}题", "status": "running", "progress": f"准备评测 {len(selected)} 道题...", "created_at": datetime.datetime.now().isoformat(), "user": user}
     _save_tasks()
     def _run():
         try:
@@ -370,6 +477,8 @@ def api_bank_random_eval(bank_name):
 
 @app.route("/api/settings", methods=["GET"])
 def api_get_settings():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     from config import get_config, has_config
     try:
         if has_config():
@@ -377,23 +486,23 @@ def api_get_settings():
             return jsonify({"intern_key": cfg.intern_s1.api_key, "intern_url": cfg.intern_s1.base_url, "intern_model": cfg.intern_s1.model, "deepseek_key": cfg.deepseek.api_key, "deepseek_url": cfg.deepseek.base_url, "deepseek_model": cfg.deepseek.model})
     except Exception:
         pass
-    return jsonify({"intern_key": os.environ.get("INTERN_S1_API_KEY", ""), "intern_url": os.environ.get("INTERN_S1_BASE_URL", "https://internlm-chat.intern-ai.org.cn/puyu/api/v1"), "intern_model": os.environ.get("INTERN_S1_MODEL", "intern-s1"), "deepseek_key": os.environ.get("DEEPSEEK_API_KEY", ""), "deepseek_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"), "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")})
+    return jsonify({"intern_key": os.environ.get("INTERN_S1_API_KEY", ""), "intern_url": os.environ.get("INTERN_S1_BASE_URL", ""), "intern_model": os.environ.get("INTERN_S1_MODEL", "intern-s1"), "deepseek_key": os.environ.get("DEEPSEEK_API_KEY", ""), "deepseek_url": os.environ.get("DEEPSEEK_BASE_URL", ""), "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")})
 
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
+    if not _get_user():
+        return jsonify({"error": "请先登录"}), 401
     data = request.get_json()
     from config import save_config
     try:
         save_config(intern_s1_key=data.get("intern_key", ""), deepseek_key=data.get("deepseek_key", ""), intern_s1_url=data.get("intern_url") or None, deepseek_url=data.get("deepseek_url") or None, intern_s1_model=data.get("intern_model") or None, deepseek_model=data.get("deepseek_model") or None)
-        return jsonify({"message": "API 设置已保存"})
+        return jsonify({"message": "设置已保存"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Fallback HTML template
-
 if __name__ == "__main__":
     print("=" * 50)
-    print("  数学智能体评测器 Web 服务 v3")
+    print("  数学智能体评测器 Web v4 (多用户)")
     print("  访问地址: http://localhost:5000")
     print("=" * 50)
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
