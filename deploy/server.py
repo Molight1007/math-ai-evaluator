@@ -51,6 +51,59 @@ def _hash_pw(pw):
 
 users_db = _load_users()
 
+# ===== Per-User API Settings =====
+USER_API_SETTINGS_FILE = "user_api_settings.json"
+
+def _load_user_api_settings():
+    try:
+        with open(USER_API_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_user_api_settings(data):
+    with open(USER_API_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _get_user_api(username):
+    """Get API settings for a user, return dict with keys or empty defaults"""
+    settings = _load_user_api_settings()
+    return settings.get(username, {})
+
+def _set_user_api(username, data):
+    """Save API settings for a user"""
+    settings = _load_user_api_settings()
+    settings[username] = {
+        "intern_key": data.get("intern_key", ""),
+        "intern_url": data.get("intern_url", ""),
+        "intern_model": data.get("intern_model", ""),
+        "deepseek_key": data.get("deepseek_key", ""),
+        "deepseek_url": data.get("deepseek_url", ""),
+        "deepseek_model": data.get("deepseek_model", ""),
+    }
+    _save_user_api_settings(settings)
+
+def _apply_user_env(username):
+    """Set environment variables for a user's API keys (for evaluation)"""
+    api = _get_user_api(username)
+    if api.get("intern_key"):
+        os.environ["INTERN_S1_API_KEY"] = api["intern_key"]
+    if api.get("intern_url"):
+        os.environ["INTERN_S1_BASE_URL"] = api["intern_url"]
+    if api.get("intern_model"):
+        os.environ["INTERN_S1_MODEL"] = api["intern_model"]
+    if api.get("deepseek_key"):
+        os.environ["DEEPSEEK_API_KEY"] = api["deepseek_key"]
+    if api.get("deepseek_url"):
+        os.environ["DEEPSEEK_BASE_URL"] = api["deepseek_url"]
+    if api.get("deepseek_model"):
+        os.environ["DEEPSEEK_MODEL"] = api["deepseek_model"]
+    # Reset config cache so next get_config() picks up new values
+    from config import reset_config
+    reset_config()
+
+user_api_settings = _load_user_api_settings()
+
 # ===== Task Management =====
 tasks: dict = {}
 tasks_lock = threading.Lock()
@@ -243,6 +296,7 @@ def api_evaluate():
     _save_tasks()
     def _run():
         try:
+            _apply_user_env(user)
             from main import auto_convert, run_evaluation
             with tasks_lock:
                 tasks[task_id]["progress"] = "转换文件中..."
@@ -469,6 +523,7 @@ def api_bank_random_eval(bank_name):
     _save_tasks()
     def _run():
         try:
+            _apply_user_env(user)
             from main import run_evaluation
             with tasks_lock:
                 tasks[task_id]["progress"] = f"评测中 ({len(selected)} 道题)..."
@@ -496,25 +551,27 @@ def api_bank_random_eval(bank_name):
 
 @app.route("/api/settings", methods=["GET"])
 def api_get_settings():
-    if not _get_user():
+    user = _get_user()
+    if not user:
         return jsonify({"error": "请先登录"}), 401
-    from config import get_config, has_config
-    try:
-        if has_config():
-            cfg = get_config()
-            return jsonify({"intern_key": cfg.intern_s1.api_key, "intern_url": cfg.intern_s1.base_url, "intern_model": cfg.intern_s1.model, "deepseek_key": cfg.deepseek.api_key, "deepseek_url": cfg.deepseek.base_url, "deepseek_model": cfg.deepseek.model})
-    except Exception:
-        pass
-    return jsonify({"intern_key": os.environ.get("INTERN_S1_API_KEY", ""), "intern_url": os.environ.get("INTERN_S1_BASE_URL", ""), "intern_model": os.environ.get("INTERN_S1_MODEL", "intern-s1"), "deepseek_key": os.environ.get("DEEPSEEK_API_KEY", ""), "deepseek_url": os.environ.get("DEEPSEEK_BASE_URL", ""), "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")})
+    api = _get_user_api(user)
+    return jsonify({
+        "intern_key": api.get("intern_key", ""),
+        "intern_url": api.get("intern_url") or "https://internlm-chat.intern-ai.org.cn/puyu/api/v1",
+        "intern_model": api.get("intern_model") or "intern-s1",
+        "deepseek_key": api.get("deepseek_key", ""),
+        "deepseek_url": api.get("deepseek_url") or "https://api.deepseek.com/v1",
+        "deepseek_model": api.get("deepseek_model") or "deepseek-v4-pro",
+    })
 
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
-    if not _get_user():
+    user = _get_user()
+    if not user:
         return jsonify({"error": "请先登录"}), 401
     data = request.get_json()
-    from config import save_config
     try:
-        save_config(intern_s1_key=data.get("intern_key", ""), deepseek_key=data.get("deepseek_key", ""), intern_s1_url=data.get("intern_url") or None, deepseek_url=data.get("deepseek_url") or None, intern_s1_model=data.get("intern_model") or None, deepseek_model=data.get("deepseek_model") or None)
+        _set_user_api(user, data)
         return jsonify({"message": "设置已保存"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -79,3 +79,4 @@ deploy/users.json
 
 # 部署运行时数据
 deploy/results/
+deploy/user_api_settings.json
