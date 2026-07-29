@@ -1,0 +1,60 @@
+# ============================================================
+# 数学智能体评测器 — Docker Compose 编排（项目根目录版）
+# 用法:  docker compose up -d        # 启动
+#       docker compose up -d --build # 更新后重建
+#       docker compose logs -f       # 查看日志
+#       docker compose down          # 停止
+# ============================================================
+
+services:
+
+  # ---------- FastAPI 后端 ----------
+  web:
+    build:
+      context: .
+      dockerfile: 与Docker相关的插件/Dockerfile
+    image: math-evaluator:latest
+    container_name: math-eval-web
+    restart: unless-stopped
+
+    environment:
+      - LEAN_KEY=${LEAN_KEY:-}
+      - ARK_API_KEY=${ARK_API_KEY:-}
+      - ALLOW_PUBLIC=false
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+
+    volumes:
+      - persist_data:/app/data
+      - ./测试结果:/app/测试结果
+
+    expose:
+      - "8000"
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------- Nginx：前端 + 反向代理 ----------
+  nginx:
+    image: nginx:alpine
+    container_name: math-eval-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./与Docker相关的插件/deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./Web服务模块/frontend:/usr/share/nginx/html/frontend:ro
+
+    depends_on:
+      web:
+        condition: service_healthy
+
+# ========== 命名卷 ==========
+volumes:
+  persist_data:

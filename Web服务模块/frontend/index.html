@@ -3,114 +3,170 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>优化版书生 AI · 数学智能体评测器</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <title>数学智能体评测器 · Math Agent Evaluator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <!-- ===================== 登录 / 注册 门禁 ===================== -->
   <div id="login-view" class="login-view">
-    <div class="login-bg"></div>
-    <div class="login-card glass">
-      <div class="brand">
-        <div class="brand-logo">📐</div>
-        <div>
-          <h1 class="brand-title">优化版书生 AI</h1>
-          <p class="brand-sub">数学智能体评测器 · Math Agent Evaluator</p>
+    <div class="login-bg">
+      <div class="bg-orb orb-1"></div>
+      <div class="bg-orb orb-2"></div>
+      <div class="bg-orb orb-3"></div>
+      <div class="bg-grid"></div>
+    </div>
+
+    <div class="login-container">
+      <div class="login-info">
+        <div class="login-logo">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="48" height="48" rx="14" fill="url(#logo-grad)"/>
+            <path d="M14 28 L20 16 L26 28 M18 24 L24 24 M28 20 L34 20 M31 16 L31 28" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>
+          </svg>
+        </div>
+        <h1 class="login-brand">数学智能体评测器</h1>
+        <p class="login-desc">
+          基于 Intern‑S1 与 DeepSeek 的数学推理评测平台。<br/>
+          支持多模型对比、Lean 4 形式化验证、题库管理与实时评测。
+        </p>
+        <div class="login-features">
+          <div class="feature-item">
+            <span class="feature-dot"></span> Intern‑S1 数学推理
+          </div>
+          <div class="feature-item">
+            <span class="feature-dot"></span> DeepSeek‑V4 自动化判题
+          </div>
+          <div class="feature-item">
+            <span class="feature-dot"></span> Lean 4 形式化验证
+          </div>
+          <div class="feature-item">
+            <span class="feature-dot"></span> 多格式题库管理
+          </div>
         </div>
       </div>
 
-      <div class="tabs">
-        <button class="tab active" data-tab="login">登录</button>
-        <button class="tab" data-tab="register">注册申请</button>
+      <div class="login-card">
+        <div class="tabs">
+          <button class="tab active" data-tab="login">登 录</button>
+          <button class="tab" data-tab="register">注册申请</button>
+        </div>
+
+        <!-- 登录表单 -->
+        <form id="login-form" class="auth-form" autocomplete="off">
+          <div class="field-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <input type="text" id="login-username" placeholder="用户名" required />
+          </div>
+          <div class="field-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="login-password" placeholder="密码" required />
+          </div>
+          <button type="submit" class="btn-primary">登 录</button>
+          <p id="login-msg" class="form-msg"></p>
+        </form>
+
+        <!-- 注册表单 -->
+        <form id="register-form" class="auth-form hidden" autocomplete="off">
+          <div class="field-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <input type="text" id="register-username" placeholder="设置用户名（3-32字符）" required />
+          </div>
+          <div class="field-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="register-password" placeholder="设置密码" required />
+          </div>
+          <button type="submit" class="btn-primary">提交申请</button>
+          <p id="register-msg" class="form-msg"></p>
+          <p class="hint">注册后需管理员审批通过方可使用本系统。</p>
+        </form>
       </div>
-
-      <!-- 登录表单 -->
-      <form id="login-form" class="auth-form" autocomplete="off">
-        <label class="field">
-          <span>用户名</span>
-          <input type="text" id="login-username" placeholder="请输入用户名" required />
-        </label>
-        <label class="field">
-          <span>密码</span>
-          <input type="password" id="login-password" placeholder="请输入密码" required />
-        </label>
-        <button type="submit" class="btn-primary">登 录</button>
-        <p id="login-msg" class="form-msg"></p>
-      </form>
-
-      <!-- 注册表单 -->
-      <form id="register-form" class="auth-form hidden" autocomplete="off">
-        <label class="field">
-          <span>用户名（3-32 个字符）</span>
-          <input type="text" id="register-username" placeholder="设置用户名" required />
-        </label>
-        <label class="field">
-          <span>密码</span>
-          <input type="password" id="register-password" placeholder="设置密码" required />
-        </label>
-        <button type="submit" class="btn-primary">提交申请</button>
-        <p id="register-msg" class="form-msg"></p>
-        <p class="hint">内部测试阶段：注册后需管理员审批通过方可使用。</p>
-      </form>
     </div>
   </div>
 
   <!-- ===================== 主应用 ===================== -->
   <div id="app-view" class="app-view hidden">
     <!-- 侧边栏 -->
-    <aside class="sidebar glass">
-      <div class="brand compact">
-        <div class="brand-logo small">📐</div>
-        <div class="brand-text">
-          <div class="brand-title small">优化版书生 AI</div>
-          <div class="brand-sub small">评测工作台</div>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="36" height="36" rx="10" fill="url(#side-logo-grad)"/>
+            <path d="M10 21 L15 12 L20 21 M13 18 L18 18 M22 15 L26 15 M24 12 L24 21" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs><linearGradient id="side-logo-grad" x1="0" y1="0" x2="36" y2="36"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>
+          </svg>
+        </div>
+        <div>
+          <div class="sidebar-brand">数学智能体</div>
+          <div class="sidebar-sub">评测工作台</div>
         </div>
       </div>
 
       <nav class="nav">
-        <button class="nav-item active" data-page="eval"><span class="ico">⚡</span>快速评测</button>
-        <button class="nav-item" data-page="bank"><span class="ico">📚</span>题库管理</button>
-        <button class="nav-item admin-only hidden" data-page="approve"><span class="ico">✅</span>审批后台</button>
+        <button class="nav-item active" data-page="eval">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+          </span>
+          <span>快速评测</span>
+        </button>
+        <button class="nav-item" data-page="bank">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h16"/><line x1="8" y1="5" x2="8" y2="19"/></svg>
+          </span>
+          <span>题库管理</span>
+        </button>
+        <button class="nav-item admin-only hidden" data-page="approve">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12c0 5-9 9-9 9s-9-4-9-9a9 9 0 0 1 18 0z"/></svg>
+          </span>
+          <span>审批后台</span>
+        </button>
       </nav>
 
-      <div class="key-settings">
+      <div class="sidebar-divider"></div>
+
+      <div class="key-settings" id="key-settings">
         <div class="key-head" id="key-head">
-          <span>🔑 API 密钥</span>
+          <span class="key-label">🔑 API 密钥</span>
           <span class="chev">▾</span>
         </div>
         <div class="key-body" id="key-body">
-          <p class="hint">密钥仅用于本次会话，不会保存在服务器。</p>
-          <label class="field">
-            <span>Intern-S1 Key</span>
+          <p class="key-hint">密钥仅用于本次会话，不保存到服务器。</p>
+          <label class="key-field">
+            <span>Intern‑S1 Key</span>
             <div class="pw-wrap">
-              <input type="password" id="intern-key" placeholder="填写你的 Intern-S1 Key" />
-              <button type="button" class="pw-toggle" data-target="intern-key">显示</button>
+              <input type="password" id="intern-key" placeholder="sk-..." />
+              <button type="button" class="pw-toggle" data-target="intern-key">👁</button>
             </div>
           </label>
-          <label class="field">
+          <label class="key-field">
             <span>DeepSeek Key</span>
             <div class="pw-wrap">
-              <input type="password" id="deepseek-key" placeholder="填写你的 DeepSeek Key" />
-              <button type="button" class="pw-toggle" data-target="deepseek-key">显示</button>
+              <input type="password" id="deepseek-key" placeholder="sk-..." />
+              <button type="button" class="pw-toggle" data-target="deepseek-key">👁</button>
             </div>
           </label>
-          <label class="field">
+          <label class="key-field">
             <span>并发数：<b id="conc-val">3</b></span>
             <input type="range" id="concurrency" min="1" max="10" value="3" />
           </label>
         </div>
       </div>
 
-      <div class="user-foot">
-        <div class="uinfo">
+      <div class="sidebar-footer">
+        <div class="user-info">
           <div class="avatar" id="user-avatar">U</div>
-          <div>
+          <div class="user-detail">
             <div class="uname" id="user-name">user</div>
             <div class="urole" id="user-role">成员</div>
           </div>
         </div>
-        <button class="btn-ghost" id="logout-btn">退出</button>
+        <button class="logout-btn" id="logout-btn" title="退出登录">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
       </div>
     </aside>
 
@@ -119,15 +175,18 @@
       <header class="topbar">
         <div>
           <h2 id="page-title">快速评测</h2>
-          <p id="page-desc" class="muted">上传题目文件或选择题库，一键触发数学智能体评测。</p>
+          <p id="page-desc" class="topbar-desc">上传题目文件或选择题库，一键触发数学智能体评测。</p>
         </div>
-        <div class="badge" id="mode-badge">内部测试模式</div>
+        <span class="badge" id="mode-badge">内部测试模式</span>
       </header>
 
       <!-- 快速评测页 -->
       <section id="page-eval" class="page">
+        <!-- 评测来源 -->
         <div class="card">
-          <h3 class="card-title">① 选择评测来源</h3>
+          <h3 class="card-title">
+            <span class="card-step">1</span> 选择评测来源
+          </h3>
           <div class="source-tabs">
             <button class="src-tab active" data-src="file">📄 上传文件</button>
             <button class="src-tab" data-src="bank">📚 选择题库</button>
@@ -136,7 +195,9 @@
           <div id="src-file" class="src-panel">
             <label class="dropzone" id="dropzone">
               <input type="file" id="file-input" hidden />
-              <div class="dz-icon">⬆</div>
+              <div class="dz-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              </div>
               <div class="dz-text">点击或拖拽文件到此处</div>
               <div class="dz-hint">支持 PDF / Word / PPT / Markdown / Excel / JSON / CSV</div>
             </label>
@@ -158,31 +219,49 @@
           </div>
         </div>
 
+        <!-- 评测选项 -->
         <div class="card">
-          <h3 class="card-title">② 评测选项</h3>
+          <h3 class="card-title">
+            <span class="card-step">2</span> 评测选项
+          </h3>
           <div id="key-mirror" class="key-mirror"></div>
           <label class="check">
             <input type="checkbox" id="enable-lean" />
-            <span>启用 Lean 形式化验证（服务器未安装 Lean 时建议关闭）</span>
+            <span>启用 Lean 4 形式化验证（服务器需安装 Lean 环境）</span>
           </label>
-          <button class="btn-primary lg" id="start-btn">🚀 开始评测</button>
+          <button class="btn-primary btn-start" id="start-btn">
+            <span>🚀 开始评测</span>
+          </button>
         </div>
 
+        <!-- 评测进度 -->
         <div class="card" id="progress-card">
-          <h3 class="card-title">③ 评测进度</h3>
+          <h3 class="card-title">
+            <span class="card-step">3</span> 评测进度
+          </h3>
           <div id="progress-wrap" class="progress-wrap hidden">
-            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
             <div class="progress-meta">
               <span id="progress-text">准备中…</span>
               <span id="progress-pct">0%</span>
             </div>
           </div>
-          <div id="eval-idle" class="empty">尚未开始评测。</div>
+          <div id="eval-idle" class="empty-state">
+            <div class="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            尚未开始评测
+          </div>
         </div>
 
+        <!-- 评测报告 -->
         <div class="card hidden" id="report-card">
           <div class="report-head">
-            <h3 class="card-title">④ 评测报告</h3>
+            <h3 class="card-title" style="margin-bottom:0">
+              <span class="card-step">4</span> 评测报告
+            </h3>
             <button class="btn-ghost" id="download-btn">⬇ 下载 HTML</button>
           </div>
           <iframe id="report-frame" class="report-frame" title="评测报告"></iframe>
@@ -194,15 +273,20 @@
         <div class="card">
           <h3 class="card-title">创建题库</h3>
           <div class="row">
-            <input type="text" id="new-bank-name" class="flex1" placeholder="输入新题库名称" />
-            <button class="btn-primary" id="create-bank-btn">创建</button>
+            <input type="text" id="new-bank-name" class="input flex1" placeholder="输入新题库名称" />
+            <button class="btn-primary btn-inline" id="create-bank-btn">创建</button>
           </div>
           <p id="bank-msg" class="form-msg"></p>
         </div>
         <div class="card">
           <h3 class="card-title">题库列表</h3>
           <div id="bank-grid" class="bank-grid"></div>
-          <div id="bank-empty" class="empty">暂无题库。</div>
+          <div id="bank-empty" class="empty-state">
+            <div class="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h16M9 5v1M15 5v1M4 9h16v11H4z"/></svg>
+            </div>
+            暂无题库，请先创建。
+          </div>
         </div>
       </section>
 
@@ -211,12 +295,18 @@
         <div class="card">
           <h3 class="card-title">待审批用户</h3>
           <div id="pending-list" class="pending-list"></div>
-          <div id="pending-empty" class="empty">暂无待审批用户 🎉</div>
+          <div id="pending-empty" class="empty-state">
+            <div class="empty-icon" style="color:#22c55e">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10z"/><path d="M8 12l3 3 5-5"/></svg>
+            </div>
+            暂无待审批用户
+          </div>
         </div>
       </section>
     </main>
   </div>
 
+  <!-- Toast 通知 -->
   <div id="toast" class="toast hidden"></div>
 
   <script src="js/api.js"></script>
