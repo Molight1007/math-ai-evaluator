@@ -99,6 +99,10 @@ CRITICAL RULES:
 - confidence must reflect your honest assessment; do NOT assign all high scores
 - The final_answer field must satisfy the user's actual request.
 
+- For proof, derivation, or explanation problems:
+  final_answer MUST include both the conclusion and the essential proof steps.
+  A bare theorem statement or final result is considered incomplete.
+
 - If the problem asks for:
   * explanation
   * derivation
@@ -161,8 +165,20 @@ IMPORTANT RULES:
   * equivalent mathematical expression is used
 
 - For problems that require explanation:
-  insufficient explanation should be treated as an incompleteness issue,
-  not a mathematical correctness failure.
+
+  First evaluate whether the mathematical conclusion is correct.
+
+  If the conclusion is correct but:
+  * explanation is shorter than reference answer
+  * proof details are omitted
+  * derivation steps are incomplete
+
+  classify as "incomplete" instead of "fail".
+
+  Only classify as mathematical failure when:
+  * the final conclusion is wrong
+  * the reasoning contains a serious logical error
+  * the proof idea is fundamentally invalid
 
 - Always evaluate the final mathematical answer first.
 - The final answer has priority over explanation style.
@@ -177,10 +193,14 @@ IMPORTANT RULES:
   * proof steps are omitted
   * explanation is shorter than reference
 
-- Only give fail when:
-  the mathematical conclusion is wrong,
-  reasoning contains serious logical errors,
-  or required proof/derivation is completely missing."""
+Only give fail when:
+- the mathematical conclusion is wrong,
+- the reasoning contains serious logical errors.
+
+For proof or derivation problems:
+- Missing detailed steps alone should not be considered mathematical failure.
+- If the final answer is correct and the proof idea is valid, accept it as PASS.
+- Mark incomplete only when no meaningful reasoning or proof idea is provided."""
 
 
 # ==================== 解析函数 ====================
@@ -205,16 +225,22 @@ def parse_multi_candidate_response(text: str) -> dict:
     if not data or not isinstance(data, dict):
         return _make_error_result("Failed to parse JSON from response")
 
+    raw_candidates = data.get("candidates", [])
     # 提取最终答案
     final_answer = (
         data.get("final_answer", "")
-        or data.get("answer", "")
+        or (
+            candidates[selected_index].get("answer","")
+            if "candidates" in data
+            else ""
+        )
+        or data.get("answer","")
     )
     if isinstance(final_answer, (int, float)):
         final_answer = str(final_answer)
 
     # 提取候选列表
-    raw_candidates = data.get("candidates", [])
+    
     if not isinstance(raw_candidates, list) or len(raw_candidates) == 0:
         # 降级：没有 candidates 时，尝试用旧格式解析
         logger.warning("No candidates field found, falling back to single-result format")
@@ -249,15 +275,46 @@ def parse_multi_candidate_response(text: str) -> dict:
     if selected_index is not None:
         selected_index = int(selected_index)
 
-    return {
-        "answer": final_answer,
-        "reasoning": data.get("selection_reasoning", ""),
-        "steps": [],
-        "verification": "",
-        "candidates": candidates,
-        "selected_index": selected_index,
-        "selection_reasoning": data.get("selection_reasoning", ""),
-    }
+return {
+    "answer": final_answer,
+
+    "reasoning": (
+        next(
+            (
+                c.get("reasoning", "")
+                for c in candidates
+                if c.get("index") == selected_index
+            ),
+            ""
+        )
+        or data.get("reasoning", "")
+        or data.get("selection_reasoning", "")
+    ),
+
+    "steps": (
+        next(
+            (
+                c.get("steps", [])
+                for c in candidates
+                if c.get("index") == selected_index
+            ),
+            []
+        )
+    ),
+
+    "verification": (
+        data.get("verification", "")
+        or data.get("logic_check", "")
+    ),
+
+    "candidates": candidates,
+
+    "selected_index": selected_index,
+
+    "selection_reasoning": (
+        data.get("selection_reasoning", "")
+    ),
+}
 
 
 def _fallback_parse(text: str) -> dict | None:

@@ -38,6 +38,9 @@ class InferenceResult:
     candidates: Optional[list[dict]] = None       # 候选答案列表 [{"index":0,"answer":"...","reasoning":"...","confidence":0.9}, ...]
     selected_candidate_index: Optional[int] = None  # 最终选中的候选编号
     selection_reasoning: str = ""                 # 选择最优候选的理由
+    # Phase 4: 独立验证评分（选中候选）
+    verification_score: float = 0.5               # 验证评分（0-1，默认0.5）
+    proof_quality_score: float = 0.0              # 证明质量评分（0-1）
     # 自审核相关字段
     review_passed: Optional[bool] = None          # 自审核是否通过（None=未执行审核）
     review_feedback: Optional[dict] = None        # 审核反馈详情 {"verdict","scores","issues","suggestions","summary"}
