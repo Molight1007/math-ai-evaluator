@@ -38,7 +38,7 @@ def _load_users():
             return json.load(f)
     except Exception:
         # Create default admin
-        default = {"admin": {"password": _hash_pw("admin"), "role": "admin"}}
+        default = {"admin": {"password": _hash_pw("csustshushen"), "role": "admin"}}
         _save_users(default)
         return default
 
@@ -198,6 +198,13 @@ def api_tasks():
     if not user:
         return jsonify([])
     all_tasks = list(_load_tasks().values())
+    # Merge in-memory running tasks (not yet persisted)
+    with tasks_lock:
+        in_memory = list(tasks.values())
+    seen_ids = {t["id"] for t in all_tasks}
+    for t in in_memory:
+        if t["id"] not in seen_ids:
+            all_tasks.append(t)
     # Filter by user; admin sees all
     if session.get("role") == "admin":
         user_tasks = all_tasks
@@ -271,6 +278,18 @@ def api_evaluate():
 
 @app.route("/api/results/<task_id>/<path:filename>")
 def serve_result(task_id, filename):
+    user = _get_user()
+    if not user:
+        return jsonify({"error": "请先登录"}), 401
+    # Verify task ownership
+    all_tasks = _load_tasks()
+    with tasks_lock:
+        in_memory = dict(tasks)
+    task = all_tasks.get(task_id) or in_memory.get(task_id)
+    if not task:
+        return jsonify({"error": "任务不存在"}), 404
+    if session.get("role") != "admin" and task.get("user", "") != user:
+        return jsonify({"error": "无权访问该任务"}), 403
     result_dir = Path(DIR_DISPLAY) / task_id
     return send_from_directory(str(result_dir), filename, as_attachment="download" in request.args)
 
@@ -486,7 +505,7 @@ def api_get_settings():
             return jsonify({"intern_key": cfg.intern_s1.api_key, "intern_url": cfg.intern_s1.base_url, "intern_model": cfg.intern_s1.model, "deepseek_key": cfg.deepseek.api_key, "deepseek_url": cfg.deepseek.base_url, "deepseek_model": cfg.deepseek.model})
     except Exception:
         pass
-    return jsonify({"intern_key": os.environ.get("INTERN_S1_API_KEY", ""), "intern_url": os.environ.get("INTERN_S1_BASE_URL", ""), "intern_model": os.environ.get("INTERN_S1_MODEL", "intern-s1"), "deepseek_key": os.environ.get("DEEPSEEK_API_KEY", ""), "deepseek_url": os.environ.get("DEEPSEEK_BASE_URL", ""), "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")})
+    return jsonify({"intern_key": os.environ.get("INTERN_S1_API_KEY", ""), "intern_url": os.environ.get("INTERN_S1_BASE_URL", ""), "intern_model": os.environ.get("INTERN_S1_MODEL", "intern-s1"), "deepseek_key": os.environ.get("DEEPSEEK_API_KEY", ""), "deepseek_url": os.environ.get("DEEPSEEK_BASE_URL", ""), "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")})
 
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():

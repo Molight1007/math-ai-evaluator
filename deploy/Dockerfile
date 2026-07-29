@@ -1,8 +1,7 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# 使用清华镜像源加速
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 RUN pip install --no-cache-dir --upgrade pip
@@ -16,8 +15,8 @@ COPY 题库/ ./题库/
 COPY deploy/server.py .
 COPY deploy/templates/ ./templates/
 
-RUN mkdir -p 测试结果/测试结果展示 测试结果/原始输出和推理过程 测试结果/原始问题
+RUN mkdir -p 测试结果/测试结果展示 测试结果/原始问题及答案 测试结果/原始问题
 
 EXPOSE 5000
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "--timeout", "300", "server:app"]
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "300", "server:app"]

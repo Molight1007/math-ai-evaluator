@@ -34,7 +34,7 @@ _DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 # 默认模型名称
 _DEFAULT_INTERN_MODEL = "intern-s1"
-_DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+_DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
 
 # 假 API Key 前缀（用于检测未配置的情况）
 _FAKE_KEY_PREFIX = "your_"

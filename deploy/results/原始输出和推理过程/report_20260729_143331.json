@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-07-29T14:33:31.624273",
+  "summary": {
+    "total": 1,
+    "correct": 1,
+    "accuracy": 100.0,
+    "avg_confidence": 1.0,
+    "avg_inference_latency": 29.32,
+    "avg_judge_latency": 1.24,
+    "total_inference_tokens": 1666,
+    "total_judge_tokens": 426,
+    "error_types": {},
+    "domain_stats": {
+      "微积分": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100.0
+      }
+    }
+  },
+  "results": [
+    {
+      "problem_id": "gen_4d3558f7",
+      "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$",
+      "domain": "微积分",
+      "reference_answer": "-1/6",
+      "intern_answer": "-1/6",
+      "intern_reasoning": "泰勒展开法直接且严谨，明确展示了分子的主导项，结果可靠且无需多次求导，优于其他方法。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": true,
+      "confidence": 1.0,
+      "judge_explanation": "模型给出的答案-1/6与参考答案完全一致，因此正确。",
+      "error_type": null,
+      "correct_answer_judge": "-1/6",
+      "inference_tokens": 1666,
+      "judge_tokens": 426,
+      "inference_latency": 29.32,
+      "judge_latency": 1.24,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 1666
+    }
+  ]
+}
