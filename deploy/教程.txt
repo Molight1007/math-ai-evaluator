@@ -1,0 +1,257 @@
+﻿# 🧮 数学智能体评测器 — Docker 部署
+
+---
+
+## 一、准备工作
+
+### 你需要有什么？
+
+| 需要的东西 | 说明 |
+|-----------|------|
+| 一台服务器 | 可以是云服务器（阿里云/腾讯云等），也可以是你的电脑 |
+| 服务器系统 | Linux（推荐 Ubuntu 20.04+）或 Windows |
+| 服务器已安装 Docker | 如果没装，看下面第 0 步 |
+
+---
+
+## 第 0 步：安装 Docker（已安装可跳过）
+
+### Linux（Ubuntu）— 复制粘贴就行：
+
+```bash
+# 1. 安装 Docker
+curl -fsSL https://get.docker.com | bash
+
+# 2. 启动 Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# 3. 验证安装
+docker --version
+```
+
+> 如果提示权限不够，每条命令前面加 `sudo`。
+
+### Windows：
+
+1. 下载 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. 双击安装，一路点"下一步"
+3. 安装完重启电脑
+4. 打开 Docker Desktop，等它启动完成（任务栏小鲸鱼图标不动了就好）
+
+---
+
+## 第 1 步：把项目传到服务器
+
+需要把整个项目文件夹传到服务器上（不仅仅是 deploy 目录，因为构建需要项目源代码）。
+
+### 方式一：用 SCP 命令（推荐 Linux 服务器）
+
+在你自己电脑的终端里执行（在项目**上级目录**）：
+
+```bash
+# 把整个 math-ai-evaluator 文件夹传到服务器
+scp -r math-ai-evaluator 你的用户名@服务器IP:/home/ubuntu/
+```
+
+### 方式二：用 Git 克隆
+
+```bash
+git clone https://github.com/Molight1007/math-ai-evaluator.git
+```
+
+### 方式三：用 U 盘 / 网盘
+
+直接把整个项目文件夹拷到服务器上。
+
+---
+
+## 第 2 步：配置 API Key（重要！）
+
+### 2.1 进入 deploy 文件夹
+
+```bash
+cd math-ai-evaluator/deploy
+```
+
+### 2.2 创建 .env 文件
+
+```bash
+cp ../.env.example .env
+nano .env    # 或用 vim .env
+```
+
+### 2.3 填入你的 API Key
+
+把 `.env` 文件里的 `your_xxx_api_key_here` 替换成你的真实 Key：
+
+```ini
+# Intern-S1（书生浦语）- 推理模型
+# 去 https://intern-ai.org.cn 注册获取
+INTERN_S1_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+
+# DeepSeek - 评判模型
+# 去 https://platform.deepseek.com 注册获取
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> ⚠️ **API Key 怎么获取？**
+> - Intern-S1：访问 https://intern-ai.org.cn ，注册后创建 API Key
+> - DeepSeek：访问 https://platform.deepseek.com ，注册后在"API Keys"页面创建
+
+---
+
+## 第 3 步：启动服务
+
+确保你在 `math-ai-evaluator/deploy` 文件夹里，然后执行：
+
+```bash
+docker compose up -d --build
+```
+
+等待 1-2 分钟，看到类似下面的输出就成功了：
+
+```
+✔ Container math-evaluator  Started
+```
+
+### 验证是否启动成功：
+
+```bash
+docker compose ps
+```
+
+应该看到 `math-evaluator` 的状态是 `Up`。
+
+---
+
+## 第 4 步：打开网页使用
+
+在浏览器地址栏输入：
+
+```
+http://你的服务器IP:5000
+```
+
+例如：`http://123.456.789.0:5000`
+
+你应该能看到评测器的 Web 界面！
+
+> ⚠️ **如果打不开？**
+> - 检查服务器防火墙是否开放了 5000 端口
+> - 云服务器需要在"安全组"里添加 5000 端口规则
+
+---
+
+## 第 5 步：使用评测器
+
+1. **上传文件**：点击"选择文件"，选一个 PDF / Word / JSON / CSV 文件
+2. **设置参数**：
+   - 最大并发数：建议 3-5（太大可能触发 API 限流）
+   - 最大评测题目数：0 表示全部评测
+3. **点击"开始评测"**
+4. **等待完成**：页面会自动刷新状态
+5. **查看报告**：点击"查看报告"链接
+
+---
+
+## 常用命令速查
+
+```bash
+# 进入 deploy 文件夹
+cd math-ai-evaluator/deploy
+
+# 启动服务
+docker compose up -d --build
+
+# 停止服务
+docker compose down
+
+# 查看日志（排查问题时用）
+docker compose logs -f
+
+# 重启服务
+docker compose restart
+
+# 更新代码后重新构建
+docker compose up -d --build
+```
+
+---
+
+## 目录结构说明
+
+部署后，服务器上的文件结构：
+
+```
+math-ai-evaluator/
+├── deploy/
+│   ├── .env                    # API Key 配置（你需要填写）
+│   ├── docker-compose.yml      # Docker 编排文件（不用改）
+│   ├── Dockerfile              # 镜像构建文件（不用改）
+│   ├── server.py               # Web 服务代码（不用改）
+│   ├── results/                # 评测结果（自动生成）
+│   │   ├── 测试结果展示/        # HTML 报告
+│   │   ├── 原始输出和推理过程/   # JSON 原始数据
+│   │   └── 原始问题/           # 上传的原始文件
+│   └── banks/                  # 题库数据库（自动生成）
+├── 测试工具/                    # 评测核心模块
+├── 转化工具/                    # 格式转换工具
+├── 题库/                       # 题库数据
+└── 数学模型/                    # 数学模型文件
+```
+
+---
+
+## 常见问题
+
+### Q1: 提示"缺少 API Key"
+
+**A:** 检查 `.env` 文件是否存在且填写了正确的 Key。可以用 `cat .env` 查看内容。
+
+### Q2: 评测一直卡住不动
+
+**A:** 查看日志：`docker compose logs -f`。常见原因：
+- API Key 无效或过期
+- 网络不通（服务器能不能访问外网？）
+- API 额度用完了
+
+### Q3: 想换端口怎么办？
+
+**A:** 修改 `docker-compose.yml` 里的 `ports`：
+```yaml
+ports:
+  - "8080:5000"    # 把 5000 改成 8080
+```
+然后重新启动：`docker compose up -d`
+
+### Q4: 如何更新代码？
+
+**A:** 
+```bash
+# 拉取最新代码后，在 deploy 文件夹里
+docker compose down
+docker compose up -d --build
+```
+
+### Q5: 评测结果存在哪？
+
+**A:** 存在 `deploy/results/` 和 `deploy/banks/` 文件夹里，这两个文件夹是持久化的，重启容器不会丢失。
+
+---
+
+## 进阶：配置 HTTPS（可选）
+
+如果你有域名，建议配置 SSL 证书。这里用 Nginx 反向代理举例：
+
+1. 安装 Nginx：`sudo apt install nginx -y`
+2. 配置反向代理，把 80/443 端口转发到 `localhost:5000`
+3. 用 Let's Encrypt 申请免费 SSL 证书
+
+（这部分不属于本傻瓜教程范围，有需要可以单独问我）
+
+---
+
+> 🎉 **恭喜！你已经成功把数学智能体评测器部署到服务器上了！**
+> 
+> 有问题随时问，祝你评测顺利！

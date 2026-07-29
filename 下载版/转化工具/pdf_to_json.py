@@ -3,7 +3,7 @@ PDF → JSON 转换工具
 将张宇1000题等数学题集 PDF 转换为评测器可用的 JSON 格式。
 
 用法:
-    python 格式转化工具/pdf_to_json.py <pdf路径> [-o 输出.json] [--max N] [--start-page N]
+    python 转化工具/pdf_to_json.py <pdf路径> [-o 输出.json] [--max N] [--start-page N]
 
 输出 JSON 格式:
 [
@@ -93,19 +93,15 @@ def is_continuation_line(line):
     return not is_chapter_header(line) and not is_section_header(line) and not is_problem_start(line) and not is_answer_section(line)
 
 
-def extract_text_from_pdf(pdf_path, start_page=0, progress_callback=None):
+def extract_text_from_pdf(pdf_path, start_page=0):
     pages_text = []
     with pdfplumber.open(pdf_path) as pdf:
-        total = len(pdf.pages) - start_page
         for i, page in enumerate(pdf.pages):
             if i < start_page:
                 continue
             text = page.extract_text()
             if text:
                 pages_text.append(text)
-            current = i - start_page + 1
-            if progress_callback and (current % 5 == 0 or current == total):
-                progress_callback(current, total)
     return pages_text
 
 
@@ -192,12 +188,12 @@ def parse_problems(pages_text):
     return problems
 
 
-def convert_pdf(pdf_path, max_problems=0, start_page=0, progress_callback=None):
+def convert_pdf(pdf_path, max_problems=0, start_page=0):
     """可导出的 PDF 转换函数"""
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"文件不存在: {pdf_path}")
     print(f"正在提取 PDF: {pdf_path}")
-    pages_text = extract_text_from_pdf(pdf_path, start_page=start_page, progress_callback=progress_callback)
+    pages_text = extract_text_from_pdf(pdf_path, start_page=start_page)
     print(f"共 {len(pages_text)} 页文本")
     problems = parse_problems(pages_text)
     print(f"解析出 {len(problems)} 道题目")
@@ -217,12 +213,12 @@ def main():
     
     problems = convert_pdf(args.pdf, max_problems=args.max, start_page=args.start_page)
     
-    # 默认输出路径：测试结果/原始问题/
+    # 默认输出路径：测试结果/原本问题/
     if args.output is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "测试结果", "原始问题")
+        output_dir = os.path.join(base_dir, "测试结果", "原本问题")
         os.makedirs(output_dir, exist_ok=True)
-        pdf_name = os.path.splitext(os.path.basename(args.pdf))[0]
+        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
         args.output = os.path.join(output_dir, f"{pdf_name}.json")
     
     with open(args.output, "w", encoding="utf-8") as f:

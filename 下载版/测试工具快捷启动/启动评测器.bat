@@ -1,6 +1,7 @@
 @echo off
-chcp 65001 > nul
-set "ROOT=%~dp0"
+chcp 936 > nul
+set "SELF_DIR=%~dp0"
+set "ROOT=%SELF_DIR%.."
 cd /d "%ROOT%"
 set "PYTHON="
 for /f "delims=" %%i in ('where.exe python') do if not defined PYTHON set "PYTHON=%%i"
@@ -10,7 +11,7 @@ if not defined PYTHON (
     exit /b 1
 )
 echo Starting Math Evaluator...
-"%PYTHON%" "%ROOT%æµ‹è¯•å·¥å…·\launcher.py" 2>"%TEMP%\math_eval_error.log"
+"%PYTHON%" "%ROOT%²âÊÔ¹¤¾ß\launcher.py" 2>"%TEMP%\math_eval_error.log"
 if errorlevel 1 (
     echo.
     echo [ERROR] Program crashed. See log below:

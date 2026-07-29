@@ -16,33 +16,6 @@ _loaded = False
 USER_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".math_evaluator")
 USER_ENV_PATH = os.path.join(USER_CONFIG_DIR, ".env")
 
-# 默认 LLM 超时和重试配置
-# 说明：0 或负数表示不设置超时，避免推理/验证被强制中断。
-_DEFAULT_LLM_TIMEOUT = 0.0             # 单次 API 请求超时（秒），0=无限制
-_DEFAULT_LLM_MAX_RETRIES = 3           # 最大重试次数
-
-# 默认 Lean 配置
-_DEFAULT_LEAN_EXECUTABLE = "lake"      # Lean 4 lake 构建工具
-_DEFAULT_LEAN_COMPILER = "lean"        # Lean 4 编译器（用于直接编译单文件）
-_DEFAULT_LEAN_TIMEOUT = 0.0            # Lean 编译超时（秒），0=无限制
-_LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
-
-# Lean 验证项目路径（不依赖 Mathlib 的轻量级项目）
-_LEAN_VERIFY_PROJECT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "与lean相关的插件", "lean_verify")
-)
-
-# 默认 API 地址
-_DEFAULT_INTERN_BASE_URL = "https://internlm-chat.intern-ai.org.cn/puyu/api/v1"
-_DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-
-# 默认模型名称
-_DEFAULT_INTERN_MODEL = "intern-s1"
-_DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
-
-# 假 API Key 前缀（用于检测未配置的情况）
-_FAKE_KEY_PREFIX = "your_"
-
 
 class ConfigError(Exception):
     """配置缺失时抛出的异常"""
@@ -176,19 +149,3 @@ def validate_config(cfg: EvalConfig = None) -> EvalConfig:
             f"Please configure API keys in the settings dialog."
         )
     return cfg
-
-
-def detect_lean_environment() -> dict:
-    """检测 Lean 4 环境是否可用。
-    返回: {"available": bool, "lean_version": str, "lake_version": str, "error": str}
-    """
-    result = {"available": False, "lean_version": "", "lake_version": "", "error": ""}
-    try:
-        import subprocess
-        r = subprocess.run(["lean", "--version"], capture_output=True, text=True, timeout=10)
-        if r.returncode == 0:
-            result["lean_version"] = r.stdout.strip().split("\n")[0]
-            result["available"] = True
-    except Exception as e:
-        result["error"] = str(e)
-    return result

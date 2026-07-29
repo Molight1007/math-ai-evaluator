@@ -1,0 +1,12 @@
+[
+  {
+    "id": "1",
+    "question": "计算极限 lim(x→0) (sin x)/x",
+    "domain": "极限"
+  },
+  {
+    "id": "2",
+    "question": "求导数 d/dx (x^2 * e^x)",
+    "domain": "导数"
+  }
+]
