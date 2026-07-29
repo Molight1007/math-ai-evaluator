@@ -1,8 +1,0 @@
-[
-  {
-    "id": "gen_4d3558f7",
-    "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$",
-    "domain": "微积分",
-    "reference_answer": "-1/6"
-  }
-]

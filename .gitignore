@@ -76,3 +76,6 @@ package-lock.json
 
 # 用户数据（运行时生成，含密码哈希）
 deploy/users.json
+
+# 部署运行时数据
+deploy/results/
