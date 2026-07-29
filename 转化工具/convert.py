@@ -3,7 +3,7 @@
 支持 PDF 和 Word (.docx) → JSON 格式转换。
 
 用法:
-    python 格式转化工具/convert.py <文件路径> [-o 输出.json] [--max N] [--start-page N]
+    python 转化工具/convert.py <文件路径> [-o 输出.json] [--max N] [--start-page N]
 
 自动识别文件类型:
   - .pdf  → 使用 pdf_to_json 模块
@@ -11,13 +11,13 @@
 
 示例:
     # 转换 PDF
-    python 格式转化工具/convert.py "题目.pdf" --max 50
+    python 转化工具/convert.py "题目.pdf" --max 50
 
     # 转换 Word
-    python 格式转化工具/convert.py "题目.docx" --max 100
+    python 转化工具/convert.py "题目.docx" --max 100
 
     # 指定输出路径
-    python 格式转化工具/convert.py "题目.pdf" -o "my_problems.json"
+    python 转化工具/convert.py "题目.pdf" -o "my_problems.json"
 """
 import argparse
 import json

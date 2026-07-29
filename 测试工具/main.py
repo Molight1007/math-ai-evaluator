@@ -27,7 +27,7 @@ from typing import Optional
 # 将当前目录添加到 import 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# 将项目根目录加入 import 路径，使 格式转化工具 / intern_s1_optimized 等顶层包可被导入
+# 将项目根目录加入 import 路径，使 转化工具 / intern_s1_optimized 等顶层包可被导入
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
@@ -162,23 +162,23 @@ def auto_convert(file_path: str, max_problems: int = 0) -> str:
 
     if ext == ".pdf":
         print("\n[转化] 检测到 PDF 文件，正在转化...")
-        from 格式转化工具.pdf_to_json import convert_pdf
+        from 转化工具.pdf_to_json import convert_pdf
         problems = convert_pdf(file_path, max_problems=max_problems)
     elif ext == ".docx":
         print("\n[转化] 检测到 Word 文件，正在转化...")
-        from 格式转化工具.docx_to_json import convert_docx
+        from 转化工具.docx_to_json import convert_docx
         problems = convert_docx(file_path, max_problems=max_problems)
     elif ext in (".pptx", ".ppt"):
         print("\n[转化] 检测到 PowerPoint 文件，正在转化...")
-        from 格式转化工具.ppt_to_json import convert_ppt
+        from 转化工具.ppt_to_json import convert_ppt
         problems = convert_ppt(file_path, max_problems=max_problems)
     elif ext == ".md":
         print("\n[转化] 检测到 Markdown 文件，正在转化...")
-        from 格式转化工具.md_to_json import convert_md
+        from 转化工具.md_to_json import convert_md
         problems = convert_md(file_path, max_problems=max_problems)
     elif ext == ".xlsx":
         print("\n[转化] 检测到 Excel 文件，正在转化...")
-        from 格式转化工具.xlsx_to_json import convert_xlsx
+        from 转化工具.xlsx_to_json import convert_xlsx
         problems = convert_xlsx(file_path, max_problems=max_problems)
     else:
         raise ValueError(

@@ -3,7 +3,7 @@ PDF → JSON 转换工具
 将张宇1000题等数学题集 PDF 转换为评测器可用的 JSON 格式。
 
 用法:
-    python 格式转化工具/pdf_to_json.py <pdf路径> [-o 输出.json] [--max N] [--start-page N]
+    python 转化工具/pdf_to_json.py <pdf路径> [-o 输出.json] [--max N] [--start-page N]
 
 输出 JSON 格式:
 [

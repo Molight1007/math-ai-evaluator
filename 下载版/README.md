@@ -15,7 +15,7 @@
 │   ├── question_bank.py    # 题库管理（创建/导入/审核）
 │   ├── question_bank.db    # SQLite 题库数据库
 │   └── ...
-├── 转化工具/               # 格式转化工具
+├── 转化工具/               # 转化工具
 │   ├── convert.py          # 统一入口（PDF/Word → JSON）
 │   ├── pdf_to_json.py      # PDF 转化
 │   └── docx_to_json.py     # Word 转化

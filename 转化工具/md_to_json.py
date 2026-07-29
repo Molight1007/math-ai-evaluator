@@ -9,7 +9,7 @@ Markdown (.md) → JSON 题目转换工具。
 - 参考答案区域（以 "答案" 开头）→ 跳过
 
 用法:
-    python 格式转化工具/md_to_json.py <md路径> [-o 输出.json] [--max N]
+    python 转化工具/md_to_json.py <md路径> [-o 输出.json] [--max N]
 
 输出 JSON 格式:
 [

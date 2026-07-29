@@ -3,7 +3,7 @@ Word (.docx) → JSON 转换工具
 将数学题集 Word 文档转换为评测器可用的 JSON 格式。
 
 用法:
-    python 格式转化工具/docx_to_json.py <docx路径> [-o 输出.json] [--max N]
+    python 转化工具/docx_to_json.py <docx路径> [-o 输出.json] [--max N]
 
 输出 JSON 格式:
 [

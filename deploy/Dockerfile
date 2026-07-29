@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir flask gunicorn
 
 # 复制项目代码（构建上下文为项目根目录）
-COPY 数学模型/ ./数学模型/
 COPY 测试工具/ ./测试工具/
 COPY 转化工具/ ./转化工具/
 COPY 题库/ ./题库/

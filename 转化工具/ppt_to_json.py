@@ -5,7 +5,7 @@ PowerPoint (.pptx / .ppt) → JSON 题目转换工具。
 逐页提取文本，识别题号+选项模式，合并为完整题目。
 
 用法:
-    python 格式转化工具/ppt_to_json.py <ppt路径> [-o 输出.json] [--max N]
+    python 转化工具/ppt_to_json.py <ppt路径> [-o 输出.json] [--max N]
 
 输出 JSON 格式:
 [
