@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 通用求解智能体（SolverAgent）
 ============================
@@ -32,7 +33,8 @@ from prompts.policy import (
     build_blueprint_user_message,
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
-from utils.extract import extract_final_answer, smart_fallback_answer
+from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
+from utils.extract import extract_final_answer, smart_fallback_answer, is_valid_final_answer
 
 logger = logging.getLogger("MathPilot")
 
@@ -103,13 +105,13 @@ class SolverAgent(BaseAgent):
         """根据题目领域自适应调整候选数量"""
         domain = (ctx.domain or "").lower()
         problem_len = len(ctx.problem)
-        # 证明题（proof/inequality/geometry theorem）→ 1 个候选即可
+        # 证明题 → 减少候选（精确推演比广度采样更重要）
         proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
         if any(k in domain for k in proof_keywords):
-            return 1
+            return max(1, default_count // 3)
         # 高难度计算题 → 增加候选
         hard_signals = [
-            problem_len > 500,  # 长题目
+            problem_len > 500,
             any(k in domain for k in ("differential_equation", "微分方程")),
             any(k in domain for k in ("series", "级数")),
             any(k in domain for k in ("integral", "不定积分", "indefinite_integral",
@@ -117,18 +119,66 @@ class SolverAgent(BaseAgent):
         ]
         if sum(hard_signals) >= 2:
             return max(default_count, 3)
-        # 单选题/填空题 → 3 个候选互相验证
         if any(k in domain for k in ("choice", "fill", "选择", "填空")):
             return max(default_count, 3)
         return default_count
+
+    def _collect_lemma_context(self, ctx: TaskContext) -> str:
+        """收集已验证的子结论（引理库），作为解题上下文注入。"""
+        if not getattr(self.config, 'use_lemma_accumulation', False):
+            return ""
+        lemmas = getattr(ctx, 'lemma_repo', [])
+        if not lemmas:
+            return ""
+        recent = lemmas[-5:]  # 最多注入 5 条
+        return "【已验证的中间结论】\n" + "\n".join(f"- {l}" for l in recent) + "\n\n"
+
+    # ----------------------------------------------------------
+    # 证明题专用通道
+    # ----------------------------------------------------------
+    def _generate_proof(self, ctx: TaskContext) -> Candidate | None:
+        """使用证明题专用提示词生成分步编号的完整证明。"""
+        from .base import Candidate
+        conditions = "见题目"
+        strategy_hint = "选择最合适的证明方法（直接证明/反证法/归纳法/构造法）"
+        user = PROOF_TEMPLATE.format(
+            problem=ctx.problem, conditions=conditions, strategy_hint=strategy_hint
+        )
+        raw = self.llm(ctx, [
+            {"role": "system", "content": PROOF_SYSTEM},
+            {"role": "user", "content": user},
+        ], 0.3, self.config.max_answer_tokens)
+        if not raw or len(raw) < 30:
+            return None
+        answer = extract_final_answer(raw) or smart_fallback_answer(raw)
+        if not is_valid_final_answer(answer) and len(raw) > 0:
+            answer = raw[-500:]
+        cid = len(ctx.candidates)
+        return Candidate(id=cid, reasoning=raw, answer=answer)
 
     # ----------------------------------------------------------
     # 初始求解（蓝图分解 + 领域提示）
     # ----------------------------------------------------------
     def _generate_initial(self, ctx: TaskContext, count: int = None) -> None:
         count = count or self.config.policy_sample_times
-        # 领域自适应候选数：证明题少生成，计算题多生成
+        # 领域自适应候选数
         count = self._adaptive_count(ctx, count)
+
+        # 证明题专用通道（若启用）
+        is_proof = False
+        proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
+        if any(k in (ctx.domain or "").lower() for k in proof_keywords):
+            is_proof = True
+        if is_proof and getattr(self.config, 'use_proof_channel', True):
+            proof_cand = self._generate_proof(ctx)
+            if proof_cand:
+                ctx.candidates.append(proof_cand)
+                self.record(ctx, "generate", f"证明题专用通道生成候选 #{proof_cand.id}")
+                return
+            self.record(ctx, "generate", "证明题专用通道未产出有效候选，回退通用求解")
+
+        # lemma 上下文注入
+        lemma_ctx = self._collect_lemma_context(ctx)
 
         if self.config.use_blueprint:
             system_prompt = get_policy_system(use_blueprint=True)
@@ -140,8 +190,11 @@ class SolverAgent(BaseAgent):
             if ctx.domain:
                 user_content = get_domain_hint(ctx.domain) + "\n" + ctx.problem
 
+        # 注入 lemma 上下文
+        if lemma_ctx:
+            system_prompt = lemma_ctx + system_prompt
+
         base_cid = len(ctx.candidates)
-        # 温度分层：不同候选使用不同温度以增加多样性
         _STRATIFIED_TEMPS = [0.1, 0.3, 0.5]
 
         def _make_one(i: int):

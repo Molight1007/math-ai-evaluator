@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 多智能体基础组件
 ================
@@ -84,6 +85,7 @@ class TaskContext:
     budget: Optional[Budget] = None            # 预算控制器
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
+    lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
 
     def verified_ids(self) -> set:
         """已验证过的候选 id 集合（避免重复验证）"""
@@ -120,12 +122,14 @@ class BaseAgent(ABC):
     def llm(self, ctx: TaskContext, messages: list, temperature: float,
             max_tokens: int) -> Optional[str]:
         """
-        带预算管控与降级的安全 LLM 调用（支持并发线程）。
-
-        - 预算不足时直接返回 None（不调用，避免超时/超额）；
-        - 调用异常时返回 None，并回退本次预扣预算；
-        成功时预算已在调用前扣减。
+        带预算管控、Token 裁剪、自动重试的安全 LLM 调用（支持并发线程）。
+        修复 BUG-6：追加 max_tokens 裁剪、上下文超长自动降级重试、异常写入 trace。
         """
+        # Token 裁剪到安全上限（可配置，默认 4096）
+        cap = getattr(self.config, 'max_tokens_cap', 4096)
+        if cap and max_tokens:
+            max_tokens = min(max_tokens, cap)
+
         reserved = False
         if ctx.budget is not None:
             with ctx.budget._lock:
@@ -141,9 +145,25 @@ class BaseAgent(ABC):
                 max_tokens=max_tokens,
             )
             return resp
+        except TypeError:
+            # 平台 client 仅接受 positional args → 降级
+            try:
+                return self.client.chat(messages)
+            except Exception:
+                pass
         except Exception as e:  # noqa: BLE001
+            err_str = str(e)[:200]
+            if any(kw in err_str.lower() for kw in ('context length', 'too long', 'max token')):
+                reduced = (max_tokens // 2) if max_tokens > 512 else 256
+                logger.warning("[%s] 上下文超长，降至 %s tokens 重试", self.name, reduced)
+                try:
+                    return self.client.chat(messages=messages, temperature=0.0, max_tokens=reduced)
+                except Exception:
+                    pass
             if reserved and ctx.budget is not None:
                 ctx.budget.refund(1)
+            ctx.trace.append({"agent": self.name, "step": "llm_error",
+                              "content": f"LLM 调用失败: {err_str}"})
             logger.warning("[%s] LLM call failed: %s", self.name, e)
             return None
 
@@ -273,4 +293,50 @@ def detect_truncated(text: str) -> bool:
     dollar_count = len(re.findall(r"(?<!\\)\$", stripped))
     if dollar_count % 2 == 1:
         return True
+    return False
+
+
+# ============================================================
+# Intern-S1 思考链污染检测（英文 thinking chain 污染）
+# ============================================================
+# 当使用 Intern-S1 等模型的 thinking_mode 时，英文思考链可能污染中文答案。
+# 参考 math_agent-main 的 ENGLISH_THINK_PATTERNS。
+
+_ENGLISH_THINK_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"<\|im_start\|>assistant", re.IGNORECASE), "特殊 token 泄露"),
+    (re.compile(r"Please respond (in|with)\s", re.IGNORECASE), "英文指令残留"),
+    (re.compile(r"Sure[,!]?\s+I.*?(?:\n|$)", re.IGNORECASE), "英文肯定前缀"),
+    (re.compile(r"(I think|Let me|First,? let me|Now I will)", re.IGNORECASE), "英文自言自语"),
+    (re.compile(r"Here[\'']s the solution:", re.IGNORECASE), "英文解题标记"),
+    (re.compile(r"(User:|Assistant:|System:)\s", re.IGNORECASE), "角色标记泄露"),
+]
+
+
+def detect_thinking_contamination(text: str) -> list[str]:
+    """检测英文思考链是否污染了中文输出。返回命中的标签列表。"""
+    if not text:
+        return []
+    found: list[str] = []
+    for pattern, label in _ENGLISH_THINK_PATTERNS:
+        if pattern.search(text):
+            found.append(label)
+    return found
+
+
+# ============================================================
+# 模板泄露检测
+# ============================================================
+_TEMPLATE_LEAK_PATTERNS: list[re.Pattern] = [
+    re.compile(r"你是一位.{1,30}(?:专家|助手|模型)", re.IGNORECASE),
+    re.compile(r"请按照.{1,30}格式", re.IGNORECASE),
+    re.compile(r"system role.{0,20}content", re.IGNORECASE),
+    re.compile(r"SYSTEM_PROMPT|TEMPLATE_CONTENT", re.IGNORECASE),
+]
+
+
+def detect_template_leak(text: str) -> bool:
+    """检测模型是否输出了 prompt 模板而非真正解答。"""
+    for pattern in _TEMPLATE_LEAK_PATTERNS:
+        if pattern.search(text):
+            return True
     return False

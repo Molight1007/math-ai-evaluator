@@ -1,3 +1,4 @@
+from __future__ import annotations
 """答案提取与格式化工具"""
 
 import re
@@ -117,20 +118,23 @@ def extract_final_answer(text: str) -> str:
         return ""
 
     # 策略 1：【最终答案】/ 答案: / Final answer: 等显式标记
+    # BUG-10 修复：多行答案用贪婪匹配到明确的节标记或文本末尾
     patterns = [
-        r"【最终答案】\s*\n?\s*(.+?)(?:\n\n|\n(?:[#*=]|$)|$)",
-        r"最终答案[:：]\s*(.+?)(?:\n\n|\n(?:[#*=]|$)|$)",
-        r"答案[:：]\s*(.+?)(?:\n\n|\n(?:[#*=]|$)|$)",
-        r"[Ff]inal\s*[Aa]nswer[:：]\s*(.+?)(?:\n\n|\n(?:[#*=]|$)|$)",
+        (r"【最终答案】\s*\n?\s*([\s\S]+)", False),
+        (r"最终答案[:：]\s*([\s\S]+)", False),
+        (r"答案[:：]\s*([\s\S]+)", False),
+        (r"[Ff]inal\s*[Aa]nswer[:：]\s*([\s\S]+)", False),
     ]
-    for pattern in patterns:
+    for pattern, is_boxed in patterns:
         match = re.search(pattern, text, re.DOTALL)
         if match:
-            answer = match.group(1).strip()
-            if (answer and len(answer) > 2
-                    and not _is_meta_line(answer)
-                    and not _is_incomplete_answer(answer)):
-                return clean_answer(answer)
+            captured = match.group(1).strip()
+            # 裁剪到第一个节标记（【...】/ #### / --- / == ）
+            captured = re.split(r'\n\n(?:【|####|---|==|答案|最终答案)', captured)[0].strip()
+            if (captured and len(captured) > 1
+                    and not _is_meta_line(captured)
+                    and not _is_incomplete_answer(captured)):
+                return clean_answer(captured)
 
     # 策略 2：\\boxed{...} 格式
     boxed_match = re.search(r"\\boxed\{([^}]+)\}", text)
@@ -255,6 +259,35 @@ def safe_json_serialize(obj: dict) -> dict:
         else:
             result[key] = str(value)
     return result
+
+
+# ============================================================
+# 答案有效性校验（BUG-12 修复）
+# ============================================================
+
+_REFUSAL_PATTERNS: list[re.Pattern] = [
+    re.compile(r"(?:无法|不能|没办法|不擅长|抱歉|对不起|sorry|cannot|unable)", re.IGNORECASE),
+    re.compile(r"(?:as an AI|I cannot|I don't have)", re.IGNORECASE),
+    re.compile(r"^(?:\s|[{[(（])*$"),  # 纯空白/括号
+    re.compile(r"^(?:未知|unknow|n/?a|none)\s*$", re.IGNORECASE),
+    re.compile(r"^(?:\[|【|\\begin).{0,20}(?:答案|最终答案).{0,20}(?:\]|】|\\end)"),
+]
+
+
+def is_valid_final_answer(text: str) -> bool:
+    """
+    检查 final_answer 是否为有效的数学解答（非拒绝语、非空模板、非占位符）。
+    BUG-12 修复：供 formatter 最终输出前校验，不合法则回退下一候选。
+    """
+    if not text or not text.strip():
+        return False
+    s = text.strip()
+    if len(s) < 2:
+        return False
+    for pat in _REFUSAL_PATTERNS:
+        if pat.search(s):
+            return False
+    return True
 
 
 # ============================================================

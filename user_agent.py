@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体版）
 ==========================================================
@@ -59,6 +60,18 @@ class AgentConfig:
     max_revise_rounds: int = 3         # 自纠错回环最大轮数
     revise_sample_times: int = 2       # 每轮纠错重解生成的候选数
     max_total_calls: int = 150         # LLM 调用预算硬上限（防超时/超额）
+
+    # ---- 智能体补充部件配置 ----
+    max_tokens: int = 4096             # 单次最大 token 数
+    max_tokens_cap: int = 4096         # 内部 token 裁剪上限（BUG-6/7 修复）
+    max_workers: int = 4               # 并发验证线程数
+    temperature: float = 0.3           # 默认 LLM 温度
+
+    # ---- 新功能开关 ----
+    use_scoring: bool = True           # Verifier 启用多维评分模式
+    by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解（需安装 sympy）
+    use_proof_channel: bool = True     # 启用证明题专用求解通道
+    use_lemma_accumulation: bool = True # 启用引理积累（跨轮复用子结论）
 
 
 # ============================================================

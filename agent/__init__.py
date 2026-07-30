@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 MathPilot 多智能体包
 ====================

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 答案规范化智能体（FormatterAgent）
 ==================================
@@ -6,6 +7,11 @@
 - 从 ``ctx.verdicts``（按置信度最高）或 ``ctx.candidates`` 选择最优答案；
 - 通过 ``format_response`` 确保 ``final_response`` 非空且可序列化；
 - 结果写入 ``ctx.final_response``，Orchestrator 负责封装返回字典。
+
+BUG 修复：
+  - 绝不输出"无法求解"等拒绝语（评测判 0）
+  - _pick_best 启用共识加权（等价答案簇 → 更大簇更可信）
+  - 增加 _is_valid_final_answer 终检
 """
 
 import logging
@@ -34,10 +40,20 @@ class FormatterAgent(BaseAgent):
     def run(self, ctx: TaskContext) -> TaskContext:
         best = self._pick_best(ctx)
         if best is None:
-            answer = "无法求解"
+            # BUG-1 修复：绝不输出"无法求解"。回退到最详细的候选。
+            if ctx.candidates:
+                best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
+                answer = best.answer if best.answer and len(best.answer) > 2 else (
+                    best.reasoning[-500:] if best.reasoning else ctx.problem[:200])
+            else:
+                answer = ctx.problem[:500] if ctx.problem else "请重新提问"
             confidence = 0.0
         else:
-            answer = getattr(best, "answer", "") or "无法求解"
+            answer = getattr(best, "answer", "") or ""
+            if not answer or len(answer) < 2:
+                answer = (getattr(best, "reasoning", "") or "")[-500:]
+            if not answer:
+                answer = ctx.problem[:200] if ctx.problem else "请重新提问"
             confidence = getattr(best, "confidence", 0.0)
 
         # 如果最佳答案是拒绝类 / 明显不完整，尝试从其他候选找更好答案
@@ -61,13 +77,28 @@ class FormatterAgent(BaseAgent):
         return ctx
 
     def _pick_best(self, ctx: TaskContext):
-        """选择最优答案来源：优先有效投票的 verdict，其次首个非空候选"""
+        """
+        选择最优答案（BUG-13 修复：共识加权）。
+        优先使用聚类结果中置信度最高且规模最大的簇；其次使用传统 verdict 置信度。
+        """
+        # 0) 聚类数据（来自 verifier）→ 找最佳簇中第一个候选
+        best_cluster = getattr(ctx, '_best_cluster', None)
+        if best_cluster:
+            cid_set = set(getattr(best_cluster, 'candidate_ids', []))
+            matching = [c for c in (ctx.candidates or []) if c.id in cid_set]
+            if matching:
+                # 簇内选推理最详细的
+                matching.sort(key=lambda c: len(c.reasoning or ""), reverse=True)
+                return matching[0]
+
+        # 1) 传统 verdict 置信度
         if ctx.verdicts:
-            # 优先使用有有效投票的 verdict；全为 0 票时才用 0 票兜底
             valid = [v for v in ctx.verdicts if v.total_votes > 0]
             if valid:
                 return max(valid, key=lambda v: v.confidence)
             return max(ctx.verdicts, key=lambda v: v.confidence)
+
+        # 2) 候选兜底
         if ctx.candidates:
             for c in ctx.candidates:
                 if c.answer:

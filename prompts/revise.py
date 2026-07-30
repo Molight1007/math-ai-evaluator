@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 纠错重解提示词 — 用于 SolverAgent 的自纠错重解（revise）模式。
 

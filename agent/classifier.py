@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 题型识别智能体（ClassifierAgent）
 ===============================

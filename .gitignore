@@ -2,91 +2,25 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
-.eggs/
-
-# 虚拟环境
-venv/
-.venv/
-env/
+*.egg
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# CodeBuddy
-.codebuddy/
-.workbuddy/
+# Temp / logs
+tmp_log.txt
+generate_ppt.py
 
-# 敏感配置（含 API Key）
-.env
+# Test tools (not for submission)
+测试工具/
 
-# 测试结果（运行时生成，全部忽略）
-测试结果/
+# Reference cases (not for submission)
+其他案例/
 
-# 题库相关（含敏感数据，不上传）
-题库/
-题库备份/
-题库审核日志/
+# Analysis docs
+MathPilot优化分析.md
 
-# 下载版（重复内容，不是源码）
-下载版/
-
-# 参考项目（非本作品代码）
-其他作品的参考/
-
-# 项目资料（文档类，非代码）
-项目资料/
-
-# 题库维护临时文件
-题库维护脚本/PROGRESS.md
-题库维护脚本/_last_*.json
-题库维护脚本/ai_fill_and_audit_answers.py
-
-# 大文件 / 资料（非源码，体积大且可重新获取）
-*.pdf
-*.pptx
-*.docx
-*.rar
-*.zip
-*.zst                    # 大型压缩包（如 lean4 工具链）
-
-# Lean 工具链（约 1.2GB，含二进制与编译产物，由 lean-toolchain 自动下载）
-lean4-toolchain/
-
-# Lean 编译产物与依赖（由 lake 自动拉取/生成）
-*.olean
-*.ilean
-*.ir
-*.private
-*.server
-.lake/
-lake-packages/
-
-# 运行时生成的题库数据库（SQLite）
-*.db
-*.db-shm
-*.db-wal
-
-# 运行/构建临时文件
-*.tmp
-*.log
-*.bak
-~$*                      # Word 临时锁文件
-build_pid.txt
-*_done.txt
-__pycache__/
-
-# 临时评测输出（运行时生成）
-*_out.txt
-*_pilot*.jsonl
-*_pilot*.json
-题库_*.json
-题库_*.jsonl
-
-# Node.js
-node_modules/
-package-lock.json
+# OS
+.DS_Store
+Thumbs.db

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 候选解答验证提示词 — 用于过程校验智能体（VerifierAgent）。
 

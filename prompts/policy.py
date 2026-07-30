@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 策略提示词模板 — 用于生成候选解答。
 
