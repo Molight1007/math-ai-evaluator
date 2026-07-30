@@ -275,11 +275,13 @@ async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
         results = []
         for inference in inferences:
             if inference.error:
+                # Phase 6.2: 推理失败（解析失败/空答案/API异常）归类为 incomplete
                 judge = JudgeResult(
                     problem_id=problem.id,
                     is_correct=False,
                     confidence=0.0,
                     explanation=f"Inference error: {inference.error}",
+                    error_type="incomplete",
                     error=inference.error,
                 )
             else:
@@ -366,6 +368,7 @@ async def _run_judge_batch_stage(inference_results):
 
     for problem, inference, ref_answer, ref_source in inference_results:
         if inference.error:
+            # Phase 6.2: 推理失败归类为 incomplete
             failed_results.append(merge_result(
                 problem, inference,
                 JudgeResult(
@@ -373,6 +376,7 @@ async def _run_judge_batch_stage(inference_results):
                     is_correct=False,
                     confidence=0.0,
                     explanation=f"Inference error: {inference.error}",
+                    error_type="incomplete",
                     error=inference.error,
                 ),
             ))
