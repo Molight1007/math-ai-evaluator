@@ -313,12 +313,13 @@ class Orchestrator(BaseAgent):
         })
         try:
             resp = self.client.chat(
-                [
+                messages=[
                     {"role": "system",
                      "content": "你是数学解题专家，请仔细分析并给出最终答案。确保输出完整，不要截断。"},
                     {"role": "user", "content": problem},
                 ],
-                0.3, self.config.policy_max_tokens,
+                temperature=0.3,
+                max_tokens=self.config.policy_max_tokens,
             )
             answer = (resp or "").strip() or "无法求解"
             # 截断/幻觉检测

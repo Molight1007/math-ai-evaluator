@@ -135,7 +135,11 @@ class BaseAgent(ABC):
                 ctx.budget.spend(1)
                 reserved = True
         try:
-            resp = self.client.chat(messages, temperature, max_tokens)
+            resp = self.client.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             return resp
         except Exception as e:  # noqa: BLE001
             if reserved and ctx.budget is not None:
