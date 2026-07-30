@@ -1,6 +1,0 @@
-name = "lean_verify"
-version = "0.1.0"
-defaultTargets = ["LeanVerify"]
-
-[[lean_lib]]
-name = "LeanVerify"
