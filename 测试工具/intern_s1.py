@@ -413,6 +413,300 @@ def _check_contradictions(c: dict, question: str) -> float:
     return 1.0
 
 
+# ==================== Phase 6.3: 数学定义约束验证 ====================
+
+# 域检测关键词
+_DOMAIN_KEYWORDS: dict[str, list[str]] = {
+    "probability": [
+        "概率", "probability", "随机", "random", "期望", "expectation",
+        "分布", "distribution", "伯努利", "bernoulli", "泊松", "poisson",
+    ],
+    "geometry": [
+        "圆", "circle", "三角形", "triangle", "面积", "area",
+        "周长", "perimeter", "体积", "volume", "半径", "radius",
+        "直径", "diameter", "长度", "length", "距离", "distance",
+        "球", "sphere", "棱柱", "棱锥", "prism", "pyramid",
+    ],
+    "algebra": [
+        "方程", "equation", "不等式", "inequality", "函数", "function",
+        "多项式", "polynomial", "因式分解", "factor",
+    ],
+    "number_theory": [
+        "正整数", "自然数", "positive integer", "natural number",
+        "素数", "prime", "同余", "congruence", "整除", "divisible",
+        "最大公约数", "gcd", "最小公倍数", "lcm",
+    ],
+    "calculus": [
+        "极限", "limit", "导数", "derivative", "积分", "integral",
+        "微积分", "calculus", "连续", "continuous", "可导", "differentiable",
+    ],
+    "combinatorics": [
+        "排列", "permutation", "组合", "combination",
+        "计数", "counting", "二项式", "binomial",
+    ],
+}
+
+# 概率相关
+_PROB_QUESTION_RE = re.compile(
+    r"概率|probability|期望|expectation|分布|distribution|伯努利|bernoulli|泊松|poisson",
+    re.IGNORECASE,
+)
+
+# 非负物理量
+_NONNEG_QUANTITY_RE = re.compile(
+    r"面积|area|长度|length|半径|radius|直径|diameter|"
+    r"周长|perimeter|距离|distance|体积|volume",
+    re.IGNORECASE,
+)
+
+# 正整数/自然数
+_POSINT_QUESTION_RE = re.compile(
+    r"正整数|自然数|positive\s+integer|natural\s+number",
+    re.IGNORECASE,
+)
+
+# 二次方程
+_QUADRATIC_RE = re.compile(
+    r"二次方程|quadratic|判别式|discriminant|x\s*[²^]2|ax\s*[²^]2",
+    re.IGNORECASE,
+)
+
+# 求所有解/解集
+_ALL_SOLUTIONS_RE = re.compile(
+    r"所有解|全部解|解集|all\s+roots|all\s+solutions|求.*解",
+    re.IGNORECASE,
+)
+
+# 对数
+_LOG_RE = re.compile(r"log|ln|对数|logarithm", re.IGNORECASE)
+# log(0) / log(-n) / ln(0) / ln(-n)
+_LOG_DOMAIN_VIOLATION_RE = re.compile(
+    r"(?:log|ln|log_?10?)\s*\(\s*([-]?\s*0+(?:\.0+)?)\s*\)"
+    r"|(?:log|ln|log_?10?)\s*\(\s*-\s*\d+(?:\.\d+)?\s*\)",
+    re.IGNORECASE,
+)
+
+# 除以零
+_DIV_BY_ZERO_RE = re.compile(
+    r"/\s*0(?!\.\d)|÷\s*0(?!\.\d+)|除以\s*零|除以\s*0\b",
+    re.IGNORECASE,
+)
+
+# 开平方负数
+_SQRT_NEG_RE = re.compile(
+    r"[√√]\s*[-‑–—]\s*\d|sqrt\s*\(\s*-\s*\d|sqrt\s*\(\s*-",
+    re.IGNORECASE,
+)
+
+# ± 符号或 "两解" / "两个解"
+_TWO_ROOTS_RE = re.compile(r"±|两个解|两解|two\s+roots|two\s+solutions|both\s+roots", re.IGNORECASE)
+
+# 约束条件 (x>0, n≥1 等)
+_CONSTRAINT_GT_RE = re.compile(r"([a-zA-Z])\s*>\s*0\s|([a-zA-Z])\s*≥\s*1\s")
+
+
+def _detect_math_domain(question: str) -> str:
+    """
+    从题干自动检测数学域。
+
+    返回: "probability" | "geometry" | "algebra" | "number_theory"
+          | "calculus" | "combinatorics" | "general"
+    """
+    if not question:
+        return "general"
+    q_lower = question.lower()
+    best_domain = "general"
+    best_count = 0
+    for domain, keywords in _DOMAIN_KEYWORDS.items():
+        count = sum(1 for kw in keywords if kw.lower() in q_lower)
+        if count > best_count:
+            best_count = count
+            best_domain = domain
+    return best_domain
+
+
+def _extract_primary_number(text: str) -> Optional[float]:
+    """
+    从文本中提取主数值。
+    支持: "3", "3.14", "3/4", "x = 5", "答案是 2", "-7",
+    "2π" → 2.0, "50%" → 0.5
+
+    返回 None 如果无法提取。
+    """
+    if not text:
+        return None
+    t = text.strip()
+
+    # 尝试分数: "3/4"
+    frac_match = re.search(r'([-+]?\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)', t)
+    if frac_match:
+        try:
+            num = float(frac_match.group(1))
+            den = float(frac_match.group(2))
+            if den != 0:
+                return num / den
+        except (ValueError, ZeroDivisionError):
+            pass
+
+    # 百分比: "50%"
+    pct_match = re.search(r'([-+]?\d+(?:\.\d+)?)\s*%', t)
+    if pct_match:
+        try:
+            return float(pct_match.group(1)) / 100.0
+        except ValueError:
+            pass
+
+    # 带符号数值: "x = -3", "答案是 5", "2π"
+    num_match = re.search(r'[-+]?\d+(?:\.\d+)?', t)
+    if num_match:
+        try:
+            return float(num_match.group())
+        except ValueError:
+            pass
+
+    return None
+
+
+def _check_mathematical_constraints(
+    candidate: dict,
+    question: str,
+    domain: Optional[str] = None,
+) -> dict:
+    """
+    Phase 6.3: 数学定义约束验证。
+
+    检测 4 类约束违反：
+    A. 基础范围约束（概率 0-1、非负物理量、正整数）
+    B. 定义约束（对数定义域、分母非零、开方实数范围）
+    C. 解集完整性（二次方程遗漏根）
+    D. 极值问题约束（可行域检查）
+
+    保守策略：仅标记明确的违反，避免误杀。
+
+    返回:
+        {
+            "constraint_score": float (0-1, 1.0=无问题),
+            "constraint_issues": [
+                {"type": str, "reason": str},
+            ],
+        }
+    """
+    if domain is None:
+        domain = _detect_math_domain(question)
+
+    issues: list[dict[str, str]] = []
+
+    fa = _candidate_final_answer(candidate)
+    proof = _candidate_proof_text(candidate)
+    reasoning = _str_field(candidate.get("reasoning") or "")
+    steps = _normalize_steps(candidate.get("steps"))
+    full_text = "\n".join([proof, reasoning] + steps).strip()
+
+    # ========== A. 基础范围约束 ==========
+
+    # A1: 概率必须在 [0, 1]
+    if domain == "probability" or _PROB_QUESTION_RE.search(question or ""):
+        p = _extract_primary_number(fa)
+        if p is not None and (p < -1e-9 or p > 1 + 1e-9):
+            issues.append({
+                "type": "probability_out_of_range",
+                "reason": f"概率值 {p} 不在 [0, 1] 范围内",
+            })
+
+    # A2: 非负物理量（面积、长度、半径等）
+    if domain == "geometry" or _NONNEG_QUANTITY_RE.search(question or ""):
+        # 仅当答案是单个负数时才标记
+        # 排除坐标、向量等可能为负的情况
+        if fa and re.match(r'^\s*-\s*\d+(?:\.\d+)?\s*$', fa.strip()):
+            # 额外检查：题目是否明确要求该物理量
+            qty_match = _NONNEG_QUANTITY_RE.search(question or "")
+            if qty_match:
+                qty_name = qty_match.group()
+                # 如果答案不是 "x = -3" 形式（即不是变量赋值），而是纯负数
+                if not re.search(r'[a-zA-Z]\s*=', fa):
+                    issues.append({
+                        "type": "negative_physical_quantity",
+                        "reason": f"物理量 {qty_name} 不应为负值，但答案为 {fa}",
+                    })
+
+    # A3: 正整数/自然数条件
+    if _POSINT_QUESTION_RE.search(question or ""):
+        n = _extract_primary_number(fa)
+        if n is not None:
+            if n <= 0 or abs(n - round(n)) > 1e-9:
+                issues.append({
+                    "type": "not_positive_integer",
+                    "reason": f"题目要求正整数/自然数，但答案 {n} 不满足",
+                })
+
+    # ========== B. 定义约束 ==========
+
+    # B1: 对数定义域检查
+    if _LOG_RE.search(full_text):
+        if _LOG_DOMAIN_VIOLATION_RE.search(full_text):
+            issues.append({
+                "type": "log_domain_violation",
+                "reason": "推理中出现 log(0)、log(负数) 或 ln(0)、ln(负数)，违反对数定义域",
+            })
+
+    # B2: 分母不能为 0
+    if _DIV_BY_ZERO_RE.search(full_text):
+        issues.append({
+            "type": "division_by_zero",
+            "reason": "推理中出现除以零的操作",
+        })
+
+    # B3: 开平方负数
+    if _SQRT_NEG_RE.search(full_text):
+        issues.append({
+            "type": "sqrt_negative",
+            "reason": "推理中对负数开平方，结果非实数",
+        })
+
+    # ========== C. 解集完整性 ==========
+
+    # C1: 二次方程遗漏根
+    if _QUADRATIC_RE.search(question or ""):
+        # 仅当题目要求所有解时才检查
+        if _ALL_SOLUTIONS_RE.search(question or ""):
+            if not _TWO_ROOTS_RE.search(full_text):
+                issues.append({
+                    "type": "quadratic_missing_roots",
+                    "reason": "二次方程求解题要求所有解，但推理中未体现两个根或 ± 符号",
+                })
+
+    # ========== D. 极值问题约束 ==========
+
+    # D1: 可行域检查 — 仅检查题目中明确给出 x>0 等约束但答案违反的情况
+    if question:
+        # 检查 "x > 0" 类约束
+        for m in _CONSTRAINT_GT_RE.finditer(question):
+            var = m.group(1) or m.group(2)
+            if var and fa:
+                n = _extract_primary_number(fa)
+                if n is not None and n <= 0:
+                    issues.append({
+                        "type": "feasible_domain_violation",
+                        "reason": f"题目要求 {var} > 0，但答案 {n} 不满足约束",
+                    })
+                    break  # 只报一次
+
+    # ========== 计算约束分数 ==========
+    if not issues:
+        return {"constraint_score": 1.0, "constraint_issues": []}
+
+    # 每个问题扣 0.25，最低 0.1
+    penalty = len(issues) * 0.25
+    score = max(0.1, 1.0 - penalty)
+
+    return {
+        "constraint_score": score,
+        "constraint_issues": [
+            {"type": i["type"], "reason": i["reason"]} for i in issues
+        ],
+    }
+
+
 def _get_logic_score(c: dict) -> float:
     """提取逻辑连贯性子分数（复用 _compute_verification_score 中 Check 2 的逻辑）。"""
     proof = _candidate_proof_text(c)
@@ -740,6 +1034,10 @@ def _ensure_candidate_scores(
     - proof_quality_score 缺失 → 基于模式识别计算
     - verification_confidence 缺失 → 默认 0.5，或基于 disagreement 计算
     - verification_warning 缺失 → 检测后填充
+
+    Phase 6.3: 数学约束验证作为辅助信号融入 verification_score
+    - constraint_score 权重 0.15
+    - final_vs = 0.85 * base_vs + 0.15 * constraint_score
     """
     out = dict(c)
 
@@ -754,6 +1052,19 @@ def _ensure_candidate_scores(
             vs = _compute_verification_score(c, question, proof_required, reference_answer)
     else:
         vs = _compute_verification_score(c, question, proof_required, reference_answer)
+
+    # --- Phase 6.3: 数学约束验证（辅助信号）---
+    # 始终计算并存储 constraint_score 和 constraint_issues
+    constraint_result = _check_mathematical_constraints(c, question)
+    out["constraint_score"] = constraint_result["constraint_score"]
+    out["constraint_issues"] = constraint_result["constraint_issues"]
+    # 仅对启发式计算的 vs 融入 constraint_score（不覆盖模型自评 vs）
+    # 融入公式: final_vs = 0.85 * base_vs + 0.15 * constraint_score
+    if not vs_from_model:
+        _CONSTRAINT_WEIGHT = 0.15
+        vs = (1.0 - _CONSTRAINT_WEIGHT) * vs + _CONSTRAINT_WEIGHT * constraint_result["constraint_score"]
+        vs = max(0.0, min(vs, 1.0))
+
     out["verification_score"] = vs
     out["_vs_from_model"] = vs_from_model
 
@@ -974,7 +1285,15 @@ def parse_multi_candidate_response(
         logger.warning(f"JSON parse failed, trying regex extraction: {e}")
         data = _fallback_parse(text)
 
+    # Phase 6.1: 主解析器和 regex fallback 均失败时，尝试健壮 fallback
     if not data or not isinstance(data, dict):
+        logger.warning("Primary JSON parsers failed, trying robust fallback...")
+        data = _robust_fallback_parse(text)
+
+    if not data or not isinstance(data, dict):
+        logger.warning(
+            f"All JSON parsers failed. Raw text (first 500 chars): {text[:500]}"
+        )
         return _make_error_result("Failed to parse JSON from response")
 
     proof_required = is_proof_problem(question)
@@ -1101,8 +1420,326 @@ def _fallback_parse(text: str) -> dict | None:
     return None
 
 
+# ==================== Phase 6.1: 健壮 Fallback 解析 ====================
+
+def _robust_fallback_parse(text: str) -> dict | None:
+    """
+    Phase 6.1: 在 extract_json_from_text() 和 _fallback_parse() 均失败后调用。
+
+    依次尝试三种策略：
+    1. Markdown 代码块提取（大小写不敏感 / 支持截断输出缺少闭合 ```）
+    2. JSON 文本修复后解析（尾随逗号 / 注释 / 单引号 / 截断修复 / 控制字符）
+    3. 键值对正则提取（最后手段，从文本中提取 answer/reasoning 等字段）
+    """
+    if not text or not text.strip():
+        return None
+
+    # ---- 策略1: Markdown 代码块（大小写不敏感，支持截断） ----
+    result = _extract_markdown_json_robust(text)
+    if result:
+        return result
+
+    # ---- 策略2: JSON 文本修复 + 解析 ----
+    result = _repair_and_parse_json(text)
+    if result:
+        return result
+
+    # ---- 策略3: 键值对正则提取 ----
+    result = _extract_fields_by_regex(text)
+    if result:
+        return result
+
+    return None
+
+
+def _extract_markdown_json_robust(text: str) -> dict | None:
+    """
+    从 markdown 代码块提取 JSON，处理：
+    - 大小写不敏感的语言标记（json / JSON / Json / 无标记）
+    - 截断输出（缺少闭合 ```）
+    - 多个代码块（逐个尝试）
+    """
+    # 先尝试有闭合标记的代码块（大小写不敏感）
+    closed_pattern = re.compile(
+        r'```(?:json|JSON|Json)?[ \t]*\n([\s\S]*?)\n[ \t]*```',
+        re.IGNORECASE,
+    )
+    for match in closed_pattern.finditer(text):
+        content = match.group(1).strip()
+        result = _repair_and_parse_json(content)
+        if result and isinstance(result, dict):
+            if "candidates" in result or "final_answer" in result or "answer" in result:
+                return result
+
+    # 再尝试无闭合标记的代码块（截断输出）
+    # 匹配 ```json 后面的所有内容直到文本末尾
+    open_pattern = re.compile(
+        r'```(?:json|JSON|Json)?[ \t]*\n([\s\S]*)$',
+        re.IGNORECASE,
+    )
+    for match in open_pattern.finditer(text):
+        content = match.group(1).strip()
+        # 去掉末尾可能残留的不完整 ``` 
+        content = re.sub(r'```\s*$', '', content).strip()
+        result = _repair_and_parse_json(content)
+        if result and isinstance(result, dict):
+            if "candidates" in result or "final_answer" in result or "answer" in result:
+                return result
+
+    return None
+
+
+def _extract_json_chunk(text: str) -> str | None:
+    """
+    从文本中提取最外层 JSON 对象子串。
+    使用字符串感知的括号匹配，正确处理值中包含 { } 的情况。
+    如果括号不匹配（截断输出），返回从第一个 { 到文本末尾的内容。
+    """
+    start = text.find('{')
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    end = -1
+
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    if end != -1:
+        return text[start:end]
+
+    # 截断的 JSON — 括号不匹配，返回从 { 到末尾
+    return text[start:]
+
+
+def _repair_truncated_json(text: str) -> str:
+    """修复截断的 JSON：补全缺失的闭合括号。"""
+    depth_brace = 0
+    depth_bracket = 0
+    in_string = False
+    escape = False
+
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            depth_brace += 1
+        elif ch == '}':
+            depth_brace -= 1
+        elif ch == '[':
+            depth_bracket += 1
+        elif ch == ']':
+            depth_bracket -= 1
+
+    # 如果在字符串中被截断，先闭合字符串
+    repaired = text
+    if in_string:
+        repaired += '"'
+
+    # 补全缺失的闭合括号
+    # 先闭合 ] 再闭合 }，与 JSON 嵌套顺序一致
+    # 但需要根据实际嵌套顺序补全，这里用简单策略：按出现顺序逆序补全
+    closers = ''
+    # 简单策略：如果 bracket 没闭合，先加 ]，再加 }
+    # 但更准确的做法是记录开括号的顺序
+    # 这里用计数法：先补 ]，再补 }
+    if depth_bracket > 0:
+        closers += ']' * depth_bracket
+    if depth_brace > 0:
+        closers += '}' * depth_brace
+
+    # 去掉末尾可能的尾随逗号
+    repaired = re.sub(r',\s*$', '', repaired.rstrip())
+
+    return repaired + closers
+
+
+def _escape_control_chars(text: str) -> str:
+    """转义字符串值中的未转义控制字符（换行、制表符等）。"""
+    # 只处理双引号字符串内的控制字符
+    result = []
+    in_string = False
+    escape = False
+    for ch in text:
+        if escape:
+            result.append(ch)
+            escape = False
+            continue
+        if ch == '\\':
+            result.append(ch)
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            result.append(ch)
+            continue
+        if in_string:
+            if ch == '\n':
+                result.append('\\n')
+            elif ch == '\r':
+                result.append('\\r')
+            elif ch == '\t':
+                result.append('\\t')
+            else:
+                result.append(ch)
+        else:
+            result.append(ch)
+    return ''.join(result)
+
+
+def _repair_and_parse_json(text: str) -> dict | None:
+    """
+    提取 JSON 子串并修复常见 LLM 格式问题后尝试解析。
+    
+    修复项：
+    - 尾随逗号（, } → }，, ] → ]）
+    - JavaScript 注释（// 行注释，/* 块注释 */）
+    - 单引号字符串 → 双引号
+    - 未转义控制字符
+    - 截断的 JSON（补全闭合括号）
+    """
+    chunk = _extract_json_chunk(text)
+    if not chunk:
+        return None
+
+    # 尝试直接解析（也许只是提取范围的问题）
+    try:
+        result = json.loads(chunk)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # 逐项修复并尝试解析
+    repairs = [
+        ("trailing_commas", lambda s: re.sub(r',\s*([}\]])', r'\1', s)),
+        ("line_comments", lambda s: re.sub(r'//[^\n]*', '', s)),
+        ("block_comments", lambda s: re.sub(r'/\*[\s\S]*?\*/', '', s)),
+        ("control_chars", lambda s: _escape_control_chars(s)),
+        ("truncated", lambda s: _repair_truncated_json(s)),
+    ]
+
+    # 逐项尝试
+    for name, repair_fn in repairs:
+        repaired = repair_fn(chunk)
+        if repaired == chunk:
+            continue
+        try:
+            result = json.loads(repaired)
+            if isinstance(result, dict):
+                logger.debug(f"JSON repaired successfully via '{name}'")
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # 所有修复组合尝试
+    combined = chunk
+    for _, repair_fn in repairs:
+        combined = repair_fn(combined)
+    if combined != chunk:
+        try:
+            result = json.loads(combined)
+            if isinstance(result, dict):
+                logger.debug("JSON repaired successfully via combined repairs")
+                return result
+        except json.JSONDecodeError:
+            pass
+
+        # 最后手段：ast.literal_eval（处理单引号等 Python 字面量）
+        try:
+            import ast
+            result = ast.literal_eval(combined)
+            if isinstance(result, dict):
+                logger.debug("JSON parsed via ast.literal_eval")
+                return result
+        except (ValueError, SyntaxError):
+            pass
+
+    return None
+
+
+def _extract_fields_by_regex(text: str) -> dict | None:
+    """
+    最后手段：用正则从文本中提取 answer / reasoning / final_answer 等字段。
+    即使 JSON 完全无法解析，也能提取出关键答案。
+    """
+    result = {}
+
+    # 提取 answer / final_answer
+    answer_patterns = [
+        r'"(?:final_)?answer"\s*:\s*"((?:[^"\\]|\\.)*)"',
+        r"'(?:final_)?answer'\s*:\s*'((?:[^'\\]|\\.)*)'",
+        r'(?:final_)?answer\s*[:：]\s*(.+?)(?:\n|$)',
+    ]
+    for pattern in answer_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            result["answer"] = match.group(1).strip()
+            result["final_answer"] = result["answer"]
+            break
+
+    # 提取 reasoning / proof
+    reasoning_patterns = [
+        r'"(?:reasoning|proof|selection_reasoning)"\s*:\s*"((?:[^"\\]|\\.)*)"',
+        r"'(?:reasoning|proof|selection_reasoning)'\s*:\s*'((?:[^'\\]|\\.)*)'",
+    ]
+    for pattern in reasoning_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            result["reasoning"] = match.group(1).strip()
+            break
+
+    # 提取 confidence
+    conf_match = re.search(r'"confidence"\s*:\s*([\d.]+)', text, re.IGNORECASE)
+    if conf_match:
+        try:
+            result["confidence"] = float(conf_match.group(1))
+        except ValueError:
+            pass
+
+    # 至少要有 answer 才认为提取成功
+    if "answer" in result and result["answer"]:
+        logger.debug(f"Fields extracted via regex: keys={list(result.keys())}")
+        return result
+
+    return None
+
+
 def _make_error_result(message: str) -> dict:
-    """构造解析失败时的结果。"""
+    """构造解析失败时的结果。
+
+    Phase 6.2: 添加 error_type="incomplete" — 解析失败属于未完成，
+    不应被误分类为 mathematical_error。
+    """
     return {
         "answer": "",
         "reasoning": f"Parse error: {message}",
@@ -1116,6 +1753,7 @@ def _make_error_result(message: str) -> dict:
         "proof_quality_score": 0.0,
         "verification_warning": "",
         "error": message,
+        "error_type": "incomplete",
     }
 
 
@@ -1347,6 +1985,19 @@ async def _do_inference(
             f"latency={latency}s"
         )
 
+        # Phase 6.2: 检测未完成输出（解析失败或答案为空）
+        # 这些情况应归类为 incomplete，而非让 judge 误判为 mathematical_error
+        final_answer = (parsed.get("answer") or "").strip()
+        parse_error = parsed.get("error")
+        if parse_error:
+            # JSON 解析失败 — 模型未产生有效输出
+            inference_error = parse_error
+        elif not final_answer:
+            # 答案为空（可能重试耗尽，或模型返回空答案）
+            inference_error = "No valid answer produced"
+        else:
+            inference_error = None
+
         return InferenceResult(
             problem_id=problem.id,
             question=problem.question,
@@ -1363,6 +2014,7 @@ async def _do_inference(
             selection_reasoning=parsed.get("selection_reasoning", ""),
             verification_score=parsed.get("verification_score", 0.5),
             proof_quality_score=parsed.get("proof_quality_score", 0.0),
+            error=inference_error,
         )
     except Exception as e:
         latency = round(time.time() - start_time, 2)
