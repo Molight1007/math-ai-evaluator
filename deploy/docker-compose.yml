@@ -1,0 +1,20 @@
+﻿services:
+  math-evaluator:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: math-evaluator
+    ports:
+      - "5000:5000"
+    volumes:
+      # 持久化测试结果
+      - ./results:/app/测试结果
+      # 挂载本地题库目录
+      - ../题库:/app/题库
+      # 持久化用户数据
+      - ./users.json:/app/users.json
+      # 持久化用户API设置
+      - ./user_api_settings.json:/app/user_api_settings.json
+    env_file:
+      - .env
+    restart: unless-stopped
