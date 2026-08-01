@@ -1,0 +1,9 @@
+{"plugins": [],
+ "package": "test_mathlib",
+ "options": {},
+ "name": "TestMathlib",
+ "isModule": false,
+ "importArts":
+ {"TestMathlib.Basic":
+  ["D:\\挑战杯\\test_mathlib\\.lake\\build\\lib\\lean\\TestMathlib\\Basic.olean"]},
+ "dynlibs": []}

@@ -1,0 +1,22 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs": "4a5b8875e4c9b3fa.exe",
+ "log":
+ [{"message":
+   ".> c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0\\bin\\clang.exe -o D:\\挑战杯\\test_mathlib\\.lake\\build\\bin\\test_mathlib.exe @D:\\挑战杯\\test_mathlib\\.lake\\build\\bin\\test_mathlib.exe.rsp",
+   "level": "trace"}],
+ "inputs":
+ [["linkObjs",
+   [["D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\Main.c.o.noexport",
+     "4db40551a74f7b87"],
+    ["D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\TestMathlib\\Basic.c.o.noexport",
+     "8d9a3bbf9b6f8956"],
+    ["D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\TestMathlib.c.o.noexport",
+     "e3eb2b4a897efda9"]]],
+  ["linkLibs", "00000000000006bb"],
+  ["Lean 4.31.0, commit 68218e876d2a38b1985b8590fff244a83c321783",
+   "fc45ac412f28501c"],
+  ["traceArgs: #[-Wl,--whole-archive, -lleanmanifest, -Wl,--no-whole-archive]",
+   "d9dc93f51f923c09"],
+  ["x86_64-w64-windows-gnu", "360db333d006d911"]],
+ "depHash": "e5f946bf49fd51a7"}

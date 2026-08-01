@@ -1,0 +1,33 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["26f9d72b0e43473c.olean"],
+  "m": false,
+  "i": "5922d870d3a16dd8.ilean",
+  "c": "ea47bd99a7533206.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=D:\\挑战杯\\test_mathlib\\lake-packages\\Cli\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\batteries\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\Qq\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\aesop\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\proofwidgets\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\importGraph\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\LeanSearchClient\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\plausible\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\lake-packages\\mathlib\\.lake\\build\\lib\\lean;D:\\挑战杯\\test_mathlib\\.lake\\build\\lib\\lean c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0\\bin\\lean.exe D:\\挑战杯\\test_mathlib\\Main.lean -o D:\\挑战杯\\test_mathlib\\.lake\\build\\lib\\lean\\Main.olean -i D:\\挑战杯\\test_mathlib\\.lake\\build\\lib\\lean\\Main.ilean -c D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\Main.c --setup D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\Main.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["Main:deps",
+   [["deps",
+     [["test_mathlib/test_mathlib:extraDep",
+       [["@test_mathlib:extraDep", "00000000000006bb"]]],
+      ["imports",
+       [["TestMathlib transitive imports (legacy)", "98ab9a4c7ff5b0be"],
+        ["TestMathlib:importAllArts", "769eefa5b6ab3136"]]]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.31.0, commit 68218e876d2a38b1985b8590fff244a83c321783",
+   "fc45ac412f28501c"],
+  ["D:\\挑战杯\\test_mathlib\\Main.lean", "0e9fe63c7f1f54f1"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Main", "f2a1fd945cf30c62"],
+  ["Package.id?: (some test_mathlib)", "8946f80de1bd8cf2"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "a637605550439a0b"}

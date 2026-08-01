@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+
+# Temp / logs
+tmp_log.txt
+generate_ppt.py
+
+# Test tools (not for submission)
+测试工具/
+
+# Reference cases (not for submission)
+其他案例/
+
+# Analysis docs
+MathPilot优化分析.md
+
+# OS
+.DS_Store
+Thumbs.db

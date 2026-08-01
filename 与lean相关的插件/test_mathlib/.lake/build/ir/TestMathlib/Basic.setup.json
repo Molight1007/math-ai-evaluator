@@ -1,0 +1,7 @@
+{"plugins": [],
+ "package": "test_mathlib",
+ "options": {},
+ "name": "TestMathlib.Basic",
+ "isModule": false,
+ "importArts": {},
+ "dynlibs": []}

@@ -1,0 +1,18 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs": "8d9a3bbf9b6f8956.o",
+ "log":
+ [{"message":
+   ".> c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0\\bin\\clang.exe -c -o D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\TestMathlib\\Basic.c.o.noexport D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\TestMathlib\\Basic.c -I c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0\\include -fstack-clash-protection -fdata-sections -ffunction-sections -Wno-unused-command-line-argument --sysroot c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0 -nostdinc -isystem c:\\Users\\35174\\.elan\\toolchains\\leanprover--lean4---v4.31.0/include/clang -O3 -DNDEBUG",
+   "level": "trace"}],
+ "inputs":
+ [["TestMathlib.Basic:c",
+   [["D:\\挑战杯\\test_mathlib\\.lake\\build\\ir\\TestMathlib\\Basic.c",
+     "1f8a0dd7bc96140c"],
+    ["Lean 4.31.0, commit 68218e876d2a38b1985b8590fff244a83c321783",
+     "fc45ac412f28501c"]]],
+  ["Lean 4.31.0, commit 68218e876d2a38b1985b8590fff244a83c321783",
+   "fc45ac412f28501c"],
+  ["traceArgs: #[-O3, -DNDEBUG]", "6c7bb0eeabd8f74a"],
+  ["x86_64-w64-windows-gnu", "360db333d006d911"]],
+ "depHash": "01c634d7deb4419b"}

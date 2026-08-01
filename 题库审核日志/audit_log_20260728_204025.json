@@ -1,0 +1,1527 @@
+{
+  "timestamp": "20260728_204025",
+  "note": "",
+  "summary": {
+    "filled": 379
+  },
+  "filled": [
+    {
+      "pid": "函数极限与连续_025",
+      "answer": "D"
+    },
+    {
+      "pid": "函数极限与连续_027",
+      "answer": "-2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0024",
+      "answer": "7x - 3y + z - 16 = 0"
+    },
+    {
+      "pid": "函数极限与连续_011",
+      "answer": "0"
+    },
+    {
+      "pid": "未知_022",
+      "answer": "D"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0610",
+      "answer": "\\(\\frac{4}{3}\\pi a^4 \\rho g\\)"
+    },
+    {
+      "pid": "多元函数微分学_016",
+      "answer": "∂²u/∂ξ² = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0199",
+      "answer": "(2) \\(\\frac{59\\pi R^5}{480}\\)  \n(3) \\(\\frac{13\\pi}{4}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0205",
+      "answer": "\\( \\frac{336\\pi}{5} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0201",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0316",
+      "answer": "(1) × (2) √"
+    },
+    {
+      "pid": "函数极限与连续_024",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0611",
+      "answer": "C. /0, 4a/(3π)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0019",
+      "answer": "11"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0198",
+      "answer": "-1/4"
+    },
+    {
+      "pid": "函数极限与连续_009",
+      "answer": "B"
+    },
+    {
+      "pid": "函数极限与连续_029",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0339",
+      "answer": "2x+4y-z=5"
+    },
+    {
+      "pid": "多元函数微分学_015",
+      "answer": "a=1, b=-1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0025",
+      "answer": "通过x轴和点(-3,1,2)的平面方程为：\\(y - 2z = 0\\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0612",
+      "answer": "(0, (e - e^{-1})/2)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0018",
+      "answer": "|a+λb| ≥ |a|"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0023",
+      "answer": "(1) 1  \n(2) 3  \n(3) 0  \n(4) 3"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0609",
+      "answer": "(1) \\( \\frac{4\\sqrt{3}}{3} \\rho g \\)  \n(2) \\( \\frac{2\\sqrt{3}}{5} \\rho g \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0337",
+      "answer": "f(x) = ∑_{n=0}^{∞} (-1)^n x^{4n+1} / (4n+1) + ∑_{n=1}^{∞} (-1)^{n-1} x^{2n} / n，收敛域为 (-1, 1]"
+    },
+    {
+      "pid": "多元函数微分学_018",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0317",
+      "answer": "(1) f(x) = 1/2 + (2/π)∑_{n=1}^{∞} [1/(2n-1)] sin((2n-1)x)  \n(2) f(x) = (π/2 - 1/2) + ∑_{n=1}^{∞} [(-1)^n - 1]/(n^2π) cos(nx) + [(-1)^n (π+1) - 1]/n sin(nx)"
+    },
+    {
+      "pid": "函数极限与连续_030",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0026",
+      "answer": "x - 4 = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0200",
+      "answer": "(1) 柱面坐标系：\\(\\int_{0}^{2\\pi} d\\theta \\int_{0}^{R} r dr \\int_{R-\\sqrt{R^2-r^2}}^{R+\\sqrt{R^2-r^2}} f(r^2, z) dz\\)  \n球面坐标系：\\(\\int_{0}^{2\\pi} d\\theta \\int_{0}^{\\frac{\\pi}{2}} d\\varphi \\int_{0}^{2R\\cos\\varphi} f(\\rho^2\\sin^2\\varphi, \\rho\\cos\\varphi) \\rho^2\\sin\\varphi d\\rho\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0203",
+      "answer": "柱面坐标系：\\(\\int_{0}^{2\\pi} d\\theta \\int_{0}^{1} r dr \\int_{0}^{\\sqrt{1-r^2}} z^2 dz\\)  \n球面坐标系：\\(\\int_{0}^{2\\pi} d\\theta \\int_{0}^{\\frac{\\pi}{2}} \\sin\\phi d\\phi \\int_{0}^{1} \\rho^4 \\cos^2\\phi d\\rho\\)  \n计算得：\\(\\frac{2\\pi}{15}\\)"
+    },
+    {
+      "pid": "数列极限_008",
+      "answer": "a"
+    },
+    {
+      "pid": "多元函数微分学_020",
+      "answer": "B"
+    },
+    {
+      "pid": "多元函数微分学_019",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0318",
+      "answer": "正弦级数：\\(\\sum_{n=1}^{\\infty} \\frac{2[(-1)^{n+1}+1]}{n\\pi} \\sin(nx)\\)，余弦级数：\\(\\frac{\\pi^2}{3} + \\sum_{n=1}^{\\infty} \\frac{4(-1)^n}{n^2} \\cos(nx)\\)，\\(\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}\\)，\\(\\sum_{n=1}^{\\infty} \\frac{1}{(2n-1)^2} = \\frac{\\pi^2}{8}\\)。"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0207",
+      "answer": "\\(2\\sqrt{2}a^2\\)"
+    },
+    {
+      "pid": "函数极限与连续_031",
+      "answer": "D"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0027",
+      "answer": "\\(\\frac{x-3}{2} = \\frac{y}{-3} = \\frac{z+1}{1}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0314",
+      "answer": "(1) \\( \\sum_{n=1}^{\\infty} \\frac{(-1)^n (2^n + 1)}{n} x^n \\)，区间 \\( \\left[ -\\frac{1}{2}, \\frac{1}{2} \\right) \\)  \n(2) \\( \\sum_{n=0}^{\\infty} \\frac{(-1)^n 3^{n+1} - 2^{n+1}}{6^{n+1}} x^n \\)，区间 \\( (-2, 2) \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0347",
+      "answer": "x - y + z = 4"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0639",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0343",
+      "answer": "3π/2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0206",
+      "answer": "\\(\\frac{1}{2} \\sqrt{a^2 b^2 + b^2 c^2 + c^2 a^2}\\)"
+    },
+    {
+      "pid": "数列极限_009",
+      "answer": "a"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0341",
+      "answer": "ò_{0}^{2} dx ò_{x}^{4-x} f(x,y) dy"
+    },
+    {
+      "pid": "未知_007",
+      "answer": "(-5/3, 2/3, -2/3)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0346",
+      "answer": "π/4"
+    },
+    {
+      "pid": "多元函数微分学_024",
+      "answer": "最大值：\\(2\\sqrt{7}\\)，最小值：\\(\\sqrt{2}\\)"
+    },
+    {
+      "pid": "数列极限_007",
+      "answer": "B"
+    },
+    {
+      "pid": "未知_008",
+      "answer": "x/2 = (y+3)/(-2) = (z-3)/1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0030",
+      "answer": "x + 3y + 2z = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0209",
+      "answer": "h = R"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0208",
+      "answer": "\\( \\frac{8\\pi}{3}(5\\sqrt{5}-1) \\)"
+    },
+    {
+      "pid": "数列极限_011",
+      "answer": "a"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0640",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0348",
+      "answer": "2ax dx - 2y dy"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0210",
+      "answer": "\\(\\frac{4}{5}, \\frac{4}{5}, \\frac{4}{15}\\)"
+    },
+    {
+      "pid": "未知_003",
+      "answer": "A"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0649",
+      "answer": "5"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0164",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0033",
+      "answer": "D"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0666",
+      "answer": "B"
+    },
+    {
+      "pid": "未知_004",
+      "answer": "|a||b|"
+    },
+    {
+      "pid": "数列极限_012",
+      "answer": "a"
+    },
+    {
+      "pid": "未知_001",
+      "answer": "(1) D  \n(2) D  \n(3) C  \n(4) B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0662",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0222",
+      "answer": "4π"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0031",
+      "answer": "x - 2y + 3z - 9 = 0"
+    },
+    {
+      "pid": "未知_022",
+      "answer": "D"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0149",
+      "answer": "B"
+    },
+    {
+      "pid": "未知_002",
+      "answer": "(1) 8  \n(2) -19  \n(3) -3/2  \n(4) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0211",
+      "answer": "质量：\\( \\frac{8\\pi}{3} \\)，转动惯量：\\( \\frac{16\\pi}{3} \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0644",
+      "answer": "(1) 连续  \n(2) a=0，df|_(0,0)=0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0035",
+      "answer": "\\(\\frac{x-1}{-2} = \\frac{y+2}{3} = \\frac{z-3}{1}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0224",
+      "answer": "-2/3"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0037",
+      "answer": "(1) A (2) D (3) C (4) C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0667",
+      "answer": "A"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0160",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0034",
+      "answer": "x = 1, y = -1, z = 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0223",
+      "answer": "2e² - 2e"
+    },
+    {
+      "pid": "一元函数微分学的计算_002",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0225",
+      "answer": "\\( \\frac{21\\pi}{2} \\)"
+    },
+    {
+      "pid": "未知_075",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0226",
+      "answer": "\\(\\frac{4\\pi a^5}{15}(l+m+n)\\)"
+    },
+    {
+      "pid": "一元函数微分学的计算_011",
+      "answer": "-2n!"
+    },
+    {
+      "pid": "未知_087",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0040",
+      "answer": "B"
+    },
+    {
+      "pid": "多元函数微分学_026",
+      "answer": "极小值，\\(z=-1\\)"
+    },
+    {
+      "pid": "一元函数微分学的计算_017",
+      "answer": "0"
+    },
+    {
+      "pid": "一元函数微分学的计算_018",
+      "answer": "A"
+    },
+    {
+      "pid": "未知_178",
+      "answer": "A"
+    },
+    {
+      "pid": "多元函数微分学_030",
+      "answer": "-1/3, 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0227",
+      "answer": "\\(\\frac{a^3}{3}\\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0202",
+      "answer": "2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0199",
+      "answer": "-1/(x^2+y^2)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0232",
+      "answer": "4πa³/3"
+    },
+    {
+      "pid": "多元函数微分学_034",
+      "answer": "最大值 \\( \\frac{20}{3} \\)，最小值 \\( -\\frac{4}{3} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0042",
+      "answer": "x = a cos θ, y = a sin θ, z = bθ"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0207",
+      "answer": "-2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0045",
+      "answer": "C"
+    },
+    {
+      "pid": "多元函数微分学_037",
+      "answer": "[-36, 0]"
+    },
+    {
+      "pid": "多元函数微分学_038",
+      "answer": "u(x,y) ≥ 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0231",
+      "answer": "12a"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0039",
+      "answer": "xoy面投影：x² + y² - ax = 0，z=0  \nyoz面投影：y² + z² = 8，x=0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0233",
+      "answer": "0"
+    },
+    {
+      "pid": "多元函数微分学_036",
+      "answer": "最大值：13，最小值：-3"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0200",
+      "answer": "-2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0230",
+      "answer": "(1) \\(1+\\frac{\\sqrt{2}}{2}\\)  \n(2) \\(\\frac{a^2}{2}\\left(\\frac{\\pi}{2}+1\\right)\\)  \n(3) \\(2a^2\\pi\\)  \n(4) \\(0\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0044",
+      "answer": "(1) 抛物柱面  \n(2) 双曲柱面"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0236",
+      "answer": "B"
+    },
+    {
+      "pid": "多元函数微分学_035",
+      "answer": "(1) 1  \n(2) 有最大值，最大值为 \\(\\sqrt{1+t^2}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0048",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0043",
+      "answer": "\\( x = t - \\frac{t}{\\sqrt{1+4t^2}}, \\quad y = t^2 + \\frac{1}{2\\sqrt{1+4t^2}} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0235",
+      "answer": "-2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0209",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0047",
+      "answer": "k>0时，椭球面；k=0时，抛物柱面；k<0时，双叶双曲面。"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0765",
+      "answer": "-2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0728",
+      "answer": "π/2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0208",
+      "answer": "\\( e^{x} (x + n) \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0038",
+      "answer": "(1) (x-5)²+(y-1)²+(z-3)²=49  \n(2) (x-1)²+(y-3)²+(z+2)²=14  \n(3) 绕x轴：x²-4y²-4z²=9；绕y轴：x²+z²-4y²=9  \n(4) 平面解析几何中表示两条直线；空间解析几何中表示两条直线  \n(5) x=t, y=t, z=±√2 t  \n(6) (x²+y²+(a-x)²=R², z=0) 或 2x²-2ax+y²=R²-a²"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0234",
+      "answer": "(1) 1  \n(2) 0  \n(3) 5"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0229",
+      "answer": "\\(I_x = \\int_G (y^2+z^2) m(x,y,z) ds\\), \\(I_y = \\int_G (x^2+z^2) m(x,y,z) ds\\), \\(I_z = \\int_G (x^2+y^2) m(x,y,z) ds\\); \\(\\bar{x} = \\frac{\\int_G x m(x,y,z) ds}{\\int_G m(x,y,z) ds}\\), \\(\\bar{y} = \\frac{\\int_G y m(x,y,z) ds}{\\int_G m(x,y,z) ds}\\), \\(\\bar{z} = \\frac{\\int_G z m(x,y,z) ds}{\\int_G m(x,y,z) ds}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0050",
+      "answer": "4"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0212",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0800",
+      "answer": "-16/3"
+    },
+    {
+      "pid": "多元函数微分学_039",
+      "answer": "(1) \\(6x - 3x^2\\)  \n(2) 最大值 \\(64\\)，最小值 \\(-64\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0054",
+      "answer": "x - 2y = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0237",
+      "answer": "-2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0055",
+      "answer": "(5, 4, 5)"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_007",
+      "answer": "y = 2x"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0241",
+      "answer": "0"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_009",
+      "answer": "\\(\\frac{2\\sqrt{3}}{3}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0239",
+      "answer": "(1) πab  \n(2) (πa²m)/8"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0060",
+      "answer": "A"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_013",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0062",
+      "answer": "D、C"
+    },
+    {
+      "pid": "微分方程_002",
+      "answer": "y² = Cx³"
+    },
+    {
+      "pid": "微分方程_001",
+      "answer": "y = -cosx/x"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0240",
+      "answer": "(1) 0  \n(2) \\(\\frac{\\pi}{4} - \\frac{1}{2}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0243",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0238",
+      "answer": "(1) ∫_L (P+Q)/√2 ds  \n(2) ∫_L (P+2xQ)/√(1+4x²) ds  \n(3) ∫_L (P(1-y)+Qx)/√(x²+y²) ds"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_023",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0241",
+      "answer": "B"
+    },
+    {
+      "pid": "微分方程_014",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0239",
+      "answer": "D"
+    },
+    {
+      "pid": "零基础_015",
+      "answer": "A"
+    },
+    {
+      "pid": "微分方程_012",
+      "answer": "\\( \\frac{1}{2} \\)"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_018",
+      "answer": "增减区间：增区间(-∞,-1)和(0,+∞)，减区间(-1,0)；极大值f(-1)=2，极小值f(0)=2；拐点(-1/2,2)"
+    },
+    {
+      "pid": "微分方程_008",
+      "answer": "y = 4e^(z/8)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0245",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0063",
+      "answer": "(1) \\( (x^2 - y^2)^2 + y^4 \\)  \n(2) \\( y^2 = 2x \\)  \n(3) \\( \\frac{1}{e} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0242",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0066",
+      "answer": "(1) 1  \n(2) 0  \n(3) 2  \n(4) e²"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0067",
+      "answer": "A"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0242",
+      "answer": "B. [1,+∞)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0064",
+      "answer": "(1) \\( y > x \\) 且 \\( x^2 + y^2 > 0 \\)  \n(2) \\( |x| \\leq 1 \\) 且 \\( y \\neq 0 \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0243",
+      "answer": "1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0244",
+      "answer": "\\( \\frac{3\\pi}{2} \\)"
+    },
+    {
+      "pid": "微分方程_015",
+      "answer": "1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0838",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0247",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0073",
+      "answer": "不存在"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0244",
+      "answer": "a=1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0819",
+      "answer": "(1) \\( y = e^x \\sin x + e^x \\)  \n(2) 斜渐近线为 \\( y = e^x \\)（无斜渐近线，实际为水平渐近线 \\( y = 0 \\)？需确认）  \n根据计算，斜渐近线不存在，水平渐近线为 \\( y = 0 \\)。"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0837",
+      "answer": "\\(x^2 + y^2 = C e^{2\\theta}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0072",
+      "answer": "(1) 0  \n(2) 0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0253",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0248",
+      "answer": "A. x+y-1=0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0839",
+      "answer": "y = e^{-2x} \\left( \\frac{x^3}{3} + 1 \\right)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0070",
+      "answer": "(1) \\( z = \\frac{x - y}{2x} \\)； (2) \\( z = \\arccos\\frac{x}{y} + \\ln(1 - y) \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0068",
+      "answer": "(1) \\( x^2 - y^2 \\)  \n(2) \\( y = k\\pi, k \\in \\mathbb{Z} \\)  \n(3) \\( 1 \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0249",
+      "answer": "(1) 0  \n(2) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0076",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0248",
+      "answer": "(1) 2π  \n(2) 2π"
+    },
+    {
+      "pid": "微分方程_035",
+      "answer": "y(x) = x - x^2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0250",
+      "answer": "4πR^3"
+    },
+    {
+      "pid": "零基础_016",
+      "answer": "(1) 直线l：\\(x - y + 1 = 0\\)，曲线C：\\(x^2 + y^2 = 1\\)  \n(2) 最小值：\\(-2\\sqrt{3}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0074",
+      "answer": "A"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0260",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0251",
+      "answer": "\\(2\\pi a\\)"
+    },
+    {
+      "pid": "函数极限与连续_001",
+      "answer": "D"
+    },
+    {
+      "pid": "函数极限与连续_002",
+      "answer": "f(x) = -x(x^2-4)"
+    },
+    {
+      "pid": "微分方程_029",
+      "answer": "y₂(x) = y₁(x) ∫ [e^{-∫P(x)dx} / y₁²(x)] dx"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_032",
+      "answer": "1/2"
+    },
+    {
+      "pid": "函数极限与连续_005",
+      "answer": "C"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_028",
+      "answer": "(1) \\( y = \\frac{1}{x} - \\frac{1}{x^2} \\)  \n(2) 拐点：\\( (2, \\frac{1}{4}) \\)；渐近线：\\( x=0 \\) 和 \\( y=0 \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0252",
+      "answer": "(1) 0  \n(2) 0"
+    },
+    {
+      "pid": "无穷级数_002",
+      "answer": "发散"
+    },
+    {
+      "pid": "函数极限与连续_004",
+      "answer": "f(x) = x - π - sinx"
+    },
+    {
+      "pid": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_001",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0077",
+      "answer": "(1) 45°  \n(2) \\(2y\\)"
+    },
+    {
+      "pid": "微分方程_037",
+      "answer": "r(θ) = 2e^(θ/2)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0254",
+      "answer": "-187π/15"
+    },
+    {
+      "pid": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_002",
+      "answer": "C"
+    },
+    {
+      "pid": "微分方程_038",
+      "answer": "y = (x+3)^(3/2)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0255",
+      "answer": "0"
+    },
+    {
+      "pid": "一元函数微分学的应用(一)--几何应用_033",
+      "answer": "\\((x+\\frac{1}{2})^2 + y^2 = \\frac{1}{4}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0081",
+      "answer": "B"
+    },
+    {
+      "pid": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_015",
+      "answer": "A"
+    },
+    {
+      "pid": "函数极限与连续_006",
+      "answer": "C"
+    },
+    {
+      "pid": "无穷级数_003",
+      "answer": "C"
+    },
+    {
+      "pid": "微分方程_036",
+      "answer": "(1) \\( y = \\frac{e^x + e^{-x}}{2} \\)  \n(2) 形心坐标为 \\(\\left( \\ln 2 - \\frac{1}{2}, \\frac{3}{4} \\right)\\)"
+    },
+    {
+      "pid": "函数极限与连续_003",
+      "answer": "g(x) = \n{ sqrt((1-x)/2), x > -1\n{ cbrt(x), -1 ≤ x ≤ 8\n{ (x+16)/12, x > 8"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0105",
+      "answer": "(1) z  \n(2) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0079",
+      "answer": "∂²z/∂x² = 1/(x+y)，∂²z/∂y² = -x/(x+y)²，∂²z/∂x∂y = x/(x+y)²"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0303",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0256",
+      "answer": "(1) 81π  \n(2) \\( \\frac{3}{2}a^4 - 3a^3 \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0107",
+      "answer": "(x² + y²)"
+    },
+    {
+      "pid": "无穷级数_004",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0304",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0259",
+      "answer": "0, 0, 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0258",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0904",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0905",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0257",
+      "answer": "(1) \\(\\frac{12\\pi R^5}{5}\\)  \n(2) \\(\\frac{3\\pi}{2}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0260",
+      "answer": "-π"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0115",
+      "answer": "-1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0109",
+      "answer": "(1) 1；(2) 1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0906",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0318",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0262",
+      "answer": "-4π"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0907",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0908",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0264",
+      "answer": "-8π"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0124",
+      "answer": "5"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0261",
+      "answer": "(1) 0  \n(2) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0123",
+      "answer": "B"
+    },
+    {
+      "pid": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式_019",
+      "answer": "当 \\(k > 2\\) 时，有1个实根；当 \\(k = 2\\) 时，有2个实根（其中一个是重根）；当 \\(-2 < k < 2\\) 时，有3个实根；当 \\(k = -2\\) 时，有2个实根（其中一个是重根）；当 \\(k < -2\\) 时，有1个实根。"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0263",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0315",
+      "answer": "存在一点ξ∈(α,β)，使得f''(ξ)=2a。"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0253",
+      "answer": "(1) \\(\\iint_S (P \\cos\\alpha + Q \\cos\\beta + R \\cos\\gamma) dS\\)，其中 \\(\\cos\\alpha = \\frac{3}{\\sqrt{22}}, \\cos\\beta = \\frac{2}{\\sqrt{22}}, \\cos\\gamma = \\frac{2\\sqrt{3}}{\\sqrt{22}}\\)\n\n(2) \\(\\iint_S (P \\cos\\alpha + Q \\cos\\beta + R \\cos\\gamma) dS\\)，其中 \\(\\cos\\alpha = \\frac{-x}{\\sqrt{1+4x^2+4y^2}}, \\cos\\beta = \\frac{-y}{\\sqrt{1+4x^2+4y^2}}, \\cos\\gamma = \\frac{1}{\\sqrt{1+4x^2+4y^2}}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0114",
+      "answer": "(1) 1  \n(2) \\(\\frac{dx}{dz} = \\frac{y - z}{x - y}\\), \\(\\frac{dy}{dz} = \\frac{z - x}{x - y}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0110",
+      "answer": "(1) ∂z/∂x = (2yz - 1)/(1 - 2xy)，∂z/∂y = (2xz - 2)/(1 - 2xy)  \n(2) ∂y/∂x = (3yz - e^x)/(e^y - 3xz)  \n(3) z_y(0,0) = 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0118",
+      "answer": "du = f_x dx + f_y dy + f_z dz，其中 dz = (e^x (1+x) dx - e^y (1+y) dy) / (e^z (1+z))。"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0924",
+      "answer": "(1) \\( a_n = n! \\)  \n(2) \\( \\frac{\\pi^2}{6} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0265",
+      "answer": "a^2 k - a k^2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0322",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0319",
+      "answer": "k ∈ (0, 1/3)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0317",
+      "answer": "(1) 存在唯一的 \\(x_n \\in (0,1)\\) 使得 \\(f(x_n) = \\frac{M}{n}\\)  \n(2) \\(\\lim_{n \\to \\infty} x_n\\) 存在，且 \\(\\lim_{n \\to \\infty} f(x_n) = M\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0267",
+      "answer": "π"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0926",
+      "answer": "(1) \\( f(x) = e^{-x} \\cos 2x \\)  \n(2) \\( \\sum_{n=1}^{\\infty} a_n = \\frac{1}{2} \\)"
+    },
+    {
+      "pid": "多元函数积分学的预备知识_003",
+      "answer": "2x + 2y + z - 6 = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0132",
+      "answer": "(1, 1, 1)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0131",
+      "answer": "切平面方程：\\(4x + 2y - z - 3 = 0\\)；法线方程：\\(\\frac{x-1}{4} = \\frac{y-1}{2} = \\frac{z-3}{-1}\\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0323",
+      "answer": "a^2 < ab < b^2"
+    },
+    {
+      "pid": "一元函数微分学的应用(三)物理应用_001",
+      "answer": "30"
+    },
+    {
+      "pid": "多元函数积分学的预备知识_009",
+      "answer": "2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0937",
+      "answer": "收敛域为 \\((-3, 1)\\)，和函数 \\(S(x) = \\frac{1}{2} \\ln\\frac{3-x}{1+x} - \\frac{x+1}{2}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0266",
+      "answer": "(1) rotA = i + j + k  \n(2) 环流量 = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0078",
+      "answer": "(1) ∂z/∂x = y e^(xy) + y x^2? 题目可能有误，按常见形式：若 z = e^(xy) + y x^2，则 ∂z/∂x = y e^(xy) + 2xy，∂z/∂y = x e^(xy) + x^2  \n(2) ∂z/∂x = e sin x cos y? 应为 z = e^(sin x) cos y，则 ∂z/∂x = e^(sin x) cos x cos y，∂z/∂y = -e^(sin x) sin y  \n(3) z = (1+xy)^y，∂z/∂x = y^2 (1+xy)^(y-1)，∂z/∂y = (1+xy)^y [ln(1+xy) + xy/(1+xy)]  \n(4) u = x^(y^z)，∂u/∂x = y^z x^(y^z -1)，∂u/∂y = x^(y^z) z y^(z-1) ln x，∂u/∂z = x^(y^z) y^"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0268",
+      "answer": "-16π"
+    },
+    {
+      "pid": "一元函数微分学的应用(三)物理应用_003",
+      "answer": "1/2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0925",
+      "answer": "(1) \\( a_n = \\frac{(-1)^n n!}{(n+1)^3} \\)  \n(2) \\( \\sum_{n=0}^{\\infty} \\frac{a_n}{n!} = \\frac{\\pi^2}{6} \\)"
+    },
+    {
+      "pid": "多元函数积分学的预备知识_010",
+      "answer": "-2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0133",
+      "answer": "x - y + 2z = ±√(11/2)"
+    },
+    {
+      "pid": "一元函数微分学的应用(三)物理应用_004",
+      "answer": "B. 10cm,5cm"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0136",
+      "answer": "-4√5/5"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0270",
+      "answer": "-π"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0269",
+      "answer": "\\(4\\pi R^{6}\\)"
+    },
+    {
+      "pid": "多元函数积分学的预备知识_011",
+      "answer": "a = 2, b = 1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0331",
+      "answer": "5√10/2 cm/s"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0272",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0333",
+      "answer": "(1) x=3  \n(2) 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0134",
+      "answer": "切线方程：\\(\\frac{x-1}{-1} = \\frac{y-1}{-1} = \\frac{z-1}{1}\\)，法平面方程：\\(x + y - z - 1 = 0\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0138",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0273",
+      "answer": "-2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0966",
+      "answer": "D. 2e^{-x^2+1}"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0275",
+      "answer": "4πa⁴"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0970",
+      "answer": "\\(\\frac{1}{2}\\)"
+    },
+    {
+      "pid": "多元函数积分学的预备知识_012",
+      "answer": "(1) \\(\\sqrt{ (1+y)^2 + (2+x)^2 }\\)  \n(2) \\(\\sqrt{10}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0135",
+      "answer": "(1) l = (1/√2, 1/√2)，方向导数为 √2/2  \n(2) gradf(0,0,0) = (3, -2, -6)，gradf(1,1,1) = (6, 4, 0)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0137",
+      "answer": "(1) ∇f = (sin yz, xz cos yz, xy cos yz)  \n(2) 方向导数为 3/√6"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0362",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0350",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0143",
+      "answer": "C B A"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0332",
+      "answer": "球的表面积增长速度：\\( 2000\\pi \\ \\text{cm}^2/\\text{s} \\)；球的体积增长速度：\\( 5000\\pi \\ \\text{cm}^3/\\text{s} \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0389",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0972",
+      "answer": "x+y+z=3"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0973",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0277",
+      "answer": "-32π"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0372",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0975",
+      "answer": "5"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0271",
+      "answer": "divA = y² + x + xz, rotA = (0 - x)i + (0 - z)j + (y - 2y)k = -x i - z j - y k"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0147",
+      "answer": "极小值 -3，极大值 6"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0401",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0146",
+      "answer": "(1) a = 1, b = 1  \n(2) 极值点为 (1,3), 极值为 4, 它是极小值  \n(3) 驻点是 (1, -1)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0976",
+      "answer": "5"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0279",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0390",
+      "answer": "f(x) = 3x - 1 - x²"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0148",
+      "answer": "2√3/9 abc"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0391",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0977",
+      "answer": "B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0280",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0284",
+      "answer": "1"
+    },
+    {
+      "pid": "多元函数积分学_002",
+      "answer": "\\(\\frac{5}{2}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0149",
+      "answer": "最大值：3，最小值：-3"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_1002",
+      "answer": "1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0153",
+      "answer": "f(x) = x - 1, z = y + x - 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0282",
+      "answer": "u_n = 1/(n(n+1))，s = 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0150",
+      "answer": "(1) B  \n(2) A  \n(3) C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0151",
+      "answer": "(1) 极小值点  \n(2) 0  \n(3) -4"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0286",
+      "answer": "1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0288",
+      "answer": "1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0152",
+      "answer": "最大值 2，最小值 -2"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_1006",
+      "answer": "4π"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_1007",
+      "answer": "-πm³/2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0281",
+      "answer": "(1) 0  \n(2) 发散  \n(3) 发散  \n(4) \\(1 - \\frac{1}{2^n}\\)，\\(\\frac{2}{3}\\)"
+    },
+    {
+      "pid": "多元函数积分学_018",
+      "answer": "0"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0408",
+      "answer": "(1) \\( y = \\ln\\frac{1+x}{x} \\)，定义域为 \\( x > 0 \\)  \n(2) \\( f'(0) = 0 \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0481",
+      "answer": "-1/2 x^2 + 1/2 x^2 ln(1+e^x) - 1/2 Li_2(-e^x) + C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0496",
+      "answer": "4"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0157",
+      "answer": "∂²u/∂x∂y = 0"
+    },
+    {
+      "pid": "一元函数积分学的计算_004",
+      "answer": "\\( e^{2x} \\arctan(e^{x-1}) - e^{x-1} + \\arctan(e^{x-1}) + C \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0156",
+      "answer": "\\( \\frac{y}{1 - e^z} dx + \\frac{x}{1 - e^z} dy \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_1009",
+      "answer": "(1) f(x) = e^x - 1, g(x) = e^x  \n(2) 2e - 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0158",
+      "answer": "∂u/∂x = f₁ · 3x²z"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0292",
+      "answer": "-1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0493",
+      "answer": "\\(\\frac{x^{3}}{3} \\ln^n x - \\frac{n}{3} \\int x^{2} \\ln^{n-1} x \\, dx\\)"
+    },
+    {
+      "pid": "多元函数积分学_025",
+      "answer": "2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0291",
+      "answer": "(1) \\( s_n = 1 - \\frac{1}{(n+1)!} \\), \\( s = 1 \\)  \n(2) \\( u_n = \\arctan n - \\arctan(n-1) \\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0498",
+      "answer": "F(x) = 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0294",
+      "answer": "收敛；发散；收敛"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_1010",
+      "answer": "(1) \\(x^2 + y^2 - z^2 + 2z = 0\\) 或 \\(x^2 + y^2 - (z-1)^2 = -1\\)  \n(2) \\(-\\pi\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0293",
+      "answer": "(1) 条件收敛；(2) 收敛"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0497",
+      "answer": "f'(x) = 2x² - 2，最小值 f(1) = 4/3"
+    },
+    {
+      "pid": "一元函数积分学的应用(一)--几何应用_010",
+      "answer": "√2(e-1)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0160",
+      "answer": "切点坐标为 (1,1,1)，最小体积值为 \\(\\frac{9\\sqrt{3}}{2}\\)。"
+    },
+    {
+      "pid": "多元函数积分学_020",
+      "answer": "f(x,y) = x^3 + 3x^2y - 3x^2，极小值 -1"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0532",
+      "answer": "2"
+    },
+    {
+      "pid": "多元函数积分学_028",
+      "answer": "\\( \\frac{4\\pi}{15} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0159",
+      "answer": "(1) 极小值 1  \n(2) 极小值 5.5  \n(3) 球面与平面相切"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0162",
+      "answer": "(1) D  \n(2) C  \n(3) B  \n(4) B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0163",
+      "answer": "D"
+    },
+    {
+      "pid": "一元函数积分学的应用(一)--几何应用_013",
+      "answer": "2π"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0165",
+      "answer": "a"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0506",
+      "answer": "(1) \\( y = \\frac{1}{\\sqrt{x^3 - 3x + 3}} \\)  \n(2) \\( \\frac{\\pi}{2\\sqrt{3}} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0295",
+      "answer": "(1) 收敛  \n(2) 收敛  \n(3) 收敛  \n(4) 收敛  \n(5) 发散  \n(6) 发散"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0534",
+      "answer": "\\(\\frac{\\sqrt{2}\\pi}{30}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0298",
+      "answer": "(1) D  \n(2) C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0161",
+      "answer": "(1) 连续  \n(2) ∂f/∂x=0, ∂f/∂y=0，不可微  \n(3) 切平面方程：z=0；法线方程：x=0, y=0  \n三、证明题：由链式法则及条件可证。"
+    },
+    {
+      "pid": "未知_002",
+      "answer": "(1) 8  \n(2) -12  \n(3) -3/2  \n(4) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0169",
+      "answer": "(B)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0297",
+      "answer": "(1) 条件收敛 (2) 条件收敛 (3) 发散 (4) 条件收敛 (5) 绝对收敛 (6) 条件收敛 (7) 条件收敛 (8) 发散"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0299",
+      "answer": "(1) 条件收敛；(2) 绝对收敛"
+    },
+    {
+      "pid": "未知_001",
+      "answer": "(1) D  \n(2) D  \n(3) C  \n(4) B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0301",
+      "answer": "( -1, 1 )"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0164",
+      "answer": "(1) ≥  \n(2) 36π ≤ I ≤ 100π  \n(3) 2S  \n(4) 2π/3"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0300",
+      "answer": "条件收敛"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0171",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0004",
+      "answer": "(1) B  \n(2) A  \n(3) C  \n(4) B  \n(5) D"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0539",
+      "answer": "1/(1-e^{-2})"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0535",
+      "answer": "(1) 1  \n(2) \\(\\frac{e^2 - 2e - 1}{2}\\pi\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0302",
+      "answer": "(-4, 0]"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0010",
+      "answer": "(1) D  \n(2) C  \n(3) B"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0005",
+      "answer": "(1) 2  \n(2) 2  \n(3) 4"
+    },
+    {
+      "pid": "未知_003",
+      "answer": "\\(\\frac{\\frac{a}{|a|} + \\frac{b}{|b|}}{\\left|\\frac{a}{|a|} + \\frac{b}{|b|}\\right|}\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0173",
+      "answer": "0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0307",
+      "answer": "B"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0603",
+      "answer": "A"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0012",
+      "answer": "p = (0, 4, -3) 或 p = (0, -4, 3)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0176",
+      "answer": "0"
+    },
+    {
+      "pid": "一元函数积分学的应用(二)--积分等式与积分不等式_008",
+      "answer": "C"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0303",
+      "answer": "(1) [-1,1)  \n(2) [2,4)  \n(3) [0,4]  \n(4) (-1/6, 1/6)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0537",
+      "answer": "(1) \\( V(a) = \\frac{\\pi}{15} \\cdot \\frac{a}{(1+a)^3} \\)  \n(2) \\( a = \\frac{1}{2} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0189",
+      "answer": "ò dθ ò f(r cosθ, r sinθ) r dr"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0606",
+      "answer": "C"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0598",
+      "answer": "(1) \\(\\frac{\\pi a^3}{2Q}\\)  \n(2) \\(\\frac{1}{3}\\pi\\rho g a^4\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0308",
+      "answer": "(1) (-1,1)  \n(2) (0,2)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0179",
+      "answer": "(1) 1/2  \n(2) 1/12  \n(3) -9/4  \n(4) 3π/2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0304",
+      "answer": "(1) \\(\\frac{1}{1+x}\\)，收敛域为 \\((-1,1]\\)  \n(2) \\(\\frac{2}{(1-x)^3}\\)，收敛域为 \\((-1,1)\\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0192",
+      "answer": "(1) 0  \n(2) \\(\\frac{5}{6} + \\frac{\\pi}{4}\\)"
+    },
+    {
+      "pid": "【A4基础强化合并】1000题数一高数篇_0599",
+      "answer": "(1) 0.2 m/min  \n(2) 0.5 J"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0016",
+      "answer": "2"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0312",
+      "answer": "(1) \\( x + \\frac{x^3}{3} \\)  \n(2) \\( \\sum_{n=0}^{\\infty} (-1)^n \\frac{x^{2n+1}}{2n+1} \\)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0015",
+      "answer": "(1) (2, 2√2, -2)  \n(2) -1  \n(3) 1"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0013",
+      "answer": "|M₁M₂| = √6，方向余弦为 (-1/√6, -2/√6, 1/√6)，方向角 α = arccos(-1/√6)，β = arccos(-2/√6)，γ = arccos(1/√6)"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0011",
+      "answer": "(1) -2  \n(2) (-12, -21, 12)  \n(3) (1/3, -2/3, -2/3)  \n(4) (-4, 2, -4)  \n(5) 3, ±(1/√2, 0, -1/√2)  \n(6) 3  \n(7) 5√3  \n(8) 0"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0197",
+      "answer": "(1) f(0,0,0)  \n(2) ∫_{-1}^{1} dx ∫_{-\\sqrt{1-x^2}}^{\\sqrt{1-x^2}} dy ∫_{x^2+y^2}^{1} f(x,y,z) dz；∫_{0}^{1} dz ∫_{-\\sqrt{z}}^{\\sqrt{z}} dy ∫_{-\\sqrt{z-y^2}}^{\\sqrt{z-y^2}} f(x,y,z) dx"
+    },
+    {
+      "pid": "Microsoft Word - 高等数学下册练习册_0313",
+      "answer": "(1) 展开式：\\(\\frac{1}{5}\\sum_{n=0}^{\\infty}\\left[\\frac{(-1)^n}{3^{n+1}} - \\frac{1}{2^{n+1}}\\right](x-1)^n\\)，成立区间：\\(|x-1|<2\\)  \n(2) 展开式：\\(\\ln 2 + \\sum_{n=1}^{\\infty}\\frac{(-1)^{n-1}}{n\\cdot 2^n}(x-2)^n\\)，成立区间：\\(0 < x \\leq 4\\)"
+    }
+  ],
+  "corrected": [],
+  "failed": []
+}
