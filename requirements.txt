@@ -1,0 +1,9 @@
+# 赛事提交依赖清单
+# 所有依赖必须在提交前写入 requirements.txt
+# 官方评测平台按此文件安装依赖
+
+# 平台 client 依赖（llm_client.py / main.py 使用）
+requests>=2.31.0
+
+# 符号计算引擎（可选，agent 会自动降级跳过）
+sympy>=1.12
