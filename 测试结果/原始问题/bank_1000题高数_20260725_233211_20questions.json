@@ -1,0 +1,20 @@
+[
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0117",
+    "question": "求极限：\\(\\lim_{n \\to \\infty} \\left( \\frac{1}{2} + \\frac{1}{6} + \\cdots + \\frac{1}{n(n+1)} \\right)\\)",
+    "domain": "数列极限",
+    "reference_answer": "1"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0641",
+    "question": "已知F(a,b) = ∫_{0}^{π/2} (a sin x - sin 2x + b)^2 cos x dx，则使得F(a,b)取得最小值的a,b分别为（ ）。",
+    "domain": "多元函数微分学",
+    "reference_answer": "a = 4/3, b = 2/3"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0770",
+    "question": "设D={(x,y)|0≤x≤2, 0≤y≤2}，计算二重积分∬_D |xy-1| dσ。",
+    "domain": "二重积分",
+    "reference_answer": "4ln2 - 1/2"
+  }
+]

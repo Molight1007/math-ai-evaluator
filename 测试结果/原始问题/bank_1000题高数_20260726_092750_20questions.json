@@ -1,0 +1,122 @@
+[
+  {
+    "id": "gen_05a1507e",
+    "question": "判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？",
+    "domain": "无穷级数",
+    "reference_answer": "绝对收敛，因为|(-1)^n/(n^2+1)| = 1/(n^2+1) ≤ 1/n^2，而∑1/n^2收敛。"
+  },
+  {
+    "id": "gen_51b9fa8e",
+    "question": "求极限：\\(\\lim\\limits_{x \\to 0} \\frac{\\int_0^x \\sin(t^2) \\, dt}{x^3}\\)。",
+    "domain": "函数极限与连续",
+    "reference_answer": "\\frac{1}{3}"
+  },
+  {
+    "id": "gen_58055bd6",
+    "question": "求极限：lim_{x→0} (1 - cos x) / (x^2)。",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_60b54d27",
+    "question": "求极限：lim_{x→0} (sin x - x)/x^3",
+    "domain": "函数极限与连续",
+    "reference_answer": "-1/6"
+  },
+  {
+    "id": "gen_81798c40",
+    "question": "求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_a2e1e013",
+    "question": "计算二重积分：∬_D (x^2 + y^2) dxdy，其中 D 是由 x^2 + y^2 = 1 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "π/2"
+  },
+  {
+    "id": "gen_b71259d7",
+    "question": "求函数f(x,y) = x^2 + y^2 - 2x + 4y + 1的极值。",
+    "domain": "多元函数微分学",
+    "reference_answer": "极小值为-4，在点(1,-2)处取得。"
+  },
+  {
+    "id": "gen_f1e7c567",
+    "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。",
+    "domain": "函数极限与连续",
+    "reference_answer": "$-\\frac{1}{6}$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0105",
+    "question": "设 \\(x_0 > 0\\)，\\(x_{n+1} = \\frac{1}{2} \\left( x_n + \\frac{a}{x_n} \\right)\\)（\\(n = 0, 1, 2, \\cdots\\)），且 \\(a > 0\\)。证明 \\(\\lim_{n \\to \\infty} x_n\\) 存在，并求此极限。",
+    "domain": "数列极限",
+    "reference_answer": "\\(\\sqrt{a}\\)"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0250",
+    "question": "已知函数 y = f(x) 对一切 x 满足 x f''(x) + 3x [f'(x)]^2 = 1 - e^{-x}。若 f'(x_0) = 0 (x_0 ≠ 0)，则（ ）。\nA. f(x_0) 是函数 f(x) 的极大值\nB. f(x_0) 是函数 f(x) 的极小值\nC. (x_0, f(x_0)) 是曲线 y = f(x) 的拐点\nD. f(x_0) 不是函数 f(x) 的极值，(x_0, f(x_0)) 也不是曲线 y = f(x) 的拐点",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "C"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0251",
+    "question": "设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) > 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调递增”是“(f(x) - f(a))/(g(x) - g(a)) 严格单调递增”的（ ）。\nA. 充分非必要条件\nB. 必要非充分条件\nC. 充分必要条件\nD. 既非充分又非必要条件",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "C"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0538",
+    "question": "设函数f(x)在[0,1]上连续，在(0,1)内可导，且满足xf'(x) = f(x) + x^2。已知曲线y = f(x)与x = 0, x = 1, y = 0所围成的图形S的面积为2。求f(x)的表达式，以及图形S绕x轴旋转一周所得旋转体的体积。",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": "f(x) = x^2 + 2x；体积V = 49π/15"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0780",
+    "question": "计算累次积分：∫_{0}^{1} x^2 dx ∫_{0}^{1} e^{-y^2} dy。",
+    "domain": "二重积分",
+    "reference_answer": "(1/3) * (√π/2) * erf(1) = (√π/6) * erf(1)，其中erf为误差函数。"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0912",
+    "question": "设数列 {a_n} 和 {b_n} 满足 e^{a_n} - e^{-a_n} = a_n (e^{b_n} + e^{-b_n})，其中 0 < a_n < 1，0 < b_n < 1，n = 1, 2, ...，且级数 ∑_{n=1}^{∞} b_n 收敛。证明：(1) a_n > b_n，n = 1, 2, ...；(2) 级数 ∑_{n=1}^{∞} (b_n - a_n) 收敛。",
+    "domain": "无穷级数",
+    "reference_answer": "证明：(1) 由已知等式，利用双曲函数或构造函数可证 a_n > b_n。(2) 利用 (1) 的结论和比较判别法证明 ∑(b_n - a_n) 收敛。"
+  },
+  {
+    "id": "一元函数积分学的计算_033",
+    "question": "计算不定积分∫ x arcsin(1-x) dx = _____。",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "-(1/2)(1-x)² arcsin(1-x) + (1/4) arcsin(1-x) + (1/4)(1-x)√(2x-x²) + C"
+  },
+  {
+    "id": "多元函数微分学_029",
+    "question": "求曲线C:{{ 上距离xOy平面最远和最近的点的坐标. x+y+3z=5",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_002",
+    "question": "已知曲线上任一点的切线在 y 轴上的截距与法线在 x 轴上的截距之比为 3:1，求该曲线方程。",
+    "domain": "微分方程",
+    "reference_answer": "设曲线为 y=y(x)，点 (x,y) 处切线方程为 Y-y=y'(X-x)，在 y 轴上的截距为 y - x y'。法线方程为 Y-y = -(1/y')(X-x)，在 x 轴上的截距为 x + y y'。由条件得 (y - x y') : (x + y y') = 3:1，即 y - x y' = 3(x + y y')，整理得 y - x y' = 3x + 3y y'，即 (y - 3x) = y'(x + 3y)。解此微分方程得通解为 x^2 + y^2 = C (C为常数)。"
+  },
+  {
+    "id": "微分方程_026",
+    "question": "微分方程y''-3y'+2y=xe^x的通解为_____",
+    "domain": "微分方程",
+    "reference_answer": "y=C1e^x+C2e^{2x}+(x^2/2 - x)e^x"
+  },
+  {
+    "id": "数列极限_010",
+    "question": "设a_n>0，lim b_n=0，且e^{a_n}+a_n=e^{b_n}，n=1,2,…，求lim a_n。",
+    "domain": "数列极限",
+    "reference_answer": "0"
+  },
+  {
+    "id": "无穷级数_004",
+    "question": "以下结论正确的是( )。选项：A. 若∑a_n^2收敛，则∑a_n^3收敛 B. 若∑a_n^2发散，则∑a_n^3发散 C. 若∑a_n^3收敛，则∑a_n^4收敛 D. 若∑a_n^3发散，则∑a_n^4发散",
+    "domain": "无穷级数",
+    "reference_answer": "A"
+  }
+]

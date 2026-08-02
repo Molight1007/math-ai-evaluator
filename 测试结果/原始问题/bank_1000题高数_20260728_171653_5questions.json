@@ -1,0 +1,44 @@
+[
+  {
+    "id": "gen_2ee0ac2f",
+    "question": "求极限：$\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。",
+    "domain": "函数极限与连续",
+    "reference_answer": "$-\\frac{1}{6}$"
+  },
+  {
+    "id": "gen_c2c19be5",
+    "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。",
+    "domain": "函数极限与连续",
+    "reference_answer": "$-\\frac{1}{6}$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0970",
+    "question": "求抛物面Σ: z=x^2+y^2上的点到空间图形Ω: x^2+y^2≤z≤1的形心的最短距离。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "最短距离为1/2"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0970",
+    "question": "求抛物面∑: z=x^2+y^2上的点到空间图形Ω: x^2+y^2≤z≤1的形心的最短距离。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_005",
+    "question": "平面无界区域 $D = \\left\\{ (x, y) \\mid |y| \\leq \\frac{1}{1 + x^2} \\right\\}$ 的面积为_____。",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": "$\\pi$"
+  },
+  {
+    "id": "微分方程_002",
+    "question": "已知曲线上任一点的切线在 y 轴上的截距与法线在 x 轴上的截距之比为 3:1，求该曲线方程。",
+    "domain": "微分方程",
+    "reference_answer": "设曲线为 y=y(x)，点 (x,y) 处切线方程为 Y-y=y'(X-x)，在 y 轴上的截距为 y - x y'。法线方程为 Y-y = -(1/y')(X-x)，在 x 轴上的截距为 x + y y'。由条件得 (y - x y') : (x + y y') = 3:1，即 y - x y' = 3(x + y y')，整理得 y - x y' = 3x + 3y y'，即 (y - 3x) = y'(x + 3y)。解此微分方程得通解为 x^2 + y^2 = C (C为常数)。"
+  },
+  {
+    "id": "微分方程_002",
+    "question": "已知曲线上任一点的切线在y轴上的截距与法线在x轴上的截距之比为3:1，求该曲线方程。",
+    "domain": "微分方程",
+    "reference_answer": "y^2=3x^2+C 或 x^2+3y^2=C（需根据初始条件确定）"
+  }
+]

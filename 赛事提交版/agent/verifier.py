@@ -79,6 +79,9 @@ class VerifierAgent(BaseAgent):
 
     def _is_correct_vote(self, text: str) -> bool:
         """解析 VERDICT 行。规则：先判拒绝词，再判接受词（BUG-2 修复）。"""
+        if text is None:
+            logger.warning("_is_correct_vote 收到 None 输入，默认判错")
+            return False
         text_upper = text.upper()
 
         # 1) 拒绝词优先——规避"不正确"包含"正确"的误判
@@ -386,22 +389,9 @@ class VerifierAgent(BaseAgent):
         cluster_data = self._cluster_candidates(candidates, all_verdicts) if use_clustering else []
         best_cluster = cluster_data[0] if cluster_data else None
 
-        # 自纠错反馈：从最差候选中提取（选置信度最低的）
-        worst_cand = None
-        if candidates:
-            # 找 0 票候选
-            for i, vds in enumerate(all_verdicts):
-                correct_count = sum(1 for v in vds if v.correct)
-                if correct_count == 0:
-                    worst_cand = candidates[i]
-                    break
-            if worst_cand is None:
-                worst_cand = candidates[0]
-        feedback = self._extract_feedback(ctx, problem, worst_cand) if worst_cand else ""
-
         return {
             "cluster_data": cluster_data,
-            "feedback": feedback,
+            "feedback": "",  # 已移除反馈提取（不再需要回环修正）
             "verdicts": all_verdicts,
             "best_cluster": best_cluster,
         }

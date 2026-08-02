@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .lean-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+        .lean-badge.lean-pass { background: #D1FAE5; color: #065F46; }
+        .lean-badge.lean-logic-err { background: #FEE2E2; color: #991B1B; }
+        .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
+        .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
+        .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
+        .section-heading.lean { color: #059669; border-color: #A7F3D0; }
+        .section-heading .icon-dot.lean { background: #10B981; }
+        .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .lean-status.pass { background: #D1FAE5; color: #065F46; }
+        .lean-status.fail { background: #FEE2E2; color: #991B1B; }
+        .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+        .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
+        .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+        .lean-insight .insight-title { font-size: 13px; font-weight: 700; color: #92400E; margin-bottom: 8px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-07-28 16:51:30</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">12</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">6</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value red">50.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.82</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">144.46s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">145.39s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">无穷级数</span>
+            <span class="domain-acc">50.0%</span>
+            <span class="domain-count">(2/4)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">函数极限与连续</span>
+            <span class="domain-acc">75.0%</span>
+            <span class="domain-count">(3/4)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的概念与性质</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">多元函数微分学</span>
+            <span class="domain-acc">33.33%</span>
+            <span class="domain-count">(1/3)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Lean</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_05a1507e&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？&quot;, &quot;reference_answer&quot;: &quot;绝对收敛，因为|(-1)^n/(n^2+1)| = 1/(n^2+1) ≤ 1/n^2，而∑1/n^2收敛。&quot;, &quot;intern_answer&quot;: &quot;该级数绝对收敛。&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 所有候选验证均失败，停止调控\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Orchestrator/control] 所有候选验证投票均为 0，触发兜底直接求解\n[Solver/direct_solve] 兜底直接求解失败\n[Orchestrator/finalize] 兜底也失败，使用最佳候选答案: 该级数绝对收敛。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;级数绝对收敛，因为绝对值级数∑1/(n^2+1)收敛。答案正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;绝对收敛&quot;, &quot;inference_tokens&quot;: 3122, &quot;judge_tokens&quot;: 2078, &quot;inference_latency&quot;: 57.21, &quot;judge_latency&quot;: 458.84, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_05a1507e</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？...</td>
+            <td>该级数绝对收敛。</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>57.21s</td>
+            <td>458.84s</td>
+            <td>5200</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_726846a3&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;无法求解&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 所有候选验证均失败，停止调控\n[Orchestrator/complete] 答案完整性检查通过（LLM确认完整）\n[Orchestrator/control] 所有候选验证投票均为 0，触发兜底直接求解\n[Solver/direct_solve] 兜底直接求解失败\n[Formatter/finalize] 最终答案: 无法求解 (置信度: 0.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#2: 置信度 0.00（0/0 票判定正确）\n候选#1: 置信度 0.00（0/0 票判定正确）\n候选#0: 置信度 0.00（0/0 票判定正确）\n候选#3: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;极限为1/2，模型回答“无法求解”，未能给出正确答案。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;1/2&quot;, &quot;inference_tokens&quot;: 200, &quot;judge_tokens&quot;: 2078, &quot;inference_latency&quot;: 27.61, &quot;judge_latency&quot;: 458.84, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_726846a3&quot;, &quot;verified&quot;: false, &quot;lean_available&quot;: false, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 0, &quot;conversion_latency&quot;: 0.0, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_726846a3</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。...</td>
+            <td>无法求解</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td></td>
+            <td>27.61s</td>
+            <td>458.84s</td>
+            <td>2278</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_c2c19be5&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。&quot;, &quot;reference_answer&quot;: &quot;$-\\frac{1}{6}$&quot;, &quot;intern_answer&quot;: &quot;$\\boxed{-\\dfrac{1}{6}}$&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 高置信度 1.00 ≥ 0.8 (3/3 票)，提前退出（节省增强调用）\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: $\\boxed{-\\dfrac{1}{6}}$ (置信度: 1.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#2: 置信度 1.00（3/3 票判定正确）\n候选#1: 置信度 1.00（3/3 票判定正确）\n候选#0: 置信度 1.00（3/3 票判定正确）\n候选#3: 置信度 1.00（3/3 票判定正确）&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;极限值为-1/6，使用泰勒展开计算，答案正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;-1/6&quot;, &quot;inference_tokens&quot;: 22205, &quot;judge_tokens&quot;: 2078, &quot;inference_latency&quot;: 99.74, &quot;judge_latency&quot;: 458.84, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_c2c19be5</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限 $\lim_{x \to 0} \frac{\sin x - x}{x^3}$。...</td>
+            <td>$\boxed{-\dfrac{1}{6}}$</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>99.74s</td>
+            <td>458.84s</td>
+            <td>24283</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0917&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;若数项级数 ∑_{n=1}^{∞} a_n 条件收敛，则幂级数 ∑_{n=1}^{∞} n a_n (x+2)^n 在 x = -2 处( )。A. 绝对收敛 B. 条件收敛 C. 发散 D. 敛散性不能确定&quot;, &quot;reference_answer&quot;: &quot;A. 绝对收敛&quot;, &quot;intern_answer&quot;: &quot;嗯，我现在要解决这个题目：如果数项级数∑_{n=1}^∞ a_n 条件收敛，那么幂级数∑_{n=1}^∞ n a_n (x+2)^n 在x = -2处的收敛性如何？选项是绝对收敛、条件收敛、发散、或者敛散性不能确定。我需要仔细分析一下。\n\n首先，题目给出的是数项级数∑a_n条件收敛，也就是说这个级数本身是收敛的，但不是绝对收敛的。接下来，题目问的是对应的幂级数在x=-2处的收敛情况。幂级数的一般形式是∑n a_n (x+2)^n，当x=-2时，代入进去的话，(x+2)就变成了0，所以每一项都是n a_n * 0^n。不过这里需要注意，当n从1开始的时候，0^n在n≥1时都是0，所以当x=-2时，这个幂级数的每一项都是0，对吗？\n\n不过，这可能有问题，因为当x=-2时，(x+2)=0，所以每一项都是n a_n * 0^n。对于n≥1来说，0^n都是0，所以整个级数在x=-2处的和应该是0+0+0+…，也就是0，对吗？这样的话，这个级数在x=-2处应该是绝对收敛的，因为所有项都是0，绝对值之和当然也是0，收敛。不过这样的话选项应该是A选项绝对收敛？\n\n不过，可能我哪里错了？因为题目给出的选项中有一个选项是条件收敛，可能我的分析有问题？\n\n让我再仔细想想。幂级数∑n a_n (x+2)^n在x=-2处的展开点其实就是幂级数的中心在x=-2处，所以当x=-2时，这个级数就变成了∑n a_n * 0^n。这时候，每一项都是n a_n乘以0的n次方。对于n≥1来说，0的n次方都是0，所以每一项都是0，所以整个级数的和就是0，对吗？\n\n这样的话，这个级数在x=-2处的收敛性应该是绝对收敛的，因为所有项都是0，绝对值之和也是0，所以绝对收敛。所以答案应该是选项A？\n\n不过，可能我的理解有问题吗？题目中的幂级数是∑n a_n (x+2)^n，当x=-2时，确实每一项都是0，所以不管a_n是什么，这个级数都是收敛的，对吗？\n\n不过题目中给出的条件是∑a_n条件收敛，这可能和幂级数在其他点的收敛性有关，但这里的问题只是在x=-2处的情况，所以可能这个条件只是用来迷惑的？\n\n或者，可能我的分析有问题？\n\n让我再考虑另一种可能性：当x=-2时，幂级数变为∑n a_n * 0^n，但这里可能存在一个问题，就是当n=0时，0^0是没有定义的，但题目中的级数是从n=1开始的，所以n≥1，所以0^n都是0，没问题。所以每一项都是0，所以级数的和是0，绝对收敛。\n\n不过，可能题目中的幂级数是否在x=-2处有定义？或者说，是否存在某些情况下，虽然每一项都是0，但可能因为系数的问题导致发散？\n\n不过，显然不是的，因为所有项都是0的话，不管系数是多少，都是0，所以级数的和就是0，绝对收敛。所以答案应该是选项A？\n\n不过，可能我哪里没考虑到？\n\n或者题目是否存在其他问题？\n\n比如，可能题目中的幂级数在x=-2处的收敛性是否需要考虑其他因素？\n\n比如，虽然当x=-2时，级数变为∑n a_n * 0^n，但可能这里的0^n在n趋近于无穷时的行为？\n\n不过，对于每个固定的n，当x=-2时，每一项都是0，所以整个级数的和就是0，所以无论a_n如何，这个级数都是绝对收敛的。\n\n不过题目中给出的条件是∑a_n条件收敛，这可能和幂级数在其他点的收敛半径有关，但这里的问题只是在x=-2处的情况，所以可能这个条件只是用来干扰的？\n\n或者可能我的分析有问题？\n\n让我再仔细看一下题目：\n\n题目是说，如果数项级数∑_{n=1}^∞ a_n 条件收敛，那么幂级数∑_{n=1}^∞ n a_n (x+2)^n 在x=-2处的收敛性如何？\n\n根据我的分析，当x=-2时，幂级数变为∑_{n=1}^∞ n a_n * 0^n = ∑_{n=1}^∞ 0 = 0，所以这个级数绝对收敛，对吗？\n\n所以答案应该是选项A，绝对收敛？\n\n不过，可能我哪里错了？\n\n或者题目是否存在其他陷阱？\n\n比如，是否有可能当x=-2时，虽然每一项都是0，但幂级数的收敛半径的问题？\n\n不过，幂级数在其中心处（即x=-2）的收敛性总是绝对收敛的，因为代入x=-2后，所有项都是0，所以不管系数如何，都是收敛的。所以不管原来的∑a_n是否收敛，幂级数在中心点都是绝对收敛的。\n\n所以可能这个题目的条件∑a_n条件收敛其实是无关的，只是用来混淆的？\n\n如果是这样的话，答案应该是选项A，绝对收敛。\n\n不过，可能我的这个结论有问题吗？\n\n让我再考虑另一种可能性：是否存在某些情况下，虽然x=-2是幂级数的中心，但系数n a_n可能导致在x=-2处发散？\n\n不过，当x=-2时，(x+2)=0，所以每一项都是n a_n * 0^n = 0，不管n a_n有多大，乘以0之后都是0，所以级数的和就是0，绝对收敛。\n\n所以不管a_n是什么，只要x=-2，这个幂级数都是绝对收敛的。所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我的分析有问题？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里没考虑到？\n\n比如，题目中的幂级数是否在x=-2处有定义？\n\n一般来说，幂级数在其中心点x=x0处总是收敛的，因为代入x=x0后，所有项都是0，除了可能的常数项，但这里的级数是从n=1开始的，所以没有常数项，所以所有项都是0，所以收敛。\n\n所以，不管系数如何，幂级数在中心点都是绝对收敛的。所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n再举个例子，比如假设a_n = (-1)^n / n，这样∑a_n 是条件收敛的，那么对应的幂级数是∑n * (-1)^n / n * (x+2)^n = ∑ (-1)^n (x+2)^n。这时候在x=-2处，代入的话，得到的是∑ (-1)^n * 0^n = 0，所以还是绝对收敛。\n\n或者另一个例子，如果a_n是某个条件收敛的级数，比如∑ (-1)^n / log(n)，那么对应的幂级数在x=-2处仍然是所有项为0，所以绝对收敛。\n\n看来不管a_n如何，只要幂级数在x=-2处，都是绝对收敛的。所以答案应该是选项A。\n\n不过，可能我哪里错了？\n\n或者题目中的幂级数是否应该是∑a_n (x+2)^n，而不是∑n a_n (x+2)^n？\n\n如果是的话，那在x=-2处，级数变为∑a_n * 0^n，同样也是0，绝对收敛。不过题目里确实是n a_n乘以(x+2)^n。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下幂级数的性质：幂级数∑c_n (x - x0)^n 在x=x0处的收敛性如何？\n\n答案是，当x=x0时，所有项都是0，除了可能的c_0项，但这里的级数是从n=1开始的，所以所有项都是0，所以收敛到0，绝对收敛。\n\n所以不管系数c_n是什么，幂级数在中心点x=x0处都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些 pathological 的情况？\n\n比如，如果a_n增长得非常快，比如a_n = (-1)^n n!，那么∑a_n 是发散的，但题目中给出的是∑a_n条件收敛，所以a_n必须满足当n趋向无穷时，a_n趋向于0，因为级数收敛的必要条件是通项趋向于0。\n\n所以，既然∑a_n收敛，那么a_n→0当n→∞。所以n a_n的极限呢？\n\n如果a_n ~ 1/n的话，那么n a_n ~ 1，所以n a_n可能趋向于某个常数或者发散到无穷大，但题目中∑a_n是条件收敛的，所以a_n必须趋向于0，但n a_n可能趋向于0或者某个常数或者无穷大？\n\n比如，如果a_n = (-1)^n / n，那么n a_n = (-1)^n，这时候n a_n的绝对值是1，不趋向于0，所以∑n a_n (x+2)^n在x=-2处虽然代入后是0，但可能在其他点的情况不同，不过题目只问x=-2处的情况。\n\n不过，不管n a_n的极限如何，当x=-2时，每一项都是n a_n * 0^n = 0，所以级数的和是0，绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前哪里有问题？\n\n或者可能题目中的选项有误？\n\n或者可能我的分析有问题？\n\n再仔细看一下题目：\n\n题目是说，数项级数∑a_n条件收敛，那么幂级数∑n a_n (x+2)^n在x=-2处的收敛性如何？\n\n根据分析，当x=-2时，幂级数变为∑n a_n * 0^n = 0，所以绝对收敛，对吗？\n\n所以选项A正确。\n\n不过，可能我之前混淆了幂级数在中心处的收敛性？\n\n是的，幂级数在其中心点x=x0处的收敛性总是绝对收敛的，因为所有项都是0，所以不管系数如何，都是收敛的。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者可能题目有错别字？\n\n或者可能我的分析有问题？\n\n综上所述，我认为正确答案应该是选项A，绝对收敛。\n\n不过，可能我哪里错了？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前混淆了条件收敛和绝对收敛的概念？\n\n条件收敛是指级数收敛但不是绝对收敛，而绝对收敛是指绝对值级数收敛。\n\n但在这里，当x=-2时，级数的所有项都是0，所以绝对值级数也是0，所以绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的选项有问题，或者我哪里没考虑到？\n\n或者可能题目中的幂级数在x=-2处的收敛性需要考虑其他因素？\n\n比如，是否存在某些情况下，虽然每一项都是0，但可能因为级数的项数无限而导致某种发散？\n\n不过，数学上，无限多个0相加的结果还是0，所以这个级数的和存在且为0，所以是收敛的，而且绝对收敛。\n\n所以，我觉得正确答案应该是选项A，绝对收敛。\n\n不过，可能我之前学的有什么遗漏吗？\n\n再查一下相关定理：\n\n幂级数∑c_n (x - x0)^n 在x=x0处的收敛性：当x=x0时，所有项都是0，所以级数收敛于0，绝对收敛。\n\n所以不管系数c_n如何，幂级数在中心点都是绝对收敛的。\n\n所以这里的c_n是n a_n，所以当x=-2时，级数绝对收敛。\n\n所以答案应该是选项A。\n\n不过，可能题目中的条件∑a_n条件收敛是为了后面的问题，或者&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Orchestrator/error] 求解异常: NameError: name 're' is not defined&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;模型正确指出当x=-2时幂级数各项为0，从而级数绝对收敛，选择A正确。推理过程虽冗长但结论无误。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;A. 绝对收敛&quot;, &quot;inference_tokens&quot;: 81012, &quot;judge_tokens&quot;: 7432, &quot;inference_latency&quot;: 452.95, &quot;judge_latency&quot;: 29.18, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0917</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">若数项级数 ∑_{n=1}^{∞} a_n 条件收敛，则幂级数 ∑_{n=1}^{∞} n a_n (x+2)^n 在 x = -2 处( )。A. 绝对收敛 ...</td>
+            <td>嗯，我现在要解决这个题目：如果数项级数∑_{n=1}^∞ a_n 条件收敛，那么幂级数∑_{n=1}^∞ n a_n (</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.95</td>
+            <td></td>
+            <td></td>
+            <td>452.95s</td>
+            <td>29.18s</td>
+            <td>88444</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;一元函数积分学的概念与性质_025&quot;, &quot;domain&quot;: &quot;一元函数积分学的概念与性质&quot;, &quot;question&quot;: &quot;下列表达式中正确的是（ ）。\nA. ∫_π^{2π} |sin x| dx ≤ ∫_π^{2π} sin^2 x dx\nB. ∫_{-π}^{π} \\frac{x}{1+\\cos x} dx &lt; ∫_{-π}^{π} \\frac{\\sin x + 1}{1+x^4} dx\nC. 若f(x)连续，x∈[c,d]，且[a,b]⊂[c,d]，则∫_a^b f(x) dx ≤ ∫_c^d f(x) dx\nD. ∫_{-1}^1 f(|x|) dx = 2∫_0^1 f(|x|) dx，其中f(x)连续，x∈[-1,1]&quot;, &quot;reference_answer&quot;: &quot;D&quot;, &quot;intern_answer&quot;: &quot;分析选项D，利用偶函数性质，选项D正确。&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 高置信度 1.00 ≥ 0.8 (3/3 票)，提前退出（节省增强调用）\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: 分析选项D，利用偶函数性质，选项D正确。 (置信度: 1.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#1: 置信度 1.00（3/3 票判定正确）\n候选#3: 置信度 1.00（3/3 票判定正确）\n候选#2: 置信度 0.00（0/0 票判定正确）\n候选#0: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.99, &quot;judge_explanation&quot;: &quot;模型选择D错误。实际上D不成立，因为∫₋₁¹ f(|x|) dx = 2∫₀¹ f(x) dx，而非f(|x|)。正确选项为B。&quot;, &quot;error_type&quot;: &quot;logic_error&quot;, &quot;correct_answer_judge&quot;: &quot;B&quot;, &quot;inference_tokens&quot;: 42112, &quot;judge_tokens&quot;: 7432, &quot;inference_latency&quot;: 243.85, &quot;judge_latency&quot;: 29.18, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;一元函数积分学的概念与性质_025&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4998, &quot;conversion_latency&quot;: 64.65, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>一元函数积分学的概念与性质_025</td>
+            <td><span class="domain-tag">一元函数积分学的概念与性质</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">下列表达式中正确的是（ ）。
+A. ∫_π^{2π} |sin x| dx ≤ ∫_π^{2π} sin^2 x dx
+B. ∫_{-π}^{π} \frac{...</td>
+            <td>分析选项D，利用偶函数性质，选项D正确。</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.99</td>
+            <td><span class="error-type">logic_error</span></td>
+            <td></td>
+            <td>243.85s</td>
+            <td>29.18s</td>
+            <td>49544</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;函数极限与连续_003&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;设函数 $f(x) = \\begin{cases} 1-2x^2, &amp; x &lt; -1 \\\\ x^3, &amp; -1 \\leq x \\leq 2 \\\\ 12x-16, &amp; x &gt; 2 \\end{cases}$，写出 $f(x)$ 的反函数 $g(x)$ 的表达式。&quot;, &quot;reference_answer&quot;: &quot;分段求反函数：\n1. 当 $x &lt; -1$ 时，$y = 1-2x^2$，解得 $x = -\\sqrt{\\frac{1-y}{2}}$（取负号因为 $x&lt;-1$），此时 $y &lt; -1$。\n2. 当 $-1 \\leq x \\leq 2$ 时，$y = x^3$，解得 $x = \\sqrt[3]{y}$，此时 $-1 \\leq y \\leq 8$。\n3. 当 $x &gt; 2$ 时，$y = 12x-16$，解得 $x = \\frac{y+16}{12}$，此时 $y &gt; 8$。\n因此，反函数 $g(x) = \\begin{cases} -\\sqrt{\\frac{1-x}{2}}, &amp; x &lt; -1 \\\\ \\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\ \\frac{x+16}{12}, &amp; x &gt; 8 \\end{cases}$。&quot;, &quot;intern_answer&quot;: &quot;$$\n\\boxed{g(x) = \\begin{cases} \n-\\sqrt{\\dfrac{1 - x}{2}}, &amp; x &lt; -1 \\\\\n\\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\\n\\dfrac{x + 16}{12}, &amp; x &gt; 8 \n\\end{cases}}\n$$&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 高置信度 1.00 ≥ 0.8 (3/3 票)，提前退出（节省增强调用）\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: $$\n\\boxed{g(x) = \\begin{cases} \n-\\sqrt{\\dfrac{1 - x}{2}}, &amp; x &lt; -1 \\\\\n\\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\\n\\dfrac{x + 16}{12}, &amp; x &gt; 8 \n\\end{cases}}\n$$ (置信度: 1.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#3: 置信度 1.00（3/3 票判定正确）\n候选#1: 置信度 1.00（3/3 票判定正确）\n候选#0: 置信度 0.67（2/3 票判定正确）\n候选#2: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型正确求出分段反函数，定义域和表达式均与函数原始分段对应无误。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;g(x) = { -√((1-x)/2), x&lt;-1; ³√x, -1≤x≤8; (x+16)/12, x&gt;8 }&quot;, &quot;inference_tokens&quot;: 20714, &quot;judge_tokens&quot;: 7432, &quot;inference_latency&quot;: 111.46, &quot;judge_latency&quot;: 29.18, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>函数极限与连续_003</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 $f(x) = \begin{cases} 1-2x^2, &amp; x &lt; -1 \\ x^3, &amp; -1 \leq x \leq 2 \\ 12x-16,...</td>
+            <td>$$
+\boxed{g(x) = \begin{cases} 
+-\sqrt{\dfrac{1 - x}{2}}, &amp; </td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>111.46s</td>
+            <td>29.18s</td>
+            <td>28146</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;函数极限与连续_003&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;设函数 f(x) = { 1 - 2x^2, x &lt; -1; x^3, -1 ≤ x ≤ 2; 12x - 16, x &gt; 2 }，写出 f(x) 的反函数 g(x) 的表达式。&quot;, &quot;reference_answer&quot;: &quot;g(x) = { -√((1-x)/2), x &lt; -1; ∛x, -1 ≤ x ≤ 8; (x+16)/12, x &gt; 8 }&quot;, &quot;intern_answer&quot;: &quot;g(x) =  \n\\begin{cases}  \n-\\sqrt{\\dfrac{1 - x}{2}}, &amp; x &lt; -1 \\\\  \n\\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\  \n\\dfrac{x + 16}{12}, &amp; x &gt; 8  \n\\end{cases}&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 中置信度 0.67，追加候选并重验\n[Solver/solve] 生成 6 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: g(x) =  \n\\begin{cases}  \n-\\sqrt{\\dfrac{1 - x}{2}}, &amp; x &lt; -1 \\\\  \n\\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\  \n\\dfrac{x + 16}{12}, &amp; x &gt; 8  \n\\end{cases} (置信度: 0.67)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#0: 置信度 0.67（2/3 票判定正确）\n候选#2: 置信度 0.67（2/3 票判定正确）\n候选#1: 置信度 0.00（0/0 票判定正确）\n候选#3: 置信度 0.00（0/0 票判定正确）\n候选#4: 置信度 0.00（0/0 票判定正确）\n候选#5: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;反函数分段表达式正确，与推导一致。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;g(x) = \\begin{cases} -\\sqrt{\\dfrac{1 - x}{2}}, &amp; x &lt; -1 \\\\ \\sqrt[3]{x}, &amp; -1 \\leq x \\leq 8 \\\\ \\dfrac{x + 16}{12}, &amp; x &gt; 8 \\end{cases}&quot;, &quot;inference_tokens&quot;: 11968, &quot;judge_tokens&quot;: 7390, &quot;inference_latency&quot;: 118.59, &quot;judge_latency&quot;: 70.57, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>函数极限与连续_003</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 f(x) = { 1 - 2x^2, x &lt; -1; x^3, -1 ≤ x ≤ 2; 12x - 16, x &gt; 2 }，写出 f(x) 的反函数 g...</td>
+            <td>g(x) =  
+\begin{cases}  
+-\sqrt{\dfrac{1 - x}{2}}, &amp; x &lt; -1 </td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>118.59s</td>
+            <td>70.57s</td>
+            <td>19358</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数微分学_021&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;求函数 $f(x,y) = x^3 - 3xy - y^2 - y - 9$ 的极值。&quot;, &quot;reference_answer&quot;: &quot;极小值 $f(1,-2) = -12$，无极大值。&quot;, &quot;intern_answer&quot;: &quot;函数的极大值为 $\\boxed{-9}$。&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 高置信度 1.00 ≥ 0.8 (3/3 票)，提前退出（节省增强调用）\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: 函数的极大值为 $\\boxed{-9}$。 (置信度: 1.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#0: 置信度 1.00（3/3 票判定正确）\n候选#2: 置信度 0.00（0/0 票判定正确）\n候选#1: 置信度 0.00（0/0 票判定正确）\n候选#3: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;函数存在唯一极值点(-1,1)为极大值点，极大值为-9，无极小值，回答正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;-9&quot;, &quot;inference_tokens&quot;: 7095, &quot;judge_tokens&quot;: 7390, &quot;inference_latency&quot;: 98.73, &quot;judge_latency&quot;: 70.57, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数微分学_021</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求函数 $f(x,y) = x^3 - 3xy - y^2 - y - 9$ 的极值。...</td>
+            <td>函数的极大值为 $\boxed{-9}$。</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>98.73s</td>
+            <td>70.57s</td>
+            <td>14485</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数微分学_034&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f'_y(x, 0) = 2x$，$f''_{yy}(x, y) = 4$。求 $f(x, y)$ 在约束条件 $x^2 + 2y^2 = 4$ 下的最大值与最小值。&quot;, &quot;reference_answer&quot;: &quot;最大值为 $8$，最小值为 $0$。&quot;, &quot;intern_answer&quot;: &quot;最大值为 $\\boxed{\\dfrac{16 + 8\\sqrt{2}}{3}}$，最小值为 $\\boxed{\\dfrac{16 - 8\\sqrt{2}}{3}}$。&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 所有候选验证均失败，停止调控\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Orchestrator/control] 所有候选验证投票均为 0，触发兜底直接求解\n[Solver/direct_solve] 兜底直接求解失败\n[Orchestrator/finalize] 兜底也失败，使用最佳候选答案: 最大值为 $\\boxed{\\dfrac{16 + 8\\sqrt{2}}{3}}$，最小值为 $\\boxed{\\dfrac{16 - 8\\sqrt{2}}{3}}$。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案与参考答案不符，参考答案为最大值8，最小值-4。&quot;, &quot;error_type&quot;: &quot;calculation_error&quot;, &quot;correct_answer_judge&quot;: &quot;最大值 8, 最小值 -4&quot;, &quot;inference_tokens&quot;: 8171, &quot;judge_tokens&quot;: 7390, &quot;inference_latency&quot;: 123.91, &quot;judge_latency&quot;: 70.57, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;多元函数微分学_034&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4997, &quot;conversion_latency&quot;: 58.68, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数微分学_034</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f'_y(x, 0) = 2x$，$f''_{yy}(x, y) = ...</td>
+            <td>最大值为 $\boxed{\dfrac{16 + 8\sqrt{2}}{3}}$，最小值为 $\boxed{\dfrac</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">calculation_error</span></td>
+            <td></td>
+            <td>123.91s</td>
+            <td>70.57s</td>
+            <td>15561</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数微分学_034&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f_y'(x, 0) = 2x$，$f_{yy}''(x, y) = 4$，求 $f(x, y)$ 在约束条件 $x^2 + 2y^2 = 4$ 下的最大值与最小值。&quot;, &quot;reference_answer&quot;: &quot;最大值 $f_{\\max} = 4$，最小值 $f_{\\min} = -4$（需具体计算验证）。&quot;, &quot;intern_answer&quot;: &quot;4 + 2\\sqrt{2&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 中置信度 0.67，追加候选并重验\n[Solver/solve] 生成 6 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/complete] 答案完整性检查通过（启发式）\n[Formatter/finalize] 最终答案: 4 + 2\\sqrt{2 (置信度: 1.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#4: 置信度 1.00（3/3 票判定正确）\n候选#3: 置信度 0.67（2/3 票判定正确）\n候选#0: 置信度 0.00（0/0 票判定正确）\n候选#2: 置信度 0.00（0/0 票判定正确）\n候选#1: 置信度 0.00（0/0 票判定正确）\n候选#5: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 16430, &quot;judge_tokens&quot;: 2675, &quot;inference_latency&quot;: 253.12, &quot;judge_latency&quot;: 22.97, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;多元函数微分学_034&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4936, &quot;conversion_latency&quot;: 66.61, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数微分学_034</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f_y'(x, 0) = 2x$，$f_{yy}''(x, y) = ...</td>
+            <td>4 + 2\sqrt{2</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>253.12s</td>
+            <td>22.97s</td>
+            <td>19105</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;无穷级数_010&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;级数 $\\sum_{n=1}^{\\infty} \\frac{e^{-nx}}{n^n}$ 的收敛域为_____。&quot;, &quot;reference_answer&quot;: &quot;$[0, +\\infty)$&quot;, &quot;intern_answer&quot;: &quot;无法求解&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 所有候选验证均失败，停止调控\n[Orchestrator/complete] 答案完整性检查通过（LLM确认完整）\n[Orchestrator/control] 所有候选验证投票均为 0，触发兜底直接求解\n[Solver/direct_solve] 兜底直接求解失败\n[Formatter/finalize] 最终答案: 无法求解 (置信度: 0.00)&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;候选#1: 置信度 0.00（0/0 票判定正确）\n候选#2: 置信度 0.00（0/0 票判定正确）\n候选#0: 置信度 0.00（0/0 票判定正确）\n候选#3: 置信度 0.00（0/0 票判定正确）&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 2675, &quot;inference_latency&quot;: 22.08, &quot;judge_latency&quot;: 22.97, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;无穷级数_010&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4862, &quot;conversion_latency&quot;: 79.5, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>无穷级数_010</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">级数 $\sum_{n=1}^{\infty} \frac{e^{-nx}}{n^n}$ 的收敛域为_____。...</td>
+            <td>无法求解</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>22.08s</td>
+            <td>22.97s</td>
+            <td>2675</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;无穷级数_033&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;∑_{n=1}^∞ 1 / ((n+2) * n!) = _____。&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;\\dfrac{1&quot;, &quot;intern_reasoning&quot;: &quot;[Classifier/classify] 分类失败，使用通用策略\n[Solver/solve] 生成 4 个候选解答 (蓝图=True, 领域=None)\n[Verifier/verify] 验证候选解答\n[Orchestrator/control] 所有候选验证均失败，停止调控\n[Orchestrator/complete] 答案完整性检查通过（LLM确认完整）\n[Orchestrator/control] 所有候选验证投票均为 0，触发兜底直接求解\n[Solver/direct_solve] 兜底直接求解成功 (attempt 1)\n[Orchestrator/finalize] 兜底直接求解结果: \\dfrac{1&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 4448, &quot;judge_tokens&quot;: 2675, &quot;inference_latency&quot;: 124.32, &quot;judge_latency&quot;: 22.97, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;无穷级数_033&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4862, &quot;conversion_latency&quot;: 55.84, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>无穷级数_033</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">∑_{n=1}^∞ 1 / ((n+2) * n!) = _____。...</td>
+            <td>\dfrac{1</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>124.32s</td>
+            <td>22.97s</td>
+            <td>7123</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += buildInfoSection(d);
+
+        // AI reasoning section
+        html += buildReasoningSection(d);
+
+        // Judge analysis section
+        html += buildJudgeSection(d);
+
+        // Lean verification section
+        html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
+
+        // Performance bar
+        html += buildPerfBar(d);
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function buildInfoSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        h += '<div class="info-grid">';
+        h += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.inference_error) h += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) h += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        h += '</div></div>';
+        return h;
+    }
+
+    function buildReasoningSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            var stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            h += stepsHtml + '</ul></div>';
+        }
+        if (d.intern_verification) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            h += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildJudgeSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            h += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            h += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildLeanSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.verified) return '';
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
+
+        if (lv.compile_passed === true) {
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
+        } else if (lv.compile_passed === false) {
+            var catLabel = lv.error_category || 'unknown';
+            var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};
+            h += '<div><span class="lean-status fail">&#10007; &#32534;&#35793;&#22833;&#36133; &mdash; ' + (catMap[catLabel] || catLabel) + '</span></div>';
+        } else {
+            h += '<div><span class="lean-status pending">&#8856; &#26410;&#32534;&#35793; &mdash; &#38477;&#32423;&#20026; LLM &#36923;&#36753;&#23457;&#26597;</span></div>';
+        }
+
+        if (lv.formalized_claim) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#24418;&#24335;&#21270;&#21629;&#39064;</div>';
+            h += '<div class="content-box" style="max-height:80px">' + esc(lv.formalized_claim) + '</div></div>';
+        }
+        if (lv.lean_code) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">Lean 4 &#20195;&#30721;</div>';
+            h += '<div class="content-box lean-code" style="max-height:200px">' + esc(lv.lean_code) + '</div></div>';
+        }
+        if (lv.compile_passed === false && lv.compile_output) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#32534;&#35793;&#38169;&#35823;&#36755;&#20986;</div>';
+            h += '<div class="content-box lean-error" style="max-height:150px">' + esc(lv.compile_output) + '</div></div>';
+        }
+
+        if (lv.analysis_performed) {
+            h += '<div class="lean-insight">';
+            h += '<div class="insight-title">&#128269; &#38169;&#35823;&#26681;&#22240;&#20998;&#26512;</div>';
+            if (lv.human_readable_error) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#38169;&#35823;&#35299;&#37322;&#65306;</span>' + esc(lv.human_readable_error) + '</div>';
+            }
+            if (lv.root_cause) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#26681;&#22240;&#65306;</span>' + esc(lv.root_cause) + '</div>';
+            }
+            if (lv.error_category === 'logic_error' || lv.error_category === 'both') {
+                if (lv.logic_flaw_location) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#36923;&#36753;&#26029;&#28857;&#65306;</span>' + esc(lv.logic_flaw_location) + '</div>';
+                }
+                if (lv.logic_flaw_why) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#38169;&#35823;&#21407;&#22240;&#65306;</span>' + esc(lv.logic_flaw_why) + '</div>';
+                }
+                if (lv.correct_approach) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#059669;">&#27491;&#30830;&#20570;&#27861;&#65306;</span>' + esc(lv.correct_approach) + '</div>';
+                }
+            }
+            if (lv.error_category === 'translation_error' || lv.error_category === 'both') {
+                if (lv.translation_issue) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#D97706;">&#36716;&#21270;&#38382;&#39064;&#65306;</span>' + esc(lv.translation_issue) + '</div>';
+                }
+            }
+            if (lv.fix_prompt_for_ai) {
+                h += '<div style="margin-top:12px;padding:10px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981;">';
+                h += '<div style="font-weight:700;color:#065F46;margin-bottom:4px;">&#128221; &#20462;&#27491;&#25552;&#31034;&#35789;&#65288;&#21487;&#21453;&#39304;&#32473;&#20070;&#29983;AI&#65289;</div>';
+                h += '<div style="font-size:12px;color:#166534;white-space:pre-wrap">' + esc(lv.fix_prompt_for_ai) + '</div></div>';
+            }
+            h += '</div>';
+        }
+
+        h += '<div style="margin-top:12px;font-size:11px;color:#94A3B8">';
+        h += '&#36716;&#21270;: ' + (lv.conversion_latency || 0).toFixed(1) + 's / ';
+        h += '&#32534;&#35793;: ' + (lv.compile_latency || 0).toFixed(1) + 's';
+        if (lv.analysis_latency) h += ' / &#20998;&#26512;: ' + (lv.analysis_latency || 0).toFixed(1) + 's';
+        h += ' | Token: ' + ((lv.conversion_tokens || 0) + (lv.analysis_tokens || 0));
+        if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
+        h += '</div>';
+        h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
+        return h;
+    }
+
+    function buildPerfBar(d) {
+        var h = '<div class="perf-bar">';
+        h += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        h += '</div>';
+        return h;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) { return _latexToReadable(inner.trim()); });
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '\u2202$1');
+        s = s.replace(/\\ln /g, 'ln '); s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin '); s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan '); s = s.replace(/\\cdot /g, '\u00b7');
+        s = s.replace(/\\times /g, '\u00d7'); s = s.replace(/\\div /g, '\u00f7');
+        s = s.replace(/\\pm /g, '\u00b1'); s = s.replace(/\\leq ?/g, '\u2264');
+        s = s.replace(/\\geq ?/g, '\u2265'); s = s.replace(/\\neq ?/g, '\u2260');
+        s = s.replace(/\\approx ?/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    function _latexToReadable(expr) {
+        var s = expr;
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)'); s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        s = s.replace(/\^(\w)/g, '^$1'); s = s.replace(/_(\w)/g, '_$1');
+        s = s.replace(/\\alpha/g, '\u03b1'); s = s.replace(/\\beta/g, '\u03b2');
+        s = s.replace(/\\gamma/g, '\u03b3'); s = s.replace(/\\delta/g, '\u03b4');
+        s = s.replace(/\\epsilon/g, '\u03b5'); s = s.replace(/\\theta/g, '\u03b8');
+        s = s.replace(/\\lambda/g, '\u03bb'); s = s.replace(/\\pi/g, '\u03c0');
+        s = s.replace(/\\sigma/g, '\u03c3'); s = s.replace(/\\phi/g, '\u03c6');
+        s = s.replace(/\\omega/g, '\u03c9'); s = s.replace(/\\rho/g, '\u03c1');
+        s = s.replace(/\\partial/g, '\u2202'); s = s.replace(/\\nabla/g, '\u2207');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln'); s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin'); s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan'); s = s.replace(/\\cdot/g, '\u00b7');
+        s = s.replace(/\\times/g, '\u00d7'); s = s.replace(/\\div/g, '\u00f7');
+        s = s.replace(/\\pm/g, '\u00b1'); s = s.replace(/\\leq/g, '\u2264');
+        s = s.replace(/\\geq/g, '\u2265'); s = s.replace(/\\neq/g, '\u2260');
+        s = s.replace(/\\approx/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '\u221a$1');
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', '); s = s.replace(/\\;[ ]*/g, '  ');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+
+</body>
+</html>

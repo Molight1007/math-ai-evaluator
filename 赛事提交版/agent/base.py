@@ -37,13 +37,16 @@ class Candidate:
 @dataclass
 class Verdict:
     """一个候选解答的验证结果"""
-    id: int
-    answer: str
-    reasoning: str
-    confidence: float           # 置信度 = 正确票数 / 总票数
-    correct_votes: int
-    total_votes: int
+    id: int = 0
+    answer: str = ""
+    reasoning: str = ""
+    confidence: float = 0.0     # 置信度 = 正确票数 / 总票数
+    correct_votes: int = 0
+    total_votes: int = 0
     feedback: str = ""          # 失败时由验证器提取的错误原因
+    correct: bool = False       # 本次投票结果是否正确（verifier 使用）
+    raw: str = ""               # 原始投票返回文本（verifier 使用）
+    score: dict | None = None   # 评分模式的详细分数（verifier 使用）
 
 
 @dataclass
@@ -167,7 +170,8 @@ class BaseAgent(ABC):
         if ctx.budget is not None:
             with ctx.budget._lock:
                 if not ctx.budget.can_spend(1):
-                    logger.debug("[%s] Budget exhausted, skip LLM call", self.name)
+                    logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用", 
+                                   self.name, ctx.budget.remaining)
                     return None
                 ctx.budget.spend(1)
                 reserved = True
@@ -177,13 +181,21 @@ class BaseAgent(ABC):
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            # 诊断：返回空值时记录
+            if not resp or not resp.strip():
+                logger.warning("[%s] LLM 返回空响应 (len=%d, type=%s)",
+                               self.name, len(resp) if resp else 0, type(resp).__name__)
             return resp
         except TypeError:
             # 平台 client 仅接受 positional args → 降级
+            logger.warning("[%s] TypeError in chat() kwargs, fallback to positional", self.name)
             try:
-                return self.client.chat(messages)
-            except Exception:
-                pass
+                resp2 = self.client.chat(messages)
+                if not resp2 or not resp2.strip():
+                    logger.warning("[%s] LLM fallback 返回空响应", self.name)
+                return resp2
+            except Exception as e2:
+                logger.warning("[%s] LLM fallback 也失败: %s", self.name, e2)
         except Exception as e:  # noqa: BLE001
             err_str = str(e)[:200]
             if any(kw in err_str.lower() for kw in ('context length', 'too long', 'max token')):
@@ -357,19 +369,42 @@ def detect_thinking_contamination(text: str) -> list[str]:
 
 
 # ============================================================
-# 模板泄露检测
+# 模板泄露检测（借鉴 math_agent-main 的成功经验）
+# Intern-S 模型常会输出 prompt 模板描述而非实际解答，这是致命问题。
 # ============================================================
 _TEMPLATE_LEAK_PATTERNS: list[re.Pattern] = [
-    re.compile(r"你是一位.{1,30}(?:专家|助手|模型)", re.IGNORECASE),
-    re.compile(r"请按照.{1,30}格式", re.IGNORECASE),
-    re.compile(r"system role.{0,20}content", re.IGNORECASE),
-    re.compile(r"SYSTEM_PROMPT|TEMPLATE_CONTENT", re.IGNORECASE),
+    re.compile(r'(?i)Strategy Planning\)?.*specific to this problem'),
+    re.compile(r'(?i)Key Insight\)?.*specific to this problem'),
+    re.compile(r'(?i)Heuristic Summary\)?.*specific to this problem'),
+    re.compile(r'(?i)<Specific mathematical conclusion'),
+    re.compile(r'(?i)<Final Answer only'),
+    re.compile(r'(?i)1-2 sentences analyzing core'),
+    re.compile(r'(?i)1 sentence highlighting the key'),
+    re.compile(r'(?i)1-2 sentences explaining broader'),
+    re.compile(r'(?i)必须针对本题具体内容.*不要泛泛而谈'),
+    re.compile(r'(?i)用1-2句话分析'),
+    re.compile(r'(?i)用1句话点出'),
+    re.compile(r'(?i)用1-2句话说明'),
+    re.compile(r'(?i)解题步骤（摘要）.*Make sure'),
+    re.compile(r'你是一位.{1,30}(?:专家|助手|模型)', re.IGNORECASE),
+    re.compile(r'请按照.{1,30}格式', re.IGNORECASE),
+    re.compile(r'SYSTEM_PROMPT|TEMPLATE_CONTENT'),
 ]
 
 
 def detect_template_leak(text: str) -> bool:
-    """检测模型是否输出了 prompt 模板而非真正解答。"""
-    for pattern in _TEMPLATE_LEAK_PATTERNS:
-        if pattern.search(text):
+    """检测模型是否输出了 prompt 模板描述而非真正解答。"""
+    if not text or len(text.strip()) < 20:
+        return False
+    leak_count = sum(1 for p in _TEMPLATE_LEAK_PATTERNS if p.search(text))
+    if leak_count >= 2:
+        return True
+    # 检测 ANSWER: 后面跟的是模板占位符
+    m = re.search(r'(?:ANSWER|答案|最终答案)\s*[：:]\s*(.+)', text, re.IGNORECASE)
+    if m:
+        ans_text = m.group(1).strip()
+        if re.search(r'(?i)<[^>]*(?:Specific|Final Answer|具体数学结论|最终答案)[^>]*>', ans_text):
+            return True
+        if re.search(r'(?i)(?:must include|no more than|only.*no reasoning)', ans_text):
             return True
     return False

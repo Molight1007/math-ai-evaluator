@@ -55,6 +55,23 @@ class FormatterAgent(BaseAgent):
             if not answer:
                 answer = ctx.problem[:200] if ctx.problem else "请重新提问"
             confidence = getattr(best, "confidence", 0.0)
+            # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
+            best_cluster = getattr(ctx, '_best_cluster', None)
+            if best_cluster and getattr(best_cluster, 'confidence', 0.0) > 0:
+                confidence = best_cluster.confidence
+
+        # 答案过长检测：如果答案超过300字符，尝试从推理尾部重新提取
+        if answer and len(answer) > 300:
+            for c in (ctx.candidates or []):
+                if c.reasoning and getattr(c, 'answer', '') == answer:
+                    from utils.extract import extract_final_answer
+                    retry = extract_final_answer(c.reasoning)
+                    if retry and len(retry) < len(answer) and len(retry) > 1:
+                        self.record(ctx, "finalize",
+                                   f"长答案重提取: {len(answer)}→{len(retry)} 字符")
+                        answer = retry
+                        confidence = max(confidence, 0.5)  # 重提取成功，给默认置信度
+                        break
 
         # 如果最佳答案是拒绝类 / 明显不完整，尝试从其他候选找更好答案
         if not answer or _REFUSAL_RE.search(answer) or _INCOMPLETE_RE.search(answer):

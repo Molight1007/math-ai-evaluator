@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .lean-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+        .lean-badge.lean-pass { background: #D1FAE5; color: #065F46; }
+        .lean-badge.lean-logic-err { background: #FEE2E2; color: #991B1B; }
+        .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
+        .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
+        .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
+        .section-heading.lean { color: #059669; border-color: #A7F3D0; }
+        .section-heading .icon-dot.lean { background: #10B981; }
+        .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .lean-status.pass { background: #D1FAE5; color: #065F46; }
+        .lean-status.fail { background: #FEE2E2; color: #991B1B; }
+        .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+        .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
+        .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+        .lean-insight .insight-title { font-size: 13px; font-weight: 700; color: #92400E; margin-bottom: 8px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-07-26 10:00:46</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">20</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">12</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value green">60.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.922</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">71.48s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">11.49s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">二重积分</span>
+            <span class="domain-acc">75.0%</span>
+            <span class="domain-count">(3/4)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">函数极限与连续</span>
+            <span class="domain-acc">83.33%</span>
+            <span class="domain-count">(5/6)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数微分学的概念</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数微分学的应用(一)--几何应用</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数微分学的应用(二)--中值定理、微分等式与微分不等式</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">多元函数积分学</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的计算</span>
+            <span class="domain-acc">50.0%</span>
+            <span class="domain-count">(1/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">多元函数积分学的预备知识</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">微分方程</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">无穷级数</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Lean</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_271f03ca&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;计算二重积分 $\\iint_D (x^2 + y^2) \\, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。&quot;, &quot;reference_answer&quot;: &quot;$\\frac{\\pi}{2}$&quot;, &quot;intern_answer&quot;: &quot;π/2&quot;, &quot;intern_reasoning&quot;: &quot;候选0直接使用极坐标变换，步骤简洁且计算过程明确，结果与其他方法一致，置信度最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型给出的答案为π/2，与参考解答一致，计算正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;π/2&quot;, &quot;inference_tokens&quot;: 2348, &quot;judge_tokens&quot;: 1295, &quot;inference_latency&quot;: 41.33, &quot;judge_latency&quot;: 3.79, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_271f03ca</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算二重积分 $\iint_D (x^2 + y^2) \, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。...</td>
+            <td>π/2</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>41.33s</td>
+            <td>3.79s</td>
+            <td>3643</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_49d3cc84&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (e^x - 1 - x) / x^2&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;1/2&quot;, &quot;intern_reasoning&quot;: &quot;泰勒展开法直接揭示了分子与分母的高阶无穷小关系，且与其他方法结果一致，逻辑严谨且步骤简洁。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型最终答案为1/2，与参考答案完全一致。模型推理中使用了泰勒展开法，过程正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;1/2&quot;, &quot;inference_tokens&quot;: 2177, &quot;judge_tokens&quot;: 1014, &quot;inference_latency&quot;: 39.22, &quot;judge_latency&quot;: 2.7, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_49d3cc84</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (e^x - 1 - x) / x^2...</td>
+            <td>1/2</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>39.22s</td>
+            <td>2.7s</td>
+            <td>3191</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_d63e25d6&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (e^x - 1 - x)/x^2&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;1/2&quot;, &quot;intern_reasoning&quot;: &quot;三个候选答案一致，但洛必达法则（候选0）直接且无需记忆展开式，步骤清晰，信心最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;答案与参考答案一致，为1/2。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;1/2&quot;, &quot;inference_tokens&quot;: 1990, &quot;judge_tokens&quot;: 1099, &quot;inference_latency&quot;: 35.59, &quot;judge_latency&quot;: 3.43, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_d63e25d6</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (e^x - 1 - x)/x^2...</td>
+            <td>1/2</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>35.59s</td>
+            <td>3.43s</td>
+            <td>3089</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_dad0bbcf&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。&quot;, &quot;reference_answer&quot;: &quot;$-\\frac{1}{6}$&quot;, &quot;intern_answer&quot;: &quot;-1/6&quot;, &quot;intern_reasoning&quot;: &quot;泰勒展开法直接揭示了分子的主导项，计算过程最简洁且无需多次求导，可靠性最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型给出的答案为 -1/6，与参考答案 -1/6 完全一致，且通过泰勒展开或洛必达法则等方法均可得到该结果，故正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;-1/6&quot;, &quot;inference_tokens&quot;: 2472, &quot;judge_tokens&quot;: 1082, &quot;inference_latency&quot;: 46.86, &quot;judge_latency&quot;: 3.04, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_dad0bbcf</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限 $\lim_{x \to 0} \frac{\sin x - x}{x^3}$。...</td>
+            <td>-1/6</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>46.86s</td>
+            <td>3.04s</td>
+            <td>3554</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_f0939acf&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：\\(\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}\\)&quot;, &quot;reference_answer&quot;: &quot;\\(-\\frac{1}{6}\\)&quot;, &quot;intern_answer&quot;: &quot;-1/6&quot;, &quot;intern_reasoning&quot;: &quot;泰勒展开法直接且直观，避免了多次求导的繁琐步骤，同时清晰展示了分子与分母的阶数关系，因此可靠性最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型的最终答案 '-1/6' 与参考答案完全一致，尽管推理部分仅提及了方法选择，但最终答案正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;-1/6&quot;, &quot;inference_tokens&quot;: 2280, &quot;judge_tokens&quot;: 985, &quot;inference_latency&quot;: 41.02, &quot;judge_latency&quot;: 2.24, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_f0939acf</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：\(\lim_{x \to 0} \frac{\sin x - x}{x^3}\)...</td>
+            <td>-1/6</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>41.02s</td>
+            <td>2.24s</td>
+            <td>3265</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_f5133e33&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;计算二重积分 $\\iint_D (x^2 + y^2) \\, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。&quot;, &quot;reference_answer&quot;: &quot;$\\frac{\\pi}{2}$&quot;, &quot;intern_answer&quot;: &quot;\\frac{\\pi}{2}&quot;, &quot;intern_reasoning&quot;: &quot;极坐标方法直接且高效，计算过程简洁且无误，其他方法虽验证结果一致但复杂度较高，因此选择极坐标方案。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;答案与参考答案一致，均为π/2，推理过程正确使用了极坐标变换，计算结果无误。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;π/2&quot;, &quot;inference_tokens&quot;: 3753, &quot;judge_tokens&quot;: 1335, &quot;inference_latency&quot;: 74.65, &quot;judge_latency&quot;: 5.17, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_f5133e33</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算二重积分 $\iint_D (x^2 + y^2) \, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。...</td>
+            <td>\frac{\pi}{2}</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>74.65s</td>
+            <td>5.17s</td>
+            <td>5088</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0075&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;当n→∞时，e^{-1/n} - 1 与 c/n^k 为等价无穷小，则( )。\nA. c=1, k=2\nB. c=1, k=1\nC. c=-1, k=2\nD. c=-1, k=1&quot;, &quot;reference_answer&quot;: &quot;D&quot;, &quot;intern_answer&quot;: &quot;D&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过泰勒展开正确识别主部为-1/n，对应c=-1，k=1，符合等价无穷小定义。其他候选分析存在明显错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型给出的答案为D（c=-1, k=1），但官方参考答案为C（c=-1, k=2）。根据题目要求，当提供参考答案时，必须以参考答案为标准判断，模型答案与参考答案不符，因此判定为错误。&quot;, &quot;error_type&quot;: &quot;other&quot;, &quot;correct_answer_judge&quot;: &quot;C&quot;, &quot;inference_tokens&quot;: 2130, &quot;judge_tokens&quot;: 2419, &quot;inference_latency&quot;: 36.1, &quot;judge_latency&quot;: 23.25, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0075&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4797, &quot;conversion_latency&quot;: 59.78, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0075</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">当n→∞时，e^{-1/n} - 1 与 c/n^k 为等价无穷小，则( )。
+A. c=1, k=2
+B. c=1, k=1
+C. c=-1, k=2
+D. ...</td>
+            <td>D</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">other</span></td>
+            <td></td>
+            <td>36.1s</td>
+            <td>23.25s</td>
+            <td>4549</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0149&quot;, &quot;domain&quot;: &quot;一元函数微分学的概念&quot;, &quot;question&quot;: &quot;函数 $f(x) = (e^x - 1) |x^3 - x^2 + x|$ 的不可导点的个数为（ ）。\nA. 0\nB. 1\nC. 2\nD. 3&quot;, &quot;reference_answer&quot;: &quot;B&quot;, &quot;intern_answer&quot;: &quot;B&quot;, &quot;intern_reasoning&quot;: &quot;候选0正确分析了绝对值函数在x=0处的不可导性，并计算了左右导数，确认了不可导点的个数为1。其他候选分析有误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;模型给出的最终答案为B，对应不可导点个数为1，与官方参考答案一致。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;B&quot;, &quot;inference_tokens&quot;: 2819, &quot;judge_tokens&quot;: 1044, &quot;inference_latency&quot;: 54.12, &quot;judge_latency&quot;: 3.32, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0149</td>
+            <td><span class="domain-tag">一元函数微分学的概念</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">函数 $f(x) = (e^x - 1) |x^3 - x^2 + x|$ 的不可导点的个数为（ ）。
+A. 0
+B. 1
+C. 2
+D. 3...</td>
+            <td>B</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.95</td>
+            <td></td>
+            <td></td>
+            <td>54.12s</td>
+            <td>3.32s</td>
+            <td>3863</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0251&quot;, &quot;domain&quot;: &quot;一元函数微分学的应用(一)--几何应用&quot;, &quot;question&quot;: &quot;设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) &gt; 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调递增”是“(f(x) - f(a))/(g(x) - g(a)) 严格单调递增”的（ ）。\nA. 充分非必要条件\nB. 必要非充分条件\nC. 充分必要条件\nD. 既非充分又非必要条件&quot;, &quot;reference_answer&quot;: &quot;C&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;Parse error: Failed to parse JSON from response&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;模型未给出最终答案，回答不完整，无法与参考答案匹配。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;A&quot;, &quot;inference_tokens&quot;: 6752, &quot;judge_tokens&quot;: 4846, &quot;inference_latency&quot;: 140.92, &quot;judge_latency&quot;: 7.67, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0251&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4817, &quot;conversion_latency&quot;: 54.07, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0251</td>
+            <td><span class="domain-tag">一元函数微分学的应用(一)--几何应用</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) &gt; 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调...</td>
+            <td></td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.95</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td></td>
+            <td>140.92s</td>
+            <td>7.67s</td>
+            <td>11598</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0310&quot;, &quot;domain&quot;: &quot;一元函数微分学的应用(二)--中值定理、微分等式与微分不等式&quot;, &quot;question&quot;: &quot;设f(x)在[0,1]上二阶可导，|f''(x)| ≤ M, x ∈ [0,1], M &gt; 0, f(0) = f(1) = 0。证明：(1) |f'(x)| ≤ M/2, x ∈ [0,1]；(2) 若f(1/2) = 0，则|f'(x)| &lt; M/2, x ∈ [0,1]。&quot;, &quot;reference_answer&quot;: &quot;(1) 由拉格朗日中值定理，存在ξ₁ ∈ (0, x)和ξ₂ ∈ (x, 1)使得f'(ξ₁) = f(x)/x, f'(ξ₂) = -f(x)/(1-x)。由f''(x)有界，利用泰勒公式或积分，可得|f'(x)| ≤ M/2。(2) 若f(1/2)=0，则存在c∈(0,1)使得f'(c)=0。利用f''(x)有界，通过反证法可证得严格不等式。&quot;, &quot;intern_answer&quot;: &quot;|f'(x)| ≤ M/2&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过泰勒展开直接推导，数学过程严谨且覆盖所有x∈[0,1]，结论明确。候选1虽处理了第二个严格不等式，但依赖反例构造，而候选2的积分方法不够完整。因此，候选0的推导最为可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;模型的最终答案仅为第一问的结论 |f'(x)| ≤ M/2，未给出第二问的严格不等式 |f'(x)| &lt; M/2，回答不完整，且与参考答案的第二问不符。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;(1) |f'(x)| ≤ M/2, x∈[0,1]; (2) 若f(1/2)=0，则|f'(x)| &lt; M/2, x∈[0,1]&quot;, &quot;inference_tokens&quot;: 6285, &quot;judge_tokens&quot;: 2322, &quot;inference_latency&quot;: 131.62, &quot;judge_latency&quot;: 14.92, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0310&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4861, &quot;conversion_latency&quot;: 58.25, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0310</td>
+            <td><span class="domain-tag">一元函数微分学的应用(二)--中值定理、微分等式与微分不等式</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设f(x)在[0,1]上二阶可导，|f''(x)| ≤ M, x ∈ [0,1], M &gt; 0, f(0) = f(1) = 0。证明：(1) |f'(x)| ...</td>
+            <td>|f'(x)| ≤ M/2</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.95</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td></td>
+            <td>131.62s</td>
+            <td>14.92s</td>
+            <td>8607</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0745&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;设 \\(M = \\iint_D \\ln(x^2+y^2) \\, dxdy\\)，\\(N = \\iint_D [\\ln(x^2+y^2)]^2 \\, dxdy\\)，\\(P = \\iint_D (x^2+y^2-1) \\, dxdy\\)，其中 \\(D = \\{(x,y) \\mid 1 \\le x^2+y^2 \\le 2\\}\\)，则必有（ ）。\nA. \\(M &lt; N &lt; P\\) \nB. \\(N &lt; M &lt; P\\) \nC. \\(M &lt; P &lt; N\\) \nD. \\(N &lt; P &lt; M\\)&quot;, &quot;reference_answer&quot;: &quot;B&quot;, &quot;intern_answer&quot;: &quot;B&quot;, &quot;intern_reasoning&quot;: &quot;候选0正确计算了各积分值，结果准确，顺序为N &lt; M &lt; P。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案B与标准答案A不符，正确顺序应为M&lt;N&lt;P，模型得出N&lt;M&lt;P，属于计算错误导致的排序错误。&quot;, &quot;error_type&quot;: &quot;calculation_error&quot;, &quot;correct_answer_judge&quot;: &quot;A&quot;, &quot;inference_tokens&quot;: 3367, &quot;judge_tokens&quot;: 1049, &quot;inference_latency&quot;: 64.3, &quot;judge_latency&quot;: 3.6, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0745&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4852, &quot;conversion_latency&quot;: 55.29, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0745</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设 \(M = \iint_D \ln(x^2+y^2) \, dxdy\)，\(N = \iint_D [\ln(x^2+y^2)]^2 \, dxdy\)，...</td>
+            <td>B</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">calculation_error</span></td>
+            <td></td>
+            <td>64.3s</td>
+            <td>3.6s</td>
+            <td>4416</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_1005&quot;, &quot;domain&quot;: &quot;多元函数积分学&quot;, &quot;question&quot;: &quot;设Γ是空间圆周{x^2+y^2+z^2=a^2, x+y+z=0} (a&gt;0)，则曲线积分∮_Γ (2yz+2zx+2xy) ds = ______。&quot;, &quot;reference_answer&quot;: &quot;0&quot;, &quot;intern_answer&quot;: &quot;-2πa³&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过代数推导和参数化验证，结果一致且逻辑严密，正确性最高。候选1和2在对称性和符号处理上存在明显错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 4917, &quot;judge_tokens&quot;: 2955, &quot;inference_latency&quot;: 101.27, &quot;judge_latency&quot;: 34.91, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_1005&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4781, &quot;conversion_latency&quot;: 59.03, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_1005</td>
+            <td><span class="domain-tag">多元函数积分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设Γ是空间圆周{x^2+y^2+z^2=a^2, x+y+z=0} (a&gt;0)，则曲线积分∮_Γ (2yz+2zx+2xy) ds = ______。...</td>
+            <td>-2πa³</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>101.27s</td>
+            <td>34.91s</td>
+            <td>7872</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_1012&quot;, &quot;domain&quot;: &quot;多元函数积分学&quot;, &quot;question&quot;: &quot;设曲面z=1-x^2-y^2与平面z=-x的交线为L，起点为A(0,1,0)，终点为B(0,-1,0)，则∫_L (x+y-z)dx+|y|dz=_____。&quot;, &quot;reference_answer&quot;: &quot;0&quot;, &quot;intern_answer&quot;: &quot;1/2 - (5/4) arctan(2)&quot;, &quot;intern_reasoning&quot;: &quot;候选0的推理过程详细，正确参数化交线，分段处理绝对值，积分计算准确，因此选择候选0。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 6241, &quot;judge_tokens&quot;: 3108, &quot;inference_latency&quot;: 109.76, &quot;judge_latency&quot;: 28.85, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_1012&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4788, &quot;conversion_latency&quot;: 54.46, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_1012</td>
+            <td><span class="domain-tag">多元函数积分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设曲面z=1-x^2-y^2与平面z=-x的交线为L，起点为A(0,1,0)，终点为B(0,-1,0)，则∫_L (x+y-z)dx+|y|dz=_____。...</td>
+            <td>1/2 - (5/4) arctan(2)</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>109.76s</td>
+            <td>28.85s</td>
+            <td>9349</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;一元函数积分学的计算_001&quot;, &quot;domain&quot;: &quot;一元函数积分学的计算&quot;, &quot;question&quot;: &quot;计算下列不定积分：\n(1) ∫ cos 3x dx\n(2) ∫ sin 3x dx\n(3) ∫ sec x dx\n(4) ∫ sec^3 x dx\n(5) ∫ \\frac{dx}{\\sqrt{a^2 - x^2}} (a ≠ 0)\n(6) ∫ \\frac{dx}{\\sqrt{x^2 - a^2}} (a ≠ 0)\n(7) ∫ \\frac{dx}{a^2 + x^2} (a ≠ 0)\n(8) ∫ \\frac{dx}{a^2 + (x+b)^2} (a ≠ 0)\n(9) ∫ \\frac{dx}{\\sqrt{a^2 - (x+b)^2}} (a &gt; 0)\n(10) ∫ \\frac{dx}{(x+b)^2} (a &gt; 0)&quot;, &quot;reference_answer&quot;: &quot;(1) (1/3) sin 3x + C\n(2) -(1/3) cos 3x + C\n(3) ln|sec x + tan x| + C\n(4) (1/2) sec x tan x + (1/2) ln|sec x + tan x| + C\n(5) arcsin(x/a) + C\n(6) ln|x + √(x^2 - a^2)| + C\n(7) (1/a) arctan(x/a) + C\n(8) (1/a) arctan((x+b)/a) + C\n(9) arcsin((x+b)/a) + C\n(10) -1/(x+b) + C&quot;, &quot;intern_answer&quot;: &quot;(1) (1/3)sin3x + C; (2) -(1/3)cos3x + C; (3) ln|secx + tanx| + C; (4) (1/2)(secx tanx + ln|secx + tanx|) + C; (5) arcsin(x/a) + C; (6) ln|x + √(x² -a²)| + C; (7) (1/a)arctan(x/a) + C; (8) (1/a)arctan((x+b)/a) + C; (9) arcsin((x+b)/a) + C; (10) -1/(x+b) + C&quot;, &quot;intern_reasoning&quot;: &quot;候选0的解答过程最详细，明确提到了每个积分的具体方法（如分部积分、变量替换等），且confidence最高（0.95），说明推导过程更严谨。其他候选虽然答案相同，但推理描述较简略，confidence较低。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;所有不定积分结果均正确，符合标准积分公式。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;(1) (1/3)sin3x + C; (2) -(1/3)cos3x + C; (3) ln|secx + tanx| + C; (4) (1/2)(secx tanx + ln|secx + tanx|) + C; (5) arcsin(x/a) + C; (6) ln|x + √(x² -a²)| + C; (7) (1/a)arctan(x/a) + C; (8) (1/a)arctan((x+b)/a) + C; (9) arcsin((x+b)/a) + C; (10) -1/(x+b) + C&quot;, &quot;inference_tokens&quot;: 3248, &quot;judge_tokens&quot;: 3537, &quot;inference_latency&quot;: 61.32, &quot;judge_latency&quot;: 19.57, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>一元函数积分学的计算_001</td>
+            <td><span class="domain-tag">一元函数积分学的计算</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算下列不定积分：
+(1) ∫ cos 3x dx
+(2) ∫ sin 3x dx
+(3) ∫ sec x dx
+(4) ∫ sec^3 x dx
+(5) ∫ ...</td>
+            <td>(1) (1/3)sin3x + C; (2) -(1/3)cos3x + C; (3) ln|secx + tanx|</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>61.32s</td>
+            <td>19.57s</td>
+            <td>6785</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;一元函数积分学的计算_017&quot;, &quot;domain&quot;: &quot;一元函数积分学的计算&quot;, &quot;question&quot;: &quot;若函数y(x)=∫_{0}^{x^2} e^{-t^2} dt，则d^2y/dx^2|_{x=-1}=（ ）。\nA. 0\nB. 1\nC. 4e^{-1}\nD. 4e&quot;, &quot;reference_answer&quot;: &quot;C. 4e^{-1}&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;Parse error: Failed to parse JSON from response&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型未提供最终答案，且其推理过程得出结果为 −6e⁻¹，与官方参考答案 4e⁻¹ 不符，因此判定为错误。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;C. 4e^{-1}&quot;, &quot;inference_tokens&quot;: 6696, &quot;judge_tokens&quot;: 5336, &quot;inference_latency&quot;: 142.24, &quot;judge_latency&quot;: 18.5, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;一元函数积分学的计算_017&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4763, &quot;conversion_latency&quot;: 45.15, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>一元函数积分学的计算_017</td>
+            <td><span class="domain-tag">一元函数积分学的计算</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">若函数y(x)=∫_{0}^{x^2} e^{-t^2} dt，则d^2y/dx^2|_{x=-1}=（ ）。
+A. 0
+B. 1
+C. 4e^{-1}
+D. ...</td>
+            <td></td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td></td>
+            <td>142.24s</td>
+            <td>18.5s</td>
+            <td>12032</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;二重积分_002&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;设 $I_i = \\iint_{D_i} e^{-(x^2+y^2)} \\, d\\sigma$，$i=1,2,3$，其中 $D_1 = \\{ (x,y) \\mid x^2+y^2 \\le R^2 \\}$，$D_2 = \\{ (x,y) \\mid x^2+y^2 \\le 2R^2 \\}$，$D_3 = \\{ (x,y) \\mid |x| \\le R, |y| \\le R \\}$，$R&gt;0$，则（ ）。\nA. $I_1 &lt; I_2 &lt; I_3$ \nB. $I_2 &lt; I_1 &lt; I_3$ \nC. $I_1 &lt; I_3 &lt; I_2$ \nD. $I_3 &lt; I_1 &lt; I_2$&quot;, &quot;reference_answer&quot;: &quot;C&quot;, &quot;intern_answer&quot;: &quot;C&quot;, &quot;intern_reasoning&quot;: &quot;候选0正确地计算了各积分的大小关系，确认了I₁ &lt; I₃ &lt; I₂，而其他候选存在计算错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型选择C，分析正确：D1是半径为R的圆盘，D2是半径为√2R的圆盘，D3是边长为2R的正方形。由于D1⊂D3⊂D2，且被积函数处处为正，因此积分大小关系为I1&lt;I3&lt;I2。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;C&quot;, &quot;inference_tokens&quot;: 3502, &quot;judge_tokens&quot;: 1958, &quot;inference_latency&quot;: 66.08, &quot;judge_latency&quot;: 10.75, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>二重积分_002</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设 $I_i = \iint_{D_i} e^{-(x^2+y^2)} \, d\sigma$，$i=1,2,3$，其中 $D_1 = \{ (x,y) \mi...</td>
+            <td>C</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>66.08s</td>
+            <td>10.75s</td>
+            <td>5460</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;函数极限与连续_030&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;当x→0时，x-ln(x+√(1+x^2)) ~ ax^b，则a,b的值分别是( )。&quot;, &quot;reference_answer&quot;: &quot;a=1/6, b=3&quot;, &quot;intern_answer&quot;: &quot;a=1/6, b=3&quot;, &quot;intern_reasoning&quot;: &quot;泰勒展开法直接且系统地揭示了主项的阶数和系数，结果与其他方法一致，且过程清晰可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案正确，x-ln(x+√(1+x^2))在x→0时的等价无穷小为(1/6)x^3，因此a=1/6, b=3。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;a=1/6, b=3&quot;, &quot;inference_tokens&quot;: 4907, &quot;judge_tokens&quot;: 1542, &quot;inference_latency&quot;: 99.32, &quot;judge_latency&quot;: 8.46, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>函数极限与连续_030</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">当x→0时，x-ln(x+√(1+x^2)) ~ ax^b，则a,b的值分别是( )。...</td>
+            <td>a=1/6, b=3</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>99.32s</td>
+            <td>8.46s</td>
+            <td>6449</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数积分学的预备知识_010&quot;, &quot;domain&quot;: &quot;多元函数积分学的预备知识&quot;, &quot;question&quot;: &quot;设f(x,y,z)=x^2e^{yz^2}，求f(x,y,z)在点(-1,0,1)处的方向导数的最小值。&quot;, &quot;reference_answer&quot;: &quot;梯度grad f=(2xe^{yz^2}, x^2z^2e^{yz^2}, 2x^2yze^{yz^2})，在点(-1,0,1)处grad f=(-2,1,0)。方向导数的最小值为负的梯度的模，即-√((-2)^2+1^2+0^2)=-√5。&quot;, &quot;intern_answer&quot;: &quot;-√5&quot;, &quot;intern_reasoning&quot;: &quot;候选0的计算过程详细且准确，各步骤清晰，结果正确，因此选择候选0作为最终答案。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案为 -√5，与官方参考答案 -√(4e^2+1) 不一致。根据官方答案，方向导数最小值应为 -√(4e^2+1)。&quot;, &quot;error_type&quot;: &quot;other&quot;, &quot;correct_answer_judge&quot;: &quot;-√(4e^2+1)&quot;, &quot;inference_tokens&quot;: 1985, &quot;judge_tokens&quot;: 2106, &quot;inference_latency&quot;: 33.03, &quot;judge_latency&quot;: 16.55, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;多元函数积分学的预备知识_010&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4755, &quot;conversion_latency&quot;: 65.08, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数积分学的预备知识_010</td>
+            <td><span class="domain-tag">多元函数积分学的预备知识</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设f(x,y,z)=x^2e^{yz^2}，求f(x,y,z)在点(-1,0,1)处的方向导数的最小值。...</td>
+            <td>-√5</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">other</span></td>
+            <td></td>
+            <td>33.03s</td>
+            <td>16.55s</td>
+            <td>4091</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;微分方程_003&quot;, &quot;domain&quot;: &quot;微分方程&quot;, &quot;question&quot;: &quot;设 y₁, y₂ 是一阶非齐次线性微分方程 y' + p(x)y = q(x) 的两个特解，若常数 λ, μ 使 λy₁ + μy₂ 是该方程的解，λy₁ - μy₂ 是该方程对应的齐次方程的解，则 ( )\nA. λ=1/2, μ=1/2\nB. λ=-1/2, μ=-1/2\nC. λ=2/3, μ=1/3\nD. λ=2/3, μ=-1/3&quot;, &quot;reference_answer&quot;: &quot;由题意，λy₁+μy₂ 是非齐次方程的解，代入得 (λy₁+μy₂)' + p(x)(λy₁+μy₂) = q(x) =&gt; λ(y₁'+p(x)y₁) + μ(y₂'+p(x)y₂) = q(x) =&gt; λq(x) + μq(x) = q(x) =&gt; λ+μ=1。又 λy₁-μy₂ 是齐次方程的解，代入得 (λy₁-μy₂)' + p(x)(λy₁-μy₂) = 0 =&gt; λq(x) - μq(x) = 0 =&gt; λ-μ=0。解得 λ=μ=1/2。故选 A。&quot;, &quot;intern_answer&quot;: &quot;A&quot;, &quot;intern_reasoning&quot;: &quot;候选0正确地通过代入方程并解方程组，得到λ=1/2，μ=1/2，符合题意。其他候选在解方程组时出现错误，导致结果不正确。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.99, &quot;judge_explanation&quot;: &quot;模型给出的答案为A，即λ=1/2, μ=1/2，与题目官方解答一致。该答案满足题目条件：λy₁+μy₁为非齐次方程的解要求λ+μ=1，λy₁-μy₁为齐次方程的解要求λ-μ=0，解得λ=μ=1/2，因此答案正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;A&quot;, &quot;inference_tokens&quot;: 1884, &quot;judge_tokens&quot;: 1296, &quot;inference_latency&quot;: 29.88, &quot;judge_latency&quot;: 3.54, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>微分方程_003</td>
+            <td><span class="domain-tag">微分方程</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设 y₁, y₂ 是一阶非齐次线性微分方程 y' + p(x)y = q(x) 的两个特解，若常数 λ, μ 使 λy₁ + μy₂ 是该方程的解，λy₁ - ...</td>
+            <td>A</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.99</td>
+            <td></td>
+            <td></td>
+            <td>29.88s</td>
+            <td>3.54s</td>
+            <td>3180</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;无穷级数_021&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;设级数 ∑_{n=1}^{∞} a_n x^n 的系数 a_n 满足关系式 a_n = a_{n-1} + 1 - 1/n, n = 2, 3, ..., a_1 = 2。则当 |x| &lt; 1 时，级数 ∑_{n=1}^{∞} a_n x^n 的和函数 S(x) = ______。&quot;, &quot;reference_answer&quot;: &quot;S(x) = (2 - x) / (1 - x) + ln(1 - x), |x| &lt; 1&quot;, &quot;intern_answer&quot;: &quot;\\frac{3x - 2x^2 + (1 - x)\\ln(1 - x)}{(1 - x)^2}&quot;, &quot;intern_reasoning&quot;: &quot;候选0的计算过程详细，正确拆分并合并了各项，结果准确且简洁，因此选择候选0作为最终答案。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案与正确结果一致。通过递推求解a_n通项，拆分级数并利用已知幂级数求和公式，最终合并得到正确表达式。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 4023, &quot;judge_tokens&quot;: 2634, &quot;inference_latency&quot;: 81.05, &quot;judge_latency&quot;: 15.57, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>无穷级数_021</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设级数 ∑_{n=1}^{∞} a_n x^n 的系数 a_n 满足关系式 a_n = a_{n-1} + 1 - 1/n, n = 2, 3, ..., a_...</td>
+            <td>\frac{3x - 2x^2 + (1 - x)\ln(1 - x)}{(1 - x)^2}</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>81.05s</td>
+            <td>15.57s</td>
+            <td>6657</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += buildInfoSection(d);
+
+        // AI reasoning section
+        html += buildReasoningSection(d);
+
+        // Judge analysis section
+        html += buildJudgeSection(d);
+
+        // Lean verification section
+        html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
+
+        // Performance bar
+        html += buildPerfBar(d);
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function buildInfoSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        h += '<div class="info-grid">';
+        h += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.inference_error) h += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) h += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        h += '</div></div>';
+        return h;
+    }
+
+    function buildReasoningSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            var stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            h += stepsHtml + '</ul></div>';
+        }
+        if (d.intern_verification) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            h += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildJudgeSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            h += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            h += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildLeanSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.verified) return '';
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
+
+        if (lv.compile_passed === true) {
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
+        } else if (lv.compile_passed === false) {
+            var catLabel = lv.error_category || 'unknown';
+            var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};
+            h += '<div><span class="lean-status fail">&#10007; &#32534;&#35793;&#22833;&#36133; &mdash; ' + (catMap[catLabel] || catLabel) + '</span></div>';
+        } else {
+            h += '<div><span class="lean-status pending">&#8856; &#26410;&#32534;&#35793; &mdash; &#38477;&#32423;&#20026; LLM &#36923;&#36753;&#23457;&#26597;</span></div>';
+        }
+
+        if (lv.formalized_claim) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#24418;&#24335;&#21270;&#21629;&#39064;</div>';
+            h += '<div class="content-box" style="max-height:80px">' + esc(lv.formalized_claim) + '</div></div>';
+        }
+        if (lv.lean_code) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">Lean 4 &#20195;&#30721;</div>';
+            h += '<div class="content-box lean-code" style="max-height:200px">' + esc(lv.lean_code) + '</div></div>';
+        }
+        if (lv.compile_passed === false && lv.compile_output) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#32534;&#35793;&#38169;&#35823;&#36755;&#20986;</div>';
+            h += '<div class="content-box lean-error" style="max-height:150px">' + esc(lv.compile_output) + '</div></div>';
+        }
+
+        if (lv.analysis_performed) {
+            h += '<div class="lean-insight">';
+            h += '<div class="insight-title">&#128269; &#38169;&#35823;&#26681;&#22240;&#20998;&#26512;</div>';
+            if (lv.human_readable_error) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#38169;&#35823;&#35299;&#37322;&#65306;</span>' + esc(lv.human_readable_error) + '</div>';
+            }
+            if (lv.root_cause) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#26681;&#22240;&#65306;</span>' + esc(lv.root_cause) + '</div>';
+            }
+            if (lv.error_category === 'logic_error' || lv.error_category === 'both') {
+                if (lv.logic_flaw_location) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#36923;&#36753;&#26029;&#28857;&#65306;</span>' + esc(lv.logic_flaw_location) + '</div>';
+                }
+                if (lv.logic_flaw_why) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#38169;&#35823;&#21407;&#22240;&#65306;</span>' + esc(lv.logic_flaw_why) + '</div>';
+                }
+                if (lv.correct_approach) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#059669;">&#27491;&#30830;&#20570;&#27861;&#65306;</span>' + esc(lv.correct_approach) + '</div>';
+                }
+            }
+            if (lv.error_category === 'translation_error' || lv.error_category === 'both') {
+                if (lv.translation_issue) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#D97706;">&#36716;&#21270;&#38382;&#39064;&#65306;</span>' + esc(lv.translation_issue) + '</div>';
+                }
+            }
+            if (lv.fix_prompt_for_ai) {
+                h += '<div style="margin-top:12px;padding:10px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981;">';
+                h += '<div style="font-weight:700;color:#065F46;margin-bottom:4px;">&#128221; &#20462;&#27491;&#25552;&#31034;&#35789;&#65288;&#21487;&#21453;&#39304;&#32473;&#20070;&#29983;AI&#65289;</div>';
+                h += '<div style="font-size:12px;color:#166534;white-space:pre-wrap">' + esc(lv.fix_prompt_for_ai) + '</div></div>';
+            }
+            h += '</div>';
+        }
+
+        h += '<div style="margin-top:12px;font-size:11px;color:#94A3B8">';
+        h += '&#36716;&#21270;: ' + (lv.conversion_latency || 0).toFixed(1) + 's / ';
+        h += '&#32534;&#35793;: ' + (lv.compile_latency || 0).toFixed(1) + 's';
+        if (lv.analysis_latency) h += ' / &#20998;&#26512;: ' + (lv.analysis_latency || 0).toFixed(1) + 's';
+        h += ' | Token: ' + ((lv.conversion_tokens || 0) + (lv.analysis_tokens || 0));
+        if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
+        h += '</div>';
+        h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
+        return h;
+    }
+
+    function buildPerfBar(d) {
+        var h = '<div class="perf-bar">';
+        h += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        h += '</div>';
+        return h;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) { return _latexToReadable(inner.trim()); });
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '\u2202$1');
+        s = s.replace(/\\ln /g, 'ln '); s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin '); s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan '); s = s.replace(/\\cdot /g, '\u00b7');
+        s = s.replace(/\\times /g, '\u00d7'); s = s.replace(/\\div /g, '\u00f7');
+        s = s.replace(/\\pm /g, '\u00b1'); s = s.replace(/\\leq ?/g, '\u2264');
+        s = s.replace(/\\geq ?/g, '\u2265'); s = s.replace(/\\neq ?/g, '\u2260');
+        s = s.replace(/\\approx ?/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    function _latexToReadable(expr) {
+        var s = expr;
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)'); s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        s = s.replace(/\^(\w)/g, '^$1'); s = s.replace(/_(\w)/g, '_$1');
+        s = s.replace(/\\alpha/g, '\u03b1'); s = s.replace(/\\beta/g, '\u03b2');
+        s = s.replace(/\\gamma/g, '\u03b3'); s = s.replace(/\\delta/g, '\u03b4');
+        s = s.replace(/\\epsilon/g, '\u03b5'); s = s.replace(/\\theta/g, '\u03b8');
+        s = s.replace(/\\lambda/g, '\u03bb'); s = s.replace(/\\pi/g, '\u03c0');
+        s = s.replace(/\\sigma/g, '\u03c3'); s = s.replace(/\\phi/g, '\u03c6');
+        s = s.replace(/\\omega/g, '\u03c9'); s = s.replace(/\\rho/g, '\u03c1');
+        s = s.replace(/\\partial/g, '\u2202'); s = s.replace(/\\nabla/g, '\u2207');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln'); s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin'); s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan'); s = s.replace(/\\cdot/g, '\u00b7');
+        s = s.replace(/\\times/g, '\u00d7'); s = s.replace(/\\div/g, '\u00f7');
+        s = s.replace(/\\pm/g, '\u00b1'); s = s.replace(/\\leq/g, '\u2264');
+        s = s.replace(/\\geq/g, '\u2265'); s = s.replace(/\\neq/g, '\u2260');
+        s = s.replace(/\\approx/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '\u221a$1');
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', '); s = s.replace(/\\;[ ]*/g, '  ');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+
+</body>
+</html>

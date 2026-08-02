@@ -35,55 +35,49 @@ logger = logging.getLogger("MathPilot")
 # ============================================================
 @dataclass
 class AgentConfig:
-    """智能体可调参数（选手可自由优化）
+    """智能体可调参数（v2.2 简化版，借鉴 ss-main）
     
     适配竞赛规则 v3（2026-07-31）：
     - 并发=3，单题最长=20分钟，Agent最长=6小时
-    - 反rollout：减少候选数与投票次数，依赖聚类共识而非暴力采样
+    - 简洁流水线：Classifier → Solver → Verifier → Formatter（无回环）
     """
     # 策略模型（解题）
-    policy_sample_times: int = 3       # 候选解答数量（适配20分钟/题限制）
-    policy_temperature: float = 0.2    # 策略采样温度
-    policy_max_tokens: int = 12288      # 策略最大 token
+    policy_sample_times: int = 3       # 候选解答数量
+    policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
+    policy_max_tokens: int = 12288     # 策略最大 token（确保思考流+答案完整输出）
 
-    # 蓝图分解（LEAP 启发：先拆后解）
-    use_blueprint: bool = True         # 是否启用蓝图分解策略
+    # 蓝图分解（已关闭，对 Intern-S 思维流不友好）
+    use_blueprint: bool = False
 
-    # 子目标逐步求解（先规划子目标树，再逐步求解每个子目标，最后合并）
-    use_subgoal: bool = False        # 是否启用子目标逐步求解策略（与 use_blueprint 互斥，优先使用子目标）
+    # 子目标逐步求解（已关闭）
+    use_subgoal: bool = False
 
     # 验证模型（评判）
-    verifier_voting_times: int = 2     # 每个候选的投票次数（聚类替代重复投票）
+    verifier_voting_times: int = 1     # 每候选只投 1 票（避免重复投票浪费）
     verifier_temperature: float = 0.0  # 验证温度（贪婪解码）
 
-    # 题型分类（可选）
-    enable_domain_hint: bool = True    # 是否启用领域提示增强
+    # 题型分类
+    enable_domain_hint: bool = True
 
     # 解析
     extraction_mode: str = "auto"      # auto | last_line | regex
 
-    # ---- 自主调控（多智能体核心增量）----
-    conf_high: float = 0.75             # 高置信度阈值：直接提前退出（降低以加速）
-    conf_low: float = 0.40              # 低置信度阈值：触发自纠错回环（提高以减少无用revise）
-    max_revise_rounds: int = 1         # 自纠错回环最大轮数（限1轮，节省时间）
-    revise_sample_times: int = 1       # 每轮纠错重解生成的候选数（降低）
-    max_total_calls: int = 40          # LLM 调用预算硬上限（40次×~15s≈10分钟，安全余量充足）
+    # ---- 简化版控制 ----
+    max_total_calls: int = 10          # LLM 调用总上限（从40降至10）
 
-    # ---- 时间限制（适配竞赛新规则）----
-    max_time_per_question: int = 1100  # 单题壁钟时间上限（秒，~18.3分钟，留安全余量）
-    max_total_time_seconds: int = 21000  # Agent总运行时间上限（秒，~5.8小时，留安全余量）
+    # ---- 时间限制 ----
+    max_time_per_question: int = 300   # 单题时间上限（秒）
+    max_total_time_seconds: int = 21000  # Agent总运行时间上限
 
-    # ---- 智能体补充部件配置 ----
-    max_tokens: int = 4096             # 单次最大 token 数
-    max_tokens_cap: int = 4096         # 内部 token 裁剪上限（BUG-6/7 修复）
-    max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
+    # ---- 智能体核心配置 ----
+    max_tokens: int = 12288            # 单次最大 token 数
+    max_tokens_cap: int = 12288        # 内部 token 裁剪上限（关键：之前 4096 会截断）
+    max_workers: int = 3               # 并发验证线程数
     temperature: float = 0.3           # 默认 LLM 温度
 
-    # ---- 新功能开关 ----
-    use_scoring: bool = True           # Verifier 启用多维评分模式
-    by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解（需安装 sympy）
-    use_proof_channel: bool = True     # 启用证明题专用求解通道
-    use_lemma_accumulation: bool = True # 启用引理积累（跨轮复用子结论）
+    # ---- 功能开关（简化）----
+    use_scoring: bool = False          # 关闭多维评分
+    by_enable_fast_path: bool = True   # 启用 SymPy 快车道
 
 
 # ============================================================
@@ -107,14 +101,11 @@ class ReasoningAgent:
         for key in (
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
             "verifier_voting_times", "verifier_temperature",
-            "enable_domain_hint", "use_blueprint", "extraction_mode",
-            "conf_high", "conf_low", "max_revise_rounds",
-<<<<<<< HEAD:user_agent.py
-            "revise_sample_times", "max_total_calls",
-            "max_time_per_question", "max_total_time_seconds",
-=======
-            "revise_sample_times", "max_total_calls", "use_subgoal",
->>>>>>> 67990f0c90579497998e2434f83e005d4b712edb:submit/user_agent.py
+            "enable_domain_hint", "extraction_mode",
+            "max_total_calls", "max_time_per_question",
+            "max_total_time_seconds", "max_tokens_cap",
+            "by_enable_fast_path", "use_scoring",
+            "use_subgoal",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
@@ -122,16 +113,12 @@ class ReasoningAgent:
         self.orchestrator = Orchestrator(client, self.config)
 
         logger.info(
-            "MathPilot ReasoningAgent (multi-agent) initialized: "
-            "samples=%d, verify_votes=%d, domain_hint=%s, blueprint=%s, "
-            "conf=[%.2f,%.2f], revise=%d, budget=%d",
+            "MathPilot v2.2 simplified: samples=%d, votes=%d, budget=%d, "
+            "max_tokens_cap=%d",
             self.config.policy_sample_times,
             self.config.verifier_voting_times,
-            self.config.enable_domain_hint,
-            self.config.use_blueprint,
-            self.config.conf_high, self.config.conf_low,
-            self.config.max_revise_rounds,
             self.config.max_total_calls,
+            self.config.max_tokens_cap,
         )
 
     def solve(self, problem: str, metadata: dict) -> dict:

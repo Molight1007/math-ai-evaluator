@@ -5,18 +5,9 @@
 # 核心：agent 使用 Python 标准库 + 平台注入的 client
 # 以下为本地测试环境的依赖（正式评测由平台提供环境）
 
-<<<<<<< HEAD
 # 本地测试脚本依赖
 httpx>=0.24.0
 
 # 符号计算引擎（可选，加速确定性求解与等价验证）
 # 若评测平台未安装 sympy，agent 会自动降级跳过
 sympy>=1.12
-=======
-# 转化工具依赖
-pdfplumber>=0.11.0     # PDF 转 JSON
-python-docx>=1.1.0     # Word 转 JSON
-python-pptx>=0.6.21    # PPT 答案提取
-
-# tkinterdnd2>=0.3.0  # GUI only, not needed for server       # GUI 拖放支持（可选，不影响基本使用）
->>>>>>> 67990f0c90579497998e2434f83e005d4b712edb

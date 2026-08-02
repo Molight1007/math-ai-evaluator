@@ -101,7 +101,9 @@ BLUEPRINT_USER_TEMPLATE = """请使用蓝图分解法求解以下数学问题。
 ============================================================"""
 
 # 是否默认启用蓝图分解策略
-USE_BLUEPRINT_DEFAULT = True
+# 注意：Intern-S 模型在蓝图模式下容易输出规划文本而非答案，已禁用。
+# 如需重新启用，改为 True 并强化提示词中的格式要求。
+USE_BLUEPRINT_DEFAULT = False
 
 
 def get_policy_system(use_blueprint: Optional[bool] = None) -> str:

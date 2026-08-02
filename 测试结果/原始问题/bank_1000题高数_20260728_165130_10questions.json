@@ -1,0 +1,74 @@
+[
+  {
+    "id": "gen_05a1507e",
+    "question": "判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？",
+    "domain": "无穷级数",
+    "reference_answer": "绝对收敛，因为|(-1)^n/(n^2+1)| = 1/(n^2+1) ≤ 1/n^2，而∑1/n^2收敛。"
+  },
+  {
+    "id": "gen_726846a3",
+    "question": "求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_c2c19be5",
+    "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。",
+    "domain": "函数极限与连续",
+    "reference_answer": "$-\\frac{1}{6}$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0917",
+    "question": "若数项级数 ∑_{n=1}^{∞} a_n 条件收敛，则幂级数 ∑_{n=1}^{∞} n a_n (x+2)^n 在 x = -2 处( )。A. 绝对收敛 B. 条件收敛 C. 发散 D. 敛散性不能确定",
+    "domain": "无穷级数",
+    "reference_answer": "A. 绝对收敛"
+  },
+  {
+    "id": "一元函数积分学的概念与性质_025",
+    "question": "下列表达式中正确的是（ ）。\nA. ∫_π^{2π} |sin x| dx ≤ ∫_π^{2π} sin^2 x dx\nB. ∫_{-π}^{π} \\frac{x}{1+\\cos x} dx < ∫_{-π}^{π} \\frac{\\sin x + 1}{1+x^4} dx\nC. 若f(x)连续，x∈[c,d]，且[a,b]⊂[c,d]，则∫_a^b f(x) dx ≤ ∫_c^d f(x) dx\nD. ∫_{-1}^1 f(|x|) dx = 2∫_0^1 f(|x|) dx，其中f(x)连续，x∈[-1,1]",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": "D"
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "设函数 $f(x) = \\begin{cases} 1-2x^2, & x < -1 \\\\ x^3, & -1 \\leq x \\leq 2 \\\\ 12x-16, & x > 2 \\end{cases}$，写出 $f(x)$ 的反函数 $g(x)$ 的表达式。",
+    "domain": "函数极限与连续",
+    "reference_answer": "分段求反函数：\n1. 当 $x < -1$ 时，$y = 1-2x^2$，解得 $x = -\\sqrt{\\frac{1-y}{2}}$（取负号因为 $x<-1$），此时 $y < -1$。\n2. 当 $-1 \\leq x \\leq 2$ 时，$y = x^3$，解得 $x = \\sqrt[3]{y}$，此时 $-1 \\leq y \\leq 8$。\n3. 当 $x > 2$ 时，$y = 12x-16$，解得 $x = \\frac{y+16}{12}$，此时 $y > 8$。\n因此，反函数 $g(x) = \\begin{cases} -\\sqrt{\\frac{1-x}{2}}, & x < -1 \\\\ \\sqrt[3]{x}, & -1 \\leq x \\leq 8 \\\\ \\frac{x+16}{12}, & x > 8 \\end{cases}$。"
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "设函数 f(x) = { 1 - 2x^2, x < -1; x^3, -1 ≤ x ≤ 2; 12x - 16, x > 2 }，写出 f(x) 的反函数 g(x) 的表达式。",
+    "domain": "函数极限与连续",
+    "reference_answer": "g(x) = { -√((1-x)/2), x < -1; ∛x, -1 ≤ x ≤ 8; (x+16)/12, x > 8 }"
+  },
+  {
+    "id": "多元函数微分学_021",
+    "question": "求函数 $f(x,y) = x^3 - 3xy - y^2 - y - 9$ 的极值。",
+    "domain": "多元函数微分学",
+    "reference_answer": "极小值 $f(1,-2) = -12$，无极大值。"
+  },
+  {
+    "id": "多元函数微分学_034",
+    "question": "设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f'_y(x, 0) = 2x$，$f''_{yy}(x, y) = 4$。求 $f(x, y)$ 在约束条件 $x^2 + 2y^2 = 4$ 下的最大值与最小值。",
+    "domain": "多元函数微分学",
+    "reference_answer": "最大值为 $8$，最小值为 $0$。"
+  },
+  {
+    "id": "多元函数微分学_034",
+    "question": "设函数 $f(x, y)$ 具有二阶连续偏导数，且满足 $f(x, 0) = x^2$，$f_y'(x, 0) = 2x$，$f_{yy}''(x, y) = 4$，求 $f(x, y)$ 在约束条件 $x^2 + 2y^2 = 4$ 下的最大值与最小值。",
+    "domain": "多元函数微分学",
+    "reference_answer": "最大值 $f_{\\max} = 4$，最小值 $f_{\\min} = -4$（需具体计算验证）。"
+  },
+  {
+    "id": "无穷级数_010",
+    "question": "级数 $\\sum_{n=1}^{\\infty} \\frac{e^{-nx}}{n^n}$ 的收敛域为_____。",
+    "domain": "无穷级数",
+    "reference_answer": "$[0, +\\infty)$"
+  },
+  {
+    "id": "无穷级数_033",
+    "question": "∑_{n=1}^∞ 1 / ((n+2) * n!) = _____。",
+    "domain": "无穷级数",
+    "reference_answer": "1/2"
+  }
+]

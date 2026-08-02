@@ -21,11 +21,10 @@ generate_ppt.py
 # Analysis docs
 MathPilot优化分析.md
 
-<<<<<<< HEAD
 # OS
 .DS_Store
 Thumbs.db
-=======
+
 # Lean 工具链（约 1.2GB，含二进制与编译产物，由 lean-toolchain 自动下载）
 lean4-toolchain/
 
@@ -49,7 +48,6 @@ lake-packages/
 ~$*                      # Word 临时锁文件
 build_pid.txt
 *_done.txt
-__pycache__/
 
 # 临时评测输出（运行时生成）
 *_out.txt
@@ -62,10 +60,9 @@ __pycache__/
 node_modules/
 package-lock.json
 
-# �û����ݣ�����ʱ���ɣ��������ϣ��
+# 用户数据（运行时生成，不应提交）
 deploy/users.json
 
-# ��������ʱ����
+# 评测运行时产物
 deploy/results/
 deploy/user_api_settings.json
->>>>>>> 67990f0c90579497998e2434f83e005d4b712edb

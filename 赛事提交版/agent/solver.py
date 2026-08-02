@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .base import (
     BaseAgent, TaskContext, Candidate,
     detect_hallucination, detect_truncated,
+    detect_template_leak,
 )
 from prompts.policy import (
     POLICY_SYSTEM,
@@ -82,6 +83,13 @@ def _is_refusal(text: str) -> bool:
         if not has_math:
             return True
     return False
+
+
+def _needs_followup(content: str) -> bool:
+    """检测是否需要追问中文答案。
+    注意：Intern-S 模型天然倾向英文输出，但数学答案（数字/表达式）无所谓语言。
+    目前暂时禁用追问机制，避免无限循环。英文答案同样可以通过正则提取。"""
+    return False  # 禁用：Intern-S 英文输出不影响答案提取
 
 
 class SolverAgent(BaseAgent):
@@ -209,20 +217,28 @@ class SolverAgent(BaseAgent):
             ]
 
             # 最多重试 3 次（原始请求 + 2 次重试），避免空响应/拒绝回答
+            resp = None
+            template_leak_retry = False  # 标记是否为模板泄露后的重试
             for retry in range(3):
                 current_temp = base_temp
                 current_system = system_prompt
-                # 如果是拒绝回答后的重试，用强化提示词和更高温度
-                if retry > 0:
+                # 模板泄露重试时使用简化prompt（不覆盖）
+                if template_leak_retry:
+                    current_user = f"请直接解答以下数学问题，只输出解答过程和最终答案：\n\n{ctx.problem}"
                     current_system = _REINFORCED_SYSTEM
                     current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
+                    template_leak_retry = False
+                else:
+                    current_user = user_content + (_perturb_hints[i % len(_perturb_hints)] if retry == 0 else "")
+                    if retry > 0:
+                        current_system = _REINFORCED_SYSTEM
+                        current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
 
                 resp = self.llm(
                     ctx,
                     [
                         {"role": "system", "content": current_system},
-                        {"role": "user",
-                         "content": user_content + (_perturb_hints[i % len(_perturb_hints)] if retry == 0 else "")},
+                        {"role": "user", "content": current_user},
                     ],
                     current_temp,
                     self.config.policy_max_tokens,
@@ -232,6 +248,31 @@ class SolverAgent(BaseAgent):
                     if retry < 2:
                         logger.warning("Candidate %d empty response (retry %d/2)", cid, retry + 1)
                         time.sleep(1)
+                    continue
+                # 模板泄露检测 → 重试
+                if detect_template_leak(resp):
+                    if retry < 2:
+                        logger.warning("Candidate %d template leak (retry %d/2)", cid, retry + 1)
+                        template_leak_retry = True
+                        time.sleep(0.5)
+                        continue
+                # 英文think泄露 → 追问中文答案
+                if _needs_followup(resp) and retry < 2:
+                    logger.warning("Candidate %d English think leak → followup", cid)
+                    followup_resp = self.llm(
+                        ctx,
+                        [
+                            {"role": "system", "content": _REINFORCED_SYSTEM},
+                            {"role": "user",
+                             "content": f"请用中文重新表达你的解答过程，并给出【最终答案】。\n\n上轮回答：\n{resp[-1500:]}\n\n请用中文写出完整解答和最终答案："},
+                        ],
+                        0.3, self.config.policy_max_tokens,
+                    )
+                    if followup_resp and followup_resp.strip():
+                        if not detect_template_leak(followup_resp) and not _needs_followup(followup_resp):
+                            resp = followup_resp
+                            break  # 追问成功，跳出重试循环
+                    time.sleep(0.5)
                     continue
                 # 幻觉检测
                 hallu = detect_hallucination(resp)
@@ -274,9 +315,11 @@ class SolverAgent(BaseAgent):
                 logger.warning("Candidate %d generation failed/skipped", cid)
                 continue
             answer = extract_final_answer(resp)
-            # 如果提取不到答案但推理内容存在，取尾部作为答案
-            if not answer and resp.strip():
-                answer = smart_fallback_answer(resp)
+            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），取尾部
+            if not answer or len(answer) > 300 and resp.strip():
+                fallback = smart_fallback_answer(resp)
+                if fallback and (not answer or len(fallback) < len(answer)):
+                    answer = fallback
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,

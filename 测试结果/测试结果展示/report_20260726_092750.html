@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .lean-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+        .lean-badge.lean-pass { background: #D1FAE5; color: #065F46; }
+        .lean-badge.lean-logic-err { background: #FEE2E2; color: #991B1B; }
+        .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
+        .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
+        .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
+        .section-heading.lean { color: #059669; border-color: #A7F3D0; }
+        .section-heading .icon-dot.lean { background: #10B981; }
+        .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .lean-status.pass { background: #D1FAE5; color: #065F46; }
+        .lean-status.fail { background: #FEE2E2; color: #991B1B; }
+        .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+        .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
+        .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+        .lean-insight .insight-title { font-size: 13px; font-weight: 700; color: #92400E; margin-bottom: 8px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-07-26 09:27:50</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">20</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">0</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value red">0.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.3</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">87.2s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">94.83s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">无穷级数</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/3)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">函数极限与连续</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/5)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">二重积分</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">多元函数微分学</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">数列极限</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数微分学的应用(一)--几何应用</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的应用(一)--几何应用</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的计算</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">微分方程</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/2)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Lean</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_05a1507e&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？&quot;, &quot;reference_answer&quot;: &quot;绝对收敛，因为|(-1)^n/(n^2+1)| = 1/(n^2+1) ≤ 1/n^2，而∑1/n^2收敛。&quot;, &quot;intern_answer&quot;: &quot;绝对收敛&quot;, &quot;intern_reasoning&quot;: &quot;候选0同时正确应用莱布尼茨判别法和比较判别法，双重验证了绝对收敛性；候选1和2在绝对值级数的判断上存在错误，结论不可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 1720, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 28.55, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_05a1507e&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4773, &quot;conversion_latency&quot;: 59.31, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_05a1507e</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">判断级数∑_{n=1}^{∞} (-1)^n / (n^2 + 1) 的敛散性，若收敛，是绝对收敛还是条件收敛？...</td>
+            <td>绝对收敛</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>28.55s</td>
+            <td>94.83s</td>
+            <td>13494</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_51b9fa8e&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：\\(\\lim\\limits_{x \\to 0} \\frac{\\int_0^x \\sin(t^2) \\, dt}{x^3}\\)。&quot;, &quot;reference_answer&quot;: &quot;\\frac{1}{3}&quot;, &quot;intern_answer&quot;: &quot;1/3&quot;, &quot;intern_reasoning&quot;: &quot;候选0和候选1均通过不同方法得到相同结果，但候选0的洛必达法则和泰勒展开结合使用更直接，且验证了两次洛必达法则的应用，结果一致，因此选择候选0。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2965, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 55.68, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_51b9fa8e&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4776, &quot;conversion_latency&quot;: 61.67, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_51b9fa8e</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：\(\lim\limits_{x \to 0} \frac{\int_0^x \sin(t^2) \, dt}{x^3}\)。...</td>
+            <td>1/3</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>55.68s</td>
+            <td>94.83s</td>
+            <td>14739</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_58055bd6&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (1 - cos x) / (x^2)。&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;1/2&quot;, &quot;intern_reasoning&quot;: &quot;洛必达法则直接且高效，步骤明确且无需依赖特殊恒等式或展开式，适用于0/0型极限的标准解法，因此选择候选0。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2278, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 40.63, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_58055bd6&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4750, &quot;conversion_latency&quot;: 52.8, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_58055bd6</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (1 - cos x) / (x^2)。...</td>
+            <td>1/2</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>40.63s</td>
+            <td>94.83s</td>
+            <td>14052</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_60b54d27&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (sin x - x)/x^3&quot;, &quot;reference_answer&quot;: &quot;-1/6&quot;, &quot;intern_answer&quot;: &quot;-1/6&quot;, &quot;intern_reasoning&quot;: &quot;候选0和1的推理均严谨可靠，但洛必达法则（候选0）更直接适用于0/0型不定式，且无需依赖泰勒展开的记忆，适用性更广。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 1718, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 27.93, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_60b54d27&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4756, &quot;conversion_latency&quot;: 61.8, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_60b54d27</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (sin x - x)/x^3...</td>
+            <td>-1/6</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>27.93s</td>
+            <td>94.83s</td>
+            <td>13492</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_81798c40&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。&quot;, &quot;reference_answer&quot;: &quot;1/2&quot;, &quot;intern_answer&quot;: &quot;1/2&quot;, &quot;intern_reasoning&quot;: &quot;三种方法均得出相同结果，但洛必达法则（候选0）直接且步骤最简，无需依赖泰勒展开或额外记忆极限，适用性更广。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 1993, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 37.13, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_81798c40&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4755, &quot;conversion_latency&quot;: 55.98, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_81798c40</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。...</td>
+            <td>1/2</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>37.13s</td>
+            <td>94.83s</td>
+            <td>13767</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_a2e1e013&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;计算二重积分：∬_D (x^2 + y^2) dxdy，其中 D 是由 x^2 + y^2 = 1 所围成的闭区域。&quot;, &quot;reference_answer&quot;: &quot;π/2&quot;, &quot;intern_answer&quot;: &quot;π/2&quot;, &quot;intern_reasoning&quot;: &quot;候选0采用极坐标转换，直接简化了积分计算，步骤简洁且逻辑清晰，结果与其他方法一致，置信度最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2708, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 55.69, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_a2e1e013&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4765, &quot;conversion_latency&quot;: 63.56, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_a2e1e013</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算二重积分：∬_D (x^2 + y^2) dxdy，其中 D 是由 x^2 + y^2 = 1 所围成的闭区域。...</td>
+            <td>π/2</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>55.69s</td>
+            <td>94.83s</td>
+            <td>14482</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_b71259d7&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;求函数f(x,y) = x^2 + y^2 - 2x + 4y + 1的极值。&quot;, &quot;reference_answer&quot;: &quot;极小值为-4，在点(1,-2)处取得。&quot;, &quot;intern_answer&quot;: &quot;-4&quot;, &quot;intern_reasoning&quot;: &quot;候选0和1均正确，但候选0通过严格的导数检验法和配方法双重验证，且Hessian分析严谨，置信度最高。候选2因计算错误被排除。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2098, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 34.68, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_b71259d7&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;import Mathlib\n\nopen Real\n\ntheorem f_extreme_value : (∃ (x y : ℝ), x^2 + y^2 - 2*x + 4*y + 1 = -4) ∧ (∀ (x y : ℝ), x^2 + y^2 - 2*x + 4*y + 1 ≥ -4) :=\nby\n  constructor\n  · use 1, -2\n    norm_num\n  · intro x y\n    have h_eq : x^2 + y^2 - 2*x + 4*y + 1 = (x - 1)^2 + (y + 2)^2 - 4 := by ring\n    rw [h_eq]\n    have hx : (x - 1)^2 ≥ 0 := sq_nonneg _\n    have hy : (y + 2)^2 ≥ 0 := sq_nonneg _\n    linarith&quot;, &quot;formalized_claim&quot;: &quot;函数 f(x,y)=x^2+y^2-2x+4y+1 的最小值为 -4。&quot;, &quot;conversion_tokens&quot;: 2441, &quot;conversion_latency&quot;: 23.63, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: false, &quot;compile_output&quot;: &quot;C:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:1:0: error: unexpected token '.'; expected command\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:7:5: error: unknown tactic\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:40: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HAdd ℝ ℝ ?m.26\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:88: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HAdd ℝ ℝ ?m.50\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:40: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HPow ℝ Nat ℝ\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:46: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HPow ℝ Nat ℝ\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:88: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HPow ℝ Nat ℝ\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:4:94: error(lean.synthInstanceFailed): failed to synthesize instance of type class\n  HPow ℝ Nat ℝ\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:7:2: error: unsolved goals\ncase left\nℝ : Type u_1\n⊢ ∃ x y, sorry\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_gwl0owwf.lean:5:0: error: unsolved goals\ncase right\nℝ : Type u_1\n⊢ ∀ (x y : ℝ), sorry&quot;, &quot;compile_latency&quot;: 1.01, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: true, &quot;error_category&quot;: &quot;translation_error&quot;, &quot;analysis_confidence&quot;: 0.95, &quot;human_readable_error&quot;: &quot;Lean代码中出现语法错误、类型类实例缺失以及未知tactic，但原始数学推理（配方法求极值）完全正确。&quot;, &quot;root_cause&quot;: &quot;编译错误是由于Lean代码翻译不完整或环境配置问题，例如第1行的不可见字符、实数幂运算的类型类实例未找到、linarith策略不可用等。这些错误不是数学逻辑问题，而是形式化过程中的技术错误。原推理通过配方法得出最小值-4是正确的。&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;函数 f(x,y) = x² + y² - 2x + 4y + 1 可配方为 (x-1)² + (y+2)² - 4，由平方的非负性知 f(x,y) ≥ -4，且等号当 x=1, y=-2 时成立，故极小值为 -4，无极大值。&quot;, &quot;translation_issue&quot;: &quot;Lean代码文件开头可能存在不可见字符导致解析失败；实数与自然数的幂运算可能因缺少显式类型标注而失败；import Mathlib.Tactic可能未正确引入linarith。&quot;, &quot;fix_prompt_for_ai&quot;: &quot;修正Lea代码的语法错误：确保文件编码为UTF-8无BOM；在theorem中明确标注实数运算，如使用 `(x:ℝ)^2`；增加 `import Mathlib.Tactic.Ring` 与 `import Mathlib.Tactic.Linarith`；在证明中适当使用 `ring` 展开多项式，并用 `linarith` 处理不等式。&quot;, &quot;suggested_fix&quot;: &quot;建议重写代码：首先用 `open Real` 或显式类型标注 `(x : ℝ)^2`；使用 `ring` 进行配方变换；利用 `sq_nonneg` 得到平方非负；最后用 `linarith` 完成下界证明。确保所有 tactic 已导入。&quot;, &quot;analysis_tokens&quot;: 3127, &quot;analysis_latency&quot;: 85.71, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 2, &quot;revised_lean_code&quot;: &quot;import Mathlib.Data.Real.Basic\nimport Mathlib.Tactic\n\ntheorem f_extreme_value : (∃ (x y : ℝ), x^2 + y^2 - 2*x + 4*y + 1 = -4) ∧ (∀ (x y : ℝ), x^2 + y^2 - 2*x + 4*y + 1 ≥ -4) :=\nby\n  constructor\n  · use 1, -2\n    norm_num\n  · intro x y\n    have h_eq : x^2 + y^2 - 2*x + 4*y + 1 = (x - 1)^2 + (y + 2)^2 - 4 := by ring\n    rw [h_eq]\n    have hx : (x - 1)^2 ≥ 0 := sq_nonneg _\n    have hy : (y + 2)^2 ≥ 0 := sq_nonneg _\n    linarith&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_b71259d7</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求函数f(x,y) = x^2 + y^2 - 2x + 4y + 1的极值。...</td>
+            <td>-4</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td><span class="lean-badge lean-trans-err" title="Translation error">L✗转化</span></td>
+            <td>34.68s</td>
+            <td>94.83s</td>
+            <td>13872</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_f1e7c567&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。&quot;, &quot;reference_answer&quot;: &quot;$-\\frac{1}{6}$&quot;, &quot;intern_answer&quot;: &quot;-1/6&quot;, &quot;intern_reasoning&quot;: &quot;泰勒展开法直接揭示分子的主部，步骤简明且误差项清晰，结果可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 1996, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 31.65, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;gen_f1e7c567&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;import Mathlib\n\nopen Real\nopen Filter\n\ntheorem limit_sin_sub_x_div_x_cube : Tendsto (λ x : ℝ =&gt; (sin x - x) / (x ^ 3)) (𝓝 0) (𝓝 (-1/6 : ℝ)) := by\n  sorry&quot;, &quot;formalized_claim&quot;: &quot;证明在 x 趋向于 0 时，(sin x - x)/x³ 的极限为 -1/6。&quot;, &quot;conversion_tokens&quot;: 2591, &quot;conversion_latency&quot;: 30.0, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: false, &quot;compile_output&quot;: &quot;C:\\Users\\35174\\AppData\\Local\\Temp\\verify_f6r19e4d.lean:1:12: error: unknown namespace `Topology`\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_f6r19e4d.lean:2:5: error: unknown namespace `Filter`\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_f6r19e4d.lean:4:37: error: Function expected at\n  Tendsto\nbut this term has type\n  ?m.1\n\nNote: Expected a function because this term is being applied to the argument\n  (λ x : ℝ =&gt; (sin x - x) / (x ^ 3))\n\nHint: The identifier `Tendsto` is unknown, and Lean's `autoImplicit` option causes an unknown identifier to be treated as an implicitly bound variable with an unknown type. However, the unknown type cannot be a function, and a function is what Lean expects here. This is often the result of a typo or a missing `import` or `open` statement.&quot;, &quot;compile_latency&quot;: 0.86, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: true, &quot;error_category&quot;: &quot;translation_error&quot;, &quot;analysis_confidence&quot;: 0.98, &quot;human_readable_error&quot;: &quot;Lean 代码编译失败：命名空间 `Topology` 和 `Filter` 未识别，`Tendsto` 函数未定义。这是因为缺少必要的导入或 `open` 声明，本质上是 Lean 形式化时的技术错误，而非数学推理错误。&quot;, &quot;root_cause&quot;: &quot;原始数学推理正确，极限值为 -1/6。但 Lean 代码在形式化时没有正确引入库和命名空间，导致 `Tendsto`、`Topology`、`Filter` 等标识符无法解析。这属于 Lean 编码层面的翻译失误，不反映原始推理的逻辑缺陷。&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;代码使用了 `open scoped Topology` 和 `open Filter`，但未从 Mathlib 中正确导入所需模块（如 `Mathlib.Topology.Basic` 等）或未将标识符限定为全名。应使用 `open Filter Topology` 并确保 `import` 了相关文件，或直接使用完全限定名如 `Filter.Tendsto`。&quot;, &quot;fix_prompt_for_ai&quot;: &quot;请将 Lean 代码的开头改为 `import Mathlib.Topology.Basic` 和 `import Mathlib.Analysis.SpecialFunctions.Trigonometric`，并使用 `open Filter Topology`，然后直接陈述定理：`theorem limit_sin_sub_x_div_x_cube : Filter.Tendsto (λ x : ℝ =&gt; (sin x - x) / (x ^ 3)) (𝓝 0) (𝓝 (-1/6 : ℝ)) := by`。&quot;, &quot;suggested_fix&quot;: &quot;在代码开头添加 `import Mathlib.Topology.Basic` 和 `import Mathlib.Analysis.SpecialFunctions.Trigonometric`，然后 `open Filter Topology`。若仍报错，则将 `Tendsto` 写为 `Filter.Tendsto`，`𝓝` 写为 `nhds`。&quot;, &quot;analysis_tokens&quot;: 2056, &quot;analysis_latency&quot;: 51.09, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 1, &quot;has_incomplete_proof&quot;: true, &quot;revision_attempts&quot;: 2, &quot;revised_lean_code&quot;: &quot;import Mathlib\nopen scoped Topology\nopen Filter\n\ntheorem limit_sin_sub_x_div_x_cube : Tendsto (λ x : ℝ =&gt; (sin x - x) / (x ^ 3)) (𝓝 0) (𝓝 (-1/6 : ℝ)) := by\n  sorry&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_f1e7c567</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求极限 $\lim_{x \to 0} \frac{\sin x - x}{x^3}$。...</td>
+            <td>-1/6</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td><span class="lean-badge lean-trans-err" title="Translation error">L✗转化</span></td>
+            <td>31.65s</td>
+            <td>94.83s</td>
+            <td>13770</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0105&quot;, &quot;domain&quot;: &quot;数列极限&quot;, &quot;question&quot;: &quot;设 \\(x_0 &gt; 0\\)，\\(x_{n+1} = \\frac{1}{2} \\left( x_n + \\frac{a}{x_n} \\right)\\)（\\(n = 0, 1, 2, \\cdots\\)），且 \\(a &gt; 0\\)。证明 \\(\\lim_{n \\to \\infty} x_n\\) 存在，并求此极限。&quot;, &quot;reference_answer&quot;: &quot;\\(\\sqrt{a}\\)&quot;, &quot;intern_answer&quot;: &quot;\\sqrt{a}&quot;, &quot;intern_reasoning&quot;: &quot;Candidate 0通过数学归纳法严格证明了有界性和单调性，逻辑链条完整且无漏洞，符合题目要求的详细证明。其他候选者或存在步骤跳跃（Candidate 1），或压缩映射条件证明不充分（Candidate 2）。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2874, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 48.23, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0105&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4833, &quot;conversion_latency&quot;: 57.55, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0105</td>
+            <td><span class="domain-tag">数列极限</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设 \(x_0 &gt; 0\)，\(x_{n+1} = \frac{1}{2} \left( x_n + \frac{a}{x_n} \right)\)（\(n =...</td>
+            <td>\sqrt{a}</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>48.23s</td>
+            <td>94.83s</td>
+            <td>14648</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0250&quot;, &quot;domain&quot;: &quot;一元函数微分学的应用(一)--几何应用&quot;, &quot;question&quot;: &quot;已知函数 y = f(x) 对一切 x 满足 x f''(x) + 3x [f'(x)]^2 = 1 - e^{-x}。若 f'(x_0) = 0 (x_0 ≠ 0)，则（ ）。\nA. f(x_0) 是函数 f(x) 的极大值\nB. f(x_0) 是函数 f(x) 的极小值\nC. (x_0, f(x_0)) 是曲线 y = f(x) 的拐点\nD. f(x_0) 不是函数 f(x) 的极值，(x_0, f(x_0)) 也不是曲线 y = f(x) 的拐点&quot;, &quot;reference_answer&quot;: &quot;C&quot;, &quot;intern_answer&quot;: &quot;B&quot;, &quot;intern_reasoning&quot;: &quot;候选0正确分析了二阶导数的符号，结论可靠；候选1和2存在计算或逻辑错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 1890, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 28.28, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0250&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4877, &quot;conversion_latency&quot;: 54.44, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0250</td>
+            <td><span class="domain-tag">一元函数微分学的应用(一)--几何应用</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">已知函数 y = f(x) 对一切 x 满足 x f''(x) + 3x [f'(x)]^2 = 1 - e^{-x}。若 f'(x_0) = 0 (x_0 ≠...</td>
+            <td>B</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>28.28s</td>
+            <td>94.83s</td>
+            <td>13664</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0251&quot;, &quot;domain&quot;: &quot;一元函数微分学的应用(一)--几何应用&quot;, &quot;question&quot;: &quot;设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) &gt; 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调递增”是“(f(x) - f(a))/(g(x) - g(a)) 严格单调递增”的（ ）。\nA. 充分非必要条件\nB. 必要非充分条件\nC. 充分必要条件\nD. 既非充分又非必要条件&quot;, &quot;reference_answer&quot;: &quot;C&quot;, &quot;intern_answer&quot;: &quot;A&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过严格导数分析和反例验证，充分性成立但必要性不成立，逻辑完整；候选1和2未正确处理必要性或反例，结论错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 5652, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 115.41, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0251&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4844, &quot;conversion_latency&quot;: 58.29, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0251</td>
+            <td><span class="domain-tag">一元函数微分学的应用(一)--几何应用</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) &gt; 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调...</td>
+            <td>A</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>115.41s</td>
+            <td>94.83s</td>
+            <td>17426</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0538&quot;, &quot;domain&quot;: &quot;一元函数积分学的应用(一)--几何应用&quot;, &quot;question&quot;: &quot;设函数f(x)在[0,1]上连续，在(0,1)内可导，且满足xf'(x) = f(x) + x^2。已知曲线y = f(x)与x = 0, x = 1, y = 0所围成的图形S的面积为2。求f(x)的表达式，以及图形S绕x轴旋转一周所得旋转体的体积。&quot;, &quot;reference_answer&quot;: &quot;f(x) = x^2 + 2x；体积V = 49π/15&quot;, &quot;intern_answer&quot;: &quot;f(x) = x² + (10/3)x，体积为752π/135&quot;, &quot;intern_reasoning&quot;: &quot;候选0的解答详细且正确，步骤清晰，计算准确，与其他候选答案一致。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2559, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 45.78, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0538&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4820, &quot;conversion_latency&quot;: 55.32, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0538</td>
+            <td><span class="domain-tag">一元函数积分学的应用(一)--几何应用</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设函数f(x)在[0,1]上连续，在(0,1)内可导，且满足xf'(x) = f(x) + x^2。已知曲线y = f(x)与x = 0, x = 1, y =...</td>
+            <td>f(x) = x² + (10/3)x，体积为752π/135</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>45.78s</td>
+            <td>94.83s</td>
+            <td>14333</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0780&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;计算累次积分：∫_{0}^{1} x^2 dx ∫_{0}^{1} e^{-y^2} dy。&quot;, &quot;reference_answer&quot;: &quot;(1/3) * (√π/2) * erf(1) = (√π/6) * erf(1)，其中erf为误差函数。&quot;, &quot;intern_answer&quot;: &quot;0.2489&quot;, &quot;intern_reasoning&quot;: &quot;候选0提供了数值近似结果，便于理解，同时正确拆分了积分并计算了每个部分，因此是最合适的答案。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2050, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 35.93, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0780&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;{\n  \&quot;lean_code\&quot;: \&quot;import Mathlib\\nopen Real\\nopen intervalIntegral\\n\\ntheorem iterated_integral_equals : (∫ x in (0:ℝ)..(1:ℝ), x^2) * (∫ y in (0:ℝ)..(1:ℝ), Real.exp (-y^2)) = (1/3 : ℝ) * (Real.sqrt π / 2) * Real.erf 1 := by\\n  have hx : (∫ x in (0:ℝ)..(1:ℝ), x^2) = (1/3 : ℝ) := by\\n    calc\\n      (∫ x in (0:ℝ)..(1:ℝ), x^2) = ((1:ℝ)^(2+1) - (0:ℝ)^(2+1)) / ((2:ℝ)+1) := by\\n        rw [intervalIntegral.integral_pow]\\n      _ = (1 - 0) / 3 := by norm_num\\n      _ = 1/3 := by ring\\n  have hy : (∫ y in (0:ℝ)..(1:ℝ), Real.exp (-y^2)) = (Real.sqrt π / 2) * Real.erf 1 := by\\n    have h_erf_def : Real&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4751, &quot;conversion_latency&quot;: 53.4, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: false, &quot;compile_output&quot;: &quot;C:\\Users\\35174\\AppData\\Local\\Temp\\verify_qsmbgea0.lean:1:0: error: unexpected token '.'; expected command\nC:\\Users\\35174\\AppData\\Local\\Temp\\verify_qsmbgea0.lean:5:36: error: expected token&quot;, &quot;compile_latency&quot;: 0.72, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: true, &quot;error_category&quot;: &quot;translation_error&quot;, &quot;analysis_confidence&quot;: 0.95, &quot;human_readable_error&quot;: &quot;Lean代码存在语法错误（意外的 '.' 和缺少 token），这通常由文件编码或不可见字符引起，与数学推理正确与否无关。&quot;, &quot;root_cause&quot;: &quot;原始推理仅评价了一个候选答案，并未给出具体的推导过程，但所证的数学等式本身是正确的。编译错误纯粹是Lean代码书写或文件格式问题，不反映任何逻辑缺陷。&quot;, &quot;logic_flaw_location&quot;: &quot;无&quot;, &quot;logic_flaw_why&quot;: &quot;无&quot;, &quot;correct_approach&quot;: &quot;正确解法：分别计算∫0^1 x^2 dx = 1/3 和 ∫0^1 e^{-y^2} dy = (√π/2) erf(1)，再相乘即可。&quot;, &quot;translation_issue&quot;: &quot;Lean代码文件可能包含不可见字符（如BOM）或多余的标点，导致解析器在首行就报错。此外，第二个积分的证明留有sorry，但这属于未完成部分，并非错误。&quot;, &quot;fix_prompt_for_ai&quot;: &quot;无需修正数学推理。请检查并修复Lean代码的语法错误：确保文件为纯文本UTF-8无BOM格式，且代码块以标准的import语句开始，无多余字符。&quot;, &quot;suggested_fix&quot;: &quot;请用UTF-8无BOM格式重新保存文件，删除可能存在的不可见字符。对于e^{-y^2}的积分，需要补充证明（可借助Mathlib中误差函数erf的展开式）。&quot;, &quot;analysis_tokens&quot;: 2344, &quot;analysis_latency&quot;: 95.72, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 1, &quot;has_incomplete_proof&quot;: true, &quot;revision_attempts&quot;: 2, &quot;revised_lean_code&quot;: &quot;import Mathlib\nimport Mathlib.Analysis.SpecialFunctions.ErrorFunction\nopen Real\n\nset_option maxHeartbeats 400000\n\ntheorem iterated_integral_equals : (∫ x in (0:ℝ)..(1:ℝ), x^2) * (∫ y in (0:ℝ)..(1:ℝ), Real.exp (-y^2)) = (1/3 : ℝ) * (Real.sqrt π / 2) * Real.erf 1 := by\n  have hx : (∫ x in (0:ℝ)..(1:ℝ), x^2) = (1/3 : ℝ) := by\n    calc\n      (∫ x in (0:ℝ)..(1:ℝ), x^2) = ((1:ℝ)^(2+1) - (0:ℝ)^(2+1)) / ((2:ℝ)+1) := by\n        rw [intervalIntegral.integral_pow]\n      _ = (1 - 0) / 3 := by norm_num\n      _ = 1/3 := by norm_num\n  have hy : (∫ y in (0:ℝ)..(1:ℝ), Real.exp (-y^2)) = (Real.sqrt π / 2) * Real.erf 1 := by\n    sorry\n  calc\n    (∫ x in (0:ℝ)..(1:ℝ), x^2) * (∫ y in (0:ℝ)..(1:ℝ), Real.exp (-y^2)) = (1/3 : ℝ) * ((Real.sqrt π / 2) * Real.erf 1) := by rw [hx, hy]\n    _ = (1/3 : ℝ) * (Real.sqrt π / 2) * Real.erf 1 := by simp [mul_assoc]&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0780</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算累次积分：∫_{0}^{1} x^2 dx ∫_{0}^{1} e^{-y^2} dy。...</td>
+            <td>0.2489</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td><span class="lean-badge lean-trans-err" title="Translation error">L✗转化</span></td>
+            <td>35.93s</td>
+            <td>94.83s</td>
+            <td>13824</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0912&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;设数列 {a_n} 和 {b_n} 满足 e^{a_n} - e^{-a_n} = a_n (e^{b_n} + e^{-b_n})，其中 0 &lt; a_n &lt; 1，0 &lt; b_n &lt; 1，n = 1, 2, ...，且级数 ∑_{n=1}^{∞} b_n 收敛。证明：(1) a_n &gt; b_n，n = 1, 2, ...；(2) 级数 ∑_{n=1}^{∞} (b_n - a_n) 收敛。&quot;, &quot;reference_answer&quot;: &quot;证明：(1) 由已知等式，利用双曲函数或构造函数可证 a_n &gt; b_n。(2) 利用 (1) 的结论和比较判别法证明 ∑(b_n - a_n) 收敛。&quot;, &quot;intern_answer&quot;: &quot;a_n &gt; b_n，且级数 ∑(b_n - a_n) 收敛&quot;, &quot;intern_reasoning&quot;: &quot;候选0的推理最为严谨，利用了函数单调性和泰勒展开，逻辑清晰，结论可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 3052, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 305.22, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0912&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4859, &quot;conversion_latency&quot;: 47.3, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0912</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设数列 {a_n} 和 {b_n} 满足 e^{a_n} - e^{-a_n} = a_n (e^{b_n} + e^{-b_n})，其中 0 &lt; a_n &lt; ...</td>
+            <td>a_n &gt; b_n，且级数 ∑(b_n - a_n) 收敛</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>305.22s</td>
+            <td>94.83s</td>
+            <td>14826</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;一元函数积分学的计算_033&quot;, &quot;domain&quot;: &quot;一元函数积分学的计算&quot;, &quot;question&quot;: &quot;计算不定积分∫ x arcsin(1-x) dx = _____。&quot;, &quot;reference_answer&quot;: &quot;-(1/2)(1-x)² arcsin(1-x) + (1/4) arcsin(1-x) + (1/4)(1-x)√(2x-x²) + C&quot;, &quot;intern_answer&quot;: &quot;\\frac{(2x^2 - 3)\\arcsin(1 - x) - (x + 3)\\sqrt{2x - x^2}}{4} + C&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过正确应用分部积分和三角替换完成推导，并通过求导验证结果正确性。其他候选未提供有效解法或存在明显错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 3895, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 185.51, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;一元函数积分学的计算_033&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4776, &quot;conversion_latency&quot;: 53.09, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>一元函数积分学的计算_033</td>
+            <td><span class="domain-tag">一元函数积分学的计算</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算不定积分∫ x arcsin(1-x) dx = _____。...</td>
+            <td>\frac{(2x^2 - 3)\arcsin(1 - x) - (x + 3)\sqrt{2x - x^2}}{4} </td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>185.51s</td>
+            <td>94.83s</td>
+            <td>15669</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数微分学_029&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;求曲线C:{{ 上距离xOy平面最远和最近的点的坐标. x+y+3z=5&quot;, &quot;reference_answer&quot;: &quot;&quot;, &quot;intern_answer&quot;: &quot;问题描述不完整，曲线C需要第二个方程（如球面、柱面等）才能定义为三维空间中的曲线。仅凭平面方程x+y+3z=5无法确定曲线，因此无法求解最远/最近点。&quot;, &quot;intern_reasoning&quot;: &quot;候选0严格遵循数学定义，明确指出题目条件不足，避免因错误假设导致无效解答。其他候选或忽略'曲线'定义错误（候选1），或依赖未经证实的补充条件（候选2），可靠性较低。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 3825, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 61.4, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;多元函数微分学_029&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4814, &quot;conversion_latency&quot;: 59.33, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数微分学_029</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求曲线C:{{ 上距离xOy平面最远和最近的点的坐标. x+y+3z=5...</td>
+            <td>问题描述不完整，曲线C需要第二个方程（如球面、柱面等）才能定义为三维空间中的曲线。仅凭平面方程x+y+3z=5无法确定曲</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>61.4s</td>
+            <td>94.83s</td>
+            <td>15599</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;微分方程_002&quot;, &quot;domain&quot;: &quot;微分方程&quot;, &quot;question&quot;: &quot;已知曲线上任一点的切线在 y 轴上的截距与法线在 x 轴上的截距之比为 3:1，求该曲线方程。&quot;, &quot;reference_answer&quot;: &quot;设曲线为 y=y(x)，点 (x,y) 处切线方程为 Y-y=y'(X-x)，在 y 轴上的截距为 y - x y'。法线方程为 Y-y = -(1/y')(X-x)，在 x 轴上的截距为 x + y y'。由条件得 (y - x y') : (x + y y') = 3:1，即 y - x y' = 3(x + y y')，整理得 y - x y' = 3x + 3y y'，即 (y - 3x) = y'(x + 3y)。解此微分方程得通解为 x^2 + y^2 = C (C为常数)。&quot;, &quot;intern_answer&quot;: &quot;arctan(y/x) + (3/2) ln(x² + y²) = C&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过严谨的微分方程推导和积分过程得出正确解，候选1虽正确但为候选0的等价变形，候选2假设错误。因此候选0的解最直接且可靠。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 4671, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 94.31, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;微分方程_002&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4788, &quot;conversion_latency&quot;: 54.73, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>微分方程_002</td>
+            <td><span class="domain-tag">微分方程</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">已知曲线上任一点的切线在 y 轴上的截距与法线在 x 轴上的截距之比为 3:1，求该曲线方程。...</td>
+            <td>arctan(y/x) + (3/2) ln(x² + y²) = C</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>94.31s</td>
+            <td>94.83s</td>
+            <td>16445</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;微分方程_026&quot;, &quot;domain&quot;: &quot;微分方程&quot;, &quot;question&quot;: &quot;微分方程y''-3y'+2y=xe^x的通解为_____&quot;, &quot;reference_answer&quot;: &quot;y=C1e^x+C2e^{2x}+(x^2/2 - x)e^x&quot;, &quot;intern_answer&quot;: &quot;y = C_1 e^{2x} + C_2 e^x - \\left(\\frac{1}{2}x^2 + x\\right)e^x&quot;, &quot;intern_reasoning&quot;: &quot;候选0的解法正确，验证了特解的正确性，且所有步骤逻辑严密，结果满足原方程。候选1和2存在方法或计算错误，导致结果不完整或不正确。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 4647, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 101.9, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;微分方程_026&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4783, &quot;conversion_latency&quot;: 56.6, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>微分方程_026</td>
+            <td><span class="domain-tag">微分方程</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">微分方程y''-3y'+2y=xe^x的通解为_____...</td>
+            <td>y = C_1 e^{2x} + C_2 e^x - \left(\frac{1}{2}x^2 + x\right)e^</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>101.9s</td>
+            <td>94.83s</td>
+            <td>16421</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;数列极限_010&quot;, &quot;domain&quot;: &quot;数列极限&quot;, &quot;question&quot;: &quot;设a_n&gt;0，lim b_n=0，且e^{a_n}+a_n=e^{b_n}，n=1,2,…，求lim a_n。&quot;, &quot;reference_answer&quot;: &quot;0&quot;, &quot;intern_answer&quot;: &quot;0&quot;, &quot;intern_reasoning&quot;: &quot;候选0通过严格数学推导和反证法，全面验证了结论的正确性，且置信度最高。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 3511, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 66.48, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;数列极限_010&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4754, &quot;conversion_latency&quot;: 55.25, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>数列极限_010</td>
+            <td><span class="domain-tag">数列极限</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设a_n&gt;0，lim b_n=0，且e^{a_n}+a_n=e^{b_n}，n=1,2,…，求lim a_n。...</td>
+            <td>0</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>66.48s</td>
+            <td>94.83s</td>
+            <td>15285</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;无穷级数_004&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;以下结论正确的是( )。选项：A. 若∑a_n^2收敛，则∑a_n^3收敛 B. 若∑a_n^2发散，则∑a_n^3发散 C. 若∑a_n^3收敛，则∑a_n^4收敛 D. 若∑a_n^3发散，则∑a_n^4发散&quot;, &quot;reference_answer&quot;: &quot;A&quot;, &quot;intern_answer&quot;: &quot;A&quot;, &quot;intern_reasoning&quot;: &quot;选项A通过比较判别法严格证明了其正确性，且反例验证了其他选项的错误性。选项C和D的反例明确显示其不成立，而选项B的反例同样有效。因此选项A是唯一正确的结论。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;(未能在批量响应中找到该题目的判定结果)&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 5050, &quot;judge_tokens&quot;: 11774, &quot;inference_latency&quot;: 343.56, &quot;judge_latency&quot;: 94.83, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;无穷级数_004&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4823, &quot;conversion_latency&quot;: 53.0, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>无穷级数_004</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">以下结论正确的是( )。选项：A. 若∑a_n^2收敛，则∑a_n^3收敛 B. 若∑a_n^2发散，则∑a_n^3发散 C. 若∑a_n^3收敛，则∑a_n^...</td>
+            <td>A</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>343.56s</td>
+            <td>94.83s</td>
+            <td>16824</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += buildInfoSection(d);
+
+        // AI reasoning section
+        html += buildReasoningSection(d);
+
+        // Judge analysis section
+        html += buildJudgeSection(d);
+
+        // Lean verification section
+        html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
+
+        // Performance bar
+        html += buildPerfBar(d);
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function buildInfoSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        h += '<div class="info-grid">';
+        h += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.inference_error) h += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) h += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        h += '</div></div>';
+        return h;
+    }
+
+    function buildReasoningSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            var stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            h += stepsHtml + '</ul></div>';
+        }
+        if (d.intern_verification) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            h += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildJudgeSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            h += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            h += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildLeanSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.verified) return '';
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
+
+        if (lv.compile_passed === true) {
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
+        } else if (lv.compile_passed === false) {
+            var catLabel = lv.error_category || 'unknown';
+            var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};
+            h += '<div><span class="lean-status fail">&#10007; &#32534;&#35793;&#22833;&#36133; &mdash; ' + (catMap[catLabel] || catLabel) + '</span></div>';
+        } else {
+            h += '<div><span class="lean-status pending">&#8856; &#26410;&#32534;&#35793; &mdash; &#38477;&#32423;&#20026; LLM &#36923;&#36753;&#23457;&#26597;</span></div>';
+        }
+
+        if (lv.formalized_claim) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#24418;&#24335;&#21270;&#21629;&#39064;</div>';
+            h += '<div class="content-box" style="max-height:80px">' + esc(lv.formalized_claim) + '</div></div>';
+        }
+        if (lv.lean_code) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">Lean 4 &#20195;&#30721;</div>';
+            h += '<div class="content-box lean-code" style="max-height:200px">' + esc(lv.lean_code) + '</div></div>';
+        }
+        if (lv.compile_passed === false && lv.compile_output) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#32534;&#35793;&#38169;&#35823;&#36755;&#20986;</div>';
+            h += '<div class="content-box lean-error" style="max-height:150px">' + esc(lv.compile_output) + '</div></div>';
+        }
+
+        if (lv.analysis_performed) {
+            h += '<div class="lean-insight">';
+            h += '<div class="insight-title">&#128269; &#38169;&#35823;&#26681;&#22240;&#20998;&#26512;</div>';
+            if (lv.human_readable_error) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#38169;&#35823;&#35299;&#37322;&#65306;</span>' + esc(lv.human_readable_error) + '</div>';
+            }
+            if (lv.root_cause) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#26681;&#22240;&#65306;</span>' + esc(lv.root_cause) + '</div>';
+            }
+            if (lv.error_category === 'logic_error' || lv.error_category === 'both') {
+                if (lv.logic_flaw_location) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#36923;&#36753;&#26029;&#28857;&#65306;</span>' + esc(lv.logic_flaw_location) + '</div>';
+                }
+                if (lv.logic_flaw_why) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#38169;&#35823;&#21407;&#22240;&#65306;</span>' + esc(lv.logic_flaw_why) + '</div>';
+                }
+                if (lv.correct_approach) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#059669;">&#27491;&#30830;&#20570;&#27861;&#65306;</span>' + esc(lv.correct_approach) + '</div>';
+                }
+            }
+            if (lv.error_category === 'translation_error' || lv.error_category === 'both') {
+                if (lv.translation_issue) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#D97706;">&#36716;&#21270;&#38382;&#39064;&#65306;</span>' + esc(lv.translation_issue) + '</div>';
+                }
+            }
+            if (lv.fix_prompt_for_ai) {
+                h += '<div style="margin-top:12px;padding:10px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981;">';
+                h += '<div style="font-weight:700;color:#065F46;margin-bottom:4px;">&#128221; &#20462;&#27491;&#25552;&#31034;&#35789;&#65288;&#21487;&#21453;&#39304;&#32473;&#20070;&#29983;AI&#65289;</div>';
+                h += '<div style="font-size:12px;color:#166534;white-space:pre-wrap">' + esc(lv.fix_prompt_for_ai) + '</div></div>';
+            }
+            h += '</div>';
+        }
+
+        h += '<div style="margin-top:12px;font-size:11px;color:#94A3B8">';
+        h += '&#36716;&#21270;: ' + (lv.conversion_latency || 0).toFixed(1) + 's / ';
+        h += '&#32534;&#35793;: ' + (lv.compile_latency || 0).toFixed(1) + 's';
+        if (lv.analysis_latency) h += ' / &#20998;&#26512;: ' + (lv.analysis_latency || 0).toFixed(1) + 's';
+        h += ' | Token: ' + ((lv.conversion_tokens || 0) + (lv.analysis_tokens || 0));
+        if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
+        h += '</div>';
+        h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
+        return h;
+    }
+
+    function buildPerfBar(d) {
+        var h = '<div class="perf-bar">';
+        h += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        h += '</div>';
+        return h;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) { return _latexToReadable(inner.trim()); });
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '\u2202$1');
+        s = s.replace(/\\ln /g, 'ln '); s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin '); s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan '); s = s.replace(/\\cdot /g, '\u00b7');
+        s = s.replace(/\\times /g, '\u00d7'); s = s.replace(/\\div /g, '\u00f7');
+        s = s.replace(/\\pm /g, '\u00b1'); s = s.replace(/\\leq ?/g, '\u2264');
+        s = s.replace(/\\geq ?/g, '\u2265'); s = s.replace(/\\neq ?/g, '\u2260');
+        s = s.replace(/\\approx ?/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    function _latexToReadable(expr) {
+        var s = expr;
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)'); s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        s = s.replace(/\^(\w)/g, '^$1'); s = s.replace(/_(\w)/g, '_$1');
+        s = s.replace(/\\alpha/g, '\u03b1'); s = s.replace(/\\beta/g, '\u03b2');
+        s = s.replace(/\\gamma/g, '\u03b3'); s = s.replace(/\\delta/g, '\u03b4');
+        s = s.replace(/\\epsilon/g, '\u03b5'); s = s.replace(/\\theta/g, '\u03b8');
+        s = s.replace(/\\lambda/g, '\u03bb'); s = s.replace(/\\pi/g, '\u03c0');
+        s = s.replace(/\\sigma/g, '\u03c3'); s = s.replace(/\\phi/g, '\u03c6');
+        s = s.replace(/\\omega/g, '\u03c9'); s = s.replace(/\\rho/g, '\u03c1');
+        s = s.replace(/\\partial/g, '\u2202'); s = s.replace(/\\nabla/g, '\u2207');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln'); s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin'); s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan'); s = s.replace(/\\cdot/g, '\u00b7');
+        s = s.replace(/\\times/g, '\u00d7'); s = s.replace(/\\div/g, '\u00f7');
+        s = s.replace(/\\pm/g, '\u00b1'); s = s.replace(/\\leq/g, '\u2264');
+        s = s.replace(/\\geq/g, '\u2265'); s = s.replace(/\\neq/g, '\u2260');
+        s = s.replace(/\\approx/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '\u221a$1');
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', '); s = s.replace(/\\;[ ]*/g, '  ');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+
+</body>
+</html>

@@ -140,20 +140,16 @@ class EvalEngine:
             base_url=base_url or None,
             model=model or None,
         )
-        # 用本地测试参数创建 Agent（更宽松，方便验证）
+        # v2.2 简化配置（借鉴 ss-main）
         local_config = AgentConfig(
             policy_sample_times=3,
-            verifier_voting_times=2,
-            max_total_calls=40,
-            max_revise_rounds=1,
+            verifier_voting_times=1,
+            max_total_calls=10,
+            max_tokens_cap=12288,
             max_workers=3,
-            conf_high=0.75,
-            conf_low=0.40,
-            use_scoring=True,
+            use_scoring=False,
             by_enable_fast_path=True,
-            use_proof_channel=True,
-            use_lemma_accumulation=True,
-            max_time_per_question=1100,
+            max_time_per_question=300,
         )
         self.agent = ReasoningAgent(self.llm_client)
         # 注入本地配置
@@ -175,9 +171,16 @@ class EvalEngine:
                 except json.JSONDecodeError:
                     logger.warning(f"第 {line_no} 行 JSON 解析失败")
                     continue
-                if "question" not in item:
-                    logger.warning(f"第 {line_no} 行缺少 question")
+                if "question" not in item and "problem" not in item:
+                    logger.warning(f"第 {line_no} 行缺少 question/problem")
                     continue
+                # 统一规范化字段名
+                if "question" not in item:
+                    item["question"] = item["problem"]
+                if "domain" not in item and "subject" in item:
+                    item["domain"] = item["subject"]
+                if "id" not in item and "idx" in item:
+                    item["id"] = item["idx"]
                 item["_line_no"] = line_no
                 tests.append(item)
         logger.info(f"加载 {len(tests)} 道测试题")

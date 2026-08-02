@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .lean-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+        .lean-badge.lean-pass { background: #D1FAE5; color: #065F46; }
+        .lean-badge.lean-logic-err { background: #FEE2E2; color: #991B1B; }
+        .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
+        .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
+        .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
+        .section-heading.lean { color: #059669; border-color: #A7F3D0; }
+        .section-heading .icon-dot.lean { background: #10B981; }
+        .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .lean-status.pass { background: #D1FAE5; color: #065F46; }
+        .lean-status.fail { background: #FEE2E2; color: #991B1B; }
+        .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+        .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
+        .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+        .lean-insight .insight-title { font-size: 13px; font-weight: 700; color: #92400E; margin-bottom: 8px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-07-26 10:49:45</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">5</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">2</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value red">40.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.58</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">101.7s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">24.76s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的应用(二)--积分等式与积分不等式</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">无穷级数</span>
+            <span class="domain-acc">50.0%</span>
+            <span class="domain-count">(1/2)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">多元函数微分学</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">微分方程</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Lean</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0612&quot;, &quot;domain&quot;: &quot;一元函数积分学的应用(二)--积分等式与积分不等式&quot;, &quot;question&quot;: &quot;曲线y = e^x与直线x = 1, x = -1及x轴所围平面有界区域D的形心坐标为多少？&quot;, &quot;reference_answer&quot;: &quot;形心坐标为 (0, (e - e^{-1})/(2(e - e^{-1})))&quot;, &quot;intern_answer&quot;: &quot;(2/(e²−1), (e²+1)/(4e))&quot;, &quot;intern_reasoning&quot;: &quot;【答案选择依据】\n候选0的推导完整且验证了关键步骤，结果符合数学逻辑和对称性分析；候选1和2在x̄或ȳ的计算中存在明显错误。\n\n【候选1推理过程】(答案=(2/(e²−1), (e²+1)/(4e)), 置信度=0.95)\n首先确定区域D的面积A，通过积分计算得A = e - 1/e。接着计算x̄，使用分部积分法求得∫_{-1}^1 x e^x dx = 2/e，因此x̄ = (2/e)/A = 2/(e²−1)。对于ȳ，计算积分∫_{-1}^1 (1/2)e^{2x} dx = (e²−e^{-2})/4，代入ȳ公式得ȳ = (e²+1)/(4e)。所有步骤均通过积分验证，结果合理。\n\n【候选2推理过程】(答案=(0, (e²+1)/(4e)), 置信度=0.5)\n错误地假设区域关于y轴对称，导致x̄=0。但实际y=e^x不对称，此假设错误。ȳ计算正确，但x̄错误。\n\n【候选3推理过程】(答案=(2/(e²−1), (e−1/e)/2), 置信度=0.6)\n正确计算x̄，但ȳ误将积分简化为面积的一半，未正确计算y方向积分，导致ȳ错误。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案正确计算了区域面积、x̄和ȳ的积分，化简结果与标准形心公式一致。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 2864, &quot;judge_tokens&quot;: 2248, &quot;inference_latency&quot;: 54.4, &quot;judge_latency&quot;: 13.84, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0612</td>
+            <td><span class="domain-tag">一元函数积分学的应用(二)--积分等式与积分不等式</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">曲线y = e^x与直线x = 1, x = -1及x轴所围平面有界区域D的形心坐标为多少？...</td>
+            <td>(2/(e²−1), (e²+1)/(4e))</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>54.4s</td>
+            <td>13.84s</td>
+            <td>5112</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0913&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;已知 ln| (1+x)/(x-1) | = ∑_{n=0}^{∞} a_n x^n，其中 -1 &lt; x &lt; 1，求 a_n。&quot;, &quot;reference_answer&quot;: &quot;a_n = -2/(n+1) 当 n 为奇数时；a_n = 0 当 n 为偶数时。&quot;, &quot;intern_answer&quot;: &quot;a_n = 0当n为偶数，a_n = 2/n当n为奇数&quot;, &quot;intern_reasoning&quot;: &quot;【答案选择依据】\n候选0通过两种独立方法验证了结果的一致性，逻辑严密且覆盖了所有可能情况，可信度最高。候选1虽然正确但缺乏验证，候选2的表达式虽统一但不够直观。\n\n【候选1推理过程】(答案=a_n = 0当n为偶数，a_n = 2/n当n为奇数, 置信度=0.95)\n首先将原式分解为ln(1+x) - ln(1-x)，利用已知的泰勒展开式：ln(1+x) = ∑_{n=1}^∞ (-1)^{n+1}x^n/n 和 ln(1-x) = -∑_{n=1}^∞ x^n/n。相减后得到系数为[(-1)^{n+1} + 1]/n。分析奇偶性后得出偶数项系数为0，奇数项系数为2/n。通过求导并积分的方法验证了结果的一致性。\n\n【候选2推理过程】(答案=a_n = 2/(2k+1)当n=2k+1，否则0, 置信度=0.85)\n将原式转化为幂级数后，通过观察奇偶项的系数规律，发现偶数次项系数为0，奇数次项系数为2/(2k+1)，其中k为非负整数。此方法直接从级数合并后的形式推导，未涉及导数验证。\n\n【候选3推理过程】(答案=a_n = 2/n * (1 - (-1)^n)/2, 置信度=0.7)\n尝试用统一表达式表示奇偶性，利用(1 - (-1)^n)/2在n为奇数时为1，偶数时为0的特性，将系数表示为2/n乘以该因子。此方法试图统一表达式，但可能引入不必要的复杂性。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;答案正确。利用绝对值内函数恒负的性质，将原式化为ln((1+x)/(1-x))=ln(1+x)-ln(1-x)，再运用已知的泰勒展开得到系数[(-1)^(n-1)+1]/n，从而得出偶数项系数为0、奇数项系数为2/n，完全符合数学推导。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;a_n = 0 (n为偶数)，a_n = 2/n (n为奇数)&quot;, &quot;inference_tokens&quot;: 3532, &quot;judge_tokens&quot;: 2363, &quot;inference_latency&quot;: 68.02, &quot;judge_latency&quot;: 14.11, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0913</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">已知 ln| (1+x)/(x-1) | = ∑_{n=0}^{∞} a_n x^n，其中 -1 &lt; x &lt; 1，求 a_n。...</td>
+            <td>a_n = 0当n为偶数，a_n = 2/n当n为奇数</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>68.02s</td>
+            <td>14.11s</td>
+            <td>5895</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;多元函数微分学_026&quot;, &quot;domain&quot;: &quot;多元函数微分学&quot;, &quot;question&quot;: &quot;求由方程2x2+2y2+z2+8xz-z+8=0所确定的函数z=z(x,y ( 的极值,并指出是极大值还是 极小值&quot;, &quot;reference_answer&quot;: &quot;&quot;, &quot;intern_answer&quot;: &quot;极小值z=1，极大值z=-8/7&quot;, &quot;intern_reasoning&quot;: &quot;【答案选择依据】\n候选0的推导过程严谨，正确应用隐函数求导和Hessian矩阵判别法，结果与验证一致。候选1和2存在明显逻辑或计算错误。\n\n【候选1推理过程】(答案=极小值z=1，极大值z=-8/7, 置信度=0.95)\n通过隐函数定理求导，找到临界点并代入原方程解得z的值，利用Hessian矩阵判断极值类型。计算得出在点(-2,0)处z=1为极小值，在点(16/7,0)处z=-8/7为极大值。\n\n【候选2推理过程】(答案=极大值z=1，极小值z=-8/7, 置信度=0.5)\n错误地将Hessian矩阵的符号判断反向，导致极值类型错误。\n\n【候选3推理过程】(答案=无极值, 置信度=0.3)\n错误地认为原方程无法确定极值，未正确应用隐函数定理。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 5334, &quot;judge_tokens&quot;: 3103, &quot;inference_latency&quot;: 111.56, &quot;judge_latency&quot;: 29.26, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;多元函数微分学_026&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 4968, &quot;conversion_latency&quot;: 63.6, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>多元函数微分学_026</td>
+            <td><span class="domain-tag">多元函数微分学</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">求由方程2x2+2y2+z2+8xz-z+8=0所确定的函数z=z(x,y ( 的极值,并指出是极大值还是 极小值...</td>
+            <td>极小值z=1，极大值z=-8/7</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>111.56s</td>
+            <td>29.26s</td>
+            <td>8437</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;微分方程_037&quot;, &quot;domain&quot;: &quot;微分方程&quot;, &quot;question&quot;: &quot;设曲线L:r=r(θ ( ,P(r,θ ( 为L上任意一点,P 0(2,0 ( 为L上的一定点,且曲线L与极径OP ,OP所 0 围成的曲边扇形面积值等于曲线L上P,P两点间弧长值的一半,求曲线L的方程&quot;, &quot;reference_answer&quot;: &quot;&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;\n嗯，好的，我现在要解决这个关于极坐标曲线的问题。题目是说，曲线L的极坐标方程是r=r(θ)，P(r,θ)是L上的任意一点，而P0(2,0)是L上的一个定点。并且，曲线L与极径OP0（也就是从原点到P0的直线）所围成的曲边扇形的面积等于曲线L上P到P0两点之间弧长的一半。我要找曲线L的方程。\n\n首先，我需要理清楚题目的条件。题目中的曲边扇形面积应该是指从θ=0到θ=θ处的扇形面积，对吧？因为P0的极坐标是(2,0)，也就是θ=0的时候r=2。所以当考虑点P(r,θ)时，扇形面积应该是从θ=0到θ的积分，而弧长则是从P0到P的弧长积分的一半等于这个面积。\n\n好的，首先我需要写出曲边扇形的面积公式。在极坐标下，扇形面积的微分是(1/2)r²dθ，所以从θ=0到θ=θ的面积应该是积分从0到θ的(1/2)r²dθ。题目中说这个面积等于弧长的一半，所以弧长的一半等于这个面积。那弧长的积分公式是什么呢？极坐标下弧长的微分是√[r² + (dr/dθ)²]dθ，所以从θ=0到θ的弧长L就是积分从0到θ的√[r² + (dr/dθ)²]dθ。题目中说面积等于弧长的一半，所以有：\n\n(1/2) ∫₀^θ r² dθ = (1/2) ∫₀^θ √[r² + (dr/dθ)²] dθ\n\n两边都有1/2，可以两边同时乘以2，得到：\n\n∫₀^θ r² dθ = ∫₀^θ √[r² + (dr/dθ)²] dθ\n\n因为积分区间相同，而且对于任意的θ都成立，所以被积函数应该相等。也就是说：\n\nr² = √[r² + (dr/dθ)²]\n\n这样的话，两边平方得：\n\nr^4 = r² + (dr/dθ)^2\n\n整理一下：\n\n(dr/dθ)^2 = r^4 - r² = r²(r² - 1)\n\n所以得到微分方程：\n\ndr/dθ = ±r√(r² - 1)\n\n不过这里可能需要考虑符号的问题，但可能根据曲线的方向，我们可以取正号或者负号。不过暂时先保留正负号。\n\n接下来需要解这个微分方程。这是一个可分离变量的方程，可以写成：\n\ndr / [r√(r² - 1)] = ±dθ\n\n积分两边。左边的积分可能需要变量替换。令u = √(r² - 1)，或者用三角替换。或者考虑积分公式：\n\n∫ dr / [r√(r² - 1)] \n\n这个积分我记得应该是等于 arccos(1/r) + C 或者类似的形式。让我仔细算一下。\n\n令u = √(r² - 1)，则du/dr = (1/2)(r² -1)^(-1/2) * 2r = r / √(r² -1 )\n\n不过可能更简单的替换是令u = 1/r，或者用三角替换。或者考虑另一个替换：\n\n令t = √(r² -1)，则t² = r² -1，所以r² = t² +1，两边微分得2r dr = 2t dt → r dr = t dt → dr = (t dt)/r = (t dt)/√(t² +1 )\n\n不过这可能不太方便。或者考虑替换u = r²，或者用双曲函数替换？\n\n或者考虑积分：\n\n∫ dr / [r√(r² -1)] \n\n令u = √(r² -1)，则u² = r² -1 → r² = u² +1，两边微分得2r dr = 2u du → dr = (u du)/r = (u du)/√(u² +1 )\n\n代入积分式：\n\n∫ [ (u du)/√(u² +1) ] / [ √(u² +1) * u ] = ∫ [u du / √(u² +1)] / [u (u² +1)^{1/2} } ]\n\n分母是r * u = √(u² +1) * u，所以整个分式变成：\n\n[ u du / √(u² +1) ] / [ u √(u² +1) ) ] = du / (u² +1 )\n\n所以积分变成 ∫ du / (u² +1 ) = arctan u + C = arctan(√(r² -1)) + C\n\n不过这可能有问题，或者有没有更直接的积分方法？\n\n或者另一个替换，令θ = secφ，即r = secφ，那么dr = secφ tanφ dφ，代入积分：\n\n∫ dr / [r√(r² -1)] = ∫ [secφ tanφ dφ] / [secφ * tanφ] ] = ∫ dφ = φ + C = arcsec r + C\n\n所以积分结果是arcsec r + C。所以左边的积分是arcsec r + C，等于右边的±θ + C'\n\n所以方程变为：\n\narcsec r = ±θ + C\n\n因为当θ=0时，r=2，代入初始条件θ=0，r=2：\n\narcsec(2) = ±0 + C → C = arcsec(2) = π/3，因为sec(π/3)=2，所以arcsec(2)=π/3。\n\n所以解为：\n\narcsec r = ±θ + π/3\n\n即：\n\nr = sec( ±θ + π/3 )\n\n不过sec是偶函数，所以sec(-θ + π/3) = sec(θ - π/3)，但可能需要考虑符号的问题。不过可能更合适的写法是：\n\nr = sec( C ± θ )\n\n不过根据初始条件，当θ=0时，r=2，所以C=π/3，所以解为：\n\nr = sec( θ + π/3 ) 或者 r = sec( -θ + π/3 ) = sec( π/3 - θ )\n\n不过sec(π/3 - θ) = sec(θ - π/3)的倒数吗？不，sec是偶函数，所以sec(π/3 - θ)=sec(θ - π/3)。不过可能两种解都可以，但需要考虑微分方程中的正负号。\n\n不过根据微分方程dr/dθ = ±r√(r² -1)，当取正号时，解为r=sec(θ + C)，而取负号时，解为r=sec(-θ + C)=sec(C - θ)。不过根据初始条件θ=0时r=2，所以C=π/3，所以两种情况分别是：\n\nr = sec(θ + π/3) 或者 r = sec(-θ + π/3) = sec(π/3 - θ)\n\n不过需要验证这两种解是否都满足原方程。\n\n不过可能更合理的解是r = sec(θ + π/3) 或者 r = sec(π/3 - θ)，但需要进一步分析。\n\n不过让我再仔细看一下积分的结果。当积分得到arcsec r = ±θ + C，代入初始条件θ=0，r=2，得到C=arcsec(2)=π/3。所以解为arcsec r = ±θ + π/3，即r = sec(±θ + π/3 )\n\n由于sec函数是偶函数，所以sec(-θ + π/3) = sec(θ - π/3)，不过这可能对应不同的曲线。不过可能两种解都是可能的，但需要看微分方程中的符号选择。\n\n不过可能题目中并没有限制θ的范围，所以两种解都可能存在。不过可能需要进一步的条件来确定符号。\n\n不过题目中给出的定点是P0(2,0)，也就是当θ=0时r=2，所以当θ=0时，代入解r=sec(±0 + π/3)=sec(π/3)=2，是对的。所以两种情况都是满足初始条件的。\n\n不过需要确定微分方程中的符号。例如，当取正号时，dr/dθ = r√(r² -1)，而当θ增加时，r=sec(θ + π/3)，当θ趋近于π/2 - π/3 = π/6时，θ + π/3趋近于π/2，此时r趋近于无穷大。而如果取负号的话，r=sec(-θ + π/3)=sec(π/3 - θ)，当θ趋近于π/3时，π/3 - θ趋近于0，此时r趋近于1，而当θ趋近于-π/6时，π/3 - θ趋近于π/2，r趋近于无穷大。\n\n不过题目中没有给出其他条件，所以可能两种解都是可能的。不过可能需要进一步分析是否两种解都满足原题的条件。\n\n不过题目中说曲线L与极径OP0围成的扇形面积等于弧长的一半，这里的弧长是从P0到P的弧长。所以可能需要考虑θ的正方向，即θ从0开始增加，所以可能取正号更合理，即解为r=sec(θ + π/3 )\n\n不过让我再检查一下微分方程的推导是否正确。原题中说面积等于弧长的一半，即：\n\n面积 = (1/2) ∫₀^θ r² dθ = (1/2) 弧长 = (1/2) ∫₀^θ √(r² + (dr/dθ)^2 ) dθ\n\n所以两边乘以2得：\n\n∫₀^θ r² dθ = ∫₀^θ √(r² + (dr/dθ)^2 ) dθ\n\n因为对于任意的θ都成立，所以被积函数必须相等，即：\n\nr² = √(r² + (dr/dθ)^2 )\n\n两边平方得：\n\nr^4 = r² + (dr/dθ)^2 → (dr/dθ)^2 = r^4 - r² = r²(r² -1 )\n\n所以dr/dθ = ±r√(r² -1 )\n\n这时候，当r&gt;1时，√(r² -1 )是实数，所以r必须大于等于1或者小于等于-1，但极坐标中r通常取非负数，所以r≥1。题目中初始点r=2，符合条件。\n\n接下来解这个微分方程，分离变量：\n\ndr / [r√(r² -1 ) ] = ±dθ\n\n积分左边等于arcsec r + C，或者根据不同的替换可能有不同的表达式。比如，如果用替换u = √(r² -1 ), 则可能得到不同的表达式，但之前用sec替换得到的结果是arcsec r = ±θ + C。\n\n所以解为r = sec(±θ + C )\n\n代入初始条件θ=0，r=2，得到C=arcsec(2)=π/3，所以解为：\n\nr = sec(±θ + π/3 )\n\n现在需要确定符号。假设取正号，即r=sec(θ + π/3 )\n\n当θ=0时，r=sec(π/3)=2，正确。当θ增加时，θ + π/3增加，当θ趋近于π/2 - π/3 = π/6时，θ + π/3趋近于π/2，此时r趋近于无穷大。这可能是一个可能的解。\n\n如果取负号，即r=sec(-θ + π/3 )=sec(π/3 - θ )\n\n同样，当θ=0时，r=sec(π/3)=2。当θ增加到π/3时，π/3 - θ=0，r=sec(0)=1，当θ超过π/3时，π/3 - θ变为负数，但sec是偶函数，所以sec(π/3 - θ)=sec(θ - π/3)，此时当θ趋近于π/3 + π/2时，θ - π/3趋近于π/2，r趋近于无穷大。\n\n不过题目中没有给出θ的范围，所以两种解都可能存在。不过需要进一步验证是否两种解都满足原题的条件。\n\n不过可能题目中隐含θ是从0开始增加的，所以两种解都有可能。不过可能需要进一步的分析。\n\n不过现在的问题是要找到曲线L的方程，所以可能有两种可能性。不过可能根据微分方程的解，两种符号都可能，但需要看是否都满足原题的条件。\n\n不过让我再仔细看一下面积和弧长的关系。假设我们取正号，解为r=sec(θ + π/3 )\n\n此时dr/dθ = sec(θ + π/3 ) tan(θ + π/3 )\n\n代入dr/dθ = r√(r² -1 )\n\n因为r=sec u，u=θ + π/3，所以√(r² -1 )=tan u，所以dr/dθ = sec u tan u = r√(r² -1 ), 符合正号的情况。\n\n同样，如果取负号，解为r=sec(-θ + π/3 )，则dr/dθ = -sec(-θ + π/3 ) tan(-θ + π/3 ) = -r tan(-θ + π/3 ) = r tan(θ - π/3 )\n\n而根据dr/dθ = ±r√(r² -1 ), 这里dr/dθ = -r tan u，其中u = -θ + π/3，所以tan u = tan(-θ + π/3 ) = -tan(θ - π/3 )\n\n所以dr/dθ = -r*(-tan(θ - π/3 )) = r tan(θ - π/3 )\n\n而√(r² -1 )=tan u = tan(-θ + π/3 ) = -tan(θ - π/3 )\n\n所以dr/dθ = r * (-√(r² -1 ))，即对应负号的情况。\n\n所以两种解都满足各自的符号情况。\n\n现在需要确定题目中是否允许两种解，或者是否存在某种限制。\n\n题目中说曲线L与极径OP0围成的扇形面积等于弧长的一半。这里的弧长应该是指从P0到P的弧长，即积分从0到θ的弧长元素。而面积是从0到θ的积分。所以无论θ是正还是负，只要满足条件即可。不过通常极坐标中θ可以取任意实数，但曲线可能有不同的分支。\n\n不过题目中的初始点是θ=0，r=2，所以可能解应该包括这个点，并且曲线可能在θ的某个范围内存在。\n\n现在的问题是，题目可能期望一个唯一的解，所以可能需要进一步的分析。\n\n或者可能两种解都是正确的，但需要以不同的形式表达。\n\n不过让我再考虑一下，当解为r=sec(θ + π/3 )时，当θ=0时r=2，当θ增加时，r增大，直到θ=π/6时，θ + π/3=π/2，此时r趋向于无穷大。这可能是一条双曲线，因为sec函数对应的是圆锥曲线中的双曲线。\n\n而另一个解r=sec(π/3 - θ )=sec(θ - π/3 )的倒数？不，sec(π/3 - θ )=sec(θ - π/3 )，因为sec是偶函数。不过当θ=π/3时，r=sec(0)=1，当θ超过π/3时，比如θ=π/3 + α，那么sec(π/3 - (π/3 + α ))=sec(-α)=secα，所以r=secα，这可能对应另一个分支。\n\n不过可能两种解都是有效的，但题目可能只需要一个解。或者可能我哪里出错了。\n\n或者可能在积分过程中，我应该考虑绝对值的问题，或者微分方程的解是否应该有其他形式。\n\n另外，可能我的积分结果是否正确？\n\n让我再重新计算左边的积分：\n\n∫ dr / [r√(r² -1 ) ]\n\n令u = √(r² -1 ), 则u² = r² -1 → r² = u² +1\n\ndu/dr = (1/(2√(r² -1 )))*2r = r / √(r² -1 ) = r/u\n\n所以 dr = (u du)/r = (u du)/√(u² +1 )\n\n代入积分：\n\n∫ [ (u du)/√(u² +1 ) ] / [ √(u² +1 ) * u ] = ∫ [u du / √(u² +1 ) ] / [ u (u² +1 )^{1/2} } ]\n\n分母是r * u = √(u² +1 ) * u，分子是u du / √(u² +1 )\n\n所以整个分式变为：\n\n(u du / √(u² +1 )) / (u √(u² +1 )) ) = du / (u² +1 )\n\n所以积分变为 ∫ du / (u² +1 ) = arctan u + C = arctan(√(r² -1 )) + C\n\n而另一方面，如果用替换r = secφ，则积分变为φ + C，即arcsec r + C，因为d/dφ (arcsec r) = 1/(r√(r² -1 )) )\n\n所以两种方法得到的结果应该一致，即：\n\narctan(√(r² -1 )) = arcsec r + C\n\n不过实际上，arcsec r = arctan(√(r² -1 ))，当r &gt; 0时，对吗？\n\n是的，因为如果r = secφ，则√(r² -1 )=tanφ，所以arctan(tanφ)=φ=arcsec r，所以两者是相等的，所以积分结果可以写成arcsec r + C或者arctan(√(r² -1 )) + C，都是正确的。\n\n所以回到微分方程的解：\n\narcsec r = ±θ + C\n\n代入初始条件θ=0，r=2，得C=arcsec(2)=π/3，所以解为：\n\narcsec r = ±θ + π/3 → r = sec(±θ + π/3 )\n\n现在需要考虑这两个解是否都满足原题的条件。\n\n例如，取正号时，r=sec(θ + π/3 )\n\n当θ=0时，r=2，正确。当θ增加时，θ + π/3增加，r增大，直到θ=π/6时，θ + π/3=π/2，r趋向于无穷大。\n\n取负号时，r=sec(-θ + π/3 )=sec(π/3 - θ )\n\n同样，当θ=0时，r=2。当θ增加到π/3时，π/3 - θ=0，r=1。当θ超过π/3时，π/3 - θ变为负数，但由于sec是偶函数，所以sec(π/3 - θ)=sec(θ - π/3 )\n\n此时，当θ从0增加到π/3时，r从2减少到1，当θ超过π/3时，r又开始增加。\n\n现在需要验证这两种情况是否都满足原题的条件，即面积等于弧长的一半。\n\n不过根据微分方程的推导，两种情况都应该满足，因为它们都是微分方程的解，并且满足初始条件。因此，可能存在两个解。\n\n不过题目可能期望一个解，或者可能我哪里考虑得不对。\n\n或者可能题目中的弧长是从P0到P的弧长，而积分是从0到θ，所以如果θ是负数的话，可能积分上下限需要调整，但题目中并没有限制θ的范围，所以两种解都可能存在。\n\n不过通常在极坐标中，θ可以取任意实数，所以两种解都是可能的。不过可能题目中的曲线L应该是一个单一的曲线，所以可能需要进一步的条件来确定符号。\n\n或者可能两种解实际上是同一条曲线，只是参数化方向不同。\n\n例如，r=sec(θ + π/3 )和r=sec(-θ + π/3 )可能关于极轴对称，或者通过替换θ为-θ得到另一个解。\n\n不过题目中并没有给出其他条件，所以可能需要接受存在两个解。\n\n不过让我再仔细看一下题目中的条件：“曲线L与极径OP0围成的曲边扇形面积值等于曲线L上P,P0两点间弧长值的一半”。\n\n这里的弧长应该是指从P0到P的弧长，无论θ是增加还是减少。所以两种解都可能满足条件。\n\n不过可能题目中隐含θ是任意的，所以两种解都需要考虑。但通常这类题目可能期望一个解，所以可能需要重新检查推导过程是否有误。\n\n或者可能在微分方程的推导过程中有什么疏漏。\n\n回到最初的等式：\n\n面积 = (1/2) ∫₀^θ r² dθ = (1/2) 弧长 = (1/2) ∫₀^θ √(r² + (dr/dθ)^2 ) dθ\n\n所以两边相等意味着对于所有的θ，积分相等，因此被积函数必须相等，即：\n\nr² = √(r² + (dr/dθ)^2 )\n\n这一步是否正确？\n\n是的，因为如果两个积分对于所有θ都相等，那么它们的导数（即被积函数）必须相等。根据积分上限定理，d/dθ [∫₀^θ f(t)dt] = f(θ)，所以两边对θ求导得到：\n\nr² = √(r² + (dr/dθ)^2 )\n\n所以这个推导是正确的。\n\n因此，微分方程是正确的，解也是正确的，存在两个可能的解。\n\n不过题目可能期望以某种形式表达答案，比如用cos的形式，或者进一步化简。\n\n例如，r = sec(θ + π/3 ) 可以写成 r = 1 / cos(θ + π/3 )\n\n同样，r = sec(π/3 - θ ) = 1 / cos(π/3 - θ )\n\n不过可能需要进一步化简，或者题目可能期望其中一个解。\n\n或者可能通过三角恒等式转换：\n\ncos(π/3 - θ ) = cosθ cosπ/3 + sinθ sinπ/3 = (1/2)cosθ + (√3/2) sinθ\n\n所以r = 1 / [ (1/2)cosθ + (√3/2) sinθ ] = 2 / (cosθ + √3 sinθ )\n\n同样，cos(θ + π/3 ) = cosθ cosπ/3 - sinθ sinπ/3 = (1/2)cosθ - (√3/2) sinθ\n\n所以r = 1 / [ (1&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 6710, &quot;judge_tokens&quot;: 12215, &quot;inference_latency&quot;: 141.74, &quot;judge_latency&quot;: 36.17, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;微分方程_037&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 9619, &quot;conversion_latency&quot;: 68.09, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>微分方程_037</td>
+            <td><span class="domain-tag">微分方程</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设曲线L:r=r(θ ( ,P(r,θ ( 为L上任意一点,P 0(2,0 ( 为L上的一定点,且曲线L与极径OP ,OP所 0 围成的曲边扇形面积值等于曲线L...</td>
+            <td></td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>141.74s</td>
+            <td>36.17s</td>
+            <td>18925</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;无穷级数_006&quot;, &quot;domain&quot;: &quot;无穷级数&quot;, &quot;question&quot;: &quot;设级数 $\\sum_{n=1}^{\\infty} (u_{n+1} - u_n)$ 收敛，则下列级数中收敛的是（ ）。\nA. $\\sum_{n=1}^{\\infty} u_n$\nB. $\\sum_{n=1}^{\\infty} (-1)^n u_n$\nC. $\\sum_{n=1}^{\\infty} \\left(1 - \\frac{u_n}{u_{n+1}}\\right)$\nD. $\\sum_{n=1}^{\\infty} (u_{2n+1} - u_{2n})$&quot;, &quot;reference_answer&quot;: &quot;D&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;好，我现在要解决这个数学证明题。题目是说，如果级数∑_{n=1}^∞ (u_{n+1} - u_n)收敛，那么下面哪个级数也收敛。选项是A到D四个。\n\n首先，我需要回忆一下相关的级数收敛的条件和性质。已知的是，级数∑(u_{n+1} - u_n)收敛，这意味着它的部分和序列是收敛的。部分和S_N = ∑_{n=1}^N (u_{n+1} - u_n) = u_{N+1} - u_1。因为级数收敛，所以当N趋向于无穷大时，u_{N+1} - u_1趋向于某个极限，也就是说，u_n的极限存在，记为L。因此，u_n → L，当n→∞。\n\n现在，我需要分析每个选项是否收敛。\n\n选项A：∑u_n。已知u_n收敛到L，那么如果L≠0，级数∑u_n发散，因为通项不趋于0。如果L=0，那么可能收敛，但不一定。例如，u_n = 1/n，此时∑(u_{n+1} - u_n) = ∑(1/(n+1) - 1/n) = ∑(-1/(n(n+1)))，这个级数是收敛的，但∑u_n = ∑1/n发散。所以选项A不一定收敛，因此A不一定正确。\n\n选项B：∑(-1)^n u_n。这看起来像是一个交错级数。根据莱布尼茨判别法，如果u_n单调递减且趋于0，那么级数收敛。但这里已知u_n趋于L，如果L≠0，那么(-1)^n u_n不趋于0，级数发散。如果L=0，且u_n单调递减，那么可能收敛。但题目中没有给出u_n单调递减的条件，所以无法确定。例如，如果u_n = 1/n，那么∑(-1)^n /n是收敛的，但如果是u_n = (-1)^n /n，那么u_n趋于0，但u_{n+1} - u_n = (-1)^{n+1}/(n+1) - (-1)^n /n = (-1)^n [ -1/(n+1) -1/n ]，这可能不收敛，所以可能不符合题设条件。因此，选项B不一定正确，因为无法保证u_n单调递减。\n\n选项C：∑(1 - u_n / u_{n+1})。这看起来有点复杂。假设u_n不为零，且u_{n+1} ≠0。我们可以考虑这个级数的通项是否趋于0。如果u_n → L，且L≠0，那么u_n / u_{n+1} → L/L =1，所以1 - u_n /u_{n+1} →0。但级数是否收敛呢？例如，假设u_n =1 + 1/n，那么u_{n+1} =1 + 1/(n+1)，那么u_n / u_{n+1} = (1 + 1/n)/(1 + 1/(n+1)) = (n+1)/(n) * (n+1)/(n+2) = (n+1)^2/(n(n+2))。那么1 - u_n/u_{n+1} =1 - (n+1)^2/(n(n+2)) = [n(n+2) - (n+1)^2]/[n(n+2)] = [n² +2n -n² -2n -1]/[n(n+2)] = (-1)/[n(n+2)]。所以级数变为∑ (-1)/(n(n+2))，这显然是收敛的，因为它是绝对收敛的。但是，如果u_n =1 + (-1)^n /n，那么u_n /u_{n+1} = [1 + (-1)^n /n]/[1 + (-1)^{n+1}/(n+1)]。这可能比较复杂，但假设u_n →1，那么u_n/u_{n+1} →1，所以1 - u_n/u_{n+1} →0，但级数是否收敛呢？这可能需要更深入的分析，但可能不一定收敛，因为可能通项不趋于0足够快。例如，假设u_n =1 + 1/n，那么如上所述，级数收敛。但如果u_n =1 + 1/√n，那么u_n /u_{n+1} = (1 +1/√n)/(1 +1/√(n+1)) ≈ (1 +1/√n)/(1 +1/√n - 1/(2n^{3/2}) + ...) ≈1 + (1/√n -1/√(n+1)) + ...，所以1 - u_n/u_{n+1} ≈ - (1/√n -1/√(n+1))，这可能是一个收敛级数，因为它是望远镜级数。因此，选项C可能收敛，但需要更仔细分析。\n\n选项D：∑(u_{2n+1} - u_{2n})。这看起来像是原级数的子级数，只取奇数项和偶数项的差。原级数∑(u_{n+1} -u_n)收敛，意味着部分和S_N = u_{N+1} -u_1 → L -u_1。那么，考虑级数D的部分和，比如前k项的和是∑_{n=1}^k (u_{2n+1} - u_{2n}) = (u_3 -u_2) + (u_5 -u_4) + ... + (u_{2k+1} -u_{2k}) )。这可以写成(u_3 + u_5 + ... + u_{2k+1}) - (u_2 + u_4 + ... + u_{2k}) )。而原级数的部分和S_{2k} = u_{2k+1} -u_1。所以，级数D的部分和可以表示为 (u_{2k+1} -u_1) - (u_2 + u_4 + ... + u_{2k}) + u_1 - u_2 - u_4 - ... - u_{2k} )？这可能有点混乱，或许更简单的是，级数D的部分和是原级数中每隔一项的和，即取n=2,4,6,...的项。因为原级数收敛，所以其子级数是否收敛？不一定，因为子级数的收敛性不一定保证。例如，原级数可能条件收敛，而子级数可能发散。例如，考虑u_n = (-1)^n /n，那么原级数∑(u_{n+1} -u_n) = ∑[ (-1)^{n+1}/(n+1) - (-1)^n /n ] = ∑ (-1)^n [ -1/(n+1) -1/n ] = ∑ (-1)^n ( - (2n+1)/(n(n+1)) )，这可能收敛。然后级数D是∑(u_{2n+1} -u_{2n}) = ∑[ (-1)^{2n+1}/(2n+1) - (-1)^{2n}/(2n) ] = ∑[ -1/(2n+1) -1/(2n) ] = -∑[1/(2n) +1/(2n+1)]，这显然是发散的，因为它是调和级数的两倍。因此，选项D不一定收敛。\n\n现在，回到选项C，假设u_n → L ≠0，那么u_n /u_{n+1} →1，所以1 - u_n/u_{n+1} →0。那么级数∑(1 - u_n/u_{n+1})是否收敛？假设u_n = L + a_n，其中a_n →0。那么u_{n+1} = L + a_{n+1}。那么u_n/u_{n+1} = (L +a_n)/(L +a_{n+1}) ≈ (L +a_n)/(L +a_n + (a_{n+1}-a_n)) ≈1 + (a_n -a_{n+1})/L - (a_n)^2 / L^2 + ...。因此，1 - u_n/u_{n+1} ≈ (a_{n+1} -a_n)/L + (a_n)^2 / L^2 - ...。如果a_n是递减的，比如a_n =1/n，那么a_{n+1} -a_n = -1/(n(n+1))，所以1 - u_n/u_{n+1} ≈ -1/(n(n+1)L) + ...，这级数是收敛的。但如果a_n = (-1)^n /n，那么a_{n+1} -a_n = (-1)^{n+1}/(n+1) - (-1)^n /n = (-1)^n [ -1/(n+1) -1/n ]，所以1 - u_n/u_{n+1} ≈ [ -1/(n+1) -1/n ] / L + ...，这可能发散，因为通项类似于1/n。因此，选项C是否收敛取决于u_n的具体情况，可能不一定收敛。\n\n综上所述，选项D不一定收敛，选项C也不一定，选项B也不一定，而选项A也不一定。那么，可能正确的选项是选项D？或者我哪里分析错了？\n\n等等，可能我之前对选项D的分析有误。因为原级数∑(u_{n+1} -u_n)收敛，意味着其部分和S_N = u_{N+1} -u_1 → L -u_1。那么，级数D的部分和是∑_{n=1}^k (u_{2n+1} -u_{2n}) = (u_3 -u_2) + (u_5 -u_4) + ... + (u_{2k+1} -u_{2k}) )。这可以写成 (u_3 + u_5 + ... + u_{2k+1}) - (u_2 + u_4 + ... + u_{2k}) )。而原级数的部分和S_{2k} = u_{2k+1} -u_1。所以，级数D的部分和可以表示为 S_{2k} - (u_2 + u_4 + ... + u_{2k}) + u_1 - u_2 - u_4 - ... - u_{2k} )？这可能不太对。或者，更准确地说，级数D的部分和是原级数中每隔一项的和，即取n=2,4,6,...的项。因为原级数收敛，所以其子级数是否收敛？不一定，因为子级数的收敛性不一定保证。例如，原级数可能条件收敛，而子级数可能发散。例如，考虑u_n = (-1)^n /n，那么原级数∑(u_{n+1} -u_n) = ∑[ (-1)^{n+1}/(n+1) - (-1)^n /n ] = ∑ (-1)^n [ -1/(n+1) -1/n ] = ∑ (-1)^n ( - (2n+1)/(n(n+1)) )，这可能收敛。然后级数D是∑(u_{2n+1} -u_{2n}) = ∑[ (-1)^{2n+1}/(2n+1) - (-1)^{2n}/(2n) ] = ∑[ -1/(2n+1) -1/(2n) ] = -∑[1/(2n) +1/(2n+1)]，这显然是发散的，因为它是调和级数的两倍。因此，选项D不一定收敛。\n\n那回到选项C，假设u_n → L ≠0，那么u_n /u_{n+1} →1，所以1 - u_n/u_{n+1} →0。那么级数∑(1 - u_n/u_{n+1})是否收敛？假设u_n = L + a_n，其中a_n →0。那么u_{n+1} = L + a_{n+1}。那么u_n/u_{n+1} = (L +a_n)/(L +a_{n+1}) ≈1 + (a_n -a_{n+1})/L - (a_n)^2 / L^2 + ...。因此，1 - u_n/u_{n+1} ≈ (a_{n+1} -a_n)/L + (a_n)^2 / L^2 - ...。如果a_n是递减的，比如a_n =1/n，那么a_{n+1} -a_n = -1/(n(n+1))，所以1 - u_n/u_{n+1} ≈ -1/(n(n+1)L) + ...，这级数是收敛的。但如果a_n = (-1)^n /n，那么a_{n+1} -a_n = (-1)^{n+1}/(n+1) - (-1)^n /n = (-1)^n [ -1/(n+1) -1/n ]，所以1 - u_n/u_{n+1} ≈ [ -1/(n+1) -1/n ] / L + ...，这可能发散，因为通项类似于1/n。因此，选项C是否收敛取决于u_n的具体情况，可能不一定收敛。\n\n那么，现在回到选项D，是否有可能收敛？比如，如果u_n是单调递减且趋于0，那么级数D可能收敛。例如，u_n =1/n，那么级数D是∑(1/(2n+1) -1/(2n)) = ∑ [ (2n - (2n+1)) / (2n(2n+1)) ] = ∑ [ -1/(2n(2n+1)) ]，这显然是收敛的。所以，在这种情况下，选项D收敛。但之前举的例子中，当u_n = (-1)^n /n时，选项D发散。因此，选项D是否收敛取决于u_n的具体情况，可能不一定。\n\n那现在，回到题目，已知∑(u_{n+1} -u_n)收敛，那么u_n → L。那么，选项D的级数是否收敛？假设u_n → L，那么u_{2n} → L，u_{2n+1} → L，所以u_{2n+1} -u_{2n} →0。但级数是否收敛？不一定，因为可能通项不趋于0足够快。例如，如果u_n = L + 1/n，那么u_{2n+1} -u_{2n} = (L +1/(2n+1)) - (L +1/(2n)) = 1/(2n+1) -1/(2n) = -1/(2n(2n+1))，级数∑-1/(2n(2n+1))是收敛的。但如果u_n = L + (-1)^n /n，那么u_{2n+1} -u_{2n} = [L + (-1)^{2n+1}/(2n+1)] - [L + (-1)^{2n}/(2n)] = [L -1/(2n+1)] - [L +1/(2n)] = -1/(2n+1) -1/(2n) = - (1/(2n) +1/(2n+1))，这级数发散，因为它是调和级数的两倍。因此，选项D不一定收敛。\n\n那么，现在回到选项C，假设u_n → L ≠0，那么u_n /u_{n+1} →1，所以1 - u_n/u_{n+1} →0。那么级数∑(1 - u_n/u_{n+1})是否收敛？假设u_n = L + a_n，其中a_n →0。那么u_{n+1} = L + a_{n+1}。那么u_n/u_{n+1} = (L +a_n)/(L +a_{n+1}) ≈1 + (a_n -a_{n+1})/L - (a_n)^2 / L^2 + ...。因此，1 - u_n/u_{n+1} ≈ (a_{n+1} -a_n)/L + (a_n)^2 / L^2 - ...。如果a_n是递减的，比如a_n =1/n，那么a_{n+1} -a_n = -1/(n(n+1))，所以1 - u_n/u_{n+1} ≈ -1/(n(n+1)L) + ...，这级数是收敛的。但如果a_n = (-1)^n /n，那么a_{n+1} -a_n = (-1)^{n+1}/(n+1) - (-1)^n /n = (-1)^n [ -1/(n+1) -1/n ]，所以1 - u_n/u_{n+1} ≈ [ -1/(n+1) -1/n ] / L + ...，这可能发散，因为通项类似于1/n。因此，选项C是否收敛取决于u_n的具体情况，可能不一定收敛。\n\n综上所述，选项D不一定收敛，选项C也不一定，选项B也不一定，选项A也不一定。那么，可能正确的选项是选项D？或者我哪里分析错了？\n\n等等，可能我之前对选项D的分析有误。因为原级数∑(u_{n+1} -u_n)收敛，意味着其部分和S_N = u_{N+1} -u_1 → L -u_1。那么，级数D的部分和是∑_{n=1}^k (u_{2n+1} -u_{2n}) = (u_3 -u_2) + (u_5 -u_4) + ... + (u_{2k+1} -u_{2k}) )。这可以写成 (u_3 + u_5 + ... + u_{2k+1}) - (u_2 + u_4 + ... + u_{2k}) )。而原级数的部分和S_{2k} = u_{2k+1} -u_1。所以，级数D的部分和可以表示为 S_{2k} - (u_2 + u_4 + ... + u_{2k}) + u_1 - u_2 - u_4 - ... - u_{2k} )？这可能不太对。或者，更准确地说，级数D的部分和是原级数中每隔一项的和，即取n=2,4,6,...的项。因为原级数收敛，所以其子级数是否收敛？不一定，因为子级数的收敛性不一定保证。例如，原级数可能条件收敛，而子级数可能发散。例如，考虑u_n = (-1)^n /n，那么原级数∑(u_{n+1} -u_n) = ∑[ (-1)^{n+1}/(n+1) - (-1)^n /n ] = ∑ (-1)^n [ -1/(n+1) -1/n ] = ∑ (-1)^n ( - (2n+1)/(n(n+1)) )，这可能收敛。然后级数D是∑(u_{2n+1} -u_{2n}) = ∑[ (-1)^{2n+1}/(2n+1) - (-1)^{2n}/(2n) ] = ∑[ -1/(2n+1) -1/(2n) ] = -∑[1/(2n) +1/(2n+1)]，这显然是发散的，因为它是调和级数的两倍。因此，选项D不一定收敛。\n\n那回到选项C，假设u_n → L ≠0，那么u_n /u_{n+1} →1，所以1 - u_n/u_{n+1} →0。那么级数∑(1 - u_n/u_{n+1})是否收敛？假设u_n = L + a_n，其中a_n →0。那么u_{n+1} = L + a_{n+1}。那么u_n/u_{n+1} = (L +a_n)/(L +a_{n+1}) ≈1 + (a_n -a_{n+1})/L - (a_n)^2 / L^2 + ...。因此，1 - u_n/u_{n+1} ≈ (a_{n+1} -a_n)/L + (a_n)^2 / L^2 - ...。如果a_n是递减的，比如a_n =1/n，那么a_{n+1} -a_n = -1/(n(n+1))，所以1 - u_n/u_{n+1} ≈ -1/(n(n+1)L) + ...，这级数是收敛的。但如果a_n = (-1)^n /n，那么a_{n+1} -a_n = (-1)^{n+1}/(n+1) - (-1)^n /n = (-1)^n [ -1/(n+1) -1/n ]，所以1 - u_n/u_{n+1} ≈ [ -1/(n+1) -1/n ] / L + ...，这可能发散，因为通项类似于1/n。因此，选项C是否收敛取决于u_n的具体情况，可能不一定收敛。\n\n综上所述，选项D不一定收敛，选项C也不一定，选项B也不一定，选项A也不一定。那么，可能正确的选项是选项D？或者我哪里分析错了？\n\n等等，可能我之前对选项D的分析有误。因为原级数∑(u_{n+1} -u_n)收敛，意味着其部分和S_N = u_{N+1} -u_1 → L -u_1。那么，级数D的部分和是∑_{n=1}^k (u_{2n+1} -u_{2n}) = (u_3 -u_2) + (u_5 -u_4) + ... + (u_{2k+1} -u_{2k}) )。这可以写成 (u_3 + u_5 + ... + u_{2k+1}) - (u_2 + u_4 + ... + u_{2k}) )。而原级数的部分和S_{2k} = u_{2k+1} -u_1。所以，级数D的部分和可以表示为 S_{2k} - (u_2 + u_4 + ... + u_{2k}) + u_1 - u_2 - u_4 - ... - u_{2k} )？这可能不太对。或者，更准确地说，级数D的部分和是原级数中每隔一项的和，即取n=2,4,6,...的项。因为原级数收敛，所以其子级数是否收敛？不一定，因为子级数的收敛性不一定保证。例如，原级数可能条件收敛，而子级数可能发散。例如，考虑u_n = (-1)^n /n，那么原级数∑(u_{n+1} -u_n) = ∑[ (-1)^{n+1}/(n+1) - (-1)^n /n ] = ∑ (-1)^n [ -1/(n+1) -1/n ] = ∑ (-1)^n ( - (2n+1)/(n(n+1)) )，这可能收敛。然后级数D是∑(u_{2n+1} -u_{2n}) = ∑[ (-1)^{2n+1}/(2n+1) - (-1)^{2n}/(2n) ] = ∑[ -1/(2n+1) -1/(2n) ] = -∑[1/(2n) +1/(2n+1)]，这显然是发散的，因为它是调和级数的两倍。因此，选项D不一定收敛。\n\n那回到选项C，假设u_n → L ≠0，那么u_n /u_{n+1} →1，所以1 - u_n/u_{n+1} →0。那么级数∑(1 - u_n/u_{n&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 6941, &quot;judge_tokens&quot;: 13102, &quot;inference_latency&quot;: 132.76, &quot;judge_latency&quot;: 30.43, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;无穷级数_006&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 10084, &quot;conversion_latency&quot;: 59.03, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>无穷级数_006</td>
+            <td><span class="domain-tag">无穷级数</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设级数 $\sum_{n=1}^{\infty} (u_{n+1} - u_n)$ 收敛，则下列级数中收敛的是（ ）。
+A. $\sum_{n=1}^{\inf...</td>
+            <td></td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>132.76s</td>
+            <td>30.43s</td>
+            <td>20043</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += buildInfoSection(d);
+
+        // AI reasoning section
+        html += buildReasoningSection(d);
+
+        // Judge analysis section
+        html += buildJudgeSection(d);
+
+        // Lean verification section
+        html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
+
+        // Performance bar
+        html += buildPerfBar(d);
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function buildInfoSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        h += '<div class="info-grid">';
+        h += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.inference_error) h += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) h += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        h += '</div></div>';
+        return h;
+    }
+
+    function buildReasoningSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            var stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            h += stepsHtml + '</ul></div>';
+        }
+        if (d.intern_verification) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            h += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildJudgeSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            h += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            h += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildLeanSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.verified) return '';
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
+
+        if (lv.compile_passed === true) {
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
+        } else if (lv.compile_passed === false) {
+            var catLabel = lv.error_category || 'unknown';
+            var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};
+            h += '<div><span class="lean-status fail">&#10007; &#32534;&#35793;&#22833;&#36133; &mdash; ' + (catMap[catLabel] || catLabel) + '</span></div>';
+        } else {
+            h += '<div><span class="lean-status pending">&#8856; &#26410;&#32534;&#35793; &mdash; &#38477;&#32423;&#20026; LLM &#36923;&#36753;&#23457;&#26597;</span></div>';
+        }
+
+        if (lv.formalized_claim) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#24418;&#24335;&#21270;&#21629;&#39064;</div>';
+            h += '<div class="content-box" style="max-height:80px">' + esc(lv.formalized_claim) + '</div></div>';
+        }
+        if (lv.lean_code) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">Lean 4 &#20195;&#30721;</div>';
+            h += '<div class="content-box lean-code" style="max-height:200px">' + esc(lv.lean_code) + '</div></div>';
+        }
+        if (lv.compile_passed === false && lv.compile_output) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#32534;&#35793;&#38169;&#35823;&#36755;&#20986;</div>';
+            h += '<div class="content-box lean-error" style="max-height:150px">' + esc(lv.compile_output) + '</div></div>';
+        }
+
+        if (lv.analysis_performed) {
+            h += '<div class="lean-insight">';
+            h += '<div class="insight-title">&#128269; &#38169;&#35823;&#26681;&#22240;&#20998;&#26512;</div>';
+            if (lv.human_readable_error) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#38169;&#35823;&#35299;&#37322;&#65306;</span>' + esc(lv.human_readable_error) + '</div>';
+            }
+            if (lv.root_cause) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#26681;&#22240;&#65306;</span>' + esc(lv.root_cause) + '</div>';
+            }
+            if (lv.error_category === 'logic_error' || lv.error_category === 'both') {
+                if (lv.logic_flaw_location) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#36923;&#36753;&#26029;&#28857;&#65306;</span>' + esc(lv.logic_flaw_location) + '</div>';
+                }
+                if (lv.logic_flaw_why) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#38169;&#35823;&#21407;&#22240;&#65306;</span>' + esc(lv.logic_flaw_why) + '</div>';
+                }
+                if (lv.correct_approach) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#059669;">&#27491;&#30830;&#20570;&#27861;&#65306;</span>' + esc(lv.correct_approach) + '</div>';
+                }
+            }
+            if (lv.error_category === 'translation_error' || lv.error_category === 'both') {
+                if (lv.translation_issue) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#D97706;">&#36716;&#21270;&#38382;&#39064;&#65306;</span>' + esc(lv.translation_issue) + '</div>';
+                }
+            }
+            if (lv.fix_prompt_for_ai) {
+                h += '<div style="margin-top:12px;padding:10px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981;">';
+                h += '<div style="font-weight:700;color:#065F46;margin-bottom:4px;">&#128221; &#20462;&#27491;&#25552;&#31034;&#35789;&#65288;&#21487;&#21453;&#39304;&#32473;&#20070;&#29983;AI&#65289;</div>';
+                h += '<div style="font-size:12px;color:#166534;white-space:pre-wrap">' + esc(lv.fix_prompt_for_ai) + '</div></div>';
+            }
+            h += '</div>';
+        }
+
+        h += '<div style="margin-top:12px;font-size:11px;color:#94A3B8">';
+        h += '&#36716;&#21270;: ' + (lv.conversion_latency || 0).toFixed(1) + 's / ';
+        h += '&#32534;&#35793;: ' + (lv.compile_latency || 0).toFixed(1) + 's';
+        if (lv.analysis_latency) h += ' / &#20998;&#26512;: ' + (lv.analysis_latency || 0).toFixed(1) + 's';
+        h += ' | Token: ' + ((lv.conversion_tokens || 0) + (lv.analysis_tokens || 0));
+        if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
+        h += '</div>';
+        h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
+        return h;
+    }
+
+    function buildPerfBar(d) {
+        var h = '<div class="perf-bar">';
+        h += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        h += '</div>';
+        return h;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) { return _latexToReadable(inner.trim()); });
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '\u2202$1');
+        s = s.replace(/\\ln /g, 'ln '); s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin '); s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan '); s = s.replace(/\\cdot /g, '\u00b7');
+        s = s.replace(/\\times /g, '\u00d7'); s = s.replace(/\\div /g, '\u00f7');
+        s = s.replace(/\\pm /g, '\u00b1'); s = s.replace(/\\leq ?/g, '\u2264');
+        s = s.replace(/\\geq ?/g, '\u2265'); s = s.replace(/\\neq ?/g, '\u2260');
+        s = s.replace(/\\approx ?/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    function _latexToReadable(expr) {
+        var s = expr;
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)'); s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        s = s.replace(/\^(\w)/g, '^$1'); s = s.replace(/_(\w)/g, '_$1');
+        s = s.replace(/\\alpha/g, '\u03b1'); s = s.replace(/\\beta/g, '\u03b2');
+        s = s.replace(/\\gamma/g, '\u03b3'); s = s.replace(/\\delta/g, '\u03b4');
+        s = s.replace(/\\epsilon/g, '\u03b5'); s = s.replace(/\\theta/g, '\u03b8');
+        s = s.replace(/\\lambda/g, '\u03bb'); s = s.replace(/\\pi/g, '\u03c0');
+        s = s.replace(/\\sigma/g, '\u03c3'); s = s.replace(/\\phi/g, '\u03c6');
+        s = s.replace(/\\omega/g, '\u03c9'); s = s.replace(/\\rho/g, '\u03c1');
+        s = s.replace(/\\partial/g, '\u2202'); s = s.replace(/\\nabla/g, '\u2207');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln'); s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin'); s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan'); s = s.replace(/\\cdot/g, '\u00b7');
+        s = s.replace(/\\times/g, '\u00d7'); s = s.replace(/\\div/g, '\u00f7');
+        s = s.replace(/\\pm/g, '\u00b1'); s = s.replace(/\\leq/g, '\u2264');
+        s = s.replace(/\\geq/g, '\u2265'); s = s.replace(/\\neq/g, '\u2260');
+        s = s.replace(/\\approx/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '\u221a$1');
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', '); s = s.replace(/\\;[ ]*/g, '  ');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+
+</body>
+</html>

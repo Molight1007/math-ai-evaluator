@@ -1,0 +1,32 @@
+[
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0612",
+    "question": "曲线y = e^x与直线x = 1, x = -1及x轴所围平面有界区域D的形心坐标为多少？",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": "形心坐标为 (0, (e - e^{-1})/(2(e - e^{-1})))"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0913",
+    "question": "已知 ln| (1+x)/(x-1) | = ∑_{n=0}^{∞} a_n x^n，其中 -1 < x < 1，求 a_n。",
+    "domain": "无穷级数",
+    "reference_answer": "a_n = -2/(n+1) 当 n 为奇数时；a_n = 0 当 n 为偶数时。"
+  },
+  {
+    "id": "多元函数微分学_026",
+    "question": "求由方程2x2+2y2+z2+8xz-z+8=0所确定的函数z=z(x,y ( 的极值,并指出是极大值还是 极小值",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  },
+  {
+    "id": "微分方程_037",
+    "question": "设曲线L:r=r(θ ( ,P(r,θ ( 为L上任意一点,P 0(2,0 ( 为L上的一定点,且曲线L与极径OP ,OP所 0 围成的曲边扇形面积值等于曲线L上P,P两点间弧长值的一半,求曲线L的方程",
+    "domain": "微分方程",
+    "reference_answer": ""
+  },
+  {
+    "id": "无穷级数_006",
+    "question": "设级数 $\\sum_{n=1}^{\\infty} (u_{n+1} - u_n)$ 收敛，则下列级数中收敛的是（ ）。\nA. $\\sum_{n=1}^{\\infty} u_n$\nB. $\\sum_{n=1}^{\\infty} (-1)^n u_n$\nC. $\\sum_{n=1}^{\\infty} \\left(1 - \\frac{u_n}{u_{n+1}}\\right)$\nD. $\\sum_{n=1}^{\\infty} (u_{2n+1} - u_{2n})$",
+    "domain": "无穷级数",
+    "reference_answer": "D"
+  }
+]

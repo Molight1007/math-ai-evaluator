@@ -1,0 +1,210 @@
+{
+  "generated_at": "2026-07-26T09:33:52.636516",
+  "summary": {
+    "total": 3,
+    "correct": 2,
+    "accuracy": 66.67,
+    "avg_confidence": 1.0,
+    "avg_inference_latency": 43.0,
+    "avg_judge_latency": 10.41,
+    "total_inference_tokens": 7618,
+    "total_judge_tokens": 4431,
+    "error_types": {
+      "calculation_error": 1
+    },
+    "domain_stats": {
+      "函数极限与连续": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100.0
+      },
+      "一元函数微分学的应用(一)--几何应用": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100.0
+      },
+      "多元函数微分学": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "problem_id": "gen_444de964",
+      "question": "求极限：lim_{x→0} (sin x - x)/x^3",
+      "domain": "函数极限与连续",
+      "reference_answer": "-1/6",
+      "intern_answer": "-1/6",
+      "intern_reasoning": "泰勒展开法直接揭示了分子的主部，避免了多次求导的繁琐，且结果与洛必达法则一致，理论基础更扎实。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": true,
+      "confidence": 1.0,
+      "judge_explanation": "使用泰勒展开可得极限为-1/6，答案正确。",
+      "error_type": null,
+      "correct_answer_judge": null,
+      "inference_tokens": 1738,
+      "judge_tokens": 1477,
+      "inference_latency": 28.47,
+      "judge_latency": 10.41,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 1738
+    },
+    {
+      "problem_id": "gen_b6760da8",
+      "question": "求函数f(x)=x^3-3x+1在区间[-2,2]上的最大值和最小值。",
+      "domain": "一元函数微分学的应用(一)--几何应用",
+      "reference_answer": "最大值为3，最小值为-1",
+      "intern_answer": "最大值3，最小值-1",
+      "intern_reasoning": "候选0通过严格求导和完整计算所有关键点，方法最严谨，置信度最高。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": true,
+      "confidence": 1.0,
+      "judge_explanation": "计算驻点和区间端点函数值可得最大值为3，最小值为-1，答案正确。",
+      "error_type": null,
+      "correct_answer_judge": null,
+      "inference_tokens": 1863,
+      "judge_tokens": 1477,
+      "inference_latency": 28.03,
+      "judge_latency": 10.41,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": null,
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 1863
+    },
+    {
+      "problem_id": "【A4基础强化合并】1000题数一高数篇_0658",
+      "question": "设z=z(x,y ( 是由方程z+lnz-∫ x e-t2 dt=1确定的函数,计算 ∂2z | y ∂x∂y (0,0 (",
+      "domain": "多元函数微分学",
+      "reference_answer": null,
+      "intern_answer": "0",
+      "intern_reasoning": "所有候选答案一致为0，且基于隐函数定理的分析最为直接可靠，尽管存在题目可能有误的疑虑，但现有信息下结论明确。",
+      "intern_steps": [],
+      "intern_verification": "",
+      "is_correct": false,
+      "confidence": 1.0,
+      "judge_explanation": "正确答案为1，模型给出的0与参考解答不符。",
+      "error_type": "calculation_error",
+      "correct_answer_judge": "1",
+      "inference_tokens": 4017,
+      "judge_tokens": 1477,
+      "inference_latency": 72.5,
+      "judge_latency": 10.41,
+      "inference_error": null,
+      "judge_error": null,
+      "lean_verification": {
+        "problem_id": "【A4基础强化合并】1000题数一高数篇_0658",
+        "verified": true,
+        "lean_available": true,
+        "lean_code": "{\n  \"lean_code\": \"import Mathlib\\n\\nopen Real\\n\\n/-- \\n设 z = z(x,y) 是由方程 z + ln z - ∫_x^y e^{-t^2} dt = 1 确定的隐函数，\\n且 z 是 C² 光滑的。证明在 (0,0) 处二阶混合偏导数 ∂²z/∂x∂y = 0。\\n-/\\ntheorem mixed_partial_zero (z : ℝ → ℝ → ℝ)\\n    (h_eq : ∀ x y, z x y + Real.log (z x y) - (∫ t in (x)..(y), Real.exp (-(t ^ 2))) = 1)\\n    (h_pos : ∀ x y, z x y > 0)\\n    (h_contdiff : ContDiff ℝ 2 (fun (p : ℝ × ℝ) => z p.1 p.2)) :\\n    deriv (fun y : ℝ => deriv (fun x : ℝ => z x y) 0) 0 = 0 :=\\nby\\n  sorry\",\n  \"is_formalizable\": true,\n  \"formalized_claim\": \"在给定方程 z + ln z - ∫_x^y e^{-t^2} dt = 1 且 z 是 C² 光滑函数的条件下，证明 ∂²z/∂x∂y 在 (0,0) 处等于 0。\",\n  \"expected_result\": \"pass\",\n  \"key_steps\": [\n    \"假设函数 z 满足方程 z + ln z - ∫_x^y e^{-t^2} dt = 1\",\n    \"要求 z > 0 以保证 ln z 有意义\",\n    \"假设 z 是二元 C² 光滑函数，从而混合偏导数可交换且存在\",\n    \"利用隐函数定理和对方程求导，最终得到混合偏导数在",
+        "formalized_claim": "",
+        "conversion_tokens": 4766,
+        "conversion_latency": 57.21,
+        "conversion_error": null,
+        "compile_passed": false,
+        "compile_output": "C:\\Users\\35174\\AppData\\Local\\Temp\\verify_frpn4y4t.lean:6:47: error: expected token",
+        "compile_latency": 1.11,
+        "compile_timeout": false,
+        "analysis_performed": true,
+        "error_category": "logic_error",
+        "analysis_confidence": 0.99,
+        "human_readable_error": "原始推理的结论“∂²z/∂x∂y (0,0) = 0”是错误的，正确结果应为 -1/8。",
+        "root_cause": "原始推理错误地断言答案为0，可能是因为未正确执行隐函数求导，或忽略了 z 对 x 和 y 的依赖关系，导致二阶混合偏导计算错误。通过对方程逐次求偏导并代入 (0,0) 可得 z(0,0)=1，进而得到 ∂²z/∂x∂y(0,0) = -1/8。",
+        "logic_flaw_location": "原始推理中声称“所有候选答案一致为0，且基于隐函数定理的分析……结论明确”。该结论缺乏具体推导，且最终数值与正确结果不符。",
+        "logic_flaw_why": "由原方程 z + ln z - ∫_x^y e^{-t²} dt = 1，对 x 求偏导得 ∂z/∂x (1+1/z) + e^{-x²} = 0 ⇒ ∂z/∂x = -z e^{-x²}/(z+1)；对 y 求偏导得 ∂z/∂y = z e^{-y²}/(z+1)。再对 ∂z/∂x 关于 y 求偏导，并利用 ∂z/∂y 表达式，最终得 ∂²z/∂x∂y = -z e^{-x²} e^{-y²}/(z+1)³。在 (0,0) 处，由方程得 z(0,0)=1，代入得 ∂²z/∂x∂y(0,0) = -1/8 ≠ 0。因此原结论 0 是错误的。",
+        "correct_approach": "正确解法：先由隐函数定理确定 z(0,0)=1，再对原方程分别求一阶偏导，然后利用商法则求二阶混合偏导，最后代入 (0,0) 得到 -1/8。",
+        "translation_issue": "Lean 代码中使用了积分符号 ∫ 但可能未正确打开 Real 积分作用域（如 `open scoped Integral`），导致编译错误“expected token”。不过这仅是语法问题，不影响对逻辑错误的判断。",
+        "fix_prompt_for_ai": "请重新推导该隐函数的二阶混合偏导数，注意 z = z(x,y) 且 z(0,0) 需由原方程求出为 1，最终结果应为 -1/8，而非 0。",
+        "suggested_fix": "将 Lean 代码中的定理结论改为 `... = -1/8`，并补充完整的计算过程，或者先修正原数学推导再形式化。语法上需确保正确导入积分相关模块（如 `open Real` 和 `open scoped Integral`）。",
+        "analysis_tokens": 3326,
+        "analysis_latency": 39.21,
+        "analysis_error": null,
+        "sorry_count": 1,
+        "has_incomplete_proof": true,
+        "revision_attempts": 1,
+        "revised_lean_code": "import Mathlib\n\nopen Real\n\n/-- \n设 z = z(x,y) 是由方程 z + ln z - ∫_x^y e^{-t^2} dt = 1 确定的隐函数，\n且 z 是 C² 光滑的。证明在 (0,0) 处二阶混合偏导数 ∂²z/∂x∂y = 0。\n-/\ntheorem mixed_partial_zero (z : ℝ → ℝ → ℝ)\n    (h_eq : ∀ x y, z x y + Real.log (z x y) - (∫ t in x..y, Real.exp (-(t ^ 2))) = 1)\n    (h_pos : ∀ x y, z x y > 0)\n    (h_contdiff : ContDiff ℝ 2 (fun (p : ℝ × ℝ) => z p.1 p.2)) :\n    deriv (fun y : ℝ => deriv (fun x : ℝ => z x y) 0) 0 = 0 :=\nby\n  sorry",
+        "dag": {
+          "root_id": "root",
+          "nodes": {
+            "root": {
+              "node_id": "root",
+              "node_type": "OR",
+              "label": "证明目标",
+              "statement": "∂²z/∂x∂y (0,0) = 0",
+              "status": "open",
+              "children": [
+                "and1"
+              ],
+              "detail": "需要证明隐函数z在(0,0)处的二阶混合偏导数为0"
+            },
+            "and1": {
+              "node_id": "and1",
+              "node_type": "AND",
+              "label": "基于隐函数定理的求导方案",
+              "statement": "利用隐函数定理对原方程求偏导并化简",
+              "status": "open",
+              "children": [
+                "leaf1",
+                "leaf2",
+                "leaf3",
+                "leaf4"
+              ],
+              "detail": "假设z由方程z+ln z-∫_x^y e^{-t^2}dt=1确定且为C²光滑，通过逐次求导和代数化简得到结果"
+            },
+            "leaf1": {
+              "node_id": "leaf1",
+              "node_type": "LEAF",
+              "label": "隐函数存在性与光滑性",
+              "statement": "方程z+ln z-∫_x^y e^{-t^2}dt=1在(0,0)附近唯一确定C²光滑函数z(x,y)且z>0",
+              "status": "sorry",
+              "children": [],
+              "detail": "需验证隐函数定理条件：F(x,y,z)=z+ln z-∫_x^y e^{-t^2}dt-1，∂F/∂z=1+1/z≠0，其余偏导连续"
+            },
+            "leaf2": {
+              "node_id": "leaf2",
+              "node_type": "LEAF",
+              "label": "一阶偏导数表达式",
+              "statement": "求出∂z/∂x = e^{-x^2}/(1+1/z) 和 ∂z/∂y = -e^{-y^2}/(1+1/z)",
+              "status": "sorry",
+              "children": [],
+              "detail": "对方程两边关于x和y求偏导，注意积分变限的导数：∂/∂x ∫_x^y = -e^{-x^2}，∂/∂y ∫_x^y = e^{-y^2}"
+            },
+            "leaf3": {
+              "node_id": "leaf3",
+              "node_type": "LEAF",
+              "label": "二阶混合偏导计算",
+              "statement": "计算∂²z/∂x∂y，代入(0,0)得0",
+              "status": "sorry",
+              "children": [],
+              "detail": "对∂z/∂x关于y再求偏导，利用商法则和链式法则，利用(0,0)处∫_0^0=0及z(0,0)满足z+ln z=1等条件化简"
+            },
+            "leaf4": {
+              "node_id": "leaf4",
+              "node_type": "LEAF",
+              "label": "混合偏导连续性保证存在性",
+              "statement": "由h_contdiff知z是C²的，故混合偏导存在且连续",
+              "status": "sorry",
+              "children": [],
+              "detail": "确保求导次序可交换，且二阶偏导有意义"
+            }
+          }
+        }
+      },
+      "sample_index": 0,
+      "review_passed": true,
+      "review_attempts": 0,
+      "total_tokens_used": 4017
+    }
+  ]
+}

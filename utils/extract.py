@@ -117,13 +117,15 @@ def extract_final_answer(text: str) -> str:
     if not text:
         return ""
 
-    # 策略 1：【最终答案】/ 答案: / Final answer: 等显式标记
-    # BUG-10 修复：多行答案用贪婪匹配到明确的节标记或文本末尾
+    # 策略 1：【最终答案】/ ANSWER: / 答案: / Final answer: 等显式标记
+    # (借鉴 math_agent-main：ANSWER: 是 Intern-S 最常遵守的标记)
     patterns = [
+        (r"ANSWER\s*[:：]\s*([\s\S]+)", False),
         (r"【最终答案】\s*\n?\s*([\s\S]+)", False),
         (r"最终答案[:：]\s*([\s\S]+)", False),
+        (r"[Ff]inal\s*[Aa]nswer\s*[:：]\s*([\s\S]+)", False),
+        (r"###\s*[Ff]inal\s*[Aa]nswer\s*\n?\s*([\s\S]+)", False),
         (r"答案[:：]\s*([\s\S]+)", False),
-        (r"[Ff]inal\s*[Aa]nswer[:：]\s*([\s\S]+)", False),
     ]
     for pattern, is_boxed in patterns:
         match = re.search(pattern, text, re.DOTALL)
@@ -175,6 +177,19 @@ def extract_final_answer(text: str) -> str:
         if not _is_meta_line(last) and not _is_incomplete_answer(last):
             return last
 
+    # 策略 5b：增强结果定位 —— 在文本末尾搜索"因此"、"所以"、"故"后紧跟的数字/表达式
+    # 用于扑捉类似 "因此答案是 72" 或 "所以|T|=72" 的模式
+    conclusion_match = re.findall(
+        r"(?:因此|所以|故|综上|因此|因而|于是)[,，:：]?\s*"
+        r"(?:[A-Za-z0-9_\\{}\[\]|$]+\s*[=＝]\s*)?"
+        r"([-+]?\d*\.?\d+(?:[eE][+-]?\d+)?)",
+        text,
+    )
+    if conclusion_match:
+        last = conclusion_match[-1].strip()
+        if last and not _is_meta_line(last) and not _is_incomplete_answer(last) and len(last) > 0:
+            return last
+
     # 策略 6：尝试忽略元语句后重新取倒数几行
     if lines := [l.strip() for l in text.strip().split("\n") if l.strip()]:
         clean_lines = [l for l in lines if not _is_meta_line(l) and not _is_incomplete_answer(l)]
@@ -188,8 +203,10 @@ def extract_final_answer(text: str) -> str:
 def clean_answer(text: str) -> str:
     """清理答案文本，去除多余符号"""
     text = text.strip()
-    # 去除编号前缀
-    text = re.sub(r"^[\d]+[\.\、\)）]\s*", "", text)
+    # 去除编号前缀（只移除单数字编号如 "1. " "2) "，保护两位数答案如 "72"）
+    stripped = re.sub(r"^\d{1}[\.\、\)）]\s*", "", text)
+    if stripped and len(stripped) > 1:
+        text = stripped
     # 去除 markdown 格式
     text = text.replace("**", "").replace("__", "")
     return text
@@ -269,8 +286,14 @@ _REFUSAL_PATTERNS: list[re.Pattern] = [
     re.compile(r"(?:无法|不能|没办法|不擅长|抱歉|对不起|sorry|cannot|unable)", re.IGNORECASE),
     re.compile(r"(?:as an AI|I cannot|I don't have)", re.IGNORECASE),
     re.compile(r"^(?:\s|[{[(（])*$"),  # 纯空白/括号
-    re.compile(r"^(?:未知|unknow|n/?a|none)\s*$", re.IGNORECASE),
+    re.compile(r"^(?:未知|unknow|n/?a|none|i don't know|i have not found)\s*$", re.IGNORECASE),
     re.compile(r"^(?:\[|【|\\begin).{0,20}(?:答案|最终答案).{0,20}(?:\]|】|\\end)"),
+    # 模板残留（借鉴 Intern-Math-main）
+    re.compile(r"(?:lemma|proof|step)\s*[:：].{0,30}(?:repository|label)", re.IGNORECASE),
+    re.compile(r"(?:no more than|only.*answer.*no reasoning|must include.*answer)", re.IGNORECASE),
+    re.compile(r"format_error|incomplete|placeholder|TBD|to be determined", re.IGNORECASE),
+    re.compile(r"^(?:answer|最终答案|答案)\s*[:：]?\s*$"),  # 只有标签没有实际答案
+    re.compile(r"<[^>]*(?:Final Answer|Specific|具体数学结论|最终答案)[^>]*>", re.IGNORECASE),
 ]
 
 

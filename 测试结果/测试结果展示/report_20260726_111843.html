@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .lean-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+        .lean-badge.lean-pass { background: #D1FAE5; color: #065F46; }
+        .lean-badge.lean-logic-err { background: #FEE2E2; color: #991B1B; }
+        .lean-badge.lean-trans-err { background: #FEF3C7; color: #92400E; }
+        .lean-badge.lean-unknown { background: #F1F5F9; color: #64748B; }
+        .lean-badge.lean-review { background: #E0E7FF; color: #3730A3; }
+        .lean-badge.lean-incomplete { background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; }
+        .section-heading.lean { color: #059669; border-color: #A7F3D0; }
+        .section-heading .icon-dot.lean { background: #10B981; }
+        .lean-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+        .lean-status.pass { background: #D1FAE5; color: #065F46; }
+        .lean-status.fail { background: #FEE2E2; color: #991B1B; }
+        .lean-status.pending { background: #F1F5F9; color: #64748B; }
+        .lean-status.warn { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+        .content-box.lean-code { background: #1E293B; color: #E2E8F0; border-color: #334155; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+        .content-box.lean-error { background: #FEF2F2; border-color: #FECACA; color: #991B1B; font-size: 12px; }
+        .lean-insight { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+        .lean-insight .insight-title { font-size: 13px; font-weight: 700; color: #92400E; margin-bottom: 8px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+        .section-heading.dag { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading .icon-dot.dag { background: #8B5CF6; }
+        .dag-container { margin-top: 8px; overflow-x: auto; }
+        .dag-tree { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: max-content; padding: 16px 0; }
+        .dag-level { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 24px; position: relative; }
+        .dag-level + .dag-level { margin-top: 40px; }
+        .dag-node-wrapper { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .dag-node { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 10px; border: 2px solid; font-size: 12px; min-width: 140px; max-width: 220px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); transition: transform 0.15s, box-shadow 0.15s; cursor: default; }
+        .dag-node:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.14); }
+        .dag-node.or { background: #EFF6FF; border-color: #93C5FD; }
+        .dag-node.or .dag-node-type { color: #1D4ED8; }
+        .dag-node.and { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.and .dag-node-type { color: #15803D; }
+        .dag-node.leaf { background: #F8FAFC; border-color: #CBD5E1; }
+        .dag-node.leaf .dag-node-type { color: #64748B; }
+        .dag-node.leaf.verified { background: #F0FDF4; border-color: #86EFAC; }
+        .dag-node.leaf.sorry { background: #FEF2F2; border-color: #FECACA; }
+        .dag-node.leaf.sorry .dag-node-type { color: #DC2626; }
+        .dag-node-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .dag-node-label { font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+        .dag-node-statement { font-size: 11px; color: #475569; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .dag-node-status { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+        .dag-node-status.open { background: #FEF3C7; color: #92400E; }
+        .dag-node-status.decomposed { background: #DBEAFE; color: #1E40AF; }
+        .dag-node-status.verified { background: #D1FAE5; color: #065F46; }
+        .dag-node-status.sorry { background: #FEE2E2; color: #991B1B; }
+        .dag-children { display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 20px; }
+        .dag-children-group { display: flex; flex-direction: column; align-items: center; }
+        .dag-connector-line { width: 2px; height: 20px; background: #CBD5E1; }
+        .dag-connector-horizontal { height: 2px; background: #CBD5E1; flex: 1; min-width: 16px; }
+        .dag-connector-bridge { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .dag-connector-bridge .dag-connector-horizontal:first-child { border-radius: 0 0 0 0; }
+        .dag-empty { color: #94A3B8; font-size: 13px; padding: 16px; text-align: center; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-07-26 11:18:43</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">5</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">3</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value green">60.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.85</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">81.79s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">17.17s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">二重积分</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数微分学的计算</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">一元函数积分学的概念与性质</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">函数极限与连续</span>
+            <span class="domain-acc">0.0%</span>
+            <span class="domain-count">(0/1)</span>
+        </div>
+        <div class="domain-stat">
+            <span class="domain-name">数列极限</span>
+            <span class="domain-acc">100.0%</span>
+            <span class="domain-count">(1/1)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Lean</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;gen_7efe6fac&quot;, &quot;domain&quot;: &quot;二重积分&quot;, &quot;question&quot;: &quot;计算二重积分：∬_D (x^2 + y^2) dxdy，其中D是由x^2+y^2=1所围成的闭区域。&quot;, &quot;reference_answer&quot;: &quot;π/2&quot;, &quot;intern_answer&quot;: &quot;π/2&quot;, &quot;intern_reasoning&quot;: &quot;【答案选择依据】\n所有候选答案均正确，但候选0的推理过程最详细且信心最高。\n\n【候选1推理过程】(答案=π/2, 置信度=0.95)\n将积分转换为极坐标系，x² + y² = r²，积分区域D为r从0到1，θ从0到2π。积分变为∫₀²π ∫₀¹ r² * r dr dθ = ∫₀²π ∫₀¹ r³ dr dθ。计算内部积分∫₀¹ r³ dr = [r⁴/4]₀¹ = 1/4。然后计算外部积分∫₀²π 1/4 dθ = (1/4)(2π) = π/2。\n\n【候选2推理过程】(答案=π/2, 置信度=0.9)\n使用极坐标系，被积函数x² + y² = r²，面积元素dxdy = r dr dθ。积分区域D为r ∈ [0,1]，θ ∈ [0,2π]。积分变为∫₀²π ∫₀¹ r² * r dr dθ = ∫₀²π ∫₀¹ r³ dr dθ。计算内部积分得1/4，外部积分得π/2。\n\n【候选3推理过程】(答案=π/2, 置信度=0.85)\n利用极坐标系，积分区域D为单位圆，转换后积分表达式为∫₀²π ∫₀¹ r² * r dr dθ。计算内部积分∫₀¹ r³ dr = 1/4，外部积分∫₀²π 1/4 dθ = π/2。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型答案与参考答案一致，均为π/2，推理过程使用极坐标变换，计算步骤正确无误。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;π/2&quot;, &quot;inference_tokens&quot;: 1834, &quot;judge_tokens&quot;: 1459, &quot;inference_latency&quot;: 26.19, &quot;judge_latency&quot;: 2.84, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>gen_7efe6fac</td>
+            <td><span class="domain-tag">二重积分</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">计算二重积分：∬_D (x^2 + y^2) dxdy，其中D是由x^2+y^2=1所围成的闭区域。...</td>
+            <td>π/2</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>26.19s</td>
+            <td>2.84s</td>
+            <td>3293</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;【A4基础强化合并】1000题数一高数篇_0210&quot;, &quot;domain&quot;: &quot;一元函数微分学的计算&quot;, &quot;question&quot;: &quot;设 $f(x) = \\frac{1+x+x^2}{1-x+x^2}$，则 $f^{(4)}(0) = \\underline{\\qquad\\qquad}$&quot;, &quot;reference_answer&quot;: &quot;0&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;\nOkay, so I need to find the fourth derivative of the function f(x) = (1 + x + x²)/(1 - x + x²) evaluated at x=0. Hmm, that sounds a bit complicated, but maybe I can break it down step by step.\n\nFirst, let me recall that taking derivatives of rational functions can sometimes be done using the quotient rule, but doing that four times might get messy. Maybe there's a smarter way, like expanding the function into a Taylor series around x=0 and then finding the coefficient of x⁴, since the nth derivative at 0 is related to the coefficient of x^n in the Taylor series multiplied by n!.\n\nRight, the Taylor series expansion of f(x) around 0 would be f(0) + f’(0)x + f''(0)x²/2! + f'''(0)x³/3! + f''''(0)x⁴/4! + ... So if I can find the coefficient of x⁴ in this expansion, multiplying it by 4! will give me f''''(0).\n\nSo my goal is to expand f(x) as a power series up to x⁴ and then find that coefficient. Let me try to do that.\n\nFirst, let me compute f(0). Plugging in x=0, numerator is 1 + 0 + 0 = 1, denominator is 1 - 0 + 0 = 1. So f(0) = 1.\n\nNow, to find the expansion, maybe I can write the denominator as 1 - x + x² and then express the function as (1 + x + x²) * (1/(1 - x + x²)). If I can expand 1/(1 - x + x²) as a power series, then multiply by (1 + x + x²), that might work.\n\nLet me denote g(x) = 1/(1 - x + x²). Then f(x) = (1 + x + x²) * g(x). So if I can find the expansion of g(x), multiplying by (1 + x + x²) will give me the expansion of f(x).\n\nTo expand g(x) = 1/(1 - x + x²), perhaps I can use the formula for the sum of a geometric series, but the denominator isn't exactly in the form 1 - something. Alternatively, maybe I can perform polynomial long division or find a recurrence relation for the coefficients.\n\nAlternatively, note that 1/(1 - x + x²) can be written as 1/(1 - (x - x²)). So if I let u = x - x², then 1/(1 - u) = 1 + u + u² + u³ + u⁴ + ... as long as |u| &lt; 1. But since we're dealing with formal power series, maybe this expansion is valid.\n\nSo expanding 1/(1 - (x - x²)) as a power series in x:\n\n1/(1 - (x - x²)) = 1 + (x - x²) + (x - x²)² + (x - x²)³ + (x - x²)^4 + ... \n\nLet me compute each term up to x⁴:\n\nFirst term: 1\n\nSecond term: x - x²\n\nThird term: (x - x²)² = x² - 2x³ + x⁴\n\nFourth term: (x - x²)^3 = x³ - 3x⁴ + ... (higher terms beyond x⁴ can be ignored)\n\nFifth term: (x - x²)^4 = x⁴ + ... (again, higher terms ignored)\n\nSo adding all these up up to x⁴:\n\n1 + (x - x²) + (x² - 2x³ + x⁴) + (x³ - 3x⁴) + x⁴\n\nLet me combine like terms:\n\nConstant term: 1\n\nx term: x\n\nx² term: -x² + x² = 0\n\nx³ term: -2x³ + x³ = -x³\n\nx⁴ term: x⁴ -3x⁴ + x⁴ = (-1)x⁴\n\nSo the expansion of g(x) up to x⁴ is 1 + x + 0x² - x³ - x⁴ + ...\n\nTherefore, g(x) = 1 + x - x³ - x⁴ + higher order terms.\n\nNow, f(x) = (1 + x + x²) * g(x). Let's multiply (1 + x + x²) with the expansion of g(x):\n\n(1)(1 + x - x³ - x⁴) + x(1 + x - x³ - x⁴) + x²(1 + x - x³ - x⁴)\n\nCompute each part:\n\nFirst part: 1 + x - x³ - x⁴\n\nSecond part: x + x² - x⁴ - x⁵\n\nThird part: x² + x³ - x⁵ - x⁶\n\nNow, combine all terms up to x⁴:\n\n1 + x - x³ - x⁴ + x + x² - x⁴ + x² + x³\n\nCombine like terms:\n\nConstant: 1\n\nx: x + x = 2x\n\nx²: x² + x² = 2x²\n\nx³: -x³ + x³ = 0\n\nx⁴: -x⁴ - x⁴ = -2x⁴\n\nSo the expansion of f(x) up to x⁴ is 1 + 2x + 2x² + 0x³ - 2x⁴ + ...\n\nTherefore, the coefficient of x⁴ in the Taylor series of f(x) is -2. Since the Taylor series is f(x) = Σ (f^{(n)}(0)/n!) x^n, the coefficient of x⁴ is f''''(0)/4! = -2. Therefore, f''''(0) = -2 * 4! = -2 * 24 = -48.\n\nWait, let me double-check my calculations because sometimes when expanding, signs can be tricky.\n\nLet me re-examine the expansion of g(x):\n\nWe had:\n\n1/(1 - x + x²) = 1 + (x - x²) + (x - x²)^2 + (x - x²)^3 + (x - x²)^4 + ...\n\nCalculating each term:\n\nTerm 0: 1\n\nTerm 1: x - x²\n\nTerm 2: (x - x²)^2 = x² - 2x³ + x⁴\n\nTerm 3: (x - x²)^3 = x³ - 3x⁴ + 3x^5 - x^6\n\nTerm 4: (x - x²)^4 = x^4 - 4x^5 + 6x^6 - 4x^7 + x^8\n\nSo up to x⁴, the expansion is:\n\n1 + (x - x²) + (x² - 2x³ + x⁴) + (x³ - 3x⁴) + x⁴\n\nNow, adding term by term:\n\n1\n\n+ x - x²\n\n+ x² - 2x³ + x⁴\n\n+ x³ - 3x⁴\n\n+ x⁴\n\nNow, let's collect each power:\n\nx^0: 1\n\nx^1: x\n\nx^2: (-x²) + x² = 0\n\nx^3: (-2x³) + x³ = (-x³)\n\nx^4: x⁴ -3x⁴ + x⁴ = (-x⁴)\n\nSo yes, g(x) = 1 + x - x³ - x⁴ + ...\n\nThen f(x) = (1 + x + x²) * g(x) = (1 + x + x²)(1 + x - x³ - x⁴)\n\nMultiplying:\n\n1*(1 + x - x³ - x⁴) = 1 + x - x³ - x⁴\n\nx*(1 + x - x³ - x⁴) = x + x² - x⁴ - x⁵\n\nx²*(1 + x - x³ - x⁴) = x² + x³ - x^5 - x^6\n\nAdding these up:\n\n1 + x - x³ - x⁴ + x + x² - x⁴ - x^5 + x² + x³ - x^5 - x^6\n\nNow, collect up to x⁴:\n\n1\n\nx + x = 2x\n\nx² + x² = 2x²\n\n(-x³) + x³ = 0\n\n(-x⁴) + (-x⁴) = -2x⁴\n\nSo f(x) = 1 + 2x + 2x² - 2x⁴ + higher terms.\n\nTherefore, the coefficient of x⁴ is -2, so f''''(0)/4! = -2, so f''''(0) = -2 * 24 = -48.\n\nWait, but let me think again. Is there another way to confirm this result? Maybe by computing derivatives directly, but that might be tedious.\n\nAlternatively, perhaps using the quotient rule multiple times. Let's try computing the first few derivatives and see if a pattern emerges.\n\nGiven f(x) = (1 + x + x²)/(1 - x + x²). Let's compute f'(x):\n\nUsing the quotient rule: f'(x) = [ (1 + 2x)(1 - x + x²) - (1 + x + x²)(-1 + 2x) ] / (1 - x + x²)^2\n\nCompute numerator:\n\nLet me compute each part:\n\nNumerator of f'(x):\n\n(1 + 2x)(1 - x + x²) - (1 + x + x²)(-1 + 2x)\n\nFirst part: (1)(1 - x + x²) + 2x(1 - x + x²) = (1 - x + x²) + (2x - 2x² + 2x³) = 1 - x + x² + 2x - 2x² + 2x³ = 1 + x - x² + 2x³\n\nSecond part: -(1 + x + x²)(-1 + 2x) = (1 + x + x²)(1 - 2x) = 1*(1 - 2x) + x*(1 - 2x) + x²*(1 - 2x) = 1 - 2x + x - 2x² + x² - 2x³ = 1 - x - x² - 2x³\n\nSo the numerator is [1 + x - x² + 2x³] + [1 - x - x² - 2x³] = 1 + x - x² + 2x³ +1 -x -x² -2x³ = 2 - 2x²\n\nTherefore, f'(x) = (2 - 2x²)/(1 - x + x²)^2 = 2(1 - x²)/(1 - x + x²)^2\n\nHmm, that's simpler than I expected. Now, maybe compute f''(x):\n\nf'(x) = 2(1 - x²)/(1 - x + x²)^2\n\nUse the quotient rule again:\n\nf''(x) = 2 [ (-2x)(1 - x + x²)^2 - (1 - x²)(2)(1 - x + x²)(-1 + 2x) ] / (1 - x + x²)^4\n\nWait, that's getting complicated. Maybe factor out common terms:\n\nLet me denote u = 1 - x + x², so f'(x) = 2(1 - x²)/u²\n\nThen f''(x) = 2 [ d/dx (1 - x²) * u² - (1 - x²) * d/dx (u²) ] / u^4\n\nWait, no, the quotient rule is [num’ * den - num * den’] / den². So:\n\nf''(x) = 2 [ (-2x) * u² - (1 - x²) * 2u * u’ ] / u^4\n\nSimplify numerator:\n\n2 [ -2x u² - 2(1 - x²)u u’ ] / u^4 = 2 [ -2x u - 2(1 - x²)u’ ] / u^3\n\nFactor out -2:\n\n2 * (-2) [ x u + (1 - x²)u’ ] / u^3 = -4 [ x u + (1 - x²)u’ ] / u^3\n\nNow, compute u = 1 - x + x², so u’ = -1 + 2x\n\nSo substitute:\n\n-4 [ x(1 - x + x²) + (1 - x²)(-1 + 2x) ] / (1 - x + x²)^3\n\nCompute the numerator inside the brackets:\n\nx(1 - x + x²) = x - x² + x³\n\n(1 - x²)(-1 + 2x) = -1*(1 - x²) + 2x*(1 - x²) = -1 + x² + 2x - 2x³\n\nSo adding these two parts:\n\n(x - x² + x³) + (-1 + x² + 2x - 2x³) = x - x² + x³ -1 + x² + 2x - 2x³ = (x + 2x) + (-x² + x²) + (x³ - 2x³) -1 = 3x - x³ -1\n\nTherefore, the numerator becomes -4*(3x - x³ -1) = -12x +4x³ +4\n\nSo f''(x) = (-12x +4x³ +4)/(1 - x + x²)^3\n\nSimplify numerator: 4x³ -12x +4 = 4(x³ -3x +1)\n\nSo f''(x) = 4(x³ -3x +1)/(1 - x + x²)^3\n\nHmm, okay. Now, evaluating f''(0): plug x=0, numerator is 4(0 -0 +1)=4, denominator is (1)^3=1, so f''(0)=4.\n\nWait, but earlier in the Taylor series, the coefficient of x² was 2, so f''(0)/2! =2 → f''(0)=4, which matches. So that's consistent.\n\nNow, let's compute f'''(x). Starting from f''(x)=4(x³ -3x +1)/(1 - x + x²)^3\n\nAgain, using the quotient rule:\n\nLet me denote numerator N =4(x³ -3x +1), denominator D=(1 -x +x²)^3\n\nThen f'''(x) = [N’ D - N D’ ] / D²\n\nCompute N’ =4(3x² -3)\n\nCompute D’ =3(1 -x +x²)^2*(-1 +2x)\n\nSo f'''(x) = [4(3x² -3)(1 -x +x²)^3 -4(x³ -3x +1)*3(1 -x +x²)^2*(-1 +2x)] / (1 -x +x²)^6\n\nFactor out common terms:\n\nFactor out 4*3(1 -x +x²)^2 from numerator:\n\n4*3(1 -x +x²)^2 [ (x² -1)(1 -x +x²) - (x³ -3x +1)(-1 +2x) ] / (1 -x +x²)^6\n\nSimplify denominator: (1 -x +x²)^6 / (1 -x +x²)^2 = (1 -x +x²)^4\n\nSo f'''(x) = 12 [ (x² -1)(1 -x +x²) - (x³ -3x +1)(-1 +2x) ] / (1 -x +x²)^4\n\nNow compute the numerator inside:\n\nFirst part: (x² -1)(1 -x +x²) = x²(1 -x +x²) -1*(1 &quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型通过泰勒展开正确求得f^{(4)}(0)=-48，与标准答案一致。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;-48&quot;, &quot;inference_tokens&quot;: 6872, &quot;judge_tokens&quot;: 8424, &quot;inference_latency&quot;: 143.6, &quot;judge_latency&quot;: 13.49, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>【A4基础强化合并】1000题数一高数篇_0210</td>
+            <td><span class="domain-tag">一元函数微分学的计算</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设 $f(x) = \frac{1+x+x^2}{1-x+x^2}$，则 $f^{(4)}(0) = \underline{\qquad\qquad}$...</td>
+            <td></td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>1.00</td>
+            <td></td>
+            <td></td>
+            <td>143.6s</td>
+            <td>13.49s</td>
+            <td>15296</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;一元函数积分学的概念与性质_005&quot;, &quot;domain&quot;: &quot;一元函数积分学的概念与性质&quot;, &quot;question&quot;: &quot;设f(x)是(0, +∞)内的正值连续函数，且f'(x) &lt; 0，g(x) = ∫₀ˣ f(t) dt，则g'(x)和g''(x)的可能取值是（ ）。\nA. -2, 1\nB. -2, 3\nC. 2, -1\nD. 2, -3&quot;, &quot;reference_answer&quot;: &quot;C&quot;, &quot;intern_answer&quot;: &quot;&quot;, &quot;intern_reasoning&quot;: &quot;\n嗯，我现在遇到了一个数学题，需要仔细分析一下。题目是说，设f(x)是在(0, +∞)内的正值连续函数，且f'(x) &lt; 0，也就是f(x)是一个递减的正值函数。然后g(x)是f(t)从0到x的积分，也就是g(x)=∫₀ˣ f(t)dt。题目问的是g'(x)和g''(x)的可能取值是哪一个选项，选项有四个：A到D。\n\n首先，我需要回忆一下微积分的基本定理。根据微积分基本定理，如果g(x)是f(t)从a到x的积分，那么g'(x)=f(x)。这里题目中的积分下限是0，所以g'(x)=f(x)。而题目中说f(x)是正值的，所以g'(x)应该是正的，对吧？所以选项中g'(x)的值必须是正数。看一下选项的话，选项C和D的g'(x)是2，而A和B的g'(x)是-2，这似乎有问题，因为f(x)是正值的，所以g'(x)应该等于f(x)，也就是正数，所以A和B的g'(x)是负数，应该被排除。那剩下的选项是C和D，它们的g'(x)是2，这可能正确。\n\n接下来，看g''(x)。因为g'(x)=f(x)，所以g''(x)=f'(x)。题目中给出f'(x) &lt; 0，所以g''(x)应该是负数。选项C的g''(x)是-1，选项D的是-3，都是负数，所以这两个都有可能。这时候需要进一步分析是否有可能。\n\n题目问的是可能的取值，所以只要存在这样的f(x)满足条件，使得g'(x)和g''(x)等于选项中的值即可。比如，假设在某个点x处，f(x)=2，而f'(x)=-1，那么此时g'(x)=2，g''(x)=-1，对应选项C。或者，如果f(x)=2，而f'(x)=-3，那么选项D也有可能。但问题在于，题目中的f(x)是定义在整个(0,+∞)上的正值递减函数，所以必须存在这样的函数在某个点x处满足这些导数值。\n\n比如，考虑选项C：g'(x)=2，g''(x)=-1。这相当于要求存在某个x，使得f(x)=2，且f'(x)=-1。而因为f(x)是递减的，所以导数是负的，这没问题。同时，f(x)必须保持正值。例如，可以构造一个函数f(x)在某个点附近满足这样的条件。比如，假设f(x)是一个线性函数，比如f(x) = -kx + b，其中k&gt;0，这样f'(x)=-k，是负的。但必须保证f(x)在(0,+∞)上都是正值。比如，当x趋近于无穷大时，f(x)会趋向负无穷，这显然不行。所以线性函数可能不行，除非我们选择特定的区间。不过题目中的积分下限是0，可能要考虑x在某个有限区间内的情况？\n\n或者，可能选择指数函数，比如f(x)=e^{-ax}，其中a&gt;0。此时f'(x)=-a e^{-ax}，所以f'(x)是负的，且f(x)始终为正。这时候，g'(x)=f(x)=e^{-ax}，而g''(x)=f'(x)=-a e^{-ax}。这时候，g'(x)和g''(x)的符号分别是正和负，符合选项中的C和D的情况。例如，当x=0时，g'(0)=f(0)=e^0=1，而g''(0)=-a。这时候如果选项中的某个选项是1和负数的话，但题目中的选项C和D的g'(x)是2，所以可能需要调整参数。比如，如果f(x)=2e^{-ax}，那么g'(x)=2e^{-ax}，在x=0时，g'(0)=2，而g''(x)= -2a e^{-ax}，在x=0时，g''(0)=-2a。这时候，如果a=0.5，那么g''(0)=-1，对应选项C；如果a=1.5，则g''(0)=-3，对应选项D。所以这两种情况都是可能的，只要存在这样的函数。\n\n所以选项C和D都有可能。但题目中的选项是否都满足呢？题目问的是“可能取值”，所以只要存在某个x和某个符合条件的f(x)，使得g'(x)和g''(x)等于选项中的值，那么该选项就是正确的。所以选项C和D都是可能的吗？但题目给出的选项中可能只有一个正确，或者多个正确？\n\n不过题目中的选项是四个，而根据分析，选项C和D的g'(x)是正的，而g''(x)是负的，所以可能都是正确的。但题目可能要求选出所有可能的选项吗？但题目选项中可能只有一个正确。或者，可能我的分析哪里有问题？\n\n或者，题目中的选项是否可能同时存在？比如，是否存在某个函数使得在某个点x处，g'(x)=2，g''(x)=-1，或者另一个函数使得g'(x)=2，g''(x)=-3。所以选项C和D都是可能的。但题目中的选项是否给出多个正确选项？但题目选项中可能只有其中一个正确。或者，可能我哪里考虑错了？\n\n或者，题目中的选项是否可能只有其中一个正确？比如，是否存在某些限制条件？\n\n比如，假设选项C中的g''(x)=-1，而g'(x)=2，那么根据f(x)=g'(x)=2，而f'(x)=g''(x)=-1。此时，f(x)在该点的导数是-1，而f(x)是正值且递减的。这没问题。同样，选项D中的f(x)=2，f'(x)=-3，同样满足条件。所以两者都是可能的。那为什么选项中会有两个可能的正确选项？\n\n但题目给出的选项是四个，而选项C和D都是可能的吗？或者，可能题目中的选项是否还有其他限制？\n\n或者，可能我的分析哪里有问题？\n\n或者，题目中的选项是否可能只有其中一个正确？\n\n比如，假设题目中的选项是否可能同时满足？比如，是否存在某个函数使得在某个点x处，g'(x)=2，g''(x)=-1，而另一个点处g'(x)=2，g''(x)=-3？或者，是否题目中的选项中的两个值必须同时存在？\n\n或者，题目中的选项是否是问可能的组合，即是否存在某个x，使得g'(x)和g''(x)等于选项中的两个值？\n\n比如，选项C是g'(x)=2，g''(x)=-1，这可能发生在某个x处；选项D是g'(x)=2，g''(x)=-3，也可能发生在另一个x处。所以两者都是可能的，但题目中的选项是否给出多个正确选项？\n\n但题目中的选项是单选的话，可能我的分析有问题。或者，可能题目中的选项是否还有其他条件？\n\n或者，可能我之前排除选项A和B是否正确？\n\n因为题目中说f(x)是正值的，所以g'(x)=f(x)必须是正的，所以选项A和B中的g'(x)=-2是负数，不可能，所以排除。剩下的选项是C和D。那问题在于，这两个选项是否都可能？\n\n比如，是否存在这样的函数，使得在某个点x处，f(x)=2，而f'(x)=-1，或者f'(x)=-3？\n\n是的，比如，假设f(x)是一个指数函数，如前面所说，f(x)=2e^{-kx}，那么f'(x)=-2k e^{-kx}。在x=0时，f(x)=2，f'(x)=-2k。所以如果k=0.5，则f'(x)=-1，对应选项C；如果k=1.5，则f'(x)=-3，对应选项D。所以这两个情况都是可能的。所以选项C和D都是正确的？\n\n但题目中的选项是否允许多个正确？但题目给出的选项是四个选项，可能需要选择所有可能的选项。但原题可能是一个单选题，所以可能我的分析哪里有问题？\n\n或者，可能题目中的选项是否还有其他限制？\n\n或者，可能题目中的积分下限是0，而f(x)在0处是否有定义？题目中说f(x)是在(0,+∞)内的正值连续函数，所以x=0可能不在定义域内。所以积分∫₀ˣ f(t)dt，当x&gt;0时，积分下限0可能是一个瑕点？比如，当t趋近于0+时，f(t)是否有极限？\n\n不过题目中说f(x)在(0,+∞)连续，所以积分∫₀ˣ f(t)dt应该理解为从0到x的积分，可能需要考虑f在0处的极限是否存在。但题目中并没有给出f在0处的连续性，只是说在(0,+∞)内连续。所以可能积分是瑕积分，但题目中说g(x)存在，所以积分必须收敛。因此，f(t)在t趋近于0+时的极限可能为0或者某个有限值？\n\n不过这可能不影响当前的问题，因为题目问的是g'(x)和g''(x)的可能取值。根据微积分基本定理，当x在(0,+∞)时，g'(x)=f(x)，而g''(x)=f'(x)。所以只要存在某个x&gt;0，使得f(x)=选项中的g'(x)值，且f'(x)=选项中的g''(x)值，同时满足f(x)&gt;0，f'(x)&lt;0。\n\n所以选项C和D都是可能的。但题目给出的选项中是否可能有两个正确选项？但原题可能设计为只有一个正确选项，所以可能我哪里错了？\n\n或者，可能题目中的选项是否可能只有其中一个满足条件？\n\n比如，假设选项C中的g''(x)=-1，而g'(x)=2，那么根据f(x)=2，f'(x)=-1。此时，f(x)在x处的导数是-1，而f(x)是递减的，所以没问题。同样，选项D中的f(x)=2，f'(x)=-3，同样满足条件。所以两者都是可能的。所以题目中的选项C和D都可能正确？\n\n但原题给出的选项中可能有多个正确吗？但题目选项是单选的话，可能我的分析有问题。或者，可能题目中的选项是否还有其他条件？\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，是否存在这样的函数，使得在同一个x处，f(x)=2，而f'(x)=-1或者-3？\n\n比如，假设存在这样的函数，那么选项C和D都是可能的。所以问题可能有两个正确选项，但原题可能给出多个正确选项。但根据用户提供的选项，选项是四个选项，可能正确答案是C和D。但原题可能设计为多选，但用户给出的选项中可能有一个正确？\n\n或者，可能我哪里考虑错了？\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，是否存在某些限制条件，比如f(x)必须在整个定义域内满足某些条件？\n\n比如，假设选项D中的g''(x)=-3，而g'(x)=2，那么f(x)=2，f'(x)=-3。此时，f(x)在x处的导数是-3，而f(x)是递减的，所以没问题。但需要确保f(x)在整个定义域内都是正值。例如，假设在某个点x处，f(x)=2，而导数是-3，那么当x增加时，f(x)会减少，但必须保持正值。这当然可以构造这样的函数，比如指数函数或者其他的。\n\n所以，选项C和D都是可能的。但原题给出的选项中是否可能有两个正确？但用户给出的选项是四个选项，可能正确答案是C和D。但原题可能设计为多选，但用户的问题可能要求选择所有可能的选项，但这里选项中可能只有其中一个正确？\n\n或者，可能我的分析哪里错了？\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，可能题目中的选项是否可能只有选项C或D中的一个？\n\n比如，假设选项中的g'(x)和g''(x)必须同时满足某个条件，比如，是否存在这样的函数，使得在某个点x处，f(x)=2，而f'(x)=-1，或者-3？\n\n是的，所以选项C和D都是可能的。但原题可能给出多个正确选项，但用户的问题可能要求选择所有可能的选项。但根据用户给出的选项，可能正确答案是C和D。但原题可能设计为多选，但这里可能需要看题目的选项是否允许多选。但根据用户给出的选项，选项是四个选项，可能正确答案是C和D。但用户的问题可能要求选择一个正确选项，这说明我的分析有问题。\n\n或者，可能我之前排除选项A和B是否正确？\n\n是的，因为f(x)是正值的，所以g'(x)=f(x)必须是正数，所以选项A和B中的g'(x)=-2不可能，排除。剩下的选项是C和D。所以正确选项应该在C和D之间。\n\n现在的问题是，这两个选项是否都可能？\n\n比如，是否存在某个函数f(x)满足条件，使得在某个x处，g'(x)=2，g''(x)=-1（选项C），同时存在另一个函数满足选项D的情况？\n\n是的。所以题目问的是“可能取值”，所以只要存在这样的函数，选项就是正确的。因此，选项C和D都是可能的。但原题给出的选项中可能有两个正确选项，但用户给出的选项中可能只有一个正确？\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，可能题目中的选项是否可能只有选项C或D中的一个？\n\n或者，可能我的分析哪里错了？\n\n比如，是否题目中的g''(x)必须满足某种关系？\n\n比如，假设g'(x)=f(x)，而g''(x)=f'(x)，所以对于选项C，g'(x)=2，g''(x)=-1，即f(x)=2，f'(x)=-1。此时，f(x)在该点的导数是-1，而f(x)是递减的，没问题。同样，选项D中的f(x)=2，f'(x)=-3，同样满足条件。所以两者都是可能的。因此，选项C和D都是正确的。\n\n但原题可能设计为多选，但用户给出的选项中可能有两个正确选项。但根据用户提供的选项，可能正确答案是C和D。但原题可能给出多个正确选项，但这里可能需要选择所有可能的选项。但根据用户的问题，可能需要选择一个答案，这说明我的分析有问题。\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，可能题目中的选项是否可能只有选项C或D中的一个？\n\n或者，可能我哪里考虑错了？\n\n比如，是否存在这样的函数，使得在某个点x处，f(x)=2，而f'(x)=-3？\n\n是的，比如，假设f(x) = 2 -3x，但这在x趋近于无穷大时会变成负数，所以必须保证f(x)在整个(0,+∞)上都是正值。所以这样的线性函数可能不行，除非x的范围被限制。比如，如果x的取值范围在(0, a)，其中a &lt; 2/3，那么f(x)=2-3x在x=0时是2，导数是-3，但当x超过2/3时，f(x)变为负数。所以如果题目中的x在某个区间内，比如x=0.5，此时f(0.5)=2-1.5=0.5&gt;0，所以此时在x=0.5处，f(x)=0.5，而导数是-3。但此时g'(x)=f(x)=0.5，而不是2。所以这不符合选项D中的g'(x)=2的情况。\n\n哦，这可能是一个问题。我之前假设在某个点x处，f(x)=2，而f'(x)=-3，但必须保证f(x)在整个定义域内都是正值。比如，如果f(x)是一个指数函数，如f(x)=2e^{-kx}，那么在x=0时，f(x)=2，导数是f'(0)=-2k。如果k=1.5，那么f'(0)=-3，此时在x=0处，f(x)=2，导数是-3。但题目中的函数定义域是(0,+∞)，所以x=0可能不在定义域内。这时候，积分下限是0，可能需要考虑x&gt;0的情况。例如，当x趋近于0+时，f(x)趋近于2，而导数趋近于-3。此时，在x趋近于0+时，g'(x)=f(x)≈2，g''(x)=f'(x)≈-3。所以选项D中的值可能在x趋近于0+时成立。同样，选项C中的情况可能在x趋近于0+时，当k=0.5时，f'(x)≈-1。\n\n所以，只要存在这样的函数，使得在某个x&gt;0处，f(x)=2，f'(x)=-1或-3，并且f(x)在整个(0,+∞)上保持正值，那么选项C和D都是可能的。例如，指数函数f(x)=2e^{-kx}，其中k&gt;0，这样f(x)始终为正，导数为-2k e^{-kx}。此时，对于任何x≥0，f(x)=2e^{-kx}，所以当x=0时，f(x)=2，导数为-2k。如果k=0.5，则导数为-1；如果k=1.5，则导数为-3。但x=0是否属于定义域？题目中定义域是(0,+∞)，所以x=0不在其中。但我们可以取x趋近于0+，此时f(x)趋近于2，导数趋近于-2k。所以对于足够小的x&gt;0，f(x)≈2，导数≈-2k。因此，选项C和D中的值都是可能的，只要存在这样的k值。\n\n因此，选项C和D都是可能的。但题目给出的选项中可能有两个正确选项，但用户给出的选项中可能只有一个正确。或者，可能题目中的选项是否可能只有其中一个正确？\n\n或者，可能我哪里错了？\n\n或者，可能题目中的选项是否可能只有选项C或D中的一个？\n\n比如，可能题目中的选项是否可能只有选项C或D中的一个？\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能我之前分析错误？\n\n比如，假设选项D中的g''(x)=-3，而g'(x)=2，那么根据f(x)=2，f'(x)=-3。此时，f(x)在x处的导数是-3，而f(x)是递减的，所以没问题。但必须保证f(x)在x附近保持正值。这当然可以构造这样的函数，比如指数函数或者其他函数。\n\n综上，选项C和D都是可能的。但原题可能设计为多选，但用户给出的选项可能要求选择所有正确选项。但根据用户给出的选项，可能正确答案是C和D。但根据用户提供的选项，可能正确答案是选项C和D。但原题可能设计为单选，这说明我的分析有问题。\n\n或者，可能题目中的选项是否可能只有其中一个正确？\n\n比如，可能题目中的选项是否可能只有选项C？\n\n或者，可能我哪里考虑错了？\n\n比如，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能我之前排除选项A和B是否正确？\n\n是的，因为g'(x)=f(x)必须是正数，所以选项A和B中的g'(x)=-2不可能，排除。剩下的选项是C和D。所以正确选项应该在C和D之间。\n\n现在，回到题目选项，选项C是2，-1；选项D是2，-3。所以两者都是可能的。但题目可能要求选择所有可能的选项，但用户给出的选项可能只有一个正确。或者，可能题目中的选项是否可能只有其中一个正确？\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能题目存在设计错误，或者我的分析有误。\n\n或者，可能题目中的选项是否可能只有选项C？\n\n比如，是否存在某种限制，使得g''(x)的绝对值不能超过某个值？\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但用户给出的选项中可能需要选择所有正确的选项，但根据用户提供的选项，可能正确答案是选项C和D。但原题可能设计为多选，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能我哪里错了？\n\n比如，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但根据用户给出的选项，可能需要选择所有正确的选项，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但原题可能设计为多选，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能我之前分析错误？\n\n比如，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但根据用户给出的选项，可能需要选择所有正确的选项，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但原题可能设计为多选，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能我哪里错了？\n\n比如，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项是否可能两者都正确？\n\n在这种情况下，可能正确答案是选项C和D。但原题可能设计为多选，但用户的问题可能要求选择一个答案，这说明我的分析有问题。\n\n或者，可能题目中的选项是否可能只有选项C？\n\n或者，可能题目中的选项是否可能只有选项D？\n\n或者，可能题目中的选项&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 1.0, &quot;judge_explanation&quot;: &quot;模型未给出最终答案，输出不完整，陷入循环推理，未做出任何选择，因此判定为错误。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 6918, &quot;judge_tokens&quot;: 12085, &quot;inference_latency&quot;: 138.75, &quot;judge_latency&quot;: 30.46, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;一元函数积分学的概念与性质_005&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 9639, &quot;conversion_latency&quot;: 68.68, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>一元函数积分学的概念与性质_005</td>
+            <td><span class="domain-tag">一元函数积分学的概念与性质</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">设f(x)是(0, +∞)内的正值连续函数，且f'(x) &lt; 0，g(x) = ∫₀ˣ f(t) dt，则g'(x)和g''(x)的可能取值是（ ）。
+A. -...</td>
+            <td></td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>1.00</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td></td>
+            <td>138.75s</td>
+            <td>30.46s</td>
+            <td>19003</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;函数极限与连续_024&quot;, &quot;domain&quot;: &quot;函数极限与连续&quot;, &quot;question&quot;: &quot;当x→0时，α(x)与β(x)是非零且不相等的等价无穷小量。以下4个结论：① α(x)+β(x)~2α(x)；② α(x)+β(x)~2β(x)；③ α(x)-β(x)=o(α(x))；④ α(x)-β(x)=o(β(x))。所有正确结论的序号是( )。A. ①③ B. ③④ C. ①②③④ D. ②④&quot;, &quot;reference_answer&quot;: &quot;B&quot;, &quot;intern_answer&quot;: &quot;C&quot;, &quot;intern_reasoning&quot;: &quot;【答案选择依据】\n候选0通过严格理论推导验证所有结论，覆盖全面且逻辑严密，confidence最高。候选1和2仅部分验证，存在遗漏。\n\n【候选1推理过程】(答案=C, 置信度=0.95)\n当x→0时，α(x)与β(x)是等价无穷小，故lim α(x)/β(x)=1。对于结论①和②，α(x)+β(x)≈2α(x)或2β(x)，因为β(x)≈α(x)，所以两者均成立。对于结论③和④，α(x)-β(x)的高阶无穷小性质可通过lim [α(x)-β(x)]/α(x)=0和lim [α(x)-β(x)]/β(x)=0验证，均成立。因此四个结论均正确。\n\n【候选2推理过程】(答案=A, 置信度=0.7)\n仅验证结论①和③。通过具体例子α(x)=x，β(x)=x+x²，发现α(x)+β(x)~2α(x)成立，且α(x)-β(x)=o(α(x))。但未验证结论②和④，可能遗漏部分正确结论。\n\n【候选3推理过程】(答案=B, 置信度=0.8)\n仅验证结论③和④。通过极限运算得出α(x)-β(x)是α(x)和β(x)的高阶无穷小，但未验证结论①和②，可能遗漏部分正确结论。&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.3, &quot;judge_explanation&quot;: &quot;&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;&quot;, &quot;inference_tokens&quot;: 3081, &quot;judge_tokens&quot;: 3352, &quot;inference_latency&quot;: 53.36, &quot;judge_latency&quot;: 32.18, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: {&quot;problem_id&quot;: &quot;函数极限与连续_024&quot;, &quot;verified&quot;: true, &quot;lean_available&quot;: true, &quot;lean_code&quot;: &quot;&quot;, &quot;formalized_claim&quot;: &quot;&quot;, &quot;conversion_tokens&quot;: 5113, &quot;conversion_latency&quot;: 60.54, &quot;conversion_error&quot;: null, &quot;compile_passed&quot;: null, &quot;compile_output&quot;: &quot;(empty Lean code)&quot;, &quot;compile_latency&quot;: 0.0, &quot;compile_timeout&quot;: false, &quot;analysis_performed&quot;: false, &quot;error_category&quot;: null, &quot;analysis_confidence&quot;: 0.0, &quot;human_readable_error&quot;: &quot;&quot;, &quot;root_cause&quot;: &quot;&quot;, &quot;logic_flaw_location&quot;: &quot;&quot;, &quot;logic_flaw_why&quot;: &quot;&quot;, &quot;correct_approach&quot;: &quot;&quot;, &quot;translation_issue&quot;: &quot;&quot;, &quot;fix_prompt_for_ai&quot;: &quot;&quot;, &quot;suggested_fix&quot;: &quot;&quot;, &quot;analysis_tokens&quot;: 0, &quot;analysis_latency&quot;: 0.0, &quot;analysis_error&quot;: null, &quot;sorry_count&quot;: 0, &quot;has_incomplete_proof&quot;: false, &quot;revision_attempts&quot;: 0, &quot;revised_lean_code&quot;: &quot;&quot;, &quot;dag&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>函数极限与连续_024</td>
+            <td><span class="domain-tag">函数极限与连续</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">当x→0时，α(x)与β(x)是非零且不相等的等价无穷小量。以下4个结论：① α(x)+β(x)~2α(x)；② α(x)+β(x)~2β(x)；③ α(x)-...</td>
+            <td>C</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.30</td>
+            <td></td>
+            <td></td>
+            <td>53.36s</td>
+            <td>32.18s</td>
+            <td>6433</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;数列极限_008&quot;, &quot;domain&quot;: &quot;数列极限&quot;, &quot;question&quot;: &quot;若对于数列\\(\\{x_n\\}\\)，存在常数\\(k\\)（\\(0 &lt; k &lt; 1\\)），使得\\(|x_{n+1} - a| \\leq k |x_n - a|\\)，\\(n = 1, 2, \\cdots\\)。证明：\\(\\{x_n\\}\\)收敛于\\(a\\)。&quot;, &quot;reference_answer&quot;: &quot;由条件可得\\(|x_n - a| \\leq k^{n-1} |x_1 - a|\\)，由于\\(0 &lt; k &lt; 1\\)，当\\(n \\to \\infty\\)时，\\(k^{n-1} \\to 0\\)，因此\\(\\lim\\limits_{n \\to \\infty} x_n = a\\)。&quot;, &quot;intern_answer&quot;: &quot;数列\\(\\{x_n\\}\\)收敛于\\(a\\)&quot;, &quot;intern_reasoning&quot;: &quot;```json\n{\n  \&quot;candidates\&quot;: [\n    {\n      \&quot;index\&quot;: 0,\n      \&quot;answer\&quot;: \&quot;数列\\(\\{x_n\\}\\)收敛于\\(a\\)\&quot;,\n      \&quot;reasoning\&quot;: \&quot;根据题设条件，对任意\\(n\\)，有\\(|x_{n+1} - a| \\leq k |x_n - a|\\)（\\(0 &lt; k &lt; 1\\)）。通过数学归纳法可得：\\n1. 当\\(n=1\\)时，\\(|x_1 - a| \\leq k^0 |x_1 - a|\\)成立。\\n2. 假设\\(|x_n - a| \\leq k^{n-1} |x_1 - a|\\)，则\\(|x_{n+1} - a| \\leq k |x_n - a| \\leq k^n |x_1 - a|\\)。\\n因此，\\(|x_n - a| \\leq k^{n-1} |x_1 - a|\\)对所有\\(n \\geq 1\\)成立。\\n由于\\(0 &lt; k &lt; 1\\)，当\\(n \\to \\infty\\)时，\\(k^{n-1} \\to 0\\)，故\\(|x_n - a| \\to 0\\)，即\\(\\{x_n\\}\\)收敛于\\(a\\).\&quot;,\n      \&quot;confidence\&quot;: 0.95,\n      \&quot;strength\&quot;: \&quot;通过数学归纳法严格推导了误差的几何衰减性，并利用极限性质证明收敛性。\&quot;,\n      \&quot;weakness\&quot;: \&quot;未明确讨论初始误差为零的特殊情况，但该情况显然满足结论。\&quot;\n    },\n    {\n      \&quot;index\&quot;: 1,\n      \&quot;answer\&quot;: \&quot;数列\\(\\{x_n\\}\\)收敛于\\(a\\)\&quot;,\n      \&quot;reasoning\&quot;: \&quot;考虑误差序列\\(e_n = |x_n - a|\\)，题设条件转化为\\(e_{n+1} \\leq k e_n\\)。递推得\\(e_n \\leq k^{n-1} e_1\\)。由于\\(0 &lt; k &lt; 1\\)，几何级数\\(k^{n-1} \\to 0\\)，故\\(e_n \\to 0\\)，即\\(x_n \\to a\\).\&quot;,\n      \&quot;confidence\&quot;: 0.85,\n      \&quot;strength\&quot;: \&quot;直接分析误差序列的递推关系，简洁明了。\&quot;,\n      \&quot;weakness\&quot;: \&quot;未显式使用数学归纳法验证递推关系的普适性，可能遗漏细节。\&quot;\n    },\n    {\n      \&quot;index\&quot;: 2,\n      \&quot;answer\&quot;: \&quot;数列\\(\\{x_n\\}\\)收敛于\\(a\\)\&quot;,\n      \&quot;reasoning\&quot;: \&quot;由条件可知，误差以比例\\(k\\)指数衰减。对任意\\(\\epsilon &gt; 0\\)，取\\(N &gt; 1 + \\frac{\\ln(\\epsilon / e_1)}{\\ln k}\\)（\\(e_1 = |x_1 - a|\\)），则当\\(n &gt; N\\)时，\\(k^{n-1} e_1 &lt; \\epsilon\\)，故\\(|x_n - a| &lt; \\epsilon\\)，满足收敛定义。\&quot;,\n      \&quot;confidence\&quot;: 0.70,\n      \&quot;strength\&quot;: \&quot;通过显式构造\\(N\\)验证收敛定义，逻辑直接。\&quot;,\n      \&quot;weakness\&quot;: \&quot;依赖对数运算的细节处理，可能因初始误差\\(e_1 = 0\\)时需单独讨论。\&quot;\n    }\n  ],\n  \&quot;final_answer\&quot;: \&quot;数列\\(\\{x_n\\}\\)收敛于\\(a\\)\&quot;,\n  \&quot;selected_index\&quot;: 0,\n  \&quot;selection_reasoning\&quot;: \&quot;候选0通过数学归纳法严格证明了误差的指数衰减性，并完整覆盖了极限推导，逻辑最严谨。候选1虽简洁但缺少归纳验证，候选2的对数处理在\\(e_1 = 0\\)时需额外说明，而候选0的归纳法自然包含所有情况。\&quot;\n}\n```&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;模型给出的最终结论正确，且其选择的主要推理（数学归纳法）严格证明了数列的极限为a，符合题目要求。尽管参考答案为‘证明略’未提供实质内容，但根据模型提供的推理本身正确，可判定为正确。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;数列{x_n}收敛于a&quot;, &quot;inference_tokens&quot;: 2734, &quot;judge_tokens&quot;: 2497, &quot;inference_latency&quot;: 47.05, &quot;judge_latency&quot;: 6.86, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;lean_verification&quot;: null}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>数列极限_008</td>
+            <td><span class="domain-tag">数列极限</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">若对于数列\(\{x_n\}\)，存在常数\(k\)（\(0 &lt; k &lt; 1\)），使得\(|x_{n+1} - a| \leq k |x_n - a|\)，\...</td>
+            <td>数列\(\{x_n\}\)收敛于\(a\)</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.95</td>
+            <td></td>
+            <td></td>
+            <td>47.05s</td>
+            <td>6.86s</td>
+            <td>5231</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += buildInfoSection(d);
+
+        // AI reasoning section
+        html += buildReasoningSection(d);
+
+        // Judge analysis section
+        html += buildJudgeSection(d);
+
+        // Lean verification section
+        html += buildLeanSection(d);
+
+        // AND-OR DAG blueprint section
+        html += buildDAGSection(d);
+
+        // Performance bar
+        html += buildPerfBar(d);
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function buildInfoSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        h += '<div class="info-grid">';
+        h += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
+        h += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.inference_error) h += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) h += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        h += '</div></div>';
+        return h;
+    }
+
+    function buildReasoningSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            var stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            h += stepsHtml + '</ul></div>';
+        }
+        if (d.intern_verification) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            h += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildJudgeSection(d) {
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            h += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            h += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            h += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            h += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            h += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge) {
+            h += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        h += '</div>';
+        return h;
+    }
+
+    function buildLeanSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.verified) return '';
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading lean"><span class="icon-dot lean"></span>Lean 4 &#24418;&#24335;&#21270;&#39564;&#35777;</div>';
+
+        if (lv.compile_passed === true) {
+            if (lv.has_incomplete_proof) {
+                h += '<div><span class="lean-status warn">&#9888; &#32534;&#35793;&#36890;&#36807; &mdash; &#35777;&#26126;&#19981;&#23436;&#25972;&#65288;&#26816;&#27979;&#21040; ' + (lv.sorry_count || 0) + ' &#22788; sorry&#65289;</span></div>';
+            } else {
+                h += '<div><span class="lean-status pass">&#10003; &#32534;&#35793;&#36890;&#36807; &mdash; &#25512;&#29702;&#36923;&#36753;&#19968;&#33268;</span></div>';
+            }
+        } else if (lv.compile_passed === false) {
+            var catLabel = lv.error_category || 'unknown';
+            var catMap = {'logic_error': '&#36923;&#36753;&#38169;&#35823;', 'translation_error': '&#36716;&#21270;&#38169;&#35823;', 'both': '&#36716;&#21270;+&#36923;&#36753;&#38169;&#35823;', 'uncertain': '&#24453;&#30830;&#23450;'};
+            h += '<div><span class="lean-status fail">&#10007; &#32534;&#35793;&#22833;&#36133; &mdash; ' + (catMap[catLabel] || catLabel) + '</span></div>';
+        } else {
+            h += '<div><span class="lean-status pending">&#8856; &#26410;&#32534;&#35793; &mdash; &#38477;&#32423;&#20026; LLM &#36923;&#36753;&#23457;&#26597;</span></div>';
+        }
+
+        if (lv.formalized_claim) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#24418;&#24335;&#21270;&#21629;&#39064;</div>';
+            h += '<div class="content-box" style="max-height:80px">' + esc(lv.formalized_claim) + '</div></div>';
+        }
+        if (lv.lean_code) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">Lean 4 &#20195;&#30721;</div>';
+            h += '<div class="content-box lean-code" style="max-height:200px">' + esc(lv.lean_code) + '</div></div>';
+        }
+        if (lv.compile_passed === false && lv.compile_output) {
+            h += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#32534;&#35793;&#38169;&#35823;&#36755;&#20986;</div>';
+            h += '<div class="content-box lean-error" style="max-height:150px">' + esc(lv.compile_output) + '</div></div>';
+        }
+
+        if (lv.analysis_performed) {
+            h += '<div class="lean-insight">';
+            h += '<div class="insight-title">&#128269; &#38169;&#35823;&#26681;&#22240;&#20998;&#26512;</div>';
+            if (lv.human_readable_error) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#38169;&#35823;&#35299;&#37322;&#65306;</span>' + esc(lv.human_readable_error) + '</div>';
+            }
+            if (lv.root_cause) {
+                h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#92400E;">&#26681;&#22240;&#65306;</span>' + esc(lv.root_cause) + '</div>';
+            }
+            if (lv.error_category === 'logic_error' || lv.error_category === 'both') {
+                if (lv.logic_flaw_location) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#36923;&#36753;&#26029;&#28857;&#65306;</span>' + esc(lv.logic_flaw_location) + '</div>';
+                }
+                if (lv.logic_flaw_why) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#DC2626;">&#38169;&#35823;&#21407;&#22240;&#65306;</span>' + esc(lv.logic_flaw_why) + '</div>';
+                }
+                if (lv.correct_approach) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#059669;">&#27491;&#30830;&#20570;&#27861;&#65306;</span>' + esc(lv.correct_approach) + '</div>';
+                }
+            }
+            if (lv.error_category === 'translation_error' || lv.error_category === 'both') {
+                if (lv.translation_issue) {
+                    h += '<div style="margin-bottom:8px"><span style="font-weight:600;color:#D97706;">&#36716;&#21270;&#38382;&#39064;&#65306;</span>' + esc(lv.translation_issue) + '</div>';
+                }
+            }
+            if (lv.fix_prompt_for_ai) {
+                h += '<div style="margin-top:12px;padding:10px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981;">';
+                h += '<div style="font-weight:700;color:#065F46;margin-bottom:4px;">&#128221; &#20462;&#27491;&#25552;&#31034;&#35789;&#65288;&#21487;&#21453;&#39304;&#32473;&#20070;&#29983;AI&#65289;</div>';
+                h += '<div style="font-size:12px;color:#166534;white-space:pre-wrap">' + esc(lv.fix_prompt_for_ai) + '</div></div>';
+            }
+            h += '</div>';
+        }
+
+        h += '<div style="margin-top:12px;font-size:11px;color:#94A3B8">';
+        h += '&#36716;&#21270;: ' + (lv.conversion_latency || 0).toFixed(1) + 's / ';
+        h += '&#32534;&#35793;: ' + (lv.compile_latency || 0).toFixed(1) + 's';
+        if (lv.analysis_latency) h += ' / &#20998;&#26512;: ' + (lv.analysis_latency || 0).toFixed(1) + 's';
+        h += ' | Token: ' + ((lv.conversion_tokens || 0) + (lv.analysis_tokens || 0));
+        if (lv.lean_available === false) h += ' | (Lean &#19981;&#21487;&#29992;&#65292;&#38477;&#32423;&#20026; LLM &#23457;&#26597;)';
+        h += '</div>';
+        h += '</div>';
+        return h;
+    }
+
+    function buildDAGSection(d) {
+        var lv = d.lean_verification;
+        if (!lv || !lv.dag || !lv.dag.root_id) return '';
+        var dag = lv.dag;
+        var nodes = dag.nodes;
+        if (!nodes || Object.keys(nodes).length === 0) return '';
+
+        var h = '<div class="detail-section">';
+        h += '<div class="section-heading dag"><span class="icon-dot dag"></span>AND-OR &#35777;&#26126;&#34013;&#22270;&#20998;&#35299;</div>';
+        h += '<div class="dag-container">';
+        h += '<div class="dag-tree">';
+
+        // 递归渲染 DAG 树，使用 BFS 分层 + DFS 递归
+        // 先计算每个节点的层级深度
+        var depths = {};
+        function calcDepth(nodeId, depth) {
+            depths[nodeId] = depth;
+            var node = nodes[nodeId];
+            if (node && node.children) {
+                node.children.forEach(function(cid) {
+                    if (!(cid in depths) || depths[cid] < depth + 1) {
+                        calcDepth(cid, depth + 1);
+                    }
+                });
+            }
+        }
+        calcDepth(dag.root_id, 0);
+
+        // 按层级分组
+        var levels = {};
+        for (var nid in depths) {
+            var d = depths[nid];
+            if (!levels[d]) levels[d] = [];
+            levels[d].push(nid);
+        }
+
+        // 渲染每一层
+        var maxLevel = Object.keys(levels).length;
+        for (var lv = 0; lv < maxLevel; lv++) {
+            var levelNodes = levels[lv] || [];
+            h += '<div class="dag-level">';
+            levelNodes.forEach(function(nid) {
+                var node = nodes[nid];
+                if (!node) return;
+                var typeClass = node.node_type === 'OR' ? 'or' :
+                                node.node_type === 'AND' ? 'and' : 'leaf';
+                var leafExtra = '';
+                if (node.node_type === 'LEAF') {
+                    leafExtra = ' ' + (node.status || 'open');
+                }
+                var statusMap = {
+                    'open': '&#26410;&#35777;',
+                    'decomposed': '&#24050;&#20998;&#35299;',
+                    'verified': '&#24050;&#39564;&#35777;',
+                    'sorry': '&#26410;&#23436;&#25104;'
+                };
+                var typeMap = {
+                    'OR': 'OR &#30446;&#26631;',
+                    'AND': 'AND &#26041;&#26696;',
+                    'LEAF': 'LEAF &#23376;&#24341;&#29702;'
+                };
+                h += '<div class="dag-node-wrapper">';
+                h += '<div class="dag-node ' + typeClass + leafExtra + '">';
+                h += '<span class="dag-node-type">' + (typeMap[node.node_type] || node.node_type) + '</span>';
+                if (node.label) {
+                    h += '<span class="dag-node-label">' + esc(node.label) + '</span>';
+                }
+                if (node.statement) {
+                    h += '<span class="dag-node-statement">' + esc(node.statement) + '</span>';
+                }
+                if (node.status) {
+                    h += '<span class="dag-node-status ' + node.status + '">' + (statusMap[node.status] || node.status) + '</span>';
+                }
+                h += '</div>';
+                h += '</div>';
+            });
+            h += '</div>';
+        }
+
+        h += '</div></div></div>';
+        return h;
+    }
+
+    function buildPerfBar(d) {
+        var h = '<div class="perf-bar">';
+        h += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        h += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        h += '</div>';
+        return h;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) { return _latexToReadable(inner.trim()); });
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '\u2202$1');
+        s = s.replace(/\\ln /g, 'ln '); s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin '); s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan '); s = s.replace(/\\cdot /g, '\u00b7');
+        s = s.replace(/\\times /g, '\u00d7'); s = s.replace(/\\div /g, '\u00f7');
+        s = s.replace(/\\pm /g, '\u00b1'); s = s.replace(/\\leq ?/g, '\u2264');
+        s = s.replace(/\\geq ?/g, '\u2265'); s = s.replace(/\\neq ?/g, '\u2260');
+        s = s.replace(/\\approx ?/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    function _latexToReadable(expr) {
+        var s = expr;
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)'); s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        s = s.replace(/\^(\w)/g, '^$1'); s = s.replace(/_(\w)/g, '_$1');
+        s = s.replace(/\\alpha/g, '\u03b1'); s = s.replace(/\\beta/g, '\u03b2');
+        s = s.replace(/\\gamma/g, '\u03b3'); s = s.replace(/\\delta/g, '\u03b4');
+        s = s.replace(/\\epsilon/g, '\u03b5'); s = s.replace(/\\theta/g, '\u03b8');
+        s = s.replace(/\\lambda/g, '\u03bb'); s = s.replace(/\\pi/g, '\u03c0');
+        s = s.replace(/\\sigma/g, '\u03c3'); s = s.replace(/\\phi/g, '\u03c6');
+        s = s.replace(/\\omega/g, '\u03c9'); s = s.replace(/\\rho/g, '\u03c1');
+        s = s.replace(/\\partial/g, '\u2202'); s = s.replace(/\\nabla/g, '\u2207');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln'); s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin'); s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan'); s = s.replace(/\\cdot/g, '\u00b7');
+        s = s.replace(/\\times/g, '\u00d7'); s = s.replace(/\\div/g, '\u00f7');
+        s = s.replace(/\\pm/g, '\u00b1'); s = s.replace(/\\leq/g, '\u2264');
+        s = s.replace(/\\geq/g, '\u2265'); s = s.replace(/\\neq/g, '\u2260');
+        s = s.replace(/\\approx/g, '\u2248'); s = s.replace(/\\infty/g, '\u221e');
+        s = s.replace(/\\sum/g, '\u2211'); s = s.replace(/\\int/g, '\u222b');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '\u221a($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '\u221a$1');
+        s = s.replace(/\\left/g, ''); s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', '); s = s.replace(/\\;[ ]*/g, '  ');
+        s = s.replace(/\\[a-zA-Z]+/g, '');
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+
+</body>
+</html>

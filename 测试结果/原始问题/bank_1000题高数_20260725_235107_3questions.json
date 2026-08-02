@@ -1,0 +1,20 @@
+[
+  {
+    "id": "gen_8a690f42",
+    "question": "计算定积分 $\\int_0^1 x e^{x^2} \\, dx$。",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "$\\frac{1}{2}(e-1)$"
+  },
+  {
+    "id": "gen_f0939acf",
+    "question": "求极限：\\(\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}\\)",
+    "domain": "函数极限与连续",
+    "reference_answer": "\\(-\\frac{1}{6}\\)"
+  },
+  {
+    "id": "函数极限与连续_034",
+    "question": "设 f(x) 在 (0, +∞) 内可导，a 为常数。对于以下结论：\n① 若 lim_{x→+∞} f'(x) = a，则 lim_{x→+∞} f(x)/x = a；\n② 若 lim_{x→+∞} f(x)/x = a，则 lim_{x→+∞} f'(x) = a。\n下列说法中正确的是（ ）。\nA. ①正确，②错误\nB. ①错误，②正确\nC. ①与②均正确\nD. ①与②均错误",
+    "domain": "函数极限与连续",
+    "reference_answer": "A"
+  }
+]

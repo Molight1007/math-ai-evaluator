@@ -1,0 +1,62 @@
+[
+  {
+    "id": "gen_58b5233a",
+    "question": "计算二重积分：∬_D (x + y) dxdy，其中D是由直线y=x, y=0, x=1所围成的三角形区域。",
+    "domain": "二重积分",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_e7290b3f",
+    "question": "求极限：lim_{x→0} (1 - cos x) / (x^2)。",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0250",
+    "question": "已知函数 y = f(x) 对一切 x 满足 x f''(x) + 3x [f'(x)]^2 = 1 - e^{-x}。若 f'(x_0) = 0 (x_0 ≠ 0)，则（ ）。\nA. f(x_0) 是函数 f(x) 的极大值\nB. f(x_0) 是函数 f(x) 的极小值\nC. (x_0, f(x_0)) 是曲线 y = f(x) 的拐点\nD. f(x_0) 不是函数 f(x) 的极值，(x_0, f(x_0)) 也不是曲线 y = f(x) 的拐点",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "C"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0383",
+    "question": "设I_1 = ∫_0^{2π} (sin x / x) dx, I_2 = ∫_0^{2π} (sin x / (2π - x)) dx, I_3 = ∫_0^{2π} (sin x / (x(2π - x))) dx, 则（ ）\nA. I_1 < I_2 < I_3\nB. I_2 < I_1 < I_3\nC. I_3 < I_1 < I_2\nD. I_1 < I_3 < I_2",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": "A"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0598",
+    "question": "有一内表面为旋转抛物面的水缸，其深为a（单位：米），缸口直径为2a（单位：米），缸内盛满了水。设水的密度为ρ（单位：千克/立方米）。若以每秒Q立方米的速率将缸中的水全部抽出，问：（1）共需多少时间？（2）需做多少功？",
+    "domain": "一元函数积分学的应用(二)--积分等式与积分不等式",
+    "reference_answer": "（1）所需时间T = (πa^3)/(2Q) 秒；（2）所需功W = (πρg a^4)/4 焦耳。"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0651",
+    "question": "设函数 $f(x,y) = \\int_x^{xy} e^{t^2} \\mathrm{d}t$，则 $\\frac{\\partial^2 f}{\\partial x \\partial y} \\bigg|_{(1,1)} = \\_\\_\\_\\_\\_$。",
+    "domain": "多元函数微分学",
+    "reference_answer": "先求 $\\frac{\\partial f}{\\partial y} = x e^{(xy)^2}$，再求 $\\frac{\\partial^2 f}{\\partial x \\partial y} = e^{(xy)^2} + 2x^2 y e^{(xy)^2}$，代入 $(1,1)$ 得 $e + 2e = 3e$。"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0837",
+    "question": "微分方程 $x + yy' = y - xy'$ 的通解为_____。",
+    "domain": "微分方程",
+    "reference_answer": "$x^2 + y^2 = C$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0848",
+    "question": "设当x≥0时，f(x)有连续的一阶导数，并且满足f(x) = -1 + x + 2∫_{0}^{x} (x-t) f(t) f'(t) dt，则f(x) = _____.",
+    "domain": "微分方程",
+    "reference_answer": "f(x) = x - 1"
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_027",
+    "question": "设 y = y(x) 满足微分方程 (xy^2 - 2) ln x + y = 0，y(e) = 2。\n(1) 求 y = y(x) 的表达式及其定义域；\n(2) 求函数 y = y(x) 的极值。",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "(1) y(x) = 2/ln x，定义域为 (0, 1) ∪ (1, +∞)；\n(2) 无极值。"
+  },
+  {
+    "id": "函数极限与连续_003",
+    "question": "设函数 $f(x) = \\begin{cases} 1-2x^2, & x < -1 \\\\ x^3, & -1 \\leq x \\leq 2 \\\\ 12x-16, & x > 2 \\end{cases}$，写出 $f(x)$ 的反函数 $g(x)$ 的表达式。",
+    "domain": "函数极限与连续",
+    "reference_answer": "分段求反函数：\n1. 当 $x < -1$ 时，$y = 1-2x^2$，解得 $x = -\\sqrt{\\frac{1-y}{2}}$（取负号因为 $x<-1$），此时 $y < -1$。\n2. 当 $-1 \\leq x \\leq 2$ 时，$y = x^3$，解得 $x = \\sqrt[3]{y}$，此时 $-1 \\leq y \\leq 8$。\n3. 当 $x > 2$ 时，$y = 12x-16$，解得 $x = \\frac{y+16}{12}$，此时 $y > 8$。\n因此，反函数 $g(x) = \\begin{cases} -\\sqrt{\\frac{1-x}{2}}, & x < -1 \\\\ \\sqrt[3]{x}, & -1 \\leq x \\leq 8 \\\\ \\frac{x+16}{12}, & x > 8 \\end{cases}$。"
+  }
+]

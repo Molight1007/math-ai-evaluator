@@ -1,0 +1,20 @@
+[
+  {
+    "id": "gen_444de964",
+    "question": "求极限：lim_{x→0} (sin x - x)/x^3",
+    "domain": "函数极限与连续",
+    "reference_answer": "-1/6"
+  },
+  {
+    "id": "gen_b6760da8",
+    "question": "求函数f(x)=x^3-3x+1在区间[-2,2]上的最大值和最小值。",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "最大值为3，最小值为-1"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0658",
+    "question": "设z=z(x,y ( 是由方程z+lnz-∫ x e-t2 dt=1确定的函数,计算 ∂2z | y ∂x∂y (0,0 (",
+    "domain": "多元函数微分学",
+    "reference_answer": ""
+  }
+]

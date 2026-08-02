@@ -1,0 +1,68 @@
+[
+  {
+    "id": "gen_e6374bd4",
+    "question": "计算二重积分 ∬_D (x^2 + y^2) dxdy，其中D是由曲线y=x^2和直线y=1所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "88/105"
+  },
+  {
+    "id": "gen_ee5469a2",
+    "question": "计算二重积分 $\\iint_D (x^2 + y^2) \\mathrm{d}x\\mathrm{d}y$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "$\\frac{\\pi}{2}$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0665",
+    "question": "设 $u = e^{x+y+z}$，其中 $y(x)$ 和 $z(x)$ 由方程组 $\\begin{cases} \\int_0^x e^{t^2} \\, dt + \\ln(1+y) = 0 \\\\ e^{y+z} = e + z \\ln z \\end{cases}$ 确定，求 $\\frac{du}{dx}$ 在 $x=0$ 处的值。",
+    "domain": "多元函数微分学",
+    "reference_answer": "$e$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0767",
+    "question": "计算累次积分：∫_{-1}^{1} dx ∫_{x^2}^{x+1} y dy。",
+    "domain": "二重积分",
+    "reference_answer": "2/3"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0971",
+    "question": "设函数z=f(x,y)在点(0,0)附近有定义，且f_x'(0,0)=3，则曲线 { z=f(x,y), y=0 } 在点(0,0,f(0,0))处的法平面方程为_____。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "3x - z + f(0,0) = 0"
+  },
+  {
+    "id": "一元函数微分学的计算_014",
+    "question": "设f(x)=\\max\\{x,x^2\\}，0<x<2，则f'(x)=_____",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "f'(x)=\\begin{cases} 1, & 0<x<1 \\\\ 2x, & 1<x<2 \\end{cases}，在x=1处不可导"
+  },
+  {
+    "id": "一元函数积分学的应用(一)--几何应用_019",
+    "question": "设平面区域D= (x,y ( { {{ |0≤y≤ x2-1 , 2≤x≤2 x2 {{{ ,求: (1)D的面积； (2)D绕x轴旋转一周所成旋转体的体积",
+    "domain": "一元函数积分学的应用(一)--几何应用",
+    "reference_answer": ""
+  },
+  {
+    "id": "一元函数积分学的概念与性质_005",
+    "question": "设f(x)是(0, +∞)内的正值连续函数，且f'(x) < 0，g(x) = ∫₀ˣ f(t) dt，则g'(x)和g''(x)的可能取值是（ ）。\nA. -2, 1\nB. -2, 3\nC. 2, -1\nD. 2, -3",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": "C"
+  },
+  {
+    "id": "一元函数积分学的计算_020",
+    "question": "设a_n = ∫_{0}^{1} x^n √(1-x^2) dx (n=0,1,2,...)，则lim_{n→∞} a_n / a_{n-2} = ______。",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "1"
+  },
+  {
+    "id": "多元函数积分学的预备知识_009",
+    "question": "求函数f(x,y)=2x^2+y^2在点(0,1)处的最大方向导数。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "梯度grad f=(4x,2y)，在点(0,1)处grad f=(0,2)。最大方向导数为梯度的模，即√(0^2+2^2)=2。"
+  },
+  {
+    "id": "多元函数积分学的预备知识_009",
+    "question": "求函数f(x,y)=2x^2+y^2在点(0,1)处的最大方向导数。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "2"
+  }
+]

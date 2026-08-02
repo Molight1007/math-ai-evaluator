@@ -79,6 +79,9 @@ class VerifierAgent(BaseAgent):
 
     def _is_correct_vote(self, text: str) -> bool:
         """解析 VERDICT 行。规则：先判拒绝词，再判接受词（BUG-2 修复）。"""
+        if text is None:
+            logger.warning("_is_correct_vote 收到 None 输入，默认判错")
+            return False
         text_upper = text.upper()
 
         # 1) 拒绝词优先——规避"不正确"包含"正确"的误判

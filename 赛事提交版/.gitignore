@@ -1,26 +1,17 @@
-# Python
+# 本地测试输出目录
+sample_outputs/
+outputs/
+
+# Python 缓存
 __pycache__/
-*.py[cod]
-*.egg-info/
-*.egg
+*.pyc
+*.pyo
+
+# 临时文件
+*.tmp
+_check.py
+_tmp_*.py
 
 # IDE
 .vscode/
 .idea/
-
-# Temp / logs
-tmp_log.txt
-generate_ppt.py
-
-# Test tools (not for submission)
-测试工具/
-
-# Reference cases (not for submission)
-其他案例/
-
-# Analysis docs
-MathPilot优化分析.md
-
-# OS
-.DS_Store
-Thumbs.db

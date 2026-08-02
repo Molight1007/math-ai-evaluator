@@ -1,0 +1,122 @@
+[
+  {
+    "id": "gen_271f03ca",
+    "question": "计算二重积分 $\\iint_D (x^2 + y^2) \\, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "$\\frac{\\pi}{2}$"
+  },
+  {
+    "id": "gen_49d3cc84",
+    "question": "求极限：lim_{x→0} (e^x - 1 - x) / x^2",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_d63e25d6",
+    "question": "求极限：lim_{x→0} (e^x - 1 - x)/x^2",
+    "domain": "函数极限与连续",
+    "reference_answer": "1/2"
+  },
+  {
+    "id": "gen_dad0bbcf",
+    "question": "求极限 $\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}$。",
+    "domain": "函数极限与连续",
+    "reference_answer": "$-\\frac{1}{6}$"
+  },
+  {
+    "id": "gen_f0939acf",
+    "question": "求极限：\\(\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}\\)",
+    "domain": "函数极限与连续",
+    "reference_answer": "\\(-\\frac{1}{6}\\)"
+  },
+  {
+    "id": "gen_f5133e33",
+    "question": "计算二重积分 $\\iint_D (x^2 + y^2) \\, dxdy$，其中 $D$ 是由 $x^2 + y^2 = 1$ 所围成的闭区域。",
+    "domain": "二重积分",
+    "reference_answer": "$\\frac{\\pi}{2}$"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0075",
+    "question": "当n→∞时，e^{-1/n} - 1 与 c/n^k 为等价无穷小，则( )。\nA. c=1, k=2\nB. c=1, k=1\nC. c=-1, k=2\nD. c=-1, k=1",
+    "domain": "函数极限与连续",
+    "reference_answer": "D"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0149",
+    "question": "函数 $f(x) = (e^x - 1) |x^3 - x^2 + x|$ 的不可导点的个数为（ ）。\nA. 0\nB. 1\nC. 2\nD. 3",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": "B"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0251",
+    "question": "设函数 f(x), g(x) 在 [a, b] 上连续，在 (a, b) 内可导，g'(x) > 0，则在 (a, b) 上，“f'(x)/g'(x) 严格单调递增”是“(f(x) - f(a))/(g(x) - g(a)) 严格单调递增”的（ ）。\nA. 充分非必要条件\nB. 必要非充分条件\nC. 充分必要条件\nD. 既非充分又非必要条件",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "C"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0310",
+    "question": "设f(x)在[0,1]上二阶可导，|f''(x)| ≤ M, x ∈ [0,1], M > 0, f(0) = f(1) = 0。证明：(1) |f'(x)| ≤ M/2, x ∈ [0,1]；(2) 若f(1/2) = 0，则|f'(x)| < M/2, x ∈ [0,1]。",
+    "domain": "一元函数微分学的应用(二)--中值定理、微分等式与微分不等式",
+    "reference_answer": "(1) 由拉格朗日中值定理，存在ξ₁ ∈ (0, x)和ξ₂ ∈ (x, 1)使得f'(ξ₁) = f(x)/x, f'(ξ₂) = -f(x)/(1-x)。由f''(x)有界，利用泰勒公式或积分，可得|f'(x)| ≤ M/2。(2) 若f(1/2)=0，则存在c∈(0,1)使得f'(c)=0。利用f''(x)有界，通过反证法可证得严格不等式。"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0745",
+    "question": "设 \\(M = \\iint_D \\ln(x^2+y^2) \\, dxdy\\)，\\(N = \\iint_D [\\ln(x^2+y^2)]^2 \\, dxdy\\)，\\(P = \\iint_D (x^2+y^2-1) \\, dxdy\\)，其中 \\(D = \\{(x,y) \\mid 1 \\le x^2+y^2 \\le 2\\}\\)，则必有（ ）。\nA. \\(M < N < P\\) \nB. \\(N < M < P\\) \nC. \\(M < P < N\\) \nD. \\(N < P < M\\)",
+    "domain": "二重积分",
+    "reference_answer": "B"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_1005",
+    "question": "设Γ是空间圆周{x^2+y^2+z^2=a^2, x+y+z=0} (a>0)，则曲线积分∮_Γ (2yz+2zx+2xy) ds = ______。",
+    "domain": "多元函数积分学",
+    "reference_answer": "0"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_1012",
+    "question": "设曲面z=1-x^2-y^2与平面z=-x的交线为L，起点为A(0,1,0)，终点为B(0,-1,0)，则∫_L (x+y-z)dx+|y|dz=_____。",
+    "domain": "多元函数积分学",
+    "reference_answer": "0"
+  },
+  {
+    "id": "一元函数积分学的计算_001",
+    "question": "计算下列不定积分：\n(1) ∫ cos 3x dx\n(2) ∫ sin 3x dx\n(3) ∫ sec x dx\n(4) ∫ sec^3 x dx\n(5) ∫ \\frac{dx}{\\sqrt{a^2 - x^2}} (a ≠ 0)\n(6) ∫ \\frac{dx}{\\sqrt{x^2 - a^2}} (a ≠ 0)\n(7) ∫ \\frac{dx}{a^2 + x^2} (a ≠ 0)\n(8) ∫ \\frac{dx}{a^2 + (x+b)^2} (a ≠ 0)\n(9) ∫ \\frac{dx}{\\sqrt{a^2 - (x+b)^2}} (a > 0)\n(10) ∫ \\frac{dx}{(x+b)^2} (a > 0)",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "(1) (1/3) sin 3x + C\n(2) -(1/3) cos 3x + C\n(3) ln|sec x + tan x| + C\n(4) (1/2) sec x tan x + (1/2) ln|sec x + tan x| + C\n(5) arcsin(x/a) + C\n(6) ln|x + √(x^2 - a^2)| + C\n(7) (1/a) arctan(x/a) + C\n(8) (1/a) arctan((x+b)/a) + C\n(9) arcsin((x+b)/a) + C\n(10) -1/(x+b) + C"
+  },
+  {
+    "id": "一元函数积分学的计算_017",
+    "question": "若函数y(x)=∫_{0}^{x^2} e^{-t^2} dt，则d^2y/dx^2|_{x=-1}=（ ）。\nA. 0\nB. 1\nC. 4e^{-1}\nD. 4e",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "C. 4e^{-1}"
+  },
+  {
+    "id": "二重积分_002",
+    "question": "设 $I_i = \\iint_{D_i} e^{-(x^2+y^2)} \\, d\\sigma$，$i=1,2,3$，其中 $D_1 = \\{ (x,y) \\mid x^2+y^2 \\le R^2 \\}$，$D_2 = \\{ (x,y) \\mid x^2+y^2 \\le 2R^2 \\}$，$D_3 = \\{ (x,y) \\mid |x| \\le R, |y| \\le R \\}$，$R>0$，则（ ）。\nA. $I_1 < I_2 < I_3$ \nB. $I_2 < I_1 < I_3$ \nC. $I_1 < I_3 < I_2$ \nD. $I_3 < I_1 < I_2$",
+    "domain": "二重积分",
+    "reference_answer": "C"
+  },
+  {
+    "id": "函数极限与连续_030",
+    "question": "当x→0时，x-ln(x+√(1+x^2)) ~ ax^b，则a,b的值分别是( )。",
+    "domain": "函数极限与连续",
+    "reference_answer": "a=1/6, b=3"
+  },
+  {
+    "id": "多元函数积分学的预备知识_010",
+    "question": "设f(x,y,z)=x^2e^{yz^2}，求f(x,y,z)在点(-1,0,1)处的方向导数的最小值。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "梯度grad f=(2xe^{yz^2}, x^2z^2e^{yz^2}, 2x^2yze^{yz^2})，在点(-1,0,1)处grad f=(-2,1,0)。方向导数的最小值为负的梯度的模，即-√((-2)^2+1^2+0^2)=-√5。"
+  },
+  {
+    "id": "微分方程_003",
+    "question": "设 y₁, y₂ 是一阶非齐次线性微分方程 y' + p(x)y = q(x) 的两个特解，若常数 λ, μ 使 λy₁ + μy₂ 是该方程的解，λy₁ - μy₂ 是该方程对应的齐次方程的解，则 ( )\nA. λ=1/2, μ=1/2\nB. λ=-1/2, μ=-1/2\nC. λ=2/3, μ=1/3\nD. λ=2/3, μ=-1/3",
+    "domain": "微分方程",
+    "reference_answer": "由题意，λy₁+μy₂ 是非齐次方程的解，代入得 (λy₁+μy₂)' + p(x)(λy₁+μy₂) = q(x) => λ(y₁'+p(x)y₁) + μ(y₂'+p(x)y₂) = q(x) => λq(x) + μq(x) = q(x) => λ+μ=1。又 λy₁-μy₂ 是齐次方程的解，代入得 (λy₁-μy₂)' + p(x)(λy₁-μy₂) = 0 => λq(x) - μq(x) = 0 => λ-μ=0。解得 λ=μ=1/2。故选 A。"
+  },
+  {
+    "id": "无穷级数_021",
+    "question": "设级数 ∑_{n=1}^{∞} a_n x^n 的系数 a_n 满足关系式 a_n = a_{n-1} + 1 - 1/n, n = 2, 3, ..., a_1 = 2。则当 |x| < 1 时，级数 ∑_{n=1}^{∞} a_n x^n 的和函数 S(x) = ______。",
+    "domain": "无穷级数",
+    "reference_answer": "S(x) = (2 - x) / (1 - x) + ln(1 - x), |x| < 1"
+  }
+]

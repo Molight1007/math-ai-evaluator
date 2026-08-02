@@ -1,0 +1,122 @@
+[
+  {
+    "id": "gen_5b2821eb",
+    "question": "求函数f(x)=x^3-3x+1在区间[-2,2]上的最大值和最小值。",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "最大值为3，最小值为-1"
+  },
+  {
+    "id": "gen_7567c60d",
+    "question": "计算极限：\\lim_{x\\to 0}\\frac{\\sin x - x}{x^3}",
+    "domain": "函数极限与连续",
+    "reference_answer": "-\\frac{1}{6}"
+  },
+  {
+    "id": "gen_cc367154",
+    "question": "求函数f(x,y)=x^2y+xy^2的偏导数\\frac{\\partial f}{\\partial x}和\\frac{\\partial f}{\\partial y}。",
+    "domain": "多元函数微分学",
+    "reference_answer": "\\frac{\\partial f}{\\partial x}=2xy+y^2，\\frac{\\partial f}{\\partial y}=x^2+2xy"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0158",
+    "question": "设函数f(x)在x=0处可导，且f(0)=a>0，f'(0)=b。求极限：lim_{x→0} [f(x) - f(0)] / [f(x) * x]。",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": "b / a^2"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0162",
+    "question": "设f(x)有二阶连续导函数，且f(0)=0，令g(x) = { f(x)/x, x≠0; f'(0), x=0 }。\n(1) 求g'(x)；\n(2) 讨论g'(x)在点x=0处的连续性。",
+    "domain": "一元函数微分学的概念",
+    "reference_answer": "(1) g'(x) = [x f'(x) - f(x)] / x^2 (x≠0)，g'(0)=f''(0)/2； (2) g'(x)在x=0处连续。"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0197",
+    "question": "设f(x)在x=0的某邻域内具有连续导数，且f(0)=1，f'(x)=f(f(x))-1，求f''(0)。",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "1"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0202",
+    "question": "设 y = y(x) 由方程 x² - xy + y² = 1 确定，求 d²y/dx²。",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "d²y/dx² = 6(x² - xy + y²) / (2y - x)³ = 6 / (2y - x)³"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0204",
+    "question": "设函数 y = y(x) 由参数方程 { e^x = sin t - 2y + 1, y + t² + 1 = 0 } 确定，求 d²y/dx² 在 t = 0 处的值。",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "d²y/dx²|_{t=0} = 2"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0208",
+    "question": "设 f(ln x) = x ln x，求 f⁽ⁿ⁾(x)。",
+    "domain": "一元函数微分学的计算",
+    "reference_answer": "f⁽ⁿ⁾(x) = e^x (x + n)"
+  },
+  {
+    "id": "【A4基础强化合并】1000题数一高数篇_0906",
+    "question": "设数列 {a_n}，{b_n} 满足 0 ≤ a_{n+1} ≤ a_n + b_n，n ∈ N⁺，则“{a_n} 收敛”是“∑_{n=1}^{∞} b_n 收敛”的（ ）。\nA. 充分非必要条件  B. 必要非充分条件  C. 充分必要条件  D. 既非充分又非必要条件",
+    "domain": "无穷级数",
+    "reference_answer": "B"
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_014",
+    "question": "设函数 f_n(x) = n^2 * e^(-nx) - (1+n)x，若 f_n(x) 在 x = ξ_n 处取得极值，则 lim_{n→∞} ξ_n = _____。",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "0"
+  },
+  {
+    "id": "一元函数微分学的应用(一)--几何应用_015",
+    "question": "曲线 y = x + 1/x 的渐近线情况为 ( )\nA. 有铅直渐近线，也有斜渐近线\nB. 有水平渐近线，也有斜渐近线\nC. 有且仅有铅直渐近线\nD. 有且仅有水平渐近线",
+    "domain": "一元函数微分学的应用(一)--几何应用",
+    "reference_answer": "A"
+  },
+  {
+    "id": "一元函数积分学的概念与性质_023",
+    "question": "下列命题中不成立的是（ ）。\nA. 若f(x)连续，x∈[a,b]，则∫_a^x f(t)dt必为f(x)的一个原函数。\nB. 若f(x)可积，x∈[a,b]，则f(x)在(a,b)内存在原函数。\nC. 若f(x)连续，且为奇函数，x∈[-a,a]，则∫_{-a}^a f(x)dx=0。\nD. 若f(x)连续，T为其周期，则∫_a^{a+T} f(x)dx = ∫_0^T f(x)dx。",
+    "domain": "一元函数积分学的概念与性质",
+    "reference_answer": "B"
+  },
+  {
+    "id": "一元函数积分学的计算_031",
+    "question": "函数f(x) = { ln(1+x²) - x, x≤0; (x+1)e^x, x>0 }的一个原函数为( )。\nA. F(x) = { ln(1+x²) - x, x≤0; (x-1)e^x, x>0 }\nB. F(x) = { ln(1+x²) - x + 1, x≤0; (x-1)e^x, x>0 }\nC. F(x) = { ln(1+x²) + x + 1, x≤0; x e^x, x>0 }\nD. F(x) = { ln(1+x²) + x + 1, x≤0; x e^x + 1, x>0 }",
+    "domain": "一元函数积分学的计算",
+    "reference_answer": "B"
+  },
+  {
+    "id": "函数极限与连续_014",
+    "question": "求极限：\\(\\lim_{x \\to 0} \\frac{x^2 - x \\ln(1+x)}{x^3}\\)",
+    "domain": "函数极限与连续",
+    "reference_answer": "\\(\\frac{1}{2}\\)"
+  },
+  {
+    "id": "多元函数微分学_038",
+    "question": "设函数 $u = u(x, y)$ 在区域 $D = \\{ (x, y) \\mid 2x^2 + 3y^2 \\leq 4 \\}$ 上连续，在区域 $D$ 的内部有二阶连续偏导数，且满足 $-2 \\frac{\\partial^2 u}{\\partial x^2} - 3 \\frac{\\partial^2 u}{\\partial y^2} = u^2$。在区域 $D$ 的边界 $2x^2 + 3y^2 = 4$ 上 $u(x, y) \\geq 0$。证明：当 $2x^2 + 3y^2 \\leq 4$ 时，$u(x, y) \\geq 0$。",
+    "domain": "多元函数微分学",
+    "reference_answer": "利用极值原理或反证法证明。"
+  },
+  {
+    "id": "多元函数积分学的预备知识_013",
+    "question": "设可微函数z=z(x,y)在平面上任一点(x,y)处沿x轴正向i与y轴正向j的方向导数分别为e^{-x}-f(x)与f(x)，其中f(x)的一阶导数连续，且f(0)=1。(1)求z(x,y)的表达式；(2)判断z(x,y)是否有极值，若有，求之，若无，说明理由。",
+    "domain": "多元函数积分学的预备知识",
+    "reference_answer": "(1)由题意，∂z/∂x=e^{-x}-f(x)，∂z/∂y=f(x)。对y积分得z=f(x)y+φ(x)，再对x求偏导得f'(x)y+φ'(x)=e^{-x}-f(x)，故f'(x)=0，φ'(x)=e^{-x}-f(x)。由f'(x)=0得f(x)=C，由f(0)=1得C=1，故f(x)=1。则φ'(x)=e^{-x}-1，积分得φ(x)=-e^{-x}-x+C1。故z(x,y)=y-e^{-x}-x+C1。(2)令∂z/∂x=e^{-x}-1=0得x=0，∂z/∂y=1≠0，故无极值点，函数无极值。"
+  },
+  {
+    "id": "微分方程_005",
+    "question": "过原点的曲线 y=y(x) 满足 dy/dx = (x+y)²，求极限 lim_{x→0⁺} y(x)/x。",
+    "domain": "微分方程",
+    "reference_answer": "由 dy/dx = (x+y)²，且 y(0)=0。令 u=y/x，则 y=ux，dy/dx = u + x du/dx。代入得 u + x du/dx = (x+ux)² = x²(1+u)²。当 x→0 时，忽略高阶项，得 u + x du/dx ≈ 0，即 du/dx ≈ -u/x，解得 u ≈ C/x。由初始条件，当 x→0 时，u 应有限，故 C=0，即 u→0。所以 lim_{x→0⁺} y(x)/x = 0。"
+  },
+  {
+    "id": "无穷级数_007",
+    "question": "设函数 $y=y(x)$ 满足 $(1-x)y'' + 2y = 0$，$y(0)=1$，$a_n(x) = \\int_0^x y(t) \\sin(nt) dt$，$n=1,2,\\cdots$。\n(1) 求 $y(x)$ 的表达式；\n(2) 证明级数 $\\sum_{n=1}^{\\infty} a_n(1)$ 收敛。",
+    "domain": "无穷级数",
+    "reference_answer": "(1) $y(x) = \\frac{1}{1-x}$ (2) 略"
+  },
+  {
+    "id": "无穷级数_034",
+    "question": "求幂级数 ∑_{n=0}^∞ (-1)^n x^{2n} / (2^n) (x > 0) 的和函数 S(x)。",
+    "domain": "无穷级数",
+    "reference_answer": "S(x) = 2 / (2 + x^2)"
+  }
+]

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:wpsCustomData="http://www.wps.cn/officeDocument/2013/wpsCustomData" mc:Ignorable="w14 w15 wp14">
+  <w:body>
+    <w:p w14:paraId="6B1BA6E3">
+      <w:pPr>
+        <w:rPr>
+          <w:rFonts w:hint="eastAsia" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="宋体" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+          <w:lang w:val="en-US" w:eastAsia="zh-CN"/>
+        </w:rPr>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:hint="eastAsia"/>
+          <w:lang w:val="en-US" w:eastAsia="zh-CN"/>
+        </w:rPr>
+        <w:t>本项目分为两个板块，一个是本地板块，分为两个主要部分，一个是优化后的书生ai和deepseek检测。逻辑就是优化书生ai，让它来答题，用的是本地题库里面的题目，然后deepseek测评答案、判断对错。之后还用到了lean什么的。</w:t>
+      <w:br w:type="textWrapping"/><w:t>另一个是赛事提交版，它严格按照比赛要求的文件格式</w:t><w:br w:type="textWrapping"/><w:t>具体请看"D:\挑战杯\赛题要求官方.docx"</w:t><w:br w:type="textWrapping"/><w:t>和</w:t></w:r>
+      
+      
+      
+      
+      
+      
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="sans-serif" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:color w:val="2951E0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:u w:val="single"/>
+          <w:bdr w:val="none" w:color="auto" w:sz="0" w:space="0"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+        </w:rPr>
+        <w:fldChar w:fldCharType="begin"/>
+      <w:instrText xml:space="preserve"> HYPERLINK "https://github.com/InternLM/Challenge-Cup-2026" \t "https://competition.gitcode.com/competition/2074065063594618882/_blank" </w:instrText><w:fldChar w:fldCharType="separate"/></w:r>
+      
+      
+      <w:r>
+        <w:rPr>
+          <w:rStyle w:val="4"/>
+          <w:rFonts w:hint="default" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="sans-serif" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:color w:val="2951E0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:u w:val="single"/>
+          <w:bdr w:val="none" w:color="auto" w:sz="0" w:space="0"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+        </w:rPr>
+        <w:t>https://github.com/InternLM/Challenge-Cup-2026</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:hint="default" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="sans-serif" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:color w:val="2951E0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:u w:val="single"/>
+          <w:bdr w:val="none" w:color="auto" w:sz="0" w:space="0"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+        </w:rPr>
+        <w:fldChar w:fldCharType="end"/>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:hint="default" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="sans-serif" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+        </w:rPr>
+        <w:t> </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:hint="eastAsia" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="宋体" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+          <w:lang w:val="en-US" w:eastAsia="zh-CN"/>
+        </w:rPr>
+        <w:t>这个还是官方给的模版。</w:t>
+      </w:r>
+    </w:p>
+    <w:p w14:paraId="2C9C1B8B">
+      <w:pPr>
+        <w:rPr>
+          <w:rFonts w:hint="default" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="宋体" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+          <w:lang w:val="en-US" w:eastAsia="zh-CN"/>
+        </w:rPr>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:hint="eastAsia" w:ascii="sans-serif" w:hAnsi="sans-serif" w:eastAsia="宋体" w:cs="sans-serif"/>
+          <w:i/>
+          <w:iCs/>
+          <w:caps w:val="0"/>
+          <w:spacing w:val="0"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+          <w:shd w:val="clear" w:fill="FFFFFF"/>
+          <w:lang w:val="en-US" w:eastAsia="zh-CN"/>
+        </w:rPr>
+        <w:t>修改时两个要分开！!!!!!</w:t>
+      </w:r>
+      <w:bookmarkStart w:id="0" w:name="_GoBack"/>
+      <w:bookmarkEnd w:id="0"/>
+    </w:p>
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1800" w:bottom="1440" w:left="1800" w:header="851" w:footer="992" w:gutter="0"/>
+      <w:cols w:space="425" w:num="1"/>
+      <w:docGrid w:type="lines" w:linePitch="312" w:charSpace="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>

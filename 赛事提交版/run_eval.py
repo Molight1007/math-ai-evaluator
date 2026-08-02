@@ -2,7 +2,8 @@
 from __future__ import annotations
 # -*- coding: utf-8 -*-
 """
-MathPilot 本地评测脚本
+MathPilot 本地评测脚本 —— 仅用于本地开发调试，非平台正式评测调用入口。
+平台只调用 user_agent.py 的 ReasoningAgent.solve()，不会执行此文件。
 支持 JSONL 题库批量评测、答案规范化匹配、领域细分统计、断点续跑。
 
 用法:
@@ -28,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger("MathPilot.Eval")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from user_agent import ReasoningAgent, AgentConfig
+from user_agent import ReasoningAgent
 from utils.llm_client import LLMClient
 
 
@@ -140,24 +141,22 @@ class EvalEngine:
             base_url=base_url or None,
             model=model or None,
         )
-        # 用本地测试参数创建 Agent（更宽松，方便验证）
-        local_config = AgentConfig(
+        # 用本地测试参数创建 Agent（与 Intern-Math-main 模式一致：kwargs 传参）
+        self.agent = ReasoningAgent(
+            self.llm_client,
             policy_sample_times=3,
             verifier_voting_times=2,
             max_total_calls=40,
             max_revise_rounds=1,
             max_workers=3,
-            conf_high=0.75,
-            conf_low=0.40,
             use_scoring=True,
             by_enable_fast_path=True,
             use_proof_channel=True,
             use_lemma_accumulation=True,
             max_time_per_question=1100,
+            max_answer_tokens=8192,
+            revise_sample_times=2,
         )
-        self.agent = ReasoningAgent(self.llm_client)
-        # 注入本地配置
-        self.agent.config = local_config
         logger.info("EvalEngine init: %s", self.llm_client)
         self.domain_stats: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {"total": 0, "correct": 0}
@@ -192,7 +191,7 @@ class EvalEngine:
         try:
             result = self.agent.solve(question, {})
             elapsed = time.time() - start
-            pred_answer = result.get("final_answer", "") if isinstance(result, dict) else ""
+            pred_answer = result.get("final_response", "") if isinstance(result, dict) else ""
             response = result.get("final_response", "") if isinstance(result, dict) else str(result) if result else ""
         except Exception as e:
             logger.error(f"题目 {pid} 求解异常: {e}", exc_info=True)
