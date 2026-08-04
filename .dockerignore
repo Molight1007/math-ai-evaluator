@@ -1,0 +1,22 @@
+# 排除 git 与本地缓存，减小构建上下文
+.git
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# 本地运行时数据（不需要进镜像）
+测试结果
+deploy/results
+deploy/banks
+deploy/users.json
+deploy/user_api_settings.json
+*.db
+*.db-shm
+*.db-wal
+
+# 其他本地产物
+node_modules
+.DS_Store
+Thumbs.db
+题库备份
+题库审核日志

@@ -50,32 +50,51 @@ def merge_result(
         review_passed=inference.review_passed,
         review_attempts=inference.review_attempts,
         total_tokens_used=inference.total_tokens_used,
+        skipped=inference.skipped,
+        skip_reason=inference.skip_reason,
     )
 
 
 def compute_summary(results: list[EvaluationResult]) -> dict:
     """计算评测统计摘要，返回字典包含以下字段：
     - total: int             — 题目总数
-    - correct: int           — 正确题目数
-    - accuracy: float        — 准确率（百分比）
+    - scored: int            — 可判分题目数（无推理/评判错误，且未被跳过）
+    - unscored: int          — 未判分题目数（推理/评判报错，含超时跳过）
+    - correct: int           — 可判分题目中的正确数
+    - accuracy: float        — 准确率（百分比，只按可判分题计算）
     - avg_confidence: float  — 平均置信度（仅统计无评判错误的题目）
     - avg_inference_latency: float — 平均推理耗时（秒，仅统计无推理错误的题目）
     - avg_judge_latency: float     — 平均评判耗时（秒，仅统计无评判错误的题目）
     - total_inference_tokens: int  — 推理总 token 消耗
     - total_judge_tokens: int      — 评判总 token 消耗
     - error_types: dict[str, int]  — 各错误类型的出现次数
+    - skipped: int                 — 被跳过的题目数（超时等）
+    - timed_out: int               — 其中因超时被跳过的题目数
     - domain_stats: dict[str, dict] — 各知识域的统计（total/correct/accuracy）
     """
     total = len(results)
     if total == 0:
         return {
-            "total": 0, "correct": 0, "accuracy": 0.0,
+            "total": 0, "scored": 0, "unscored": 0,
+            "correct": 0, "accuracy": 0.0,
             "avg_confidence": 0.0, "avg_inference_latency": 0.0,
             "avg_judge_latency": 0.0, "total_inference_tokens": 0,
-            "total_judge_tokens": 0, "error_types": {}, "domain_stats": {},
+            "total_judge_tokens": 0, "error_types": {},
+            "skipped": 0, "timed_out": 0, "domain_stats": {},
         }
 
-    correct = sum(1 for r in results if r.is_correct)
+    # 可判分：无推理错误、无评判错误、未被跳过。
+    # 报错/超时的题目一律不计入准确率，只作为“未判分”单独统计。
+    scored_results = [
+        r for r in results
+        if not r.inference_error and not r.judge_error
+        and not getattr(r, "skipped", False)
+    ]
+    scored = len(scored_results)
+    unscored = total - scored
+    correct = sum(1 for r in scored_results if r.is_correct)
+    accuracy = round(correct / scored * 100, 2) if scored else 0.0
+
     # 仅统计无错误的评判结果和推理结果，确保均值准确性
     valid_judges = [r for r in results if not r.judge_error]
     valid_inferences = [r for r in results if not r.inference_error]
@@ -86,23 +105,38 @@ def compute_summary(results: list[EvaluationResult]) -> dict:
         if r.error_type:
             error_types[r.error_type] = error_types.get(r.error_type, 0) + 1
 
+    skipped = sum(1 for r in results if getattr(r, "skipped", False))
+    timed_out = sum(
+        1 for r in results
+        if getattr(r, "skipped", False)
+        and "timeout" in (getattr(r, "skip_reason", "") or "").lower()
+    )
+
     # 按知识域分组统计正确率
     domain_stats = {}
     for r in results:
         domain = r.domain or "unknown"
         if domain not in domain_stats:
-            domain_stats[domain] = {"total": 0, "correct": 0}
+            domain_stats[domain] = {
+                "total": 0, "scored": 0, "correct": 0,
+            }
         domain_stats[domain]["total"] += 1
-        if r.is_correct:
+        is_scored = (
+            not r.inference_error and not r.judge_error
+            and not getattr(r, "skipped", False)
+        )
+        if is_scored:
+            domain_stats[domain]["scored"] += 1
+        if is_scored and r.is_correct:
             domain_stats[domain]["correct"] += 1
     for d in domain_stats:
-        t = domain_stats[d]["total"]
+        t = domain_stats[d]["scored"]
         c = domain_stats[d]["correct"]
         domain_stats[d]["accuracy"] = round(c / t * 100, 2) if t > 0 else 0.0
 
     return {
-        "total": total, "correct": correct,
-        "accuracy": round(correct / total * 100, 2),
+        "total": total, "scored": scored, "unscored": unscored,
+        "correct": correct, "accuracy": accuracy,
         "avg_confidence": round(
             sum(r.confidence for r in valid_judges) / len(valid_judges), 4
         ) if valid_judges else 0.0,
@@ -115,5 +149,7 @@ def compute_summary(results: list[EvaluationResult]) -> dict:
         "total_inference_tokens": sum(r.inference_tokens for r in results),
         "total_judge_tokens": sum(r.judge_tokens for r in results),
         "error_types": error_types,
+        "skipped": skipped,
+        "timed_out": timed_out,
         "domain_stats": domain_stats,
     }

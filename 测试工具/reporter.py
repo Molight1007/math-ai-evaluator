@@ -33,11 +33,12 @@ def generate_csv_report(results, output_path):
         return output_path
     fieldnames = [
         "problem_id", "domain", "question", "reference_answer",
-        "intern_answer", "is_correct", "confidence",
+        "intern_answer", "is_correct", "scored", "confidence",
         "judge_explanation", "error_type", "correct_answer_judge",
         "inference_tokens", "judge_tokens",
         "inference_latency", "judge_latency",
         "inference_error", "judge_error",
+        "skipped", "skip_reason",
     ]
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -50,6 +51,10 @@ def generate_csv_report(results, output_path):
                 "reference_answer": r.reference_answer or "",
                 "intern_answer": r.intern_answer,
                 "is_correct": r.is_correct,
+                "scored": (
+                    not r.inference_error and not r.judge_error
+                    and not getattr(r, "skipped", False)
+                ),
                 "confidence": r.confidence,
                 "judge_explanation": r.judge_explanation,
                 "error_type": r.error_type or "",
@@ -60,6 +65,8 @@ def generate_csv_report(results, output_path):
                 "judge_latency": r.judge_latency,
                 "inference_error": r.inference_error or "",
                 "judge_error": r.judge_error or "",
+                "skipped": getattr(r, "skipped", False),
+                "skip_reason": getattr(r, "skip_reason", "") or "",
             })
     logger.info(f"CSV report saved to {output_path}")
     return output_path
@@ -72,12 +79,18 @@ def print_summary(results):
     print("  MATH AGENT EVALUATION REPORT")
     print("=" * 60)
     print(f"  Total Problems:    {summary['total']}")
+    print(f"  Scored:            {summary['scored']}")
+    print(f"  Unscored:          {summary['unscored']}"
+          f" (incl. errors/skipped)")
     print(f"  Correct:           {summary['correct']}")
     print(f"  Accuracy:          {summary['accuracy']}%")
     print(f"  Avg Confidence:    {summary['avg_confidence']}")
     print(f"  Avg Inf. Latency:  {summary['avg_inference_latency']}s")
     print(f"  Avg Judge Latency: {summary['avg_judge_latency']}s")
     print(f"  Total Tokens:      {summary['total_inference_tokens'] + summary['total_judge_tokens']}")
+    if summary.get("skipped"):
+        print(f"  Skipped:           {summary['skipped']}"
+              f" (timeout: {summary.get('timed_out', 0)})")
     print("-" * 60)
     if summary["error_types"]:
         print("  Error Distribution:")
@@ -87,12 +100,20 @@ def print_summary(results):
         print("-" * 60)
         print("  Domain Accuracy:")
         for domain, stats in summary["domain_stats"].items():
-            print(f"    {domain}: {stats['accuracy']}% ({stats['correct']}/{stats['total']})")
+            print(f"    {domain}: {stats['accuracy']}% ({stats['correct']}/{stats['scored']})")
     print("-" * 60)
     print("  Per-Problem Results:")
     for i, r in enumerate(results, 1):
-        status = "PASS" if r.is_correct else "FAIL"
-        print(f"  [{i}] {status} | {r.problem_id}: {r.intern_answer[:60]}")
+        if getattr(r, "skipped", False):
+            status = "SKIP"
+            detail = r.skip_reason or "skipped"
+        elif r.inference_error or r.judge_error:
+            status = "ERROR"
+            detail = (r.inference_error or r.judge_error or "")[:60]
+        else:
+            status = "PASS" if r.is_correct else "FAIL"
+            detail = r.intern_answer[:60]
+        print(f"  [{i}] {status} | {r.problem_id}: {detail}")
     print("=" * 60)
 
 
@@ -108,9 +129,29 @@ def generate_html_report(results, output_path):
     # 构建逐题表格行
     rows_html = ""
     for i, r in enumerate(results):
-        status_class = "pass" if r.is_correct else "fail"
-        status_text = "Correct" if r.is_correct else "Wrong"
-        error_html = f'<span class="error-type">{_escape_html(r.error_type)}</span>' if r.error_type else ""
+        skipped = getattr(r, "skipped", False)
+        has_error = bool(r.inference_error or r.judge_error)
+        if skipped:
+            status_class = "skip"
+            status_text = "Skipped"
+        elif has_error:
+            status_class = "error"
+            status_text = "Error"
+        else:
+            status_class = "pass" if r.is_correct else "fail"
+            status_text = "Correct" if r.is_correct else "Wrong"
+        if skipped:
+            error_html = (
+                f'<span class="error-type">{_escape_html(getattr(r, "skip_reason", "") or "skipped")}</span>'
+            )
+        elif has_error:
+            error_html = (
+                f'<span class="error-type">{_escape_html(r.inference_error or r.judge_error)}</span>'
+            )
+        elif r.error_type:
+            error_html = f'<span class="error-type">{_escape_html(r.error_type)}</span>'
+        else:
+            error_html = ""
         domain_html = f'<span class="domain-tag">{_escape_html(r.domain)}</span>' if r.domain else ""
 
         # 构建完整详情数据 JSON，嵌入 data-detail 属性
@@ -124,6 +165,7 @@ def generate_html_report(results, output_path):
             "intern_steps": r.intern_steps,
             "intern_verification": r.intern_verification,
             "is_correct": r.is_correct,
+            "scored": not has_error and not skipped,
             "confidence": r.confidence,
             "judge_explanation": r.judge_explanation,
             "error_type": r.error_type or "",
@@ -134,6 +176,8 @@ def generate_html_report(results, output_path):
             "judge_latency": r.judge_latency,
             "inference_error": r.inference_error or "",
             "judge_error": r.judge_error or "",
+            "skipped": skipped,
+            "skip_reason": getattr(r, "skip_reason", "") or "",
         }
         detail_json = json.dumps(detail_data, ensure_ascii=False)
         detail_escaped = detail_json.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
@@ -159,7 +203,7 @@ def generate_html_report(results, output_path):
         <div class="domain-stat">
             <span class="domain-name">{domain}</span>
             <span class="domain-acc">{stats['accuracy']}%</span>
-            <span class="domain-count">({stats['correct']}/{stats['total']})</span>
+            <span class="domain-count">({stats['correct']}/{stats['scored']})</span>
         </div>"""
 
     # 完整 HTML 模板 — 分两段构建以避免 f-string 中 JS 花括号的语法问题
@@ -188,6 +232,7 @@ def generate_html_report(results, output_path):
         .card-value {{ font-size: 32px; font-weight: 700; color: #1a1a2e; }}
         .card-value.green {{ color: #10b981; }}
         .card-value.red {{ color: #ef4444; }}
+        .card-value.amber {{ color: #d97706; }}
         .section-title {{ font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }}
         .domain-stats {{ display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }}
         .domain-stat {{ background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }}
@@ -199,9 +244,13 @@ def generate_html_report(results, output_path):
         td {{ padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }}
         tr:hover {{ background: #f8fafc; }}
         tr.fail {{ background: #fef2f2; }}
+        tr.skip {{ background: #fffbeb; }}
+        tr.error {{ background: #fdf2f8; }}
         .status-badge {{ display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }}
         .status-badge.pass {{ background: #d1fae5; color: #065f46; }}
         .status-badge.fail {{ background: #fee2e2; color: #991b1b; }}
+        .status-badge.skip {{ background: #fde68a; color: #92400e; }}
+        .status-badge.error {{ background: #fbcfe8; color: #9d174d; }}
         .error-type {{ display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }}
         .domain-tag {{ display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }}
         .question-cell {{ max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
@@ -221,6 +270,8 @@ def generate_html_report(results, output_path):
         .modal-status {{ display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }}
         .modal-status.pass {{ background: #D1FAE5; color: #065F46; }}
         .modal-status.fail {{ background: #FEE2E2; color: #991B1B; }}
+        .modal-status.skip {{ background: #FDE68A; color: #92400E; }}
+        .modal-status.error {{ background: #FBCFE8; color: #9D174D; }}
         .modal-confidence {{ font-size: 13px; color: #64748B; }}
         .modal-confidence span {{ font-weight: 700; color: #3B82F6; }}
         .modal-close {{ width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }}
@@ -272,11 +323,14 @@ def generate_html_report(results, output_path):
         <p class="subtitle">Generated at {now_str}</p>
         <div class="summary-cards">
             <div class="card"><div class="card-label">Total</div><div class="card-value">{summary['total']}</div></div>
+            <div class="card"><div class="card-label">Scored</div><div class="card-value">{summary.get('scored', 0)}</div></div>
+            <div class="card"><div class="card-label">Unscored</div><div class="card-value red">{summary.get('unscored', 0)}</div></div>
             <div class="card"><div class="card-label">Correct</div><div class="card-value green">{summary['correct']}</div></div>
             <div class="card"><div class="card-label">Accuracy</div><div class="card-value {accuracy_class}">{summary['accuracy']}%</div></div>
             <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">{summary['avg_confidence']}</div></div>
             <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">{summary['avg_inference_latency']}s</div></div>
             <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">{summary['avg_judge_latency']}s</div></div>
+            <div class="card"><div class="card-label">Skipped</div><div class="card-value amber">{summary.get('skipped', 0)}</div></div>
         </div>
         {domain_section}
         <h2 class="section-title">Detailed Results</h2>
@@ -314,7 +368,13 @@ def generate_html_report(results, output_path):
         // Header
         document.getElementById('modalTitle').textContent = d.problem_id;
         var statusEl = document.getElementById('modalStatus');
-        if (d.is_correct) {
+        if (d.skipped) {
+            statusEl.className = 'modal-status skip';
+            statusEl.innerHTML = '&#9203; Skipped';
+        } else if (d.scored === false) {
+            statusEl.className = 'modal-status error';
+            statusEl.innerHTML = '&#10071; Unscored';
+        } else if (d.is_correct) {
             statusEl.className = 'modal-status pass';
             statusEl.innerHTML = '&#10003; Correct';
         } else {
@@ -348,6 +408,7 @@ def generate_html_report(results, output_path):
         html += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
         html += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '&#26242;&#26080;') + '</div></div>';
         html += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '&#26242;&#26080;') + '</div></div>';
+        if (d.skipped) html += '<div class="info-item full"><div class="info-label">&#36339;&#36807;&#21407;&#22240;</div><div class="content-box highlight">' + esc(d.skip_reason || 'skipped') + '</div></div>';
         if (d.inference_error) html += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
         if (d.judge_error) html += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
         html += '</div></div>';

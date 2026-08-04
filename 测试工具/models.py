@@ -46,6 +46,8 @@ class InferenceResult:
     review_latency_seconds: float = 0.0           # 审核耗时（秒）
     total_tokens_used: int = 0                    # 总 token（推理+审核+重试）
     total_latency_seconds: float = 0.0            # 总耗时（推理+审核+重试，秒）
+    skipped: bool = False                         # 是否因超时等原因被跳过
+    skip_reason: str = ""                         # 跳过原因（如 "timeout: 600s"）
 
 
 @dataclass
@@ -91,6 +93,8 @@ class EvaluationResult:
     review_passed: Optional[bool] = None          # 自审核是否通过
     review_attempts: int = 0                      # 审核/重试次数
     total_tokens_used: int = 0                    # 总 token（推理+审核）
+    skipped: bool = False                         # 是否因超时等原因被跳过
+    skip_reason: str = ""                         # 跳过原因（如 "timeout: 600s"）
 
     def to_dict(self) -> dict:
         """将结果转为字典，用于 JSON 序列化"""

@@ -233,8 +233,33 @@ def _lookup_reference_answer(bank_name: str, problem_id: str) -> tuple:
 
 # ==================== 逐题评测模式 ====================
 
+def _make_skipped_inference(
+    problem, reason: str, sample_index: int = 0,
+) -> InferenceResult:
+    """
+    构造一条被跳过题目的推理记录（超时等），供下游合并进评测报告。
+
+    参数:
+        problem: 原始题目对象
+        reason: 跳过原因（如 "timeout: exceeded 600s"）
+        sample_index: 样本编号
+
+    返回:
+        InferenceResult — error / skipped / skip_reason 均已填充
+    """
+    return InferenceResult(
+        problem_id=problem.id,
+        question=problem.question,
+        sample_index=sample_index,
+        error=reason,
+        skipped=True,
+        skip_reason=reason,
+    )
+
+
 async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
-                           enable_review=True, max_review_retries=2):
+                           enable_review=True, max_review_retries=2,
+                           timeout: float = 0.0):
     """
     评测单道题目的完整流程（逐题模式）：
     1. 调用 Intern-S1 进行数学推理（支持多样本模式）
@@ -249,53 +274,94 @@ async def evaluate_single(problem, semaphore, bank_name=None, multi_sample=0,
         multi_sample: 每道题生成几个答案（0=单次推理）
         enable_review: 是否启用自审核（默认 True）
         max_review_retries: 审核不通过时的最大重试次数（默认 2）
+        timeout: 每道题墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         list[EvaluationResult] — 单样本时长度为 1，多样本时长度为 multi_sample
     """
     async with semaphore:
-        # 多样本模式：并行生成 N 个不同答案
-        if multi_sample > 0:
-            inferences = await _run_inference_multi_func(problem, num_samples=multi_sample)
+        if timeout and timeout > 0:
+            try:
+                return await asyncio.wait_for(
+                    _evaluate_single_impl(
+                        problem, bank_name=bank_name, multi_sample=multi_sample,
+                        enable_review=enable_review,
+                        max_review_retries=max_review_retries,
+                    ),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                reason = f"timeout: exceeded {timeout}s per-question limit"
+                logger.warning(f"[{problem.id}] {reason}，跳过该题")
+                print(
+                    f"  [SKIP] {problem.id}: 超时超过 {timeout}s，"
+                    f"已跳过并记录"
+                )
+                skipped = _make_skipped_inference(problem, reason)
+                return [merge_result(
+                    problem, skipped,
+                    JudgeResult(
+                        problem_id=problem.id,
+                        is_correct=False,
+                        confidence=0.0,
+                        explanation=reason,
+                        error=reason,
+                    ),
+                )]
+        return await _evaluate_single_impl(
+            problem, bank_name=bank_name, multi_sample=multi_sample,
+            enable_review=enable_review, max_review_retries=max_review_retries,
+        )
+
+
+async def _evaluate_single_impl(problem, bank_name=None, multi_sample=0,
+                                 enable_review=True, max_review_retries=2):
+    """
+    evaluate_single 的实际执行体（由超时包装调用）。
+    """
+    # 多样本模式：并行生成 N 个不同答案
+    if multi_sample > 0:
+        inferences = await _run_inference_multi_func(problem, num_samples=multi_sample)
+    else:
+        inferences = [await _run_inference_func(
+            problem, enable_review=enable_review, max_review_retries=max_review_retries
+        )]
+
+    # 查参考答案（所有样本共用同一个参考答案）
+    ref_answer, ref_source = _lookup_reference_answer(
+        bank_name, problem.id
+    ) if bank_name else (None, None)
+    # 数据集内置参考答案兜底（JSONL 的 answer/reference_answer 字段）
+    if not ref_answer and getattr(problem, "reference_answer", None):
+        ref_answer = problem.reference_answer
+        ref_source = ref_source or "数据集内置"
+
+    # 对每个推理结果进行评判
+    results = []
+    for inference in inferences:
+        if inference.error:
+            judge = JudgeResult(
+                problem_id=problem.id,
+                is_correct=False,
+                confidence=0.0,
+                explanation=f"Inference error: {inference.error}",
+                error=inference.error,
+            )
         else:
-            inferences = [await _run_inference_func(
-                problem, enable_review=enable_review, max_review_retries=max_review_retries
-            )]
-
-        # 查参考答案（所有样本共用同一个参考答案）
-        ref_answer, ref_source = _lookup_reference_answer(
-            bank_name, problem.id
-        ) if bank_name else (None, None)
-        # 数据集内置参考答案兜底（JSONL 的 answer/reference_answer 字段）
-        if not ref_answer and getattr(problem, "reference_answer", None):
-            ref_answer = problem.reference_answer
-            ref_source = ref_source or "数据集内置"
-
-        # 对每个推理结果进行评判
-        results = []
-        for inference in inferences:
-            if inference.error:
-                judge = JudgeResult(
-                    problem_id=problem.id,
-                    is_correct=False,
-                    confidence=0.0,
-                    explanation=f"Inference error: {inference.error}",
-                    error=inference.error,
-                )
-            else:
-                judge = await run_judge(
-                    inference,
-                    reference_answer=ref_answer,
-                    answer_source=ref_source,
-                )
-            results.append(merge_result(problem, inference, judge))
-        return results
+            judge = await run_judge(
+                inference,
+                reference_answer=ref_answer,
+                answer_source=ref_source,
+            )
+        results.append(merge_result(problem, inference, judge))
+    return results
 
 
 # ==================== 批量评测模式 ====================
 
 async def _run_inference_stage(problems, concurrency, bank_name=None, multi_sample=0,
-                               enable_review=True, max_review_retries=2):
+                               enable_review=True, max_review_retries=2,
+                               timeout: float = 0.0):
     """
     阶段一：并发执行 Intern-S1 推理，同时收集每道题的参考答案。
     多样本模式下，每道题生成多个答案。
@@ -307,6 +373,7 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         multi_sample: 每道题生成几个答案（0=单次）
         enable_review: 是否启用自审核（默认 True）
         max_review_retries: 审核不通过时的最大重试次数（默认 2）
+        timeout: 单题推理墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         [(Problem, InferenceResult, ref_answer, ref_source), ...] 列表
@@ -318,12 +385,36 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         # 多样本模式：每道题并行生成 N 个推理结果
         async def _inference_task(problem):
             async with semaphore:
-                inferences = await _run_inference_multi_func(problem, num_samples=multi_sample)
-                ref_answer, ref_source = _lookup_reference_answer(
-                    bank_name, problem.id
-                ) if bank_name else (None, None)
-                # 每个样本各自产生一条记录
-                return [(problem, inf, ref_answer, ref_source) for inf in inferences]
+                try:
+                    if timeout and timeout > 0:
+                        inferences = await asyncio.wait_for(
+                            _run_inference_multi_func(
+                                problem, num_samples=multi_sample
+                            ),
+                            timeout=timeout,
+                        )
+                    else:
+                        inferences = await _run_inference_multi_func(
+                            problem, num_samples=multi_sample
+                        )
+                    ref_answer, ref_source = _lookup_reference_answer(
+                        bank_name, problem.id
+                    ) if bank_name else (None, None)
+                    # 每个样本各自产生一条记录
+                    return [(problem, inf, ref_answer, ref_source) for inf in inferences]
+                except asyncio.TimeoutError:
+                    reason = f"timeout: exceeded {timeout}s inference limit"
+                    logger.warning(f"[{problem.id}] {reason}，跳过该题")
+                    print(
+                        f"  [SKIP] {problem.id}: 推理超时超过 {timeout}s，"
+                        f"已跳过并记录"
+                    )
+                    return [(
+                        problem,
+                        _make_skipped_inference(problem, reason),
+                        None,
+                        None,
+                    )]
 
         tasks = [_inference_task(p) for p in problems]
         grouped = await asyncio.gather(*tasks)
@@ -336,13 +427,34 @@ async def _run_inference_stage(problems, concurrency, bank_name=None, multi_samp
         # 单样本模式（原有逻辑）
         async def _inference_task(problem):
             async with semaphore:
-                inference = await _run_inference_func(
-                    problem, enable_review=enable_review, max_review_retries=max_review_retries
-                )
-                ref_answer, ref_source = _lookup_reference_answer(
-                    bank_name, problem.id
-                ) if bank_name and not inference.error else (None, None)
-                return problem, inference, ref_answer, ref_source
+                try:
+                    if timeout and timeout > 0:
+                        inference = await asyncio.wait_for(
+                            _run_inference_func(
+                                problem,
+                                enable_review=enable_review,
+                                max_review_retries=max_review_retries,
+                            ),
+                            timeout=timeout,
+                        )
+                    else:
+                        inference = await _run_inference_func(
+                            problem,
+                            enable_review=enable_review,
+                            max_review_retries=max_review_retries,
+                        )
+                    ref_answer, ref_source = _lookup_reference_answer(
+                        bank_name, problem.id
+                    ) if bank_name and not inference.error else (None, None)
+                    return problem, inference, ref_answer, ref_source
+                except asyncio.TimeoutError:
+                    reason = f"timeout: exceeded {timeout}s inference limit"
+                    logger.warning(f"[{problem.id}] {reason}，跳过该题")
+                    print(
+                        f"  [SKIP] {problem.id}: 推理超时超过 {timeout}s，"
+                        f"已跳过并记录"
+                    )
+                    return problem, _make_skipped_inference(problem, reason), None, None
 
         tasks = [_inference_task(p) for p in problems]
         return await asyncio.gather(*tasks)
@@ -410,7 +522,8 @@ async def _run_judge_batch_stage(inference_results):
 
 
 async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sample=0,
-                              enable_review=True, max_review_retries=2):
+                              enable_review=True, max_review_retries=2,
+                              timeout: float = 0.0):
     """
     批量评测模式（两阶段流水线）：
     阶段一：并发执行 Intern-S1 推理
@@ -425,6 +538,7 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
         multi_sample: 每道题生成几个答案（0=单次）
         enable_review: 是否启用自审核（默认 True）
         max_review_retries: 审核不通过时的最大重试次数（默认 2）
+        timeout: 单题推理墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         EvaluationResult 列表
@@ -449,6 +563,7 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
     inference_results = await _run_inference_stage(
         problems, concurrency, bank_name=bank_name, multi_sample=multi_sample,
         enable_review=enable_review, max_review_retries=max_review_retries,
+        timeout=timeout,
     )
 
     total_inferences = len(inference_results)
@@ -459,6 +574,12 @@ async def evaluate_batch_mode(problems, concurrency=10, bank_name=None, multi_sa
         f"  Stage 1/2 complete: {success_count}/{total_inferences} succeeded, "
         f"{total_inferences - success_count} failed"
     )
+    skipped_count = sum(
+        1 for _, inf, _, _ in inference_results
+        if getattr(inf, "skipped", False)
+    )
+    if skipped_count:
+        print(f"  Stage 1/2 skipped due to timeout: {skipped_count}")
 
     print(f"  Stage 2/2: Batch judging {success_count} results...")
     return await _run_judge_batch_stage(inference_results)
@@ -674,7 +795,12 @@ async def _print_problem_results(results: list) -> None:
     sorted_results = sorted(results, key=lambda r: (r.problem_id, r.sample_index))
     has_multi = any(r.sample_index > 0 for r in sorted_results)
     for i, result in enumerate(sorted_results, 1):
-        status = "PASS" if result.is_correct else "FAIL"
+        if getattr(result, "skipped", False):
+            status = "SKIP"
+        elif result.inference_error or result.judge_error:
+            status = "ERROR"
+        else:
+            status = "PASS" if result.is_correct else "FAIL"
         sample_tag = f" [S{result.sample_index}]" if has_multi else ""
         print(
             f"  [{i}/{len(results)}] {status} "
@@ -737,6 +863,7 @@ async def run_evaluation(
     enable_review=True,
     max_review_retries=2,
     multi_agent=False,
+    timeout: float = 0.0,
 ):
     """
     执行完整评测流水线：
@@ -756,6 +883,8 @@ async def run_evaluation(
         multi_sample: 每道题生成几个不同答案（0=禁用，建议 3）
         enable_review: 是否启用自审核（默认 True）
         max_review_retries: 审核不通过时的最大重试次数（默认 2）
+        multi_agent: 是否使用多智能体版推理模块
+        timeout: 每道题墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         HTML 报告路径，加载失败返回 None
@@ -810,15 +939,24 @@ async def run_evaluation(
             problems, actual_concurrency, bank_name=bank_name,
             multi_sample=multi_sample,
             enable_review=enable_review, max_review_retries=max_review_retries,
+            timeout=timeout,
         )
         await _print_problem_results(results)
     else:
         results = await _run_single_mode(
             problems, actual_concurrency, bank_name, multi_sample,
             enable_review=enable_review, max_review_retries=max_review_retries,
+            timeout=timeout,
         )
 
     results.sort(key=lambda r: r.problem_id)
+
+    # 打印被跳过题目的记录（超时等）
+    skipped_results = [r for r in results if getattr(r, "skipped", False)]
+    if skipped_results:
+        print(f"\n  [跳过记录] 共 {len(skipped_results)} 道题被跳过：")
+        for r in skipped_results:
+            print(f"    - {r.problem_id}: {r.skip_reason or 'unknown'}")
 
     # 打印自审核统计
     if enable_review:
@@ -871,7 +1009,8 @@ def _check_answer_coverage(bank_name: str) -> None:
 
 
 async def _run_single_mode(problems, concurrency, bank_name=None, multi_sample=0,
-                            enable_review=True, max_review_retries=2):
+                            enable_review=True, max_review_retries=2,
+                            timeout: float = 0.0):
     """
     逐题评测模式：每道题独立推理 + 评判。
 
@@ -882,6 +1021,7 @@ async def _run_single_mode(problems, concurrency, bank_name=None, multi_sample=0
         multi_sample: 每道题生成几个不同答案
         enable_review: 是否启用自审核（默认 True）
         max_review_retries: 审核不通过时的最大重试次数（默认 2）
+        timeout: 每道题墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         EvaluationResult 列表
@@ -889,7 +1029,8 @@ async def _run_single_mode(problems, concurrency, bank_name=None, multi_sample=0
     semaphore = asyncio.Semaphore(concurrency)
     tasks = [
         evaluate_single(p, semaphore, bank_name=bank_name, multi_sample=multi_sample,
-                        enable_review=enable_review, max_review_retries=max_review_retries)
+                        enable_review=enable_review, max_review_retries=max_review_retries,
+                        timeout=timeout)
         for p in problems
     ]
     total_label = f"{len(problems)} problems"
@@ -904,7 +1045,12 @@ async def _run_single_mode(problems, concurrency, bank_name=None, multi_sample=0
         sample_results = await coro  # list[EvaluationResult]
         for sr in sample_results:
             results.append(sr)
-            status = "PASS" if sr.is_correct else "FAIL"
+            if getattr(sr, "skipped", False):
+                status = "SKIP"
+            elif sr.inference_error or sr.judge_error:
+                status = "ERROR"
+            else:
+                status = "PASS" if sr.is_correct else "FAIL"
             sample_tag = f" [S{sr.sample_index}]" if multi_sample > 0 else ""
             print(
                 f"  [{i}/{len(problems)}] {status} "
@@ -922,6 +1068,7 @@ async def run_evaluation_from_bank(
     domain: Optional[str] = None,
     progress_callback=None,
     multi_agent: bool = False,
+    timeout: float = 0.0,
 ) -> Optional[str]:
     """
     从题库随机选题并评测的完整流程。
@@ -934,6 +1081,8 @@ async def run_evaluation_from_bank(
         concurrency: 并发数
         domain: 可选领域筛选
         progress_callback: 进度回调 (current, total)
+        multi_agent: 是否使用多智能体版推理模块
+        timeout: 每道题墙钟超时（秒），0=不限时；超时自动跳过并记录
 
     返回:
         HTML 报告路径，失败返回 None
@@ -979,6 +1128,7 @@ async def run_evaluation_from_bank(
         temp_path, concurrency,
         progress_callback=progress_callback, bank_name=bank_name,
         multi_agent=multi_agent,
+        timeout=timeout,
     )
 
     # 将临时文件重命名为有意义的名字
@@ -1066,6 +1216,11 @@ def main():
     parser.add_argument(
         "--max-review-retries", type=int, default=2, metavar="N",
         help="自审核不通过时的最大重试次数（默认 2）",
+    )
+    parser.add_argument(
+        "--timeout", type=float, default=0.0, metavar="SEC",
+        help="每道题墙钟超时（秒），超时自动跳过并在报告中记录；"
+             "0=不限时（默认 0，不启用跳过）",
     )
 
     # 答案导入相关参数
@@ -1161,6 +1316,7 @@ def main():
             enable_review=not args.no_review,
             max_review_retries=args.max_review_retries,
             multi_agent=args.multi_agent,
+            timeout=args.timeout,
         )
     )
 

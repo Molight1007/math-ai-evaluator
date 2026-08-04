@@ -12,6 +12,10 @@ RUN pip install --no-cache-dir flask gunicorn
 COPY 测试工具/ ./测试工具/
 COPY 转化工具/ ./转化工具/
 COPY 题库/ ./题库/
+COPY user_agent.py .
+COPY agent/ ./agent/
+COPY utils/ ./utils/
+COPY prompts/ ./prompts/
 COPY deploy/server.py .
 COPY deploy/templates/ ./templates/
 
