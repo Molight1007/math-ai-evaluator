@@ -18,7 +18,11 @@ import logging
 import re
 
 from .base import BaseAgent, TaskContext
-from utils.extract import format_response
+from utils.extract import (
+    format_response,
+    is_acceptable_final_answer,
+    smart_fallback_answer,
+)
 
 logger = logging.getLogger("MathPilot")
 
@@ -43,17 +47,17 @@ class FormatterAgent(BaseAgent):
             # BUG-1 修复：绝不输出"无法求解"。回退到最详细的候选。
             if ctx.candidates:
                 best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
-                answer = best.answer if best.answer and len(best.answer) > 2 else (
-                    best.reasoning[-500:] if best.reasoning else ctx.problem[:200])
+                answer = best.answer if best.answer and best.answer.strip() else (
+                    best.reasoning[-500:] if best.reasoning else "")
             else:
-                answer = ctx.problem[:500] if ctx.problem else "请重新提问"
+                answer = ""
             confidence = 0.0
         else:
             answer = getattr(best, "answer", "") or ""
-            if not answer or len(answer) < 2:
+            if not answer:
                 answer = (getattr(best, "reasoning", "") or "")[-500:]
             if not answer:
-                answer = ctx.problem[:200] if ctx.problem else "请重新提问"
+                answer = ""
             confidence = getattr(best, "confidence", 0.0)
             # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
             best_cluster = getattr(ctx, '_best_cluster', None)
@@ -84,6 +88,19 @@ class FormatterAgent(BaseAgent):
 
         # 答案质量终检 + 自动修复
         answer = self._diagnose_and_repair(answer, ctx)
+        # 终检不通过（空/拒绝语/占位）→ 从候选推理重新提取，兜底交给 Orchestrator 闸门
+        if not is_acceptable_final_answer(answer):
+            fallback = self._pick_fallback(ctx, exclude_answer=answer)
+            if not fallback:
+                for c in sorted(ctx.candidates or [],
+                                key=lambda c: len(c.reasoning or ""), reverse=True):
+                    fallback = smart_fallback_answer(c.reasoning or c.answer or "")
+                    if fallback and is_acceptable_final_answer(fallback):
+                        break
+            if fallback:
+                answer = fallback
+                self.record(ctx, "finalize",
+                            "终检失败，改用候选推理提取的答案")
 
         ctx.final_response = format_response(answer)
         self.record(

@@ -66,3 +66,11 @@ deploy/users.json
 # 评测运行时产物
 deploy/results/
 deploy/user_api_settings.json
+题库/高数a.json
+题库/新高数_随机40题.json
+题库/1000题高数.json
+题库/新高数.json
+题库/示例题库.db
+题库维护脚本/export_bank_to_json.py
+题库/示例题库.db
+题库/示例题库.db

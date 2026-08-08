@@ -313,6 +313,36 @@ def is_valid_final_answer(text: str) -> bool:
     return True
 
 
+# 最终答案硬拒绝语（比 _REFUSAL_PATTERNS 更聚焦"整段无意义输出"）
+_REFUSAL_FINAL_RE = re.compile(
+    r"(?:无法求解|无法解决|不能解决|无法解答|我无法|暂无法|暂时无法|无法|"
+    r"不会|做不出来|解不出来|抱歉|对不起|请重新提问|不知道|我不确定|"
+    r"sorry|as an AI|I cannot)",
+    re.IGNORECASE,
+)
+
+
+def is_acceptable_final_answer(text: str) -> bool:
+    """
+    最终出口闸门用的可用性终检：
+    非空、长度合理、非拒绝语、非占位、非截断。
+
+    与 is_valid_final_answer 的区别：这里是"整段输出"级别的检查，
+    配合 detect_truncated 一起用，保证 final_response 可被判题器解析。
+    """
+    s = (text or "").strip()
+    if not s:
+        return False
+    if _REFUSAL_FINAL_RE.search(s):
+        return False
+    # 单选/填空短答案（A/B/C/D、单个数字或符号）直接可用
+    if len(s) <= 2:
+        return True
+    if not is_valid_final_answer(s):
+        return False
+    return True
+
+
 # ============================================================
 # 答案规范化管道 (Normalization Pipeline)
 # ============================================================

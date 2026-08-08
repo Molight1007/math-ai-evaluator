@@ -19,12 +19,17 @@ import logging
 import time
 import re as _re
 
-from .base import BaseAgent, TaskContext, Budget
+from .base import BaseAgent, TaskContext, Budget, detect_truncated
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .verifier import VerifierAgent, AnswerCluster
 from .formatter import FormatterAgent
-from utils.extract import safe_json_serialize
+from utils.extract import (
+    safe_json_serialize,
+    is_acceptable_final_answer,
+    smart_fallback_answer,
+    extract_final_answer,
+)
 
 try:
     from utils.sympy_tools import (
@@ -77,10 +82,7 @@ class Orchestrator(BaseAgent):
             if fast_result is not None:
                 ctx.final_response = fast_result
                 self.record(ctx, "fast_path", f"快车道直接求解: {fast_result[:200]}")
-                return safe_json_serialize({
-                    "final_response": fast_result, "trace": ctx.trace,
-                    "candidates": [], "verdicts": [],
-                })
+                return self._finalize(ctx)
 
             # 3) 求解（3 候选并行）
             self.solver.run(ctx)
@@ -108,52 +110,174 @@ class Orchestrator(BaseAgent):
                 direct_answer = self.solver.direct_solve(ctx)
                 if direct_answer:
                     ctx.final_response = direct_answer
-                    return safe_json_serialize({
-                        "final_response": direct_answer, "trace": ctx.trace,
-                    })
+                    return self._finalize(ctx)
                 best = self._pick_best_from_candidates(ctx)
                 if best:
                     ctx.final_response = best
-                    return safe_json_serialize({
-                        "final_response": best, "trace": ctx.trace,
-                    })
+                    return self._finalize(ctx)
 
             # 6) 格式化输出
             self.formatter.run(ctx)
 
-            # 构建返回
-            candidates_out = [
-                {"id": c.id, "answer": c.answer,
-                 "reasoning": c.reasoning, "revised": c.revised}
-                for c in ctx.candidates
-            ]
-            verdicts_out = [
-                {"id": v.id, "answer": v.answer,
-                 "confidence": v.confidence,
-                 "correct_votes": v.correct_votes,
-                 "total_votes": v.total_votes,
-                 "feedback": v.feedback}
-                for v in (ctx.verdicts or [])
-            ]
-            cluster_out = None
-            bc = getattr(ctx, '_best_cluster', None)
-            if bc:
-                cluster_out = {
-                    "answer_norm": bc.answer_norm,
-                    "size": bc.size,
-                    "confidence": bc.confidence,
-                    "candidate_ids": bc.candidate_ids,
-                }
-            return safe_json_serialize({
-                "final_response": ctx.final_response or "",
-                "trace": ctx.trace,
-                "candidates": candidates_out,
-                "verdicts": verdicts_out,
-                "cluster": cluster_out,
-            })
+            return self._finalize(ctx)
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
             return self._fallback(ctx, problem, e)
+
+    # ----------------------------------------------------------
+    # 最终出口闸门：保证 final_response 非空、非拒绝、非截断、可解析
+    # ----------------------------------------------------------
+    _ANSWER_ONLY_SYSTEM = (
+        "你是数学解题智能体。只输出最终答案本身，不要推理过程、不要解释、"
+        "不要任何多余文字。选择题只输出选项字母（如 A）；"
+        "填空/计算题输出数值或数学表达式（可用 LaTeX）。"
+    )
+    _MAX_FINAL_ANSWER_CHARS = 1500
+
+    def _finalize(self, ctx: TaskContext) -> dict:
+        """统一出口：对 final_response 做最终质量闸门后封装返回。"""
+        answer = (ctx.final_response or "").strip()
+        if not self._is_acceptable_final(answer):
+            repaired = self._repair_final_answer(ctx, answer)
+            if repaired is not None:
+                answer = repaired
+                self.record(ctx, "finalize",
+                            f"最终答案经闸门修复: {answer[:200]}")
+            else:
+                self.record(ctx, "finalize",
+                            f"闸门未能修复，保留原答案: {answer[:100] or '(空)'}")
+        ctx.final_response = answer
+
+        candidates_out = [
+            {"id": c.id, "answer": c.answer,
+             "reasoning": c.reasoning, "revised": c.revised}
+            for c in (ctx.candidates or [])
+        ]
+        verdicts_out = [
+            {"id": v.id, "answer": v.answer,
+             "confidence": v.confidence,
+             "correct_votes": v.correct_votes,
+             "total_votes": v.total_votes,
+             "feedback": v.feedback}
+            for v in (ctx.verdicts or [])
+        ]
+        cluster_out = None
+        bc = getattr(ctx, '_best_cluster', None)
+        if bc:
+            cluster_out = {
+                "answer_norm": bc.answer_norm,
+                "size": bc.size,
+                "confidence": bc.confidence,
+                "candidate_ids": bc.candidate_ids,
+            }
+        return safe_json_serialize({
+            "final_response": ctx.final_response,
+            "trace": ctx.trace,
+            "candidates": candidates_out,
+            "verdicts": verdicts_out,
+            "cluster": cluster_out,
+        })
+
+    def _is_acceptable_final(self, answer: str) -> bool:
+        """终检：非空、长度合理、非拒绝语、非截断。"""
+        if not answer or not answer.strip():
+            return False
+        if len(answer) > self._MAX_FINAL_ANSWER_CHARS:
+            return False
+        if detect_truncated(answer):
+            return False
+        return is_acceptable_final_answer(answer)
+
+    def _repair_final_answer(self, ctx: TaskContext, current: str):
+        """
+        逐级修复最终答案：
+        1. 从候选答案/推理中提取（smart_fallback）
+        2. 对截断的当前答案做轻量补全
+        3. 仅答案直答（最后一次低温度 LLM 调用）
+        4. 绝对兜底：最详细候选的答案/推理尾部
+        """
+        # 1) 候选提取
+        for c in sorted(ctx.candidates or [],
+                        key=lambda c: len(c.reasoning or ""), reverse=True):
+            for raw in (c.answer, c.reasoning):
+                if not raw:
+                    continue
+                cand = smart_fallback_answer(raw)
+                if (cand and cand != current
+                        and self._is_acceptable_final(cand)):
+                    return cand
+            cand2 = extract_final_answer(c.reasoning or c.answer or "")
+            if (cand2 and cand2 != current
+                    and self._is_acceptable_final(cand2)):
+                return cand2
+
+        # 2) 截断补全
+        fixed = self._fix_truncated_tail(current)
+        if fixed and self._is_acceptable_final(fixed):
+            return fixed
+
+        # 3) 仅答案直答（普通 → 严格，最多 2 次）
+        last_direct = ""
+        for strict in (False, True):
+            direct = self._answer_only_call(ctx.problem or "", strict=strict)
+            last_direct = direct or last_direct
+            if direct and self._is_acceptable_final(direct):
+                return direct
+
+        # 4) 绝对兜底
+        if ctx.candidates:
+            best = max(ctx.candidates,
+                       key=lambda c: len(c.reasoning or ""))
+            tail = smart_fallback_answer(best.reasoning or best.answer or "")
+            if tail:
+                return tail[:self._MAX_FINAL_ANSWER_CHARS]
+            if best.answer:
+                return best.answer[:self._MAX_FINAL_ANSWER_CHARS]
+
+        # 5) 最终保证：final_response 绝不返回空串
+        if current:
+            return current
+        if last_direct:
+            return last_direct
+        return None
+
+    @staticmethod
+    def _fix_truncated_tail(answer: str) -> str:
+        """轻量补全截断的答案尾部（\boxed、$、\begin、答案前缀）。"""
+        if not answer:
+            return answer
+        fixed = answer.rstrip()
+        if fixed.count("\\boxed{") > fixed.count("}"):
+            fixed += "}"
+        if fixed.count("$") % 2 == 1:
+            fixed = fixed.rstrip("$")
+        fixed = _re.sub(r"\\begin\{[^}]*\}\s*$", "", fixed).strip()
+        fixed = _re.sub(
+            r"(?:答案|最终答案|结果为?|解得?|等于|选)[:：=]?\s*$",
+            "", fixed,
+        ).strip()
+        return fixed or answer
+
+    def _answer_only_call(self, problem: str, strict: bool = False) -> str:
+        """最后一道保险：让模型只输出答案本身（温度 0，限制 token）。"""
+        try:
+            system = self._ANSWER_ONLY_SYSTEM
+            if strict:
+                system += (
+                    " 必须直接输出最终答案（数值/选项字母/表达式），"
+                    "禁止任何解释、分析、拒绝或道歉。"
+                )
+            resp = self.client.chat(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": problem},
+                ],
+                temperature=0.0,
+                max_tokens=512,
+            )
+            return (resp or "").strip()
+        except Exception:
+            return ""
 
     # ----------------------------------------------------------
     # 快车道：可确定性求解的题目直接用 SymPy 短路
@@ -260,7 +384,7 @@ class Orchestrator(BaseAgent):
         return ""
 
     def _fallback_direct(self, ctx: TaskContext) -> dict:
-        """Solver 无候选 → 直接 LLM 求解"""
+        """Solver 无候选 → 直接 LLM 求解（仍走最终闸门）"""
         try:
             resp = self.client.chat(
                 messages=[
@@ -270,16 +394,10 @@ class Orchestrator(BaseAgent):
                 temperature=0.3,
                 max_tokens=self.config.policy_max_tokens,
             )
-            answer = (resp or "").strip()
-            if not answer or len(answer) < 5:
-                answer = ctx.problem[:500]
-            return safe_json_serialize({
-                "final_response": answer, "trace": ctx.trace,
-            })
+            ctx.final_response = (resp or "").strip()
         except Exception:
-            return safe_json_serialize({
-                "final_response": ctx.problem[:500], "trace": ctx.trace,
-            })
+            ctx.final_response = ""
+        return self._finalize(ctx)
 
     def _fallback(self, ctx: TaskContext, problem: str, exc: Exception) -> dict:
         trace = list(ctx.trace) if ctx.trace else []
@@ -291,7 +409,9 @@ class Orchestrator(BaseAgent):
         if answer:
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "使用已有候选最佳答案作为兜底"})
-            return {"final_response": answer, "trace": trace}
+            ctx.final_response = answer
+            ctx.trace = trace
+            return self._finalize(ctx)
         # 尝试单次 LLM
         try:
             resp = self.client.chat(
@@ -302,11 +422,8 @@ class Orchestrator(BaseAgent):
                 temperature=0.3,
                 max_tokens=self.config.policy_max_tokens,
             )
-            answer = (resp or "").strip()
+            ctx.final_response = (resp or "").strip()
         except Exception:
-            answer = ""
-        if not answer or len(answer) < 5:
-            answer = problem[:500] if problem else "请重新提问"
-            trace.append({"agent": self.name, "step": "fallback",
-                          "content": "所有求解尝试均失败，返回原始问题文本"})
-        return {"final_response": answer, "trace": trace}
+            ctx.final_response = ""
+        ctx.trace = trace
+        return self._finalize(ctx)
