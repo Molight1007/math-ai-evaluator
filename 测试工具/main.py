@@ -30,7 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 将项目根目录加入 import 路径，使 转化工具 / intern_s1_optimized 等顶层包可被导入
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+    # 追加到末尾而非插入最前：避免根目录的 llm_client.py / main.py
+    # 遮蔽 测试工具/ 下的同名模块（deepseek.py 依赖 测试工具/llm_client.py）
+    sys.path.append(_PROJECT_ROOT)
 
 # 确保 Lean 4 (elan) 在 PATH 中
 _ELAN_BIN = os.path.join(os.path.expanduser("~"), ".elan", "bin")
