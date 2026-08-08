@@ -55,7 +55,7 @@ class LLMConfig:
     api_key: str                                  # API 密钥
     base_url: str                                 # API 基础地址
     model: str                                    # 模型名称
-    timeout: float = 120.0                        # 请求超时（秒）
+    timeout: float = 240.0                        # 请求超时（秒）
     max_retries: int = 3                          # 最大重试次数
 
 
@@ -112,7 +112,7 @@ def save_config(intern_s1_key: str, deepseek_key: str,
         f.write(f"DEEPSEEK_API_KEY={deepseek_key}\n")
         f.write(f"DEEPSEEK_BASE_URL={deepseek_url or 'https://api.deepseek.com/v1'}\n")
         f.write(f"DEEPSEEK_MODEL={deepseek_model or 'deepseek-chat'}\n\n")
-        f.write("LLM_TIMEOUT=120\n")
+        f.write("LLM_TIMEOUT=240\n")
         f.write("LLM_MAX_RETRIES=3\n")
 
     # 重新加载环境变量，使新保存的配置立即生效
@@ -148,14 +148,14 @@ def get_config() -> EvalConfig:
             api_key=os.getenv("INTERN_S1_API_KEY", ""),
             base_url=os.getenv("INTERN_S1_BASE_URL", "https://internlm-chat.intern-ai.org.cn/puyu/api/v1"),
             model=os.getenv("INTERN_S1_MODEL", "intern-s1"),
-            timeout=float(os.getenv("LLM_TIMEOUT", "120")),
+            timeout=float(os.getenv("LLM_TIMEOUT", "240")),
             max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
         ),
         deepseek=LLMConfig(
             api_key=os.getenv("DEEPSEEK_API_KEY", ""),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
             model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-            timeout=float(os.getenv("LLM_TIMEOUT", "120")),
+            timeout=float(os.getenv("LLM_TIMEOUT", "240")),
             max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
         ),
     )

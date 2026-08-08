@@ -175,36 +175,10 @@ class ClassifierAgent(BaseAgent):
             logger.info("Domain classified (keyword): %s (score=%d)", domain, score)
             return ctx
 
-        # 第二优先级：LLM 分类（仅在关键词得分不足时回退）
-        resp = self.llm(ctx, [
-            {"role": "system", "content": CLASSIFY_PROMPT},
-            {"role": "user", "content": ctx.problem},
-        ], 0.01, 256)
-
-        if resp:
-            domain = resp.strip().rstrip("。.，,、")
-            # 精确匹配
-            if domain in _KNOWN_DOMAINS:
-                ctx.domain = domain
-                self.record(ctx, "classify", f"题型分类结果(LLM): {domain}", domain=domain)
-                logger.info("Domain classified (LLM): %s", domain)
-                return ctx
-            # 模糊匹配
-            for known in _KNOWN_DOMAINS:
-                if known in domain or domain in known:
-                    ctx.domain = known
-                    self.record(ctx, "classify",
-                                f"题型分类结果(LLM模糊): {domain} → {known}", domain=known)
-                    logger.info("Domain classified (LLM fuzzy): %s -> %s", domain, known)
-                    return ctx
-            # 看起来像有效中文领域 → 采用
-            if len(domain) >= 3 and any('\u4e00' <= ch <= '\u9fff' for ch in domain):
-                ctx.domain = domain
-                self.record(ctx, "classify",
-                            f"题型分类结果(LLM新领域): {domain}", domain=domain)
-                logger.info("Domain classified (LLM novel): %s", domain)
-                return ctx
-            logger.debug("Unknown domain classification: %s (keyword score=%d)", domain, score)
+        # 第二优先级：LLM 分类已移除（提速）。
+        # 实测 Intern-S 不遵守"只输出领域名"指令，会把整段解题推理当作输出返回，
+        # 既浪费一次完整生成时间，还会把噪音文本注入 domain 提示词。
+        # 关键词未命中时直接进入低分兜底 / 通用策略。
 
         # 关键词低分时，若 ≥1 仍采用（比"未知"好）
         if score >= 1:

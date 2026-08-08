@@ -44,7 +44,7 @@ class AgentConfig:
     # 策略模型（解题）
     policy_sample_times: int = 3       # 候选解答数量
     policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
-    policy_max_tokens: int = 12288     # 策略最大 token（确保思考流+答案完整输出）
+    policy_max_tokens: int = 8192      # 策略最大 token（从 12288 下调，避免单题超时）
 
     # 蓝图分解（已关闭，对 Intern-S 思维流不友好）
     use_blueprint: bool = False
@@ -70,8 +70,8 @@ class AgentConfig:
     max_total_time_seconds: int = 21000  # Agent总运行时间上限
 
     # ---- 智能体核心配置 ----
-    max_tokens: int = 12288            # 单次最大 token 数
-    max_tokens_cap: int = 12288        # 内部 token 裁剪上限（关键：之前 4096 会截断）
+    max_tokens: int = 8192             # 单次最大 token 数
+    max_tokens_cap: int = 8192         # 内部 token 裁剪上限（配合 300s 单题预算）
     max_workers: int = 3               # 并发验证线程数
     temperature: float = 0.3           # 默认 LLM 温度
 
