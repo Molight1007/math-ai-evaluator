@@ -35,7 +35,12 @@ from prompts.policy import (
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
-from utils.extract import extract_final_answer, smart_fallback_answer, is_valid_final_answer
+from utils.extract import (
+    extract_final_answer,
+    smart_fallback_answer,
+    rescue_final_answer,
+    is_valid_final_answer,
+)
 
 logger = logging.getLogger("MathPilot")
 
@@ -158,7 +163,11 @@ class SolverAgent(BaseAgent):
         ], 0.3, self.config.max_answer_tokens)
         if not raw or len(raw) < 30:
             return None
-        answer = extract_final_answer(raw) or smart_fallback_answer(raw)
+        answer = extract_final_answer(raw)
+        if not answer or len(answer) > 300:
+            answer = rescue_final_answer(raw)[0]
+        if not answer:
+            answer = smart_fallback_answer(raw)
         if not is_valid_final_answer(answer) and len(raw) > 0:
             answer = raw[-500:]
         cid = len(ctx.candidates)
@@ -315,11 +324,16 @@ class SolverAgent(BaseAgent):
                 logger.warning("Candidate %d generation failed/skipped", cid)
                 continue
             answer = extract_final_answer(resp)
-            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），取尾部
+            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），
+            # 先试 rescue 兜底（嵌套 boxed / 中段强模式结论），再取尾部
             if not answer or len(answer) > 300 and resp.strip():
-                fallback = smart_fallback_answer(resp)
-                if fallback and (not answer or len(fallback) < len(answer)):
-                    answer = fallback
+                rescued = rescue_final_answer(resp)[0]
+                if rescued:
+                    answer = rescued
+                else:
+                    fallback = smart_fallback_answer(resp)
+                    if fallback and (not answer or len(fallback) < len(answer)):
+                        answer = fallback
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,
@@ -392,9 +406,14 @@ class SolverAgent(BaseAgent):
                     id=cid, answer="", reasoning="[重解失败] 调用受限"))
                 logger.warning("Revise candidate %d failed/skipped", cid)
                 continue
+            answer = extract_final_answer(resp)
+            if not answer or len(answer) > 300:
+                answer = rescue_final_answer(resp)[0]
+            if not answer:
+                answer = smart_fallback_answer(resp)
             ctx.candidates.append(Candidate(
                 id=cid,
-                answer=extract_final_answer(resp),
+                answer=answer,
                 reasoning=resp,
                 revised=True,
             ))
@@ -455,7 +474,13 @@ class SolverAgent(BaseAgent):
                 if answer:
                     self.record(ctx, "direct_solve", f"兜底直接求解成功 (attempt {attempt + 1})")
                     return answer
-                # 提取失败，取全文作为答案
+                # 常规提取失败 → rescue 兜底（嵌套 boxed / 中段强模式）
+                rescued = rescue_final_answer(resp)[0]
+                if rescued:
+                    self.record(ctx, "direct_solve",
+                               f"兜底求解成功但常规提取失败，rescue 截取 (attempt {attempt + 1})")
+                    return rescued
+                # 仍失败，取全文作为答案
                 self.record(ctx, "direct_solve",
                            f"兜底求解成功但提取失败，使用全文 (attempt {attempt + 1})")
                 return smart_fallback_answer(resp)
@@ -545,6 +570,8 @@ class SolverAgent(BaseAgent):
                 # 合并推理
                 full_reasoning = reasoning + "\n\n[续写]\n" + continuation.strip()
                 new_answer = extract_final_answer(full_reasoning)
+                if not new_answer:
+                    new_answer = rescue_final_answer(full_reasoning)[0]
                 if not new_answer:
                     new_answer = smart_fallback_answer(continuation)
                 self.record(ctx, "complete",

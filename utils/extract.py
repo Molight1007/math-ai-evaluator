@@ -136,12 +136,10 @@ def extract_final_answer(text: str) -> str:
                     and not _is_incomplete_answer(captured)):
                 return clean_answer(captured)
 
-    # 策略 2：\\boxed{...} 格式
-    boxed_match = re.search(r"\\boxed\{([^}]+)\}", text)
-    if boxed_match:
-        ans = boxed_match.group(1).strip()
-        if ans and not _is_incomplete_answer(ans):
-            return ans
+    # 策略 2：\\boxed{...} 格式（支持任意嵌套深度）
+    ans = _extract_boxed_nested(text)
+    if ans and not _is_incomplete_answer(ans):
+        return ans
 
     # 策略 3：从尾部跳过元语句向前找有效答案行（核心修复）
     last_valid = _extract_last_valid_answer(text)
@@ -388,3 +386,188 @@ def normalize_answer(raw: str) -> str:
     s = re.sub(r",+", ",", s)
 
     return s.strip()
+
+
+# ============================================================
+# 兜底提取增强（同步自 测试工具/intern_s1.py，纯规则、不耗 LLM 预算）
+# ============================================================
+
+
+def _extract_boxed_nested(text: str) -> str:
+    """匹配 \\boxed{...}，通过手动计数大括号处理任意嵌套深度。"""
+    if not text:
+        return ""
+
+    marker = r"\boxed{"
+    results = []
+    idx = 0
+    while True:
+        pos = text.find(marker, idx)
+        if pos == -1:
+            break
+        start = pos + len(marker)  # 内容起始位置（{ 之后）
+        depth = 1
+        cursor = start
+        while cursor < len(text) and depth > 0:
+            ch = text[cursor]
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    results.append(text[start:cursor].strip())
+                    break
+            cursor += 1
+        idx = pos + 1
+
+    return results[-1] if results else ""
+
+
+# 强模式：明确结论句（可靠，可在全文搜索）
+_ANSWER_PATTERNS = [
+    # "the (final) answer is X" / "answer: X" — 最可靠
+    (r"(?i)(?:the\s+(?:final\s+|correct\s+)?answer\s+(?:is\s*[:\s]|:))\s*(.+?)(?:\.\s*$|\.\s|\n\n|\Z)", 1),
+    # "X = Y is a candidate / solution / the answer"（Intern-S1 常用）
+    (r"(?i)\b([a-zA-Z])\s*=\s*(-?\d+)\s+is\s+(?:a\s+(?:valid\s+)?(?:candidate|solution)|the\s+answer)", 2),
+    # "Therefore/Thus/Hence/So, X." — 需要 X 是短答案
+    (r"(?i)(?:Therefore|Thus|Hence|So)\s*[,:]\s*(.{1,120}?)(?:\.\s*$|\n\n|\Z)", 1),
+    # "which gives X" / "which yields X" / "we conclude X"
+    (r"(?i)(?:which\s+(?:gives|yields)|we\s+conclude)\s+(.{1,120}?)(?:\.\s*$|\n\n|\Z)", 1),
+    # "result: X" / "conclusion: X"
+    (r"(?i)(?:(?:final\s+)?result|conclusion)\s*:\s*(.{1,120}?)(?:\.\s*$|\n\n|\Z)", 1),
+]
+
+# 弱模式：行尾变量赋值（如 "N = 3"），只在文本尾部搜索，避免误匹配推理开头
+_WEAK_ASSIGN_PATTERN = (r"(?m)^(?:\w)\s*=\s*(.{1,80}?)\s*$", 1)
+
+
+def _extract_strong_pattern(text: str) -> str:
+    """仅使用强结论模式匹配（可靠）：
+    1) 强模式全文搜索（候选解如 "N=3 is a candidate" 常出现在推理中段）
+    2) 弱赋值模式只在尾部搜索（结论通常在末尾，避免开头误匹配）
+    """
+    if not text or len(text) < 10:
+        return ""
+
+    tail = text[-4000:] if len(text) > 4000 else text
+
+    # 1) 强模式在全文搜索
+    for pattern, group in _ANSWER_PATTERNS:
+        m = re.search(pattern, text, re.DOTALL | re.MULTILINE)
+        if m:
+            candidate = m.group(group).strip()
+            candidate = _clean_extracted_answer(candidate)
+            if candidate and 1 <= len(candidate) <= 200:
+                return candidate
+
+    # 2) 弱赋值模式只在尾部搜索
+    m = re.search(_WEAK_ASSIGN_PATTERN[0], tail, re.MULTILINE)
+    if m:
+        candidate = m.group(_WEAK_ASSIGN_PATTERN[1]).strip()
+        candidate = _clean_extracted_answer(candidate)
+        if candidate and 1 <= len(candidate) <= 200:
+            return candidate
+
+    return ""
+
+
+def _extract_tail_fallback(text: str) -> str:
+    """最后手段：取最后一行非空内容作为答案（误报率高，仅作兜底）"""
+    if not text:
+        return ""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    for line in reversed(lines[-5:]):  # 只看最后5行
+        # 跳过推理标记、半截句子
+        skip_words = ["```", "wait", "let me", "now consider", "for example",
+                      "we can", "since", "because", "first", "next", "then",
+                      "note that", "assume", "suppose", "let's"]
+        if any(line.lower().startswith(w) for w in skip_words):
+            continue
+        # 跳过以 "(" "[" "{" 开头（通常是公式推导）
+        if line and line[0] in "([{":
+            continue
+        cleaned = _clean_extracted_answer(line)
+        # 推理片段检测（清理后的内容仍像推理句则跳过）
+        if cleaned and not _looks_like_reasoning_fragment(cleaned) and 3 <= len(cleaned) <= 200:
+            return cleaned
+
+    return ""
+
+
+_REASONING_FRAGMENT_WORDS = [
+    "if we", "we set", "let us", "we have", "we can", "we get", "we need",
+    "so best", "it is decreasing", "note that", "assume", "suppose",
+    "since", "because", "first", "next", "then", "wait", "for each",
+    "for example", "the number written is", "the set", "term is",
+]
+
+
+def _clean_extracted_answer(text: str) -> str:
+    """清理提取的答案文本；若清理后仍呈推理片段特征则返回空串"""
+    if not text:
+        return ""
+    # 去掉开头的冒号、空格、破折号
+    text = re.sub(r"^[:\s\-–—]+", "", text)
+    # 去掉尾部的空格和标点
+    text = text.strip().rstrip(".;,，。；")
+    # 去掉开头的小写引导词
+    text = re.sub(r"^(?:is|that|it\s+is|the\s+answer\s+is)\s+", "", text, flags=re.IGNORECASE)
+    # 去掉编号前缀（如 "1. If we set..."）
+    # 注意：必须是编号分隔符后紧跟空白或结尾才删除，避免误删 "3.5" 的小数点
+    text = re.sub(r"^\d+[.)](?=\s|$)", "", text).strip()
+    # 推理片段特征检测：以引导词开头 → 非独立答案
+    if _looks_like_reasoning_fragment(text):
+        return ""
+    # 保留下划线、反斜杠、花括号等数学符号
+    return text.strip()
+
+
+def _looks_like_reasoning_fragment(text: str) -> bool:
+    """判断文本是否像推理片段而非独立答案"""
+    if not text:
+        return False
+    low = text.lower()
+    for w in _REASONING_FRAGMENT_WORDS:
+        if low.startswith(w):
+            return True
+    # 以 "X=..." 开头但后面跟着推理连词（如 "2: π(2)=3 ≤2, so floor=1"）
+    if re.match(r"^\w+\s*[:=]", low) and re.search(r"\b(so|then|since|because|thus)\b", low):
+        return True
+    return False
+
+
+def rescue_final_answer(text: str) -> tuple[str, str]:
+    """答案兜底提取（纯规则、不消耗 LLM 预算）：依次尝试
+    嵌套 boxed → 强结论模式 → 尾部兜底。
+
+    同步自 测试工具/intern_s1.py::_rescue_answer，但去掉了 DeepSeek 跨模型
+    通道（赛事提交版只有平台注入的单一 client，竞赛禁止硬编码 API Key）。
+
+    参数:
+        text: LLM 原始输出
+
+    返回:
+        (提取到的答案, 提取来源)；未提取到返回 ("", "")。
+    """
+    if not text:
+        return "", ""
+    text = text.strip()
+
+    # 1) 嵌套 boxed 提取
+    answer = _extract_boxed_nested(text)
+    if answer:
+        cleaned = _clean_extracted_answer(answer)
+        if cleaned:
+            return cleaned, "boxed"
+
+    # 2) 强结论模式（可在全文截获中段结论）
+    answer = _extract_strong_pattern(text)
+    if answer:
+        return answer, "strong_pattern"
+
+    # 3) 尾部兜底
+    answer = _extract_tail_fallback(text)
+    if answer:
+        return answer, "tail_fallback"
+
+    return "", ""

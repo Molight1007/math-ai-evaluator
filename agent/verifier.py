@@ -121,21 +121,29 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _normalize_answer_text(self, text: str) -> str:
-        """文本级归一化：去空白/去 $/浮点舍入/LaTeX 分数统一。"""
+        """文本级归一化：去空白/去 $/浮点舍入/文本分数→数值/LaTeX 分数统一。"""
         if not text:
             return ""
         t = text.strip()
         t = t.replace("$", "").replace(" ", "")
         t = t.replace("\\displaystyle", "")
         t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
+        # LaTeX 分数统一（与本地 _normalize_answer 一致，无括号便于数值解析）
+        t = re.sub(r'\\frac\s*\{\s*([^}]*)\s*\}\s*\{\s*([^}]*)\s*\}', r'\1/\2', t)
         # 浮点舍入 6 位
         try:
             f = float(t)
             t = f"{f:.6g}"
         except (ValueError, TypeError):
-            pass
-        # LaTeX 分数统一
-        t = re.sub(r'\\frac\s*\{\s*([^}]*)\s*\}\s*\{\s*([^}]*)\s*\}', r'(\1)/(\2)', t)
+            # 文本分数（如 1/2、(1)/(2)）→ 数值，统一 1/2 与 0.5、3 与 3.0
+            stripped = re.sub(r'^\((-?\d+)\)/\((-?\d+)\)$', r'\1/\2', t)
+            if re.fullmatch(r'-?\d+/\d+', stripped):
+                try:
+                    num, den = stripped.split("/")
+                    f = int(num) / int(den)
+                    t = f"{f:.6g}"
+                except (ValueError, ZeroDivisionError):
+                    pass
         return t
 
     def _are_answers_equivalent(self, a: str, b: str) -> bool:
