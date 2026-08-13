@@ -1,0 +1,148 @@
+# -*- coding: utf-8 -*-
+"""子目标求解智能体（SubGoalSolverAgent）单元测试。
+
+覆盖:
+- ``_extract_json``: JSON 解析（代码块 / 纯 JSON / 坏输入）
+- ``_parse_subgoal_plan``: 规划校验、去重、类型白名单、上限
+- ``run``: 全流程（mock client）追加候选
+"""
+import unittest
+from types import SimpleNamespace
+
+from agent.base import TaskContext, Budget, Candidate
+from agent.sub_goal_solver import SubGoalSolverAgent
+
+
+def make_agent(client=None) -> SubGoalSolverAgent:
+    config = SimpleNamespace(
+        max_total_calls=20,
+        max_time_per_question=300,
+        max_total_time_seconds=21000,
+        policy_max_tokens=2048,
+    )
+    return SubGoalSolverAgent(client=client or MockClient(), config=config)
+
+
+class MockClient:
+    """返回固定子目标规划 JSON 的 mock 客户端。"""
+
+    def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
+        return self.call(messages=messages, temperature=temperature,
+                         max_tokens=max_tokens, **kw)
+
+    def call(self, messages=None, temperature=0.0, max_tokens=256, **kw):
+        return (
+            "```json\n"
+            '{"problem_analysis": {"domain": "代数", "core_objective": "求解"},'
+            '"subgoals": ['
+            '{"id": 1, "title": "化简", "description": "先化简", '
+            '"type": "compute", "depends_on": [], "expected_output": "化简结果"}'
+            '], "merge_strategy": "合并"}'
+            "\n```"
+        )
+
+
+def make_ctx(problem="求极限 lim_{x→0} (sin x)/x") -> TaskContext:
+    return TaskContext(
+        problem=problem,
+        metadata={},
+        budget=Budget(max_calls=20),
+        start_time=0.0,
+        deadline=999.0,
+        total_start_time=0.0,
+        total_deadline=9999.0,
+    )
+
+
+class ExtractJsonTest(unittest.TestCase):
+    def test_fenced_json(self) -> None:
+        text = '```json\n{"a": 1}\n```'
+        self.assertEqual(SubGoalSolverAgent._extract_json(text), {"a": 1})
+
+    def test_plain_json(self) -> None:
+        text = '{"a": 1}'
+        self.assertEqual(SubGoalSolverAgent._extract_json(text), {"a": 1})
+
+    def test_invalid_json_returns_none(self) -> None:
+        self.assertIsNone(SubGoalSolverAgent._extract_json("not json at all"))
+
+    def test_empty_input(self) -> None:
+        self.assertIsNone(SubGoalSolverAgent._extract_json(""))
+        self.assertIsNone(SubGoalSolverAgent._extract_json(None))
+
+    def test_trailing_comma_repaired(self) -> None:
+        text = '{"subgoals": [{"id": 1, "title": "x",}]}'
+        data = SubGoalSolverAgent._extract_json(text)
+        self.assertIsNotNone(data)
+        self.assertEqual(len(data["subgoals"]), 1)
+
+
+class ParseSubgoalPlanTest(unittest.TestCase):
+    def test_valid_plan(self) -> None:
+        raw = {"subgoals": [
+            {"id": 1, "title": "化简", "type": "compute",
+             "depends_on": [], "expected_output": "x"},
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["id"], 1)
+
+    def test_empty_or_missing_subgoals(self) -> None:
+        self.assertIsNone(SubGoalSolverAgent._parse_subgoal_plan({}))
+        self.assertIsNone(SubGoalSolverAgent._parse_subgoal_plan({"subgoals": []}))
+
+    def test_duplicate_ids_deduplicated(self) -> None:
+        raw = {"subgoals": [
+            {"id": 1, "title": "a", "type": "compute"},
+            {"id": 1, "title": "b", "type": "compute"},
+            {"id": 2, "title": "c", "type": "compute"},
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
+        self.assertEqual(len(plan), 2)
+
+    def test_type_whitelist(self) -> None:
+        raw = {"subgoals": [
+            {"id": 1, "title": "a", "type": "hack"},  # 非法类型 → compute
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
+        self.assertEqual(plan[0]["type"], "compute")
+
+    def test_too_many_subgoals_capped(self) -> None:
+        raw = {"subgoals": [
+            {"id": i, "title": f"s{i}", "type": "compute"} for i in range(1, 20)
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
+        self.assertEqual(len(plan), 10)
+
+
+class RunFlowTest(unittest.TestCase):
+    def test_run_appends_candidate(self) -> None:
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        self.assertEqual(len(ctx.candidates), 2)
+        self.assertIn("最终答案", ctx.candidates[-1].reasoning)
+
+    def test_run_exhausted_budget_skips(self) -> None:
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.budget.spend(20)  # 预算完全耗尽
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        # 预算耗尽时规划阶段直接失败，不追加候选
+        self.assertEqual(len(ctx.candidates), 1)
+
+    def test_run_partial_budget_still_appends_fallback(self) -> None:
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.budget.spend(18)  # 剩 2 次：规划可用，但子目标阶段预算不足
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        # 规划成功但子目标/合并预算不足 → 以"无法求解"兜底仍追加候选
+        self.assertEqual(len(ctx.candidates), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

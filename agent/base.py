@@ -171,7 +171,7 @@ class BaseAgent(ABC):
             with ctx.budget._lock:
                 if not ctx.budget.can_spend(1):
                     logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用", 
-                                   self.name, ctx.budget.remaining)
+                                   self.name, ctx.budget.remaining())
                     return None
                 ctx.budget.spend(1)
                 reserved = True

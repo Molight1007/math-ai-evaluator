@@ -1,0 +1,110 @@
+{
+  "full_open": {
+    "total": 6,
+    "scored": 6,
+    "correct": 5,
+    "accuracy": 0.8333,
+    "avg_elapsed_sec": 268.86,
+    "per_domain": {
+      "一元函数微分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "一元函数积分学的应用(二)--积分等式与积分不等式": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0.0
+      },
+      "一元函数积分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "函数极限与连续": {
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      "积分": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      }
+    },
+    "wall_sec": 843.1,
+    "config": "full_open"
+  },
+  "revise1": {
+    "total": 6,
+    "scored": 6,
+    "correct": 6,
+    "accuracy": 1.0,
+    "avg_elapsed_sec": 123.45,
+    "per_domain": {
+      "一元函数微分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "一元函数积分学的应用(二)--积分等式与积分不等式": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "一元函数积分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "函数极限与连续": {
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      "积分": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      }
+    },
+    "wall_sec": 409.1,
+    "config": "revise1"
+  },
+  "scoring_proof": {
+    "total": 6,
+    "scored": 6,
+    "correct": 6,
+    "accuracy": 1.0,
+    "avg_elapsed_sec": 267.26,
+    "per_domain": {
+      "一元函数微分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "一元函数积分学的应用(二)--积分等式与积分不等式": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "一元函数积分学的计算": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      },
+      "函数极限与连续": {
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      "积分": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 1.0
+      }
+    },
+    "wall_sec": 868.9,
+    "config": "scoring_proof"
+  }
+}

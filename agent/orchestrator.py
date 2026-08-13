@@ -19,9 +19,10 @@ import logging
 import time
 import re as _re
 
-from .base import BaseAgent, TaskContext, Budget
+from .base import BaseAgent, TaskContext, Budget, Verdict
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
+from .sub_goal_solver import SubGoalSolverAgent
 from .verifier import VerifierAgent, AnswerCluster
 from .formatter import FormatterAgent
 from utils.extract import safe_json_serialize
@@ -45,6 +46,7 @@ class Orchestrator(BaseAgent):
         super().__init__(client, config)
         self.classifier = ClassifierAgent(client, config)
         self.solver = SolverAgent(client, config)
+        self.sub_goal_solver = SubGoalSolverAgent(client, config)
         self.verifier = VerifierAgent(client, config)
         self.formatter = FormatterAgent(client, config)
 
@@ -88,15 +90,24 @@ class Orchestrator(BaseAgent):
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
                 return self._fallback_direct(ctx)
 
-            # 4) 验证（每候选 1 票 + 聚类选最优）
+            # 3.5) 子目标分解补充候选（可选）：候选不足或证明/难题时触发
             is_proof = getattr(ctx, 'domain', '') in ('证明', '证明题')
+            if (getattr(self.config, 'use_sub_goal', False)
+                    and ctx.budget.can_spend(3)
+                    and (len(ctx.candidates) < 2 or is_proof)):
+                self.record(ctx, "control",
+                            "候选不足或证明题，触发子目标分解补充候选",
+                            sub_goal_trigger=f"candidates={len(ctx.candidates)}, is_proof={is_proof}")
+                self.sub_goal_solver.run(ctx)
+
+            # 4) 验证（每候选 1 票 + 聚类选最优）
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
                 use_clustering=True,
                 use_scoring=self.config.use_scoring,
                 is_proof=is_proof,
             )
-            ctx.verdicts = self._verdicts_from_ver_result(ver_result)
+            ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
             ctx._best_cluster = ver_result.get("best_cluster")
             ctx._cluster_data = ver_result.get("cluster_data", [])
 
@@ -221,20 +232,32 @@ class Orchestrator(BaseAgent):
             pass
         return None
 
-    def _verdicts_from_ver_result(self, ver_result: dict) -> list:
+    def _verdicts_from_ver_result(self, ver_result: dict, candidates: list = None) -> list:
+        """将验证器产出的多票结果汇总为 Verdict 数据类列表。
+
+        每个候选可能有多张票（Verdict），此处聚合成一个汇总 Verdict：
+        - confidence = 正确票 / 总票数
+        - answer 取自候选（便于 Formatter 兜底直接使用）
+        - feedback 取第一张有效票的反馈，score 取第一张非空票的评分
+        """
         all_verdicts = ver_result.get("verdicts", [])
         result = []
         for idx, vds in enumerate(all_verdicts):
             correct_votes = sum(1 for v in vds if v.correct)
             total_votes = len(vds)
-            result.append(type('_VSummary', (), {
-                "id": idx,
-                "answer": "",
-                "correct_votes": correct_votes,
-                "total_votes": total_votes,
-                "confidence": correct_votes / total_votes if total_votes else 0.0,
-                "feedback": "",
-            }))
+            candidate = candidates[idx] if candidates and idx < len(candidates) else None
+            answer = candidate.answer if candidate else ""
+            feedback = next((v.feedback for v in vds if v.feedback), "")
+            score = next((v.score for v in vds if v.score is not None), None)
+            result.append(Verdict(
+                id=idx,
+                answer=answer,
+                confidence=correct_votes / total_votes if total_votes else 0.0,
+                correct_votes=correct_votes,
+                total_votes=total_votes,
+                feedback=feedback,
+                score=score,
+            ))
         return result
 
     def _pick_best_from_candidates(self, ctx: TaskContext) -> str:

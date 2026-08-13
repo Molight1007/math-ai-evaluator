@@ -37,6 +37,14 @@ from utils.llm_client import LLMClient
 # 答案规范化与匹配
 # ===========================================================================
 
+# LaTeX 常见符号 → Unicode（用于答案归一化，如 \pi → π）
+_LATEX_SYMBOL_MAP = {
+    r"\pi": "π", r"\infty": "∞", r"\theta": "θ",
+    r"\alpha": "α", r"\beta": "β", r"\gamma": "γ",
+    r"\Delta": "Δ", r"\lambda": "λ", r"\sqrt": "√",
+}
+
+
 def _clean_answer(text: str) -> str:
     if not text:
         return ""
@@ -44,7 +52,48 @@ def _clean_answer(text: str) -> str:
     text = text.replace("$", "").replace(" ", "")
     text = text.replace("\\displaystyle", "")
     text = text.replace("\\,", "").replace("\\;", "").replace("\\!", "")
+    for cmd, uni in _LATEX_SYMBOL_MAP.items():
+        text = text.replace(cmd, uni)
     return text
+
+
+def _norm_candidate(text: str) -> str:
+    """候选答案规范化（LaTeX 分数 → 除法表达）"""
+    if not text:
+        return ""
+    return _laTeX_to_py_frac(_clean_answer(text))
+
+
+def _extract_equals_candidates(pred: str) -> List[str]:
+    """从推导文本中提取 '= X' / '答案为 X' / '故选 X' 等结论候选。"""
+    if not pred:
+        return []
+    results = []
+    # 1) "= X" 结论（等号后直到行尾标点/换行）
+    for m in re.finditer(r"[=＝]\s*([^，。；;,\n]+)", pred):
+        results.append(m.group(1).strip())
+    # 2) 文字结论前缀（先"答案为"后"结果为"，避免误匹配"计算结果"）
+    for m in re.finditer(
+        r"(?:答案为?|最终答案为?|结果为?|结论[为是])\s*[:：]?\s*([^，。；;,\n]+)",
+        pred,
+    ):
+        results.append(m.group(1).strip())
+    # 3) 选项结论（故选/选择/应选 + A-D）
+    for m in re.finditer(r"(?:故选|选择|应选|选)\s*([A-Da-d])", pred):
+        results.append(m.group(1).strip())
+    # 清理：前导冒号/标点、尾部标点；递归提取候选内部的 "= X"
+    cleaned: List[str] = []
+    for c in results:
+        c = c.strip().lstrip("：:，,。.;； ").rstrip("。.，,;；：:")
+        if not c:
+            continue
+        if "=" in c or "＝" in c:
+            c2 = re.split(r"[=＝]", c)[-1].strip().rstrip("。.，,;；：:")
+            if c2:
+                cleaned.append(c2)
+                continue
+        cleaned.append(c)
+    return cleaned
 
 
 def _extract_boxed(text: str) -> Optional[str]:
@@ -99,16 +148,10 @@ def _try_fraction_compare(a: str, b: str) -> bool:
     return False
 
 
-def answers_match(pred: str, gold: str) -> bool:
-    """多级答案匹配：字符串相等 → 分数等价 → 浮点近似 → SymPy 符号等价。"""
-    if not pred or not gold:
+def _matches_one(pred_f: str, gold_f: str) -> bool:
+    """单次多级匹配：字符串相等 → 分数等价 → 浮点近似 → SymPy 符号等价。"""
+    if not pred_f or not gold_f:
         return False
-    pred = _clean_answer(pred)
-    gold = _clean_answer(gold)
-    if pred == gold:
-        return True
-    pred_f = _laTeX_to_py_frac(pred)
-    gold_f = _laTeX_to_py_frac(gold)
     if pred_f == gold_f:
         return True
     if _try_fraction_compare(pred_f, gold_f):
@@ -124,14 +167,50 @@ def answers_match(pred: str, gold: str) -> bool:
     return False
 
 
+def answers_match(pred: str, gold: str) -> bool:
+    """多级答案匹配：字符串相等 → 分数等价 → 浮点近似 → SymPy 符号等价。
+
+    若 predicted 为推导文本（非纯答案），会尝试从中提取 '= X'/'答案为 X' 结论。
+    """
+    if not pred or not gold:
+        return False
+    pred_f = _norm_candidate(pred)
+    gold_f = _norm_candidate(gold)
+    if _matches_one(pred_f, gold_f):
+        return True
+    # 推导文本：提取 '= X' 结论逐个匹配
+    for cand in _extract_equals_candidates(pred):
+        if _matches_one(_norm_candidate(cand), gold_f):
+            return True
+    return False
+
+
 # ===========================================================================
 # 评测引擎
 # ===========================================================================
 
+# 本地评测默认参数（对应"全开"版本，用于 A/B 对比的基线）
+# 与平台默认（user_agent.py AgentConfig 保守配置）不同，本地可自由实验。
+DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
+    "policy_sample_times": 3,
+    "verifier_voting_times": 2,
+    "max_total_calls": 40,
+    "max_revise_rounds": 1,
+    "max_workers": 3,
+    "use_scoring": True,
+    "by_enable_fast_path": True,
+    "use_proof_channel": True,
+    "use_lemma_accumulation": True,
+    "max_time_per_question": 1100,
+    "max_answer_tokens": 8192,
+    "revise_sample_times": 2,
+}
+
+
 class EvalEngine:
     def __init__(self, concurrency: int = 1, resume: bool = False,
                  api_key: str = "", base_url: str = "", model: str = "",
-                 verbose: bool = False):
+                 verbose: bool = False, agent_overrides: Optional[Dict[str, Any]] = None):
         self.concurrency = concurrency
         self.resume = resume
         self.verbose = verbose
@@ -141,23 +220,12 @@ class EvalEngine:
             base_url=base_url or None,
             model=model or None,
         )
-        # 用本地测试参数创建 Agent（与 Intern-Math-main 模式一致：kwargs 传参）
-        self.agent = ReasoningAgent(
-            self.llm_client,
-            policy_sample_times=3,
-            verifier_voting_times=2,
-            max_total_calls=40,
-            max_revise_rounds=1,
-            max_workers=3,
-            use_scoring=True,
-            by_enable_fast_path=True,
-            use_proof_channel=True,
-            use_lemma_accumulation=True,
-            max_time_per_question=1100,
-            max_answer_tokens=8192,
-            revise_sample_times=2,
-        )
-        logger.info("EvalEngine init: %s", self.llm_client)
+        # 配置覆盖：先取本地评测默认值，再叠加 CLI 传入的 A/B 开关
+        overrides = dict(DEFAULT_AGENT_OVERRIDES)
+        if agent_overrides:
+            overrides.update(agent_overrides)
+        self.agent = ReasoningAgent(self.llm_client, **overrides)
+        logger.info("EvalEngine init: %s, overrides=%s", self.llm_client, overrides)
         self.domain_stats: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {"total": 0, "correct": 0}
         )
@@ -282,13 +350,36 @@ def main():
     parser.add_argument("--api_key", default="", help="LLM API Key（或设置 OPENAI_API_KEY 环境变量）")
     parser.add_argument("--base_url", default="", help="LLM Base URL（或设置 OPENAI_BASE_URL 环境变量）")
     parser.add_argument("--model", default="", help="模型名（或设置 LLM_MODEL 环境变量）")
+    # ---- A/B 能力开关（None 表示使用本地评测默认值）----
+    parser.add_argument("--voting_times", type=int, default=None, help="verifier_voting_times（每个候选验证票数）")
+    parser.add_argument("--use_scoring", type=str, default=None, choices=["true", "false"], help="use_scoring（验证器多维评分）")
+    parser.add_argument("--revise_rounds", type=int, default=None, help="max_revise_rounds（自纠错回环轮数）")
+    parser.add_argument("--use_proof", type=str, default=None, choices=["true", "false"], help="use_proof_channel（证明题专用通道）")
+    parser.add_argument("--use_blueprint", type=str, default=None, choices=["true", "false"], help="use_blueprint（蓝图分解）")
+    parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
+    parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+    overrides: Dict[str, Any] = {}
+    if args.voting_times is not None:
+        overrides["verifier_voting_times"] = args.voting_times
+    if args.use_scoring is not None:
+        overrides["use_scoring"] = args.use_scoring == "true"
+    if args.revise_rounds is not None:
+        overrides["max_revise_rounds"] = args.revise_rounds
+    if args.use_proof is not None:
+        overrides["use_proof_channel"] = args.use_proof == "true"
+    if args.use_blueprint is not None:
+        overrides["use_blueprint"] = args.use_blueprint == "true"
+    if args.use_fast_path is not None:
+        overrides["by_enable_fast_path"] = args.use_fast_path == "true"
+    if args.max_total_calls is not None:
+        overrides["max_total_calls"] = args.max_total_calls
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,
         api_key=args.api_key, base_url=args.base_url, model=args.model,
-        verbose=args.verbose,
+        verbose=args.verbose, agent_overrides=overrides,
     )
     summary = engine.run(args.test_file, args.output)
     print("\n" + "=" * 60)

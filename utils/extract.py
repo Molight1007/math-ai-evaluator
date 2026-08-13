@@ -375,6 +375,8 @@ def normalize_answer(raw: str) -> str:
         s_new = pat.sub("", s)
         if s_new:
             s = s_new
+    # 剥离后清理尾部孤立乘号（如 "120s" → "120*s" → "120*" → "120"）
+    s = re.sub(r"\*+$", "", s)
 
     # 步骤 6: 集合/区间标准化
     # {1,2,3} → [1,2,3] 统一用方括号

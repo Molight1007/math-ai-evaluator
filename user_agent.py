@@ -60,8 +60,8 @@ class AgentConfig:
     extraction_mode: str = "auto"      # auto | last_line | regex
 
     # ---- 自主调控（大幅缩减）----
-    max_revise_rounds: int = 0         # 不做自纠错回环（省 LLM 调用）
-    max_total_calls: int = 10          # LLM 调用预算硬上限（≤10次，~2.5分钟）
+    max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
+    max_total_calls: int = 15          # LLM 调用预算硬上限（revise=1 需额外 1-3 次）
 
     # ---- 时间限制（适配竞赛新规则）----
     max_time_per_question: int = 300   # 单题壁钟时间上限（秒，省下的时间给后面的题）
@@ -82,6 +82,7 @@ class AgentConfig:
     by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
+    use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
 
 
 # ============================================================
@@ -112,6 +113,7 @@ class ReasoningAgent:
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
+            "use_blueprint", "use_sub_goal",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

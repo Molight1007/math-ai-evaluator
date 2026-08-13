@@ -56,3 +56,16 @@ class LLMClient:
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)
         raise RuntimeError(f"LLM 调用失败（{retries} 次重试后）: {last_error}")
+
+    def chat(self, messages: list[dict], temperature: float = 0.0,
+             max_tokens: int = 4096, **kwargs) -> str:
+        """agent 层统一以 client.chat(messages, temperature, max_tokens) 调用。
+
+        平台 client 提供 chat 接口；本地评测客户端补齐同名方法以对齐。
+        """
+        return self.call(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
