@@ -40,20 +40,18 @@ class FormatterAgent(BaseAgent):
     def run(self, ctx: TaskContext) -> TaskContext:
         best = self._pick_best(ctx)
         if best is None:
-            # BUG-1 修复：绝不输出"无法求解"。回退到最详细的候选。
+            # BUG-1 修复：绝不输出"无法求解"，也绝不把原题当答案。
             if ctx.candidates:
                 best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
                 answer = best.answer if best.answer and len(best.answer) > 2 else (
-                    best.reasoning[-500:] if best.reasoning else ctx.problem[:200])
+                    (best.reasoning or "")[-500:])
             else:
-                answer = ctx.problem[:500] if ctx.problem else "请重新提问"
+                answer = ""
             confidence = 0.0
         else:
             answer = getattr(best, "answer", "") or ""
             if not answer or len(answer) < 2:
                 answer = (getattr(best, "reasoning", "") or "")[-500:]
-            if not answer:
-                answer = ctx.problem[:200] if ctx.problem else "请重新提问"
             confidence = getattr(best, "confidence", 0.0)
             # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
             best_cluster = getattr(ctx, '_best_cluster', None)

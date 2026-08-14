@@ -19,7 +19,7 @@ import logging
 import time
 import re as _re
 
-from .base import BaseAgent, TaskContext, Budget, Verdict
+from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_response
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
@@ -65,6 +65,19 @@ class Orchestrator(BaseAgent):
             total_deadline=now + getattr(self.config, 'max_total_time_seconds', 21000),
         )
         try:
+            # 0) PaperPacer 简化版：按剩余时间动态收紧预算（P1-2）
+            elapsed_total = time.time() - ctx.total_start_time
+            total_budget = ctx.total_deadline - ctx.total_start_time
+            ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
+            if ratio > 0.85:
+                # 严重超时：收缩候选数与投票数，进入应急模式
+                self.config.policy_sample_times = max(1, self.config.policy_sample_times - 1)
+                self.config.verifier_voting_times = 1
+                self.record(ctx, "paper_pacer", f"应急模式：已用 {ratio:.0%} 总预算")
+            elif ratio > 0.6:
+                self.config.verifier_voting_times = 1
+                self.record(ctx, "paper_pacer", f"时间收紧：已用 {ratio:.0%} 总预算")
+
             # 1) 题型识别（元数据已知时跳过 LLM）
             pre_known_domain = (metadata or {}).get("domain", "")
             if pre_known_domain and pre_known_domain in _KNOWN_DOMAINS:
@@ -89,6 +102,13 @@ class Orchestrator(BaseAgent):
             if not ctx.candidates:
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
                 return self._fallback_direct(ctx)
+
+            # 3.2) 截断候选批量续写（P0-3）：修复"只记录不续写"导致的答案丢失
+            if getattr(ctx, 'candidates', None):
+                n_completed = self.solver.complete_truncated_candidates(ctx)
+                if n_completed > 0:
+                    self.record(ctx, "control",
+                                f"截断续写完成 {n_completed} 个候选")
 
             # 3.5) 子目标分解补充候选（可选）：候选不足或证明/难题时触发
             is_proof = getattr(ctx, 'domain', '') in ('证明', '证明题')
@@ -202,14 +222,14 @@ class Orchestrator(BaseAgent):
             f"\n\n题目类型: {tag}\n题目: {problem}\n\n表达式:"
         )
         try:
-            raw_expr = self.client.chat(
+            raw_expr = _normalize_chat_response(self.client.chat(
                 messages=[
                     {"role": "system", "content": "你只输出数学表达式，不要任何解释。"},
                     {"role": "user", "content": extract_prompt},
                 ],
                 temperature=0.0,
                 max_tokens=256,
-            )
+            ))
             raw_expr = (raw_expr or "").strip()
         except Exception:
             return None
@@ -282,27 +302,50 @@ class Orchestrator(BaseAgent):
                 return best.reasoning.strip()[-500:]
         return ""
 
-    def _fallback_direct(self, ctx: TaskContext) -> dict:
-        """Solver 无候选 → 直接 LLM 求解"""
+    _DIRECT_SYS = (
+        "你是数学解题专家。请解答下面这道题。"
+        "最后一行必须以【最终答案】: <答案> 的格式给出最终答案，"
+        "答案只写数值、表达式或选项字母，不要写任何解释或推理。"
+    )
+
+    def _emergency_direct_solve(self, problem: str) -> str:
+        """紧急直答：用最精简 prompt 逼模型输出答案，绝不返回原题。"""
         try:
             resp = self.client.chat(
                 messages=[
-                    {"role": "system", "content": "你是数学解题专家，请仔细分析并给出最终答案。确保输出完整。"},
-                    {"role": "user", "content": ctx.problem},
+                    {"role": "system", "content": self._DIRECT_SYS},
+                    {"role": "user", "content": problem},
                 ],
-                temperature=0.3,
-                max_tokens=self.config.policy_max_tokens,
+                temperature=0.0,
+                max_tokens=self.config.max_answer_tokens,
             )
-            answer = (resp or "").strip()
-            if not answer or len(answer) < 5:
-                answer = ctx.problem[:500]
-            return safe_json_serialize({
-                "final_response": answer, "trace": ctx.trace,
-            })
+            text = _normalize_chat_response(resp)
+            if not text or not text.strip():
+                return ""
+            # 优先提取【最终答案】行
+            m = _re.search(r"【最终答案】[:：]?\s*([\s\S]+)", text)
+            if m:
+                ans = m.group(1).strip().split("\n")[0].strip()
+                if ans:
+                    return ans
+            # 兜底：最后一个非空行
+            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+            if lines:
+                return lines[-1][:500]
+            return text.strip()[:500]
         except Exception:
-            return safe_json_serialize({
-                "final_response": ctx.problem[:500], "trace": ctx.trace,
-            })
+            return ""
+
+    def _fallback_direct(self, ctx: TaskContext) -> dict:
+        """Solver 无候选 → 直接 LLM 求解（紧急直答，绝不返回原题）"""
+        answer = self._emergency_direct_solve(ctx.problem)
+        if not answer:
+            answer = "未给出有效解答。"
+            ctx.trace.append({"agent": self.name, "step": "fallback",
+                              "content": "紧急直答失败，返回占位答案"})
+        return safe_json_serialize({
+            "final_response": answer, "trace": ctx.trace,
+        })
 
     def _fallback(self, ctx: TaskContext, problem: str, exc: Exception) -> dict:
         trace = list(ctx.trace) if ctx.trace else []
@@ -315,21 +358,10 @@ class Orchestrator(BaseAgent):
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "使用已有候选最佳答案作为兜底"})
             return {"final_response": answer, "trace": trace}
-        # 尝试单次 LLM
-        try:
-            resp = self.client.chat(
-                messages=[
-                    {"role": "system", "content": "你是数学解题专家，请仔细分析并给出最终答案。确保输出完整。"},
-                    {"role": "user", "content": problem},
-                ],
-                temperature=0.3,
-                max_tokens=self.config.policy_max_tokens,
-            )
-            answer = (resp or "").strip()
-        except Exception:
-            answer = ""
-        if not answer or len(answer) < 5:
-            answer = problem[:500] if problem else "请重新提问"
+        # 紧急直答
+        answer = self._emergency_direct_solve(problem)
+        if not answer:
+            answer = "未给出有效解答。"
             trace.append({"agent": self.name, "step": "fallback",
-                          "content": "所有求解尝试均失败，返回原始问题文本"})
+                          "content": "紧急直答失败，返回占位答案"})
         return {"final_response": answer, "trace": trace}

@@ -20,12 +20,27 @@ MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体�
     - 禁止使用绝对路径，所有文件读取使用相对路径
     - solve 返回的字典必须支持 JSON 序列化
     - final_response 不可为空
+
+平台契约防御（v2.3）：
+    - sys.path 自举：无论平台以何种 cwd 运行，都能找到本包
+    - solve(problem, metadata=None)：metadata 缺失时不崩溃
+    - 核心模块导入失败 → 降级到内置直答后端，保证永远有输出
+    - client.chat 响应归一化：兼容 str / dict / 对象 / 空值
+    - _validate_output：返回前强制校验 final_response 非空
 """
 
 import logging
+import os
+import sys
 from dataclasses import dataclass
+from typing import Any
 
-from agent.orchestrator import Orchestrator
+# ---------------------------------------------------------------------------
+# sys.path 自举：保证从任何 cwd 都能 import 到本包
+# ---------------------------------------------------------------------------
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 logger = logging.getLogger("MathPilot")
 
@@ -86,6 +101,88 @@ class AgentConfig:
 
 
 # ============================================================
+# 响应归一化工具（P0-1 契约防线核心）
+# ============================================================
+
+def _normalize_chat_response(resp: Any) -> str:
+    """把 client.chat 的返回值统一成字符串。
+
+    平台注入的 client 实现不定，常见返回形态：
+      - str: 直接可用
+      - dict: {"content": "...", "choices": [...], "message": {...}}
+      - list: [{"content": "..."}, ...]
+      - 对象: .content / .text / .message.content
+      - bytes: 解码为 UTF-8
+      - None / 异常: 返回 ""
+    """
+    if resp is None:
+        return ""
+    if isinstance(resp, str):
+        return resp
+    if isinstance(resp, bytes):
+        try:
+            return resp.decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+    if isinstance(resp, list):
+        # 取第一个元素
+        for item in resp:
+            text = _normalize_chat_response(item)
+            if text:
+                return text
+        return ""
+    if isinstance(resp, dict):
+        # 常见的几种字典形态
+        for key in ("content", "text", "output", "result"):
+            if key in resp and resp[key] is not None:
+                val = resp[key]
+                if isinstance(val, str):
+                    return val
+                return _normalize_chat_response(val)
+        if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
+            choice = resp["choices"][0]
+            if isinstance(choice, dict):
+                # OpenAI 风格: {"message": {"content": ...}} 或 {"text": ...}
+                if "message" in choice and isinstance(choice["message"], dict):
+                    msg = choice["message"]
+                    for key in ("content", "text"):
+                        if key in msg and msg[key] is not None:
+                            return str(msg[key])
+                if "text" in choice and choice["text"] is not None:
+                    return str(choice["text"])
+            return _normalize_chat_response(choice)
+        if "message" in resp and isinstance(resp["message"], dict):
+            msg = resp["message"]
+            for key in ("content", "text"):
+                if key in msg and msg[key] is not None:
+                    return str(msg[key])
+        if "data" in resp:
+            return _normalize_chat_response(resp["data"])
+        return ""
+    # 普通对象：尝试 .content / .text / .message
+    for attr in ("content", "text", "response"):
+        try:
+            val = getattr(resp, attr, None)
+            if val is not None:
+                return _normalize_chat_response(val)
+        except Exception:
+            pass
+    try:
+        if hasattr(resp, "message") and resp.message is not None:
+            return _normalize_chat_response(resp.message)
+    except Exception:
+        pass
+    # 最后兜底：字符串化
+    try:
+        s = str(resp)
+        if s and s != "None" and not s.startswith("<") and not s.startswith("{"):
+            return s
+    except Exception:
+        pass
+    return ""
+
+
+# ============================================================
 # ReasoningAgent 平台入口（薄壳）
 # ============================================================
 class ReasoningAgent:
@@ -95,7 +192,8 @@ class ReasoningAgent:
     solve() 的内部实现已委托给多智能体 Orchestrator，本类仅负责：
     - 接收平台注入的 client；
     - 组装配置；
-    - 透传 solve 调用并维持返回格式不变。
+    - 透传 solve 调用并维持返回格式不变；
+    - 平台契约防御：核心模块不可用时降级到内置直答后端。
     """
 
     def __init__(self, client, *args, **kwargs):
@@ -118,7 +216,13 @@ class ReasoningAgent:
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
 
-        self.orchestrator = Orchestrator(client, self.config)
+        self.orchestrator = None
+        # 核心模块导入失败时不崩溃：置为 None，solve 时走 fallback backend
+        try:
+            from agent.orchestrator import Orchestrator
+            self.orchestrator = Orchestrator(client, self.config)
+        except Exception as e:  # pragma: no cover
+            logger.warning("Orchestrator 初始化失败，启用内置直答后端: %s", e)
 
         logger.info(
             "MathPilot ReasoningAgent (v2 simplified) initialized: "
@@ -133,15 +237,98 @@ class ReasoningAgent:
             self.config.by_enable_fast_path,
         )
 
-    def solve(self, problem: str, metadata: dict) -> dict:
+    # ------------------------------------------------------------------
+    # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出
+    # ------------------------------------------------------------------
+    def _fallback_solve(self, problem: str) -> str:
+        """零依赖直答：直接要求模型给出最终答案，不经过 orchestrator。"""
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是数学解题专家。请解答下面的数学题，最后一行必须用"
+                        "【最终答案】:<答案> 的格式给出最终答案，答案只写数值、"
+                        "表达式或选项，不要多余解释。"
+                    ),
+                },
+                {"role": "user", "content": problem},
+            ]
+            resp = self.client.chat(
+                messages=messages,
+                temperature=0.0,
+                max_tokens=self.config.max_answer_tokens,
+            )
+            text = _normalize_chat_response(resp)
+            if not text:
+                return ""
+            # 提取【最终答案】行
+            import re
+            m = re.search(r"【最终答案】[:：]?\s*([\s\S]+)", text)
+            if m:
+                ans = m.group(1).strip().split("\n")[0].strip()
+                if ans:
+                    return ans
+            # 兜底：返回最后一个非空行
+            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+            if lines:
+                return lines[-1][:500]
+            return text.strip()[:500]
+        except Exception as e:  # pragma: no cover
+            logger.error("fallback_solve failed: %s", e)
+            return ""
+
+    def _validate_output(self, result: dict) -> dict:
+        """返回前强制校验：final_response 非空且可 JSON 序列化。"""
+        fr = result.get("final_response", "")
+        if not isinstance(fr, str) or not fr.strip():
+            result["final_response"] = "未给出有效解答。"
+        # 保证 JSON 可序列化
+        if not isinstance(result.get("trace"), list):
+            result["trace"] = []
+        return result
+
+    def solve(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
         """
         求解单道数学题（平台固定调用入口）。
 
         参数:
             problem: 原始数学题目文本
-            metadata: 题目元数据，必含 idx 字段
+            metadata: 题目元数据（可缺省，含 idx 字段）
 
         返回:
             {"final_response": str, "trace": list[dict]}
         """
-        return self.orchestrator.run(problem, metadata)
+        if metadata is None:
+            metadata = {}
+        if problem is None or not str(problem).strip():
+            return self._validate_output({
+                "final_response": "题目为空。",
+                "trace": [{"stage": "input", "note": "empty problem"}],
+            })
+
+        # 核心流水线可用 → 走 orchestrator
+        if self.orchestrator is not None:
+            try:
+                result = self.orchestrator.run(problem, metadata)
+                if result and isinstance(result, dict):
+                    return self._validate_output(result)
+            except Exception as e:  # pragma: no cover
+                logger.error("orchestrator.run failed, fallback to direct backend: %s", e)
+
+        # 降级：内置直答后端
+        answer = self._fallback_solve(problem)
+        if not answer:
+            answer = "未给出有效解答。"
+        return self._validate_output({
+            "final_response": answer,
+            "trace": [{"stage": "fallback_direct", "note": "orchestrator unavailable"}],
+        })
+
+    # 兼容平台直接调用 agent(problem, metadata) 的场景
+    def __call__(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
+        return self.solve(problem, metadata, *args, **kwargs)
+
+    # 兼容平台调用 agent.run(problem, metadata) 的场景
+    def run(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
+        return self.solve(problem, metadata, *args, **kwargs)

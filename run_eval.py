@@ -199,7 +199,7 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "max_workers": 3,
     "use_scoring": True,
     "by_enable_fast_path": True,
-    "use_proof_channel": True,
+    "use_proof_channel": False,
     "use_lemma_accumulation": True,
     "max_time_per_question": 1100,
     "max_answer_tokens": 8192,

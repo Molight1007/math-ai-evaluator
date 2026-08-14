@@ -136,6 +136,24 @@ class SolverAgent(BaseAgent):
             return max(default_count, 3)
         return default_count
 
+    @staticmethod
+    def _adaptive_max_tokens(ctx: TaskContext, base_tokens: int) -> int:
+        """P0-3: 按题目领域/长度分级 max_tokens，降低简单题截断率。"""
+        domain = (ctx.domain or "").lower()
+        problem_len = len(ctx.problem or "")
+        # 简单题（选择/填空/算术）→ 减小预算，快速出答案
+        simple_signals = any(k in domain for k in ("choice", "fill", "选择", "填空", "arithmetic", "算术"))
+        if simple_signals:
+            return min(base_tokens, 6144)
+        # 难题（证明/级数/积分/方程/长题）→ 保持大预算
+        hard_signals = any(k in domain for k in (
+            "proof", "prove", "证明", "series", "级数",
+            "integral", "积分", "equation", "方程", "derivative", "微分",
+        )) or problem_len > 500
+        if hard_signals:
+            return max(base_tokens, 16384)
+        return base_tokens
+
     def _collect_lemma_context(self, ctx: TaskContext) -> str:
         """收集已验证的子结论（引理库），作为解题上下文注入。"""
         if not getattr(self.config, 'use_lemma_accumulation', False):
@@ -186,7 +204,7 @@ class SolverAgent(BaseAgent):
         proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
         if any(k in (ctx.domain or "").lower() for k in proof_keywords):
             is_proof = True
-        if is_proof and getattr(self.config, 'use_proof_channel', True):
+        if is_proof and getattr(self.config, 'use_proof_channel', False):
             proof_cand = self._generate_proof(ctx)
             if proof_cand:
                 ctx.candidates.append(proof_cand)
@@ -250,7 +268,7 @@ class SolverAgent(BaseAgent):
                         {"role": "user", "content": current_user},
                     ],
                     current_temp,
-                    self.config.policy_max_tokens,
+                    self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
                 )
                 # 空响应 -> 重试
                 if resp is None or not resp.strip():
@@ -275,7 +293,7 @@ class SolverAgent(BaseAgent):
                             {"role": "user",
                              "content": f"请用中文重新表达你的解答过程，并给出【最终答案】。\n\n上轮回答：\n{resp[-1500:]}\n\n请用中文写出完整解答和最终答案："},
                         ],
-                        0.3, self.config.policy_max_tokens,
+                        0.3, self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
                     )
                     if followup_resp and followup_resp.strip():
                         if not detect_template_leak(followup_resp) and not _needs_followup(followup_resp):
@@ -370,7 +388,7 @@ class SolverAgent(BaseAgent):
                         {"role": "user", "content": user_content},
                     ],
                     self.config.policy_temperature,
-                    self.config.policy_max_tokens,
+                    self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
                 )
                 if resp is not None and resp.strip():
                     # 幻觉/拒绝检测（与 _generate_initial 一致）
@@ -491,6 +509,33 @@ class SolverAgent(BaseAgent):
         return ""
 
     # ----------------------------------------------------------
+    # 截断候选批量续写（P0-3）
+    # ----------------------------------------------------------
+    def complete_truncated_candidates(self, ctx: TaskContext) -> int:
+        """对截断的候选逐个发起续写，把完成的候选放回列表。返回续写成功数量。
+
+        修复：此前 orchestrator 只在日志里记录 truncated，从不真正续写，
+        导致 65% 被截断的候选答案丢失 → invalid。
+        """
+        completed = 0
+        new_list = []
+        for c in ctx.candidates:
+            if not c.reasoning or not c.reasoning.strip() or not detect_truncated(c.reasoning):
+                new_list.append(c)
+                continue
+            # 预算允许才续写
+            if ctx.budget is None or ctx.budget.can_spend(1):
+                new_c = self.complete_answer(ctx, c)
+                if new_c is not c and new_c.answer and len(new_c.answer) > 1:
+                    new_list.append(new_c)
+                    completed += 1
+                    self.record(ctx, "complete", f"候选 #{c.id} 截断续写成功")
+                    continue
+            new_list.append(c)
+        ctx.candidates = new_list
+        return completed
+
+    # ----------------------------------------------------------
     # 答案完整性检查与续写
     # ----------------------------------------------------------
     def is_answer_complete(self, reasoning: str, answer: str) -> bool:
@@ -532,10 +577,21 @@ class SolverAgent(BaseAgent):
             return False
         return True
 
+    _COMPLETE_SYS = (
+        "你是数学解题专家，正在完成一段被中断的推理。"
+        "请直接续写剩下的推导并给出最终答案。"
+    )
+    _ANSWER_PREFIX_SYS = (
+        "你是数学解题专家。根据下面被截断的推理，直接给出最终答案。"
+        "只输出答案本身（数值、表达式或选项字母），不要解释、不要推理过程。"
+    )
+
     def complete_answer(self, ctx: TaskContext, candidate: Candidate) -> Candidate:
         """
         对不完整的推理进行续写。
-        将截断的推理发回模型，要求其继续完成，然后合并。
+
+        P0-2/P0-3 强化：先尝试续写推理；若仍提取不到答案，
+        再用【答案前置】紧急重问（prefill 精神：答案在前，截断不丢）。
         """
         if not candidate.reasoning or not candidate.reasoning.strip():
             return candidate
@@ -555,9 +611,7 @@ class SolverAgent(BaseAgent):
                 continuation = self.llm(
                     ctx,
                     [
-                        {"role": "system",
-                         "content": "你是数学解题专家，正在完成一段被中断的推理。请从断点处直接继续，"
-                                    "完成剩下的推导过程，并给出【最终答案】。"},
+                        {"role": "system", "content": self._COMPLETE_SYS},
                         {"role": "user", "content": continue_prompt},
                     ],
                     0.2,
@@ -574,16 +628,42 @@ class SolverAgent(BaseAgent):
                     new_answer = rescue_final_answer(full_reasoning)[0]
                 if not new_answer:
                     new_answer = smart_fallback_answer(continuation)
-                self.record(ctx, "complete",
-                           f"答案续写成功 (attempt {attempt + 1})")
-                return Candidate(
-                    id=candidate.id,
-                    answer=new_answer,
-                    reasoning=full_reasoning,
-                    revised=candidate.revised,
-                )
+                if new_answer:
+                    self.record(ctx, "complete",
+                               f"答案续写成功 (attempt {attempt + 1})")
+                    return Candidate(
+                        id=candidate.id,
+                        answer=new_answer,
+                        reasoning=full_reasoning,
+                        revised=candidate.revised,
+                    )
             logger.warning("Answer completion attempt %d returned empty", attempt + 1)
             time.sleep(0.5)
+
+        # 答案前置紧急重问：即使推理不全，也要把答案抢救出来
+        try:
+            direct = self.llm(
+                ctx,
+                [
+                    {"role": "system", "content": self._ANSWER_PREFIX_SYS},
+                    {"role": "user",
+                     "content": f"被截断的推理片段：\n{context_tail}\n\n最终答案："},
+                ],
+                0.0,
+                1024,
+            )
+            if direct and direct.strip():
+                direct_ans = smart_fallback_answer(direct)
+                if direct_ans:
+                    self.record(ctx, "complete", "答案前置重问成功")
+                    return Candidate(
+                        id=candidate.id,
+                        answer=direct_ans,
+                        reasoning=reasoning + "\n\n[答案重问]\n" + direct.strip(),
+                        revised=candidate.revised,
+                    )
+        except Exception as e:
+            logger.warning("Answer prefill retry failed: %s", e)
 
         self.record(ctx, "complete", "答案续写失败，使用原始答案")
         return candidate

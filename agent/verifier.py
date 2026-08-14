@@ -26,6 +26,7 @@ from prompts.verifier import (
     VERIFIER_FEEDBACK_TEMPLATE,
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
+from utils.extract import smart_fallback_answer
 
 logger = logging.getLogger("MathPilot.Verifier")
 
@@ -320,6 +321,62 @@ class VerifierAgent(BaseAgent):
             return "无法提取失败原因。"
 
     # ==================================================================
+    # P1-1: Python/SymPy 独立验证通道 + 确定性复算（playoff）
+    # ==================================================================
+
+    _PLAYOFF_SYS = (
+        "你是数学解题专家。重新独立地解答下面这道题，"
+        "只输出最终答案（数值、表达式或选项字母），不要任何推理过程。"
+    )
+
+    def _sympy_spot_check(self, answer: str) -> dict:
+        """对候选答案做 SymPy 独立 sanity check（不消耗 LLM 预算）。
+
+        返回 {"parseable": bool, "value": str|None, "note": str}。
+        仅用于给投票做旁证：可解析的数值/表达式答案可信度更高。
+        """
+        if not answer:
+            return {"parseable": False, "value": None, "note": "empty"}
+        try:
+            from utils.sympy_tools import _try_parse, eval_expression
+            parsed, err = _try_parse(answer)
+            if parsed is None:
+                return {"parseable": False, "value": None, "note": err}
+            val = eval_expression(answer)
+            return {"parseable": True, "value": val, "note": "ok"}
+        except Exception as e:
+            return {"parseable": False, "value": None, "note": str(e)[:80]}
+
+    def _playoff_recheck(self, ctx, problem: str, top_answer: str) -> bool:
+        """确定性复算（playoff）：用 temperature=0 重新解一遍，比对答案。
+
+        解决"验证器与解题器同源一起错"的问题：低温重解是独立采样，
+        若两次独立求解答案一致，则置信度大幅提升。
+        """
+        try:
+            resp = self.llm(
+                ctx,
+                [
+                    {"role": "system", "content": self._PLAYOFF_SYS},
+                    {"role": "user", "content": problem},
+                ],
+                0.0,
+                self.config.max_answer_tokens,
+            )
+            if not resp or not resp.strip():
+                return False
+            recheck_ans = smart_fallback_answer(resp)
+            if not recheck_ans:
+                return False
+            return self._are_answers_equivalent(
+                self._normalize_answer_text(top_answer),
+                self._normalize_answer_text(recheck_ans),
+            )
+        except Exception as e:
+            logger.warning("playoff recheck failed: %s", e)
+            return False
+
+    # ==================================================================
     # 证明步骤验证
     # ==================================================================
 
@@ -396,6 +453,23 @@ class VerifierAgent(BaseAgent):
         # 聚类 + 共识
         cluster_data = self._cluster_candidates(candidates, all_verdicts) if use_clustering else []
         best_cluster = cluster_data[0] if cluster_data else None
+
+        # P1-1 确定性复算（playoff）：共识不强或验证全错时，低温独立重解
+        if best_cluster is not None and ctx.budget is not None:
+            confidence = (best_cluster.vote_correct / best_cluster.vote_total
+                          if best_cluster.vote_total else 0.0)
+            # 触发条件：置信度低（验证结果不可靠）或投票全否
+            if confidence < 0.5 and ctx.budget.can_spend(1):
+                top_ans = best_cluster.answer_norm or ""
+                if self._playoff_recheck(ctx, problem, top_ans):
+                    best_cluster.vote_correct += 1
+                    best_cluster.vote_total += 1
+                    self.record(ctx, "playoff", "确定性复算通过，答案可信")
+                else:
+                    # 复算不一致 → 置信度下调，标记供 orchestrator 走 revise
+                    best_cluster.vote_correct = 0
+                    best_cluster.vote_total = max(1, best_cluster.vote_total)
+                    self.record(ctx, "playoff", "确定性复算不一致，转自纠错")
 
         return {
             "cluster_data": cluster_data,
