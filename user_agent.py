@@ -57,9 +57,13 @@ class AgentConfig:
     - 反rollout：减少候选数与投票次数，依赖聚类共识而非暴力采样
     """
     # 策略模型（解题）
-    policy_sample_times: int = 3       # 候选解答数量
+    # P0-4 修复：候选 3→2（平台并发=3，且 3 候选×3 重试曾耗尽单题预算 → 45 error）
+    # v2.4.0：恢复 24576 上限（ICMA 对齐）。ICMA 实测同模型首轮 24576 仅 143-231s，
+    # 模型实际只用 3-7K token，24576 只是上限；降上限会牺牲贴上限的奥赛题成功区间。
+    # 真正修超时靠：结构化四章节 prompt（抑制自由 CoT）+ 预算感知 + 压缩 prefill 兜底。
+    policy_sample_times: int = 2       # 候选解答数量
     policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
-    policy_max_tokens: int = 12288     # 策略最大 token（确保思考流+答案完整输出）
+    policy_max_tokens: int = 24576     # 策略最大 token（上限，模型实际用 3-7K）
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
     use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
@@ -79,12 +83,16 @@ class AgentConfig:
     max_total_calls: int = 15          # LLM 调用预算硬上限（revise=1 需额外 1-3 次）
 
     # ---- 时间限制（适配竞赛新规则）----
-    max_time_per_question: int = 300   # 单题壁钟时间上限（秒，省下的时间给后面的题）
+    # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
+    #   此前 300s 对完整 CoT 求解（ICMA 实测中档 77-116s、奥赛 500-552s）是死限，
+    #   导致主求解调用被读超时/预算跳过 → 45 error。总时长由 PaperPacer 动态收紧控制。）
+    max_time_per_question: int = 1200  # 单题壁钟时间上限（秒，平台允许 20 分钟）
     max_total_time_seconds: int = 21000  # Agent总运行时间上限
 
     # ---- 智能体补充部件配置 ----
-    max_tokens: int = 12288            # 单次最大 token 数（匹配 policy_max_tokens）
-    max_tokens_cap: int = 12288        # 内部 token 裁剪上限（修复：之前 4096 截断严重）
+    # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
+    max_tokens: int = 24576            # 单次最大 token 数（匹配 policy_max_tokens）
+    max_tokens_cap: int = 24576        # 内部 token 裁剪上限（对齐 ICMA reasoning 24576）
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     temperature: float = 0.3           # 默认 LLM 温度
 

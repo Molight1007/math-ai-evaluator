@@ -119,8 +119,12 @@ def extract_final_answer(text: str) -> str:
 
     # 策略 1：【最终答案】/ 答案: / Final answer: 等显式标记
     # BUG-10 修复：多行答案用贪婪匹配到明确的节标记或文本末尾
+    # P0-4 增强：兼容 prefill 答案前置形态（"最终答案：42" 后紧跟解释，
+    # 答案在首行——优先取首行短答案，避免吞入后续推理）
     patterns = [
         (r"【最终答案】\s*\n?\s*([\s\S]+)", False),
+        (r"##\s*最终答案\s*\n?\s*([\s\S]+?)(?=\n\s*##|$)", False),
+        (r"##\s*[Ff]inal\s+[Aa]nswer\s*\n?\s*([\s\S]+?)(?=\n\s*##|$)", False),
         (r"最终答案[:：]\s*([\s\S]+)", False),
         (r"答案[:：]\s*([\s\S]+)", False),
         (r"[Ff]inal\s*[Aa]nswer[:：]\s*([\s\S]+)", False),
@@ -129,9 +133,19 @@ def extract_final_answer(text: str) -> str:
         match = re.search(pattern, text, re.DOTALL)
         if match:
             captured = match.group(1).strip()
+            # prefill 答案前置：标记后首行即答案，优先返回短首行
+            # P0-4 修复：剥离标记后遗留的 ": " 前缀（"【最终答案】: 5" 形态）
+            first_line = re.sub(r"^[:：,，\s]+", "", captured.split("\n")[0].strip())
+            if (first_line and first_line != captured
+                    and 1 < len(first_line) <= 200
+                    and re.search(r"\d|[a-zA-Zα-ω]|[$\\=＝]", first_line)
+                    and not _is_meta_line(first_line)
+                    and not _is_incomplete_answer(first_line)):
+                return clean_answer(first_line)
             # 裁剪到第一个节标记（【...】/ #### / --- / == ）
+            # P0-4 修复：允许单字符答案（prefill 场景 "最终答案：7" 是合法答案）
             captured = re.split(r'\n\n(?:【|####|---|==|答案|最终答案)', captured)[0].strip()
-            if (captured and len(captured) > 1
+            if (captured and len(captured) >= 1
                     and not _is_meta_line(captured)
                     and not _is_incomplete_answer(captured)):
                 return clean_answer(captured)

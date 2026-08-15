@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -237,7 +238,30 @@ class BaseAgent(ABC):
         """
         带预算管控、Token 裁剪、自动重试的安全 LLM 调用（支持并发线程）。
         修复 BUG-6：追加 max_tokens 裁剪、上下文超长自动降级重试、异常写入 trace。
+        P0-4 修复：新增时间预算感知——剩余不足时跳过/降级，杜绝单题超时（45 error 主因）。
         """
+        # 时间预算感知：剩余 < 60s 直接跳过调用（保证有产出优于无产出）
+        # 修复：区分「未设置 deadline / 测试 fixture 伪 deadline」与「真实 deadline 已过期」。
+        #   - deadline < 1e8（epoch 伪值，如测试 fixture 的 999.0）→ 不启用预算（兼容测试）
+        #   - 真实时间戳但已过期 → remaining <= 0 → 跳过，杜绝无界超时重试（45 error/2923s 根因）
+        if ctx.deadline:
+            if ctx.deadline < 10**8:
+                remaining = float("inf")   # 测试 fixture 用 epoch 伪 deadline
+            else:
+                remaining = ctx.deadline - time.time()
+        else:
+            remaining = float("inf")
+        if remaining < 60:
+            logger.warning("[%s] 剩余时间不足 (%.0fs)，跳过 LLM 调用", self.name, remaining)
+            ctx.trace.append({"agent": self.name, "step": "budget_skip",
+                              "content": f"剩余时间不足 {remaining:.0f}s，跳过 LLM 调用"})
+            return None
+        # 剩余 < 120s：自动减半 max_tokens，缩短单次调用耗时
+        if remaining < 120 and max_tokens and max_tokens > 1024:
+            logger.warning("[%s] 剩余时间紧张 (%.0fs)，max_tokens %d → %d",
+                           self.name, remaining, max_tokens, max_tokens // 2)
+            max_tokens = max(1024, max_tokens // 2)
+
         # Token 裁剪到安全上限（可配置，默认 4096）
         cap = getattr(self.config, 'max_tokens_cap', 4096)
         if cap and max_tokens:

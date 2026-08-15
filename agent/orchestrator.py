@@ -65,18 +65,26 @@ class Orchestrator(BaseAgent):
             total_deadline=now + getattr(self.config, 'max_total_time_seconds', 21000),
         )
         try:
-            # 0) PaperPacer 简化版：按剩余时间动态收紧预算（P1-2）
+            # 0) PaperPacer 简化版：按剩余时间动态收紧预算（P0-4 提前收紧防超时）
             elapsed_total = time.time() - ctx.total_start_time
             total_budget = ctx.total_deadline - ctx.total_start_time
             ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
-            if ratio > 0.85:
-                # 严重超时：收缩候选数与投票数，进入应急模式
+            self.config._time_ratio = ratio
+            if ratio > 0.75:
+                # 应急模式：候选→1、投票→1，跳过续写/复算（45 error 主因根治）
                 self.config.policy_sample_times = max(1, self.config.policy_sample_times - 1)
                 self.config.verifier_voting_times = 1
+                self.config._emergency = True
+                self.config._playoff_enabled = False
                 self.record(ctx, "paper_pacer", f"应急模式：已用 {ratio:.0%} 总预算")
-            elif ratio > 0.6:
+            elif ratio > 0.5:
                 self.config.verifier_voting_times = 1
+                self.config._emergency = False
+                self.config._playoff_enabled = False
                 self.record(ctx, "paper_pacer", f"时间收紧：已用 {ratio:.0%} 总预算")
+            else:
+                self.config._emergency = False
+                self.config._playoff_enabled = True
 
             # 1) 题型识别（元数据已知时跳过 LLM）
             pre_known_domain = (metadata or {}).get("domain", "")
@@ -103,9 +111,11 @@ class Orchestrator(BaseAgent):
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
                 return self._fallback_direct(ctx)
 
-            # 3.2) 截断候选批量续写（P0-3）：修复"只记录不续写"导致的答案丢失
-            if getattr(ctx, 'candidates', None):
-                n_completed = self.solver.complete_truncated_candidates(ctx)
+            # 3.2) 截断候选续写（P0-4）：仅续写最有希望恢复的 1 个截断候选，
+            #      每候选 1 次续写 + 1 次答案前置（2+1→1+1），应急模式跳过
+            if (getattr(ctx, 'candidates', None)
+                    and not getattr(self.config, '_emergency', False)):
+                n_completed = self.solver.complete_truncated_candidates(ctx, max_count=1)
                 if n_completed > 0:
                     self.record(ctx, "control",
                                 f"截断续写完成 {n_completed} 个候选")
@@ -121,11 +131,13 @@ class Orchestrator(BaseAgent):
                 self.sub_goal_solver.run(ctx)
 
             # 4) 验证（每候选 1 票 + 聚类选最优）
+            # P0-4 修复：playoff 复算按时间宽裕度开关，默认关闭防超时
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
                 use_clustering=True,
                 use_scoring=self.config.use_scoring,
                 is_proof=is_proof,
+                use_playoff=getattr(self.config, '_playoff_enabled', False),
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
             ctx._best_cluster = ver_result.get("best_cluster")
@@ -222,14 +234,21 @@ class Orchestrator(BaseAgent):
             f"\n\n题目类型: {tag}\n题目: {problem}\n\n表达式:"
         )
         try:
+            # v2.4.1：prefill「表达式：」抑制 CoT——快车道只需表达式，秒级返回
+            from utils.prefill import prefill_messages, stitch
             raw_expr = _normalize_chat_response(self.client.chat(
-                messages=[
-                    {"role": "system", "content": "你只输出数学表达式，不要任何解释。"},
-                    {"role": "user", "content": extract_prompt},
-                ],
+                messages=prefill_messages(
+                    [
+                        {"role": "system", "content": "你只输出数学表达式，不要任何解释。"},
+                        {"role": "user", "content": extract_prompt},
+                    ],
+                    "表达式：",
+                ),
                 temperature=0.0,
                 max_tokens=256,
             ))
+            if raw_expr:
+                raw_expr = stitch("表达式：", raw_expr)
             raw_expr = (raw_expr or "").strip()
         except Exception:
             return None
@@ -309,17 +328,27 @@ class Orchestrator(BaseAgent):
     )
 
     def _emergency_direct_solve(self, problem: str) -> str:
-        """紧急直答：用最精简 prompt 逼模型输出答案，绝不返回原题。"""
+        """紧急直答：用最精简 prompt 逼模型输出答案，绝不返回原题。
+
+        P0-4 修复：集成 prefill 答案前置——时间最紧时优先保答案，
+        抑制 CoT 开启，即使截断也只损失思考、不损失答案（ICMA 验证 58-140× 加速）。
+        """
         try:
+            from utils.prefill import prefill_messages, stitch
             resp = self.client.chat(
-                messages=[
-                    {"role": "system", "content": self._DIRECT_SYS},
-                    {"role": "user", "content": problem},
-                ],
+                messages=prefill_messages(
+                    [
+                        {"role": "system", "content": self._DIRECT_SYS},
+                        {"role": "user", "content": problem},
+                    ],
+                    "【最终答案】: ",
+                ),
                 temperature=0.0,
                 max_tokens=self.config.max_answer_tokens,
             )
             text = _normalize_chat_response(resp)
+            if text:
+                text = stitch("【最终答案】: ", text)
             if not text or not text.strip():
                 return ""
             # 优先提取【最终答案】行

@@ -32,6 +32,7 @@ try:
     )
     from prompts.policy import get_domain_hint
     from utils.extract import extract_final_answer, smart_fallback_answer
+    from utils.prefill import prefill_messages, stitch
 except ImportError:
     from submit.prompts.sub_goal import (
         SUBGOAL_PLAN_SYSTEM,
@@ -43,6 +44,7 @@ except ImportError:
     )
     from submit.prompts.policy import get_domain_hint
     from submit.utils.extract import extract_final_answer, smart_fallback_answer
+    from submit.utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -174,14 +176,20 @@ class SubGoalSolverAgent(BaseAgent):
         )
 
         for attempt in range(2):
+            # v2.4.1：prefill「{"」引导直接输出规划 JSON，抑制 CoT
             resp = self.llm(
                 ctx,
-                [
-                    {"role": "system", "content": SUBGOAL_PLAN_SYSTEM},
-                    {"role": "user", "content": user_msg},
-                ],
-                0.2, 4096,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": SUBGOAL_PLAN_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    '{"',
+                ),
+                0.2, 2048,
             )
+            if resp:
+                resp = stitch('{"', resp)
             if resp is None:
                 continue
             raw = self._extract_json(resp)
@@ -216,14 +224,20 @@ class SubGoalSolverAgent(BaseAgent):
             subgoal_expected_output=sg["expected_output"],
         )
 
+        # v2.4.1：prefill「【本步结果】」让答案前置，抑制 CoT
         resp = self.llm(
             ctx,
-            [
-                {"role": "system", "content": SUBGOAL_STEP_SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
-            0.2, 4096,
+            prefill_messages(
+                [
+                    {"role": "system", "content": SUBGOAL_STEP_SYSTEM},
+                    {"role": "user", "content": user_msg},
+                ],
+                "【本步结果】",
+            ),
+            0.2, 2048,
         )
+        if resp:
+            resp = stitch("【本步结果】", resp)
         if resp is None:
             return f"[子目标 #{sg['id']} 求解失败]"
 
@@ -247,14 +261,20 @@ class SubGoalSolverAgent(BaseAgent):
             merge_strategy=merge_strategy or "将各子目标结果按逻辑顺序组合，得出原题的最终答案。",
         )
 
+        # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
         resp = self.llm(
             ctx,
-            [
-                {"role": "system", "content": SUBGOAL_MERGE_SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
-            0.2, 4096,
+            prefill_messages(
+                [
+                    {"role": "system", "content": SUBGOAL_MERGE_SYSTEM},
+                    {"role": "user", "content": user_msg},
+                ],
+                "【最终答案】",
+            ),
+            0.2, 2048,
         )
+        if resp:
+            resp = stitch("【最终答案】", resp)
         if resp is None:
             return self._fallback_from_last_subgoal(subgoals)
 

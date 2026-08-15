@@ -161,7 +161,7 @@ export INTERN_API_KEY="sk-..."
 可选用环境变量覆盖模型与端点：
 
 ```bash
-export INTERN_MODEL="intern-s2-preview"    # 默认即此
+export INTERN_MODEL="Intern-S2-Preview-397B"    # 默认即此
 export INTERN_API_BASE="https://chat.intern-ai.org.cn/api/v1/chat/completions"
 ```
 
@@ -256,7 +256,7 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 - [ ] `requirements.txt` 覆盖全部依赖
 - [ ] 无硬编码 API key、个人路径、调试标准答案
 - [ ] `main.py --input_file sample_data/dev.jsonl --output_dir sample_outputs` 本地跑通
-- [ ] 选择使用的模型：`intern-s2-preview`
+- [ ] 选择使用的模型：`Intern-S2-Preview-397B`
 
 ---
 

@@ -13,6 +13,7 @@ import logging
 import re
 
 from .base import BaseAgent, TaskContext
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -176,12 +177,13 @@ class ClassifierAgent(BaseAgent):
             return ctx
 
         # 第二优先级：LLM 分类（仅在关键词得分不足时回退）
-        resp = self.llm(ctx, [
+        # v2.4.1：prefill「本题类型：」抑制 CoT——分类只需输出域名，秒级返回
+        resp = self.llm(ctx, prefill_messages([
             {"role": "system", "content": CLASSIFY_PROMPT},
             {"role": "user", "content": ctx.problem},
-        ], 0.01, 256)
-
+        ], "本题类型："), 0.01, 128)
         if resp:
+            resp = stitch("本题类型：", resp)
             domain = resp.strip().rstrip("。.，,、")
             # 精确匹配
             if domain in _KNOWN_DOMAINS:

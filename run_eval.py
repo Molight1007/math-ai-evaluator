@@ -6,9 +6,17 @@ MathPilot 本地评测脚本 —— 仅用于本地开发调试，非平台正�
 平台只调用 user_agent.py 的 ReasoningAgent.solve()，不会执行此文件。
 支持 JSONL 题库批量评测、答案规范化匹配、领域细分统计、断点续跑。
 
+本文件为本地版（题库注册表）与赛事版（答案提取增强 / A/B 能力开关）的合并版：
+- 保留本地题库注册表: --bank 新高数 / 1000题高数 / 高数a / IMO-AnswerBench / IMO-ProofBench / all
+- 引入赛事版答案匹配增强: _extract_equals_candidates 结论提取、LaTeX 符号归一化
+- 引入赛事版 A/B 能力开关: --voting_times / --use_scoring / --revise_rounds / --use_proof / ...
+
 用法:
     python run_eval.py --test_file tests.jsonl --output results.jsonl
     python run_eval.py --test_file tests.jsonl --concurrency 4 --resume results.jsonl
+    python run_eval.py --bank 新高数 --output results.jsonl
+    python run_eval.py --bank 1000题高数 --concurrency 4
+    python run_eval.py --bank all --concurrency 4
 """
 
 import argparse
@@ -32,6 +40,52 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from user_agent import ReasoningAgent
 from utils.llm_client import LLMClient
 
+# ===========================================================================
+# 题库注册表
+# ===========================================================================
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+SAMPLE_DATA = os.path.join(PROJECT_ROOT, "sample_data")
+
+# 题库名称 → 文件路径映射
+BANK_REGISTRY: Dict[str, str] = {
+    # ---- 自建题库 ----
+    "新高数": os.path.join(SAMPLE_DATA, "新高数.jsonl"),
+    "1000题高数": os.path.join(SAMPLE_DATA, "1000题高数.jsonl"),
+    "高数a": os.path.join(SAMPLE_DATA, "高数a.jsonl"),
+    # ---- IMO-Bench (Google DeepMind 公开基准) ----
+    "IMO-AnswerBench": os.path.join(SAMPLE_DATA, "IMO-AnswerBench.jsonl"),
+    "IMO-ProofBench": os.path.join(SAMPLE_DATA, "IMO-ProofBench.jsonl"),
+}
+
+def resolve_bank(bank_name: str):
+    """解析题库名称，返回 JSONL 文件路径。支持 'all' 返回所有题库路径。"""
+    if bank_name == "all":
+        return [p for _, p in BANK_REGISTRY.items() if os.path.exists(p)]
+    if bank_name in BANK_REGISTRY:
+        path = BANK_REGISTRY[bank_name]
+        if os.path.exists(path):
+            return path
+        else:
+            logger.error(f"题库 '{bank_name}' 的文件不存在: {path}")
+            return None
+    return None
+
+def list_banks():
+    """列出所有已注册的题库。"""
+    print("\n已注册的题库:")
+    print("-" * 60)
+    for name, path in BANK_REGISTRY.items():
+        if os.path.exists(path):
+            count = sum(1 for _ in open(path, "r", encoding="utf-8"))
+            size_kb = os.path.getsize(path) / 1024
+            print(f"  {name:<15} {count:>5} 题  {size_kb:>8.1f} KB  ({path})")
+        else:
+            print(f"  {name:<15} [文件缺失] ({path})")
+    print("-" * 60)
+    print("用法: python run_eval.py --bank <题库名> [其他参数]")
+    print("       python run_eval.py --bank all [其他参数]  # 评测所有题库")
+    print()
 
 # ===========================================================================
 # 答案规范化与匹配
@@ -242,9 +296,16 @@ class EvalEngine:
                 except json.JSONDecodeError:
                     logger.warning(f"第 {line_no} 行 JSON 解析失败")
                     continue
-                if "question" not in item:
-                    logger.warning(f"第 {line_no} 行缺少 question")
+                if "question" not in item and "problem" not in item:
+                    logger.warning(f"第 {line_no} 行缺少 question/problem")
                     continue
+                # 统一规范化字段名（本地题库兼容：problem/question、subject/domain、idx/id）
+                if "question" not in item:
+                    item["question"] = item["problem"]
+                if "domain" not in item and "subject" in item:
+                    item["domain"] = item["subject"]
+                if "id" not in item and "idx" in item:
+                    item["id"] = item["idx"]
                 item["_line_no"] = line_no
                 tests.append(item)
         logger.info(f"加载 {len(tests)} 道测试题")
@@ -342,7 +403,9 @@ class EvalEngine:
 
 def main():
     parser = argparse.ArgumentParser(description="MathPilot 本地评测工具")
-    parser.add_argument("--test_file", required=True, help="JSONL 测试文件路径")
+    parser.add_argument("--test_file", default="", help="JSONL 测试文件路径")
+    parser.add_argument("--bank", default="", help="题库名称（如 新高数、1000题高数、高数a、IMO-AnswerBench、all）")
+    parser.add_argument("--list_banks", action="store_true", help="列出所有已注册题库")
     parser.add_argument("--output", default="eval_results.jsonl", help="输出结果文件")
     parser.add_argument("--concurrency", type=int, default=2, help="并发数")
     parser.add_argument("--resume", action="store_true", help="断点续跑")
@@ -359,8 +422,32 @@ def main():
     parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     args = parser.parse_args()
+
+    if args.list_banks:
+        list_banks()
+        return
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    # 解析 test_file：--bank 优先
+    test_files: List[str] = []
+    if args.bank:
+        resolved = resolve_bank(args.bank)
+        if resolved is None:
+            print(f"错误: 未知题库 '{args.bank}'。使用 --list_banks 查看可用题库。")
+            sys.exit(1)
+        if isinstance(resolved, list):
+            test_files = resolved
+        else:
+            test_files = [resolved]
+    elif args.test_file:
+        test_files = [args.test_file]
+    else:
+        print("错误: 请指定 --test_file 或 --bank。使用 --list_banks 查看可用题库。")
+        sys.exit(1)
+
+    # 收集 A/B 能力开关
     overrides: Dict[str, Any] = {}
     if args.voting_times is not None:
         overrides["verifier_voting_times"] = args.voting_times
@@ -376,26 +463,64 @@ def main():
         overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:
         overrides["max_total_calls"] = args.max_total_calls
+
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,
         api_key=args.api_key, base_url=args.base_url, model=args.model,
         verbose=args.verbose, agent_overrides=overrides,
     )
-    summary = engine.run(args.test_file, args.output)
-    print("\n" + "=" * 60)
-    print("MathPilot 评测报告")
-    print("=" * 60)
-    print(f"题目总数:   {summary['total']}")
-    print(f"可判分题:   {summary['scored']}")
-    print(f"正确数:     {summary['correct']}")
-    print(f"准确率:     {summary['accuracy']:.2%}")
-    print(f"平均耗时:   {summary['avg_elapsed_sec']} 秒")
-    print("-" * 60)
-    print(f"{'领域':<20} {'总数':<6} {'正确':<6} {'准确率':<8}")
-    print("-" * 60)
-    for domain, stats in summary["per_domain"].items():
-        print(f"{domain:<20} {stats['total']:<6} {stats['correct']:<6} {stats['accuracy']:<8.2%}")
-    print("=" * 60)
+
+    # 支持多题库评测
+    all_summaries = []
+    base_output = args.output
+    for i, test_file in enumerate(test_files):
+        # 多题库时自动命名输出文件
+        if len(test_files) > 1:
+            bank_name = os.path.splitext(os.path.basename(test_file))[0]
+            stem, ext = os.path.splitext(base_output)
+            output_file = f"{stem}_{bank_name}{ext}"
+        else:
+            output_file = base_output
+
+        print(f"\n{'='*60}")
+        print(f"题库 [{i+1}/{len(test_files)}]: {os.path.basename(test_file)}")
+        print(f"输出文件: {output_file}")
+        print(f"{'='*60}")
+
+        summary = engine.run(test_file, output_file)
+        all_summaries.append((test_file, summary))
+
+    # 打印汇总报告
+    for test_file, summary in all_summaries:
+        print("\n" + "=" * 60)
+        print(f"MathPilot 评测报告 - {os.path.basename(test_file)}")
+        print("=" * 60)
+        print(f"题目总数:   {summary['total']}")
+        print(f"可判分题:   {summary['scored']}")
+        print(f"正确数:     {summary['correct']}")
+        print(f"准确率:     {summary['accuracy']:.2%}")
+        print(f"平均耗时:   {summary['avg_elapsed_sec']} 秒")
+        print("-" * 60)
+        print(f"{'领域':<25} {'总数':<6} {'正确':<6} {'准确率':<8}")
+        print("-" * 60)
+        for domain, stats in summary.get("per_domain", {}).items():
+            print(f"{domain:<25} {stats['total']:<6} {stats['correct']:<6} {stats['accuracy']:<8.2%}")
+        print("=" * 60)
+
+    # 多题库时打印总汇总
+    if len(all_summaries) > 1:
+        total_q = sum(s['total'] for _, s in all_summaries)
+        total_correct = sum(s['correct'] for _, s in all_summaries)
+        total_scored = sum(s['scored'] for _, s in all_summaries)
+        print("\n" + "=" * 60)
+        print("全部题库汇总")
+        print("=" * 60)
+        print(f"题库数:     {len(all_summaries)}")
+        print(f"题目总数:   {total_q}")
+        print(f"可判分题:   {total_scored}")
+        print(f"正确数:     {total_correct}")
+        print(f"总准确率:   {total_correct/total_scored:.2%}" if total_scored else "总准确率:   N/A")
+        print("=" * 60)
 
 
 if __name__ == "__main__":

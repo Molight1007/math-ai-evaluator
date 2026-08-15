@@ -27,6 +27,7 @@ from prompts.verifier import (
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
 from utils.extract import smart_fallback_answer
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot.Verifier")
 
@@ -230,24 +231,34 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _vote_one(self, ctx, problem: str, candidate_text: str) -> str:
-        """单次投票（返回原始文本）。"""
+        """单次投票（返回原始文本）。
+
+        v2.4.1：prefill「VERDICT: 」抑制 CoT——投票输出只需 A/B，
+        实测 prefill 仲裁 0.8s vs 普通 70.2s（140×），杜绝 Intern-S2 推理流占满预算。
+        """
         messages = [
             {"role": "system", "content": VERIFIER_SYSTEM},
             {"role": "user", "content": VERIFIER_USER_TEMPLATE.format(
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        return self.llm(ctx, messages, 0.0, self.config.max_tokens)
+        raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "), 0.0, 512)
+        return stitch("VERDICT: ", raw) if raw else raw
 
     def _vote_one_scoring(self, ctx, problem: str, candidate_text: str) -> dict | None:
-        """评分模式投票（返回 JSON 或 None）。"""
+        """评分模式投票（返回 JSON 或 None）。
+
+        v2.4.1：prefill「{"」引导直接输出 JSON，抑制 CoT 前置长推理。
+        """
         messages = [
             {"role": "system", "content": VERIFIER_SCORING_SYSTEM},
             {"role": "user", "content": VERIFIER_SCORING_TEMPLATE.format(
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        raw = self.llm(ctx, messages, 0.0, self.config.max_tokens)
+        raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 1024)
+        if raw:
+            raw = stitch('{"', raw)
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
@@ -315,7 +326,9 @@ class VerifierAgent(BaseAgent):
             )},
         ]
         try:
-            return self.llm(ctx, messages, 0.0, self.config.max_tokens)
+            # v2.4.1：prefill「错因：」抑制 CoT，直接输出错因定位
+            raw = self.llm(ctx, prefill_messages(messages, "错因："), 0.0, 1024)
+            return stitch("错因：", raw) if raw else "无法提取失败原因。"
         except Exception as e:
             logger.error(f"Feedback extraction failed: {e}")
             return "无法提取失败原因。"
@@ -354,15 +367,21 @@ class VerifierAgent(BaseAgent):
         若两次独立求解答案一致，则置信度大幅提升。
         """
         try:
+            # v2.4.1：playoff 也走 prefill——「答案：」让答案前置，抑制 CoT 推理流
             resp = self.llm(
                 ctx,
-                [
-                    {"role": "system", "content": self._PLAYOFF_SYS},
-                    {"role": "user", "content": problem},
-                ],
+                prefill_messages(
+                    [
+                        {"role": "system", "content": self._PLAYOFF_SYS},
+                        {"role": "user", "content": problem},
+                    ],
+                    "答案：",
+                ),
                 0.0,
-                self.config.max_answer_tokens,
+                2048,
             )
+            if resp:
+                resp = stitch("答案：", resp)
             if not resp or not resp.strip():
                 return False
             recheck_ans = smart_fallback_answer(resp)
@@ -388,7 +407,10 @@ class VerifierAgent(BaseAgent):
             )},
         ]
         try:
-            raw = self.llm(ctx, messages, 0.0, self.config.max_tokens)
+            # v2.4.1：prefill「{"」引导 JSON 输出，抑制 CoT 前置长推理
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 2048)
+            if raw:
+                raw = stitch('{"', raw)
             m = re.search(r'\{[^{}"]*(?:"[^"]*"[^{}]*)*\}', raw, re.DOTALL)
             if m:
                 return json.loads(m.group())
@@ -410,6 +432,7 @@ class VerifierAgent(BaseAgent):
         use_clustering: bool = True,
         use_scoring: bool = False,
         is_proof: bool = False,
+        use_playoff: bool = False,
     ) -> dict:
         """
         验证主流程。
@@ -455,7 +478,9 @@ class VerifierAgent(BaseAgent):
         best_cluster = cluster_data[0] if cluster_data else None
 
         # P1-1 确定性复算（playoff）：共识不强或验证全错时，低温独立重解
-        if best_cluster is not None and ctx.budget is not None:
+        # P0-4 修复：默认关闭（use_playoff=False），仅在时间宽裕时由 orchestrator 开启，
+        # 避免叠加调用链耗尽单题预算 → 45 error
+        if use_playoff and best_cluster is not None and ctx.budget is not None:
             confidence = (best_cluster.vote_correct / best_cluster.vote_total
                           if best_cluster.vote_total else 0.0)
             # 触发条件：置信度低（验证结果不可靠）或投票全否
@@ -506,7 +531,8 @@ class VerifierAgent(BaseAgent):
             {"role": "user", "content": text + "\n\n这个答案是完整的吗？"},
         ]
         try:
-            raw = self.llm(ctx, messages, 0.0, 128)
+            # v2.4.1：prefill「COMPLETE 」抑制 CoT，秒级返回判定
+            raw = self.llm(ctx, prefill_messages(messages, "COMPLETE "), 0.0, 64)
             return "INCOMPLETE" not in raw.upper() or "COMPLETE" in raw.upper()
         except Exception:
             return True  # 网络异常时保守当作完整
