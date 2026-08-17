@@ -152,6 +152,11 @@ class Budget:
         with self._lock:
             return max(0, self.max_calls - self.used_calls)
 
+    def set_max_calls(self, new_max: int) -> None:
+        """动态调整总调用预算（deep 档位需要更多预算时调用）。"""
+        with self._lock:
+            self.max_calls = max(self.used_calls, new_max)
+
 
 @dataclass
 class TaskContext:
@@ -167,6 +172,12 @@ class TaskContext:
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
     lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
+
+    # ---- 难题深度求解通道字段 ----
+    tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
+    tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
+    soft_budget: float = 0.0                    # PaperPacer 分配的当前档位软预算帽（秒）
+    pacer_remaining: float = 0.0                # 全卷时间池剩余目标时间（秒，诊断用）
 
     # ---- 壁钟时间追踪（适配竞赛新规则：单题≤20分钟，总计≤6小时）----
     start_time: float = 0.0                    # 单题壁钟启动时间 (time.time())

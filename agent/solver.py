@@ -119,6 +119,9 @@ class SolverAgent(BaseAgent):
         """根据题目领域自适应调整候选数量"""
         domain = (ctx.domain or "").lower()
         problem_len = len(ctx.problem)
+        # 难题深度通道：deep 档保持多候选（4 候选，不做缩减）
+        if getattr(ctx, 'tier', 'standard') == 'deep':
+            return default_count
         # 证明题 → 减少候选（精确推演比广度采样更重要）
         proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
         if any(k in domain for k in proof_keywords):
@@ -228,8 +231,23 @@ class SolverAgent(BaseAgent):
     # ----------------------------------------------------------
     # 初始求解（蓝图分解 + 领域提示）
     # ----------------------------------------------------------
-    def _generate_initial(self, ctx: TaskContext, count: int = None) -> None:
-        count = count or self.config.policy_sample_times
+    def _generate_initial(self, ctx: TaskContext, count: int = None,
+                          temperatures: list = None) -> None:
+        """生成初始候选。
+
+        参数:
+            count: 候选数；None 时回退 config.policy_sample_times
+                   （难题深度通道由 orchestrator 按档位传入）
+            temperatures: 温度分层列表；None 时用默认 [0.1, 0.3, 0.5]
+        """
+        # 档位候选数：ctx.tier 有配置则优先（orchestrator 已写入）
+        if count is None:
+            tier_tbl = getattr(self.config, 'tier_sample_times', None)
+            if tier_tbl:
+                count = tier_tbl.get(getattr(ctx, 'tier', 'standard'),
+                                     self.config.policy_sample_times)
+            else:
+                count = self.config.policy_sample_times
         # 领域自适应候选数
         count = self._adaptive_count(ctx, count)
 
@@ -272,11 +290,15 @@ class SolverAgent(BaseAgent):
         user_content = user_content + _ANSWER_GUIDE
 
         base_cid = len(ctx.candidates)
-        _STRATIFIED_TEMPS = [0.1, 0.3, 0.5]
+        if temperatures is None:
+            tier_tbl = getattr(self.config, 'tier_temperatures', None)
+            temperatures = (tier_tbl.get(getattr(ctx, 'tier', 'standard'), [0.1, 0.3, 0.5])
+                            if tier_tbl else [0.1, 0.3, 0.5])
+        _STRATIFIED_TEMPS = temperatures
 
         def _make_one(i: int):
             cid = base_cid + i
-            # 温度分层：按索引轮转取值（count>=3 时生效）
+            # 温度分层：按索引轮转取值（count>=3 时生效；deep 档 4 温度 0.1/0.3/0.5/0.7）
             base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
             # 候选 2+ 追加微扰动提示，引导不同解题思路
             _perturb_hints = [

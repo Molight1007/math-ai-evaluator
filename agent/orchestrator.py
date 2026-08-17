@@ -25,6 +25,8 @@ from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
 from .verifier import VerifierAgent, AnswerCluster
 from .formatter import FormatterAgent
+from .difficulty_router import DifficultyRouter
+from .paper_pacer import PaperPacer
 from utils.extract import safe_json_serialize
 
 try:
@@ -49,6 +51,9 @@ class Orchestrator(BaseAgent):
         self.sub_goal_solver = SubGoalSolverAgent(client, config)
         self.verifier = VerifierAgent(client, config)
         self.formatter = FormatterAgent(client, config)
+        # 难题深度求解通道（v2.5）
+        self.difficulty_router = DifficultyRouter(client, config)
+        self.pacer = PaperPacer(config)
 
     # ----------------------------------------------------------
     # 主入口（简化版流水线）
@@ -65,7 +70,9 @@ class Orchestrator(BaseAgent):
             total_deadline=now + getattr(self.config, 'max_total_time_seconds', 21000),
         )
         try:
-            # 0) PaperPacer 简化版：按剩余时间动态收紧预算（P0-4 提前收紧防超时）
+            # 0) PaperPacer 全卷时间池：5h 目标动态预算帽 + MIN_SOFT 保底
+            self.pacer.begin()
+            ctx.pacer_remaining = self.pacer.hard_remaining()
             elapsed_total = time.time() - ctx.total_start_time
             total_budget = ctx.total_deadline - ctx.total_start_time
             ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
@@ -100,69 +107,107 @@ class Orchestrator(BaseAgent):
             if fast_result is not None:
                 ctx.final_response = fast_result
                 self.record(ctx, "fast_path", f"快车道直接求解: {fast_result[:200]}")
+                self.pacer.end()
                 return safe_json_serialize({
                     "final_response": fast_result, "trace": ctx.trace,
                     "candidates": [], "verdicts": [],
                 })
 
-            # 3) 求解（3 候选并行）
+            # 2.5) 难度路由：静态预判 + LLM 自评 → 三级档位（难题深度通道）
+            self.difficulty_router.run(ctx)
+            tier = getattr(ctx, 'tier', 'standard')
+            # 应急模式：所有档位强制降级到 fast（预算收紧，保产出）
+            if getattr(self.config, '_emergency', False) and tier != 'fast':
+                ctx.tier = 'fast'
+                tier = 'fast'
+                self.record(ctx, "paper_pacer", "应急模式：强制降档到 fast")
+            # 全卷时间池动态预算帽（写入 ctx 供 trace/诊断）
+            ctx.soft_budget = self.pacer.budget_for(tier)
+            # 按档位调整 LLM 调用预算（deep 档需要更多调用次数）
+            max_calls = self.config.tier_max_calls.get(
+                tier, self.config.max_total_calls)
+            if ctx.budget is not None:
+                ctx.budget.set_max_calls(max_calls)
+            self.record(ctx, "paper_pacer",
+                        f"档位 {tier} 软预算帽 {ctx.soft_budget:.0f}s "
+                        f"(剩余目标 {ctx.pacer_remaining:.0f}s, 调用预算 {max_calls})",
+                        tier=tier, soft_budget=round(ctx.soft_budget))
+
+            # 3) 求解（候选数/温度分层按档位，solver 内部读取 ctx.tier）
             self.solver.run(ctx)
             if not ctx.candidates:
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
+                self.pacer.end(tier=tier)
                 return self._fallback_direct(ctx)
 
-            # 3.2) 截断候选续写（P0-4）：仅续写最有希望恢复的 1 个截断候选，
-            #      每候选 1 次续写 + 1 次答案前置（2+1→1+1），应急模式跳过
+            # 3.2) 截断候选续写：每档 max_completions 个（fast=0 跳过），应急模式跳过
             if (getattr(ctx, 'candidates', None)
                     and not getattr(self.config, '_emergency', False)):
-                n_completed = self.solver.complete_truncated_candidates(ctx, max_count=1)
-                if n_completed > 0:
-                    self.record(ctx, "control",
-                                f"截断续写完成 {n_completed} 个候选")
+                max_comp = self.config.tier_max_completions.get(tier, 1)
+                if max_comp > 0:
+                    n_completed = self.solver.complete_truncated_candidates(
+                        ctx, max_count=max_comp)
+                    if n_completed > 0:
+                        self.record(ctx, "control",
+                                    f"截断续写完成 {n_completed} 个候选")
 
-            # 3.5) 子目标分解补充候选（可选）：候选不足或证明/难题时触发
+            # 3.5) 子目标分解补充候选：deep 档强制；其他档候选不足或证明题时触发
             is_proof = getattr(ctx, 'domain', '') in ('证明', '证明题')
-            if (getattr(self.config, 'use_sub_goal', False)
+            use_sub = (getattr(self.config, 'deep_use_sub_goal', True)
+                       if tier == 'deep' else getattr(self.config, 'use_sub_goal', False))
+            if (use_sub
                     and ctx.budget.can_spend(3)
-                    and (len(ctx.candidates) < 2 or is_proof)):
+                    and (len(ctx.candidates) < 2 or is_proof or tier == 'deep')):
                 self.record(ctx, "control",
-                            "候选不足或证明题，触发子目标分解补充候选",
-                            sub_goal_trigger=f"candidates={len(ctx.candidates)}, is_proof={is_proof}")
+                            "触发子目标分解补充候选",
+                            sub_goal_trigger=f"tier={tier}, candidates={len(ctx.candidates)}, is_proof={is_proof}")
                 self.sub_goal_solver.run(ctx)
 
-            # 4) 验证（每候选 1 票 + 聚类选最优）
-            # P0-4 修复：playoff 复算按时间宽裕度开关，默认关闭防超时
+            # 4) 验证（投票数按档位：fast=1/standard=1/deep=3）
+            # P0-4 修复：playoff 复算按时间宽裕度开关，deep 档且时间宽裕时启用
+            tier_votes = self.config.tier_voting_times.get(tier, 1)
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
                 use_clustering=True,
                 use_scoring=self.config.use_scoring,
                 is_proof=is_proof,
-                use_playoff=getattr(self.config, '_playoff_enabled', False),
+                use_playoff=(getattr(self.config, '_playoff_enabled', False)
+                             and (tier != 'deep' or self.config.deep_use_playoff)),
+                voting_times=tier_votes,
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
             ctx._best_cluster = ver_result.get("best_cluster")
             ctx._cluster_data = ver_result.get("cluster_data", [])
 
-            # 5) 全部 0 正确票 → 兜底直接求解（不做回环）
+            # 5) 全部 0 正确票：
+            #    - deep 档：先 revise 自纠错回环（最多 deep_revise_rounds 轮）
+            #    - 其他档：直接兜底直接求解
             if (ctx.verdicts
                     and all(v.total_votes > 0 for v in ctx.verdicts)
                     and all(v.correct_votes == 0 for v in ctx.verdicts)):
-                self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
-                direct_answer = self.solver.direct_solve(ctx)
-                if direct_answer:
-                    ctx.final_response = direct_answer
-                    return safe_json_serialize({
-                        "final_response": direct_answer, "trace": ctx.trace,
-                    })
-                best = self._pick_best_from_candidates(ctx)
-                if best:
-                    ctx.final_response = best
-                    return safe_json_serialize({
-                        "final_response": best, "trace": ctx.trace,
-                    })
+                revised_ok = False
+                if tier == 'deep' and not getattr(self.config, '_emergency', False):
+                    revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
+                if not revised_ok:
+                    self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
+                    direct_answer = self.solver.direct_solve(ctx)
+                    if direct_answer:
+                        ctx.final_response = direct_answer
+                        self.pacer.end(tier=tier)
+                        return safe_json_serialize({
+                            "final_response": direct_answer, "trace": ctx.trace,
+                        })
+                    best = self._pick_best_from_candidates(ctx)
+                    if best:
+                        ctx.final_response = best
+                        self.pacer.end(tier=tier)
+                        return safe_json_serialize({
+                            "final_response": best, "trace": ctx.trace,
+                        })
 
             # 6) 格式化输出
             self.formatter.run(ctx)
+            self.pacer.end(tier=tier)
 
             # 构建返回
             candidates_out = [
@@ -196,6 +241,10 @@ class Orchestrator(BaseAgent):
             })
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
+            try:
+                self.pacer.end()
+            except Exception:
+                pass
             return self._fallback(ctx, problem, e)
 
     # ----------------------------------------------------------
@@ -270,6 +319,48 @@ class Orchestrator(BaseAgent):
         except Exception:
             pass
         return None
+
+    def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
+                          tier_votes: int) -> bool:
+        """deep 档 0 正确票时的 revise 自纠错回环。
+
+        用验证器反馈驱动定向修正：最多 deep_revise_rounds 轮，
+        每轮 solver 走 _generate_revise 重解 + verifier 重新验证。
+        返回是否在回环中获得至少 1 个候选获得正确票。
+        """
+        max_rounds = getattr(self.config, 'deep_revise_rounds', 1)
+        if max_rounds <= 0 or getattr(self.config, '_emergency', False):
+            return False
+        feedback = ver_result.get("feedback", "")
+        if not feedback:
+            feedback = "所有候选均未获验证通过，请重新审题并纠正推理错误。"
+        for r in range(max_rounds):
+            if not ctx.budget.can_spend(3):
+                self.record(ctx, "revise", "revise 回环预算不足，提前终止")
+                break
+            ctx.revise_round += 1
+            ctx.revise_feedback = [feedback]
+            self.record(ctx, "revise",
+                        f"deep 档 revise 自纠错 第{ctx.revise_round}轮",
+                        round=ctx.revise_round)
+            self.solver.run(ctx)  # 走 _generate_revise 路径
+            ver2 = self.verifier.run(
+                ctx, problem=ctx.problem, candidates=ctx.candidates,
+                use_clustering=True,
+                use_scoring=self.config.use_scoring,
+                is_proof=getattr(ctx, 'domain', '') in ('证明', '证明题'),
+                use_playoff=getattr(self.config, '_playoff_enabled', False),
+                voting_times=tier_votes,
+            )
+            ctx.verdicts = self._verdicts_from_ver_result(ver2, ctx.candidates)
+            ctx._best_cluster = ver2.get("best_cluster")
+            ctx._cluster_data = ver2.get("cluster_data", [])
+            if any(v.correct_votes > 0 for v in ctx.verdicts):
+                self.record(ctx, "revise", f"revise 第{ctx.revise_round}轮获得正确票")
+                return True
+            feedback = ver2.get("feedback") or feedback
+        self.record(ctx, "revise", f"revise 回环 {max_rounds} 轮仍未获得正确票")
+        return False
 
     def _verdicts_from_ver_result(self, ver_result: dict, candidates: list = None) -> list:
         """将验证器产出的多票结果汇总为 Verdict 数据类列表。

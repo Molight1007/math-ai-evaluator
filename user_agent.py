@@ -107,6 +107,42 @@ class AgentConfig:
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
     use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
 
+    # ---- 难题深度求解通道（v2.5）----
+    # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
+    enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
+    enable_llm_difficulty: bool = True      # 难题识别第二层：LLM 自评难度（1 次小调用）
+    tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:4}
+    tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
+    tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
+    tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
+    tier_max_calls: dict = None             # 每档 LLM 调用预算上限
+    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:480, deep:1200}
+    paper_target_time: int = 18000          # 全卷墙钟目标（秒，5 小时=18000）
+    paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
+    paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
+    deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
+    deep_revise_rounds: int = 1             # deep 档 0 票时 revise 自纠错轮数
+    deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
+
+    def __post_init__(self):
+        """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
+        if self.tier_sample_times is None:
+            self.tier_sample_times = {"fast": 1, "standard": 2, "deep": 4}
+        if self.tier_temperatures is None:
+            self.tier_temperatures = {
+                "fast": [0.1],
+                "standard": [0.1, 0.3],
+                "deep": [0.1, 0.3, 0.5, 0.7],
+            }
+        if self.tier_voting_times is None:
+            self.tier_voting_times = {"fast": 1, "standard": 1, "deep": 3}
+        if self.tier_max_completions is None:
+            self.tier_max_completions = {"fast": 0, "standard": 1, "deep": 2}
+        if self.tier_max_calls is None:
+            self.tier_max_calls = {"fast": 6, "standard": 15, "deep": 30}
+        if self.tier_budget is None:
+            self.tier_budget = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
+
 
 # ============================================================
 # 响应归一化工具（P0-1 契约防线核心）
@@ -220,9 +256,17 @@ class ReasoningAgent:
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
             "use_blueprint", "use_sub_goal",
+            # 难题深度求解通道
+            "enable_difficulty_router", "enable_llm_difficulty",
+            "tier_sample_times", "tier_temperatures", "tier_voting_times",
+            "tier_max_completions", "tier_max_calls", "tier_budget",
+            "paper_target_time", "paper_min_soft", "paper_total_questions",
+            "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
+        # 覆盖 dict 型配置后需确保各档键完整
+        self.config.__post_init__()
 
         self.orchestrator = None
         # 核心模块导入失败时不崩溃：置为 None，solve 时走 fallback backend

@@ -1,8 +1,0 @@
-fix: v2.4.1 超时/截断修复同步至比赛仓库
-
-- prefill 答案前置抑制 CoT 截断（utils/prefill.py）
-- llm() 时间预算感知 + 重试/候选收紧（agent/base.py, solver.py）
-- 截断续写仅最优候选 + playoff 默认关闭（orchestrator.py, verifier.py）
-- 答案提取多级回退链增强（utils/extract.py）
-- 模型名统一 Intern-S2-Preview-397B（llm_client.py）
-- 官网规则存档 docs/ + 官方契约测试 tests/ + AB 集结果

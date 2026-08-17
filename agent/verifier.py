@@ -433,9 +433,14 @@ class VerifierAgent(BaseAgent):
         use_scoring: bool = False,
         is_proof: bool = False,
         use_playoff: bool = False,
+        voting_times: int = None,
     ) -> dict:
         """
         验证主流程。
+
+        参数:
+            voting_times: 每候选投票数；None 时回退 config.verifier_voting_times。
+                          （难题深度通道：deep 档传 3，fast/standard 传 1）
 
         返回:
             {
@@ -466,10 +471,12 @@ class VerifierAgent(BaseAgent):
                 "best_cluster": cluster,
             }
 
-        # 常规：每个候选投票
+        # 常规：每个候选投票（voting_times 参数化：难题深度通道 deep 档 3 票）
+        if voting_times is None:
+            voting_times = getattr(self.config, 'verifier_voting_times', 1)
         all_verdicts: list[list[Verdict]] = []
         for i, cand in enumerate(candidates):
-            vds = self._vote(ctx, problem, cand, total_votes=self.config.verifier_voting_times,
+            vds = self._vote(ctx, problem, cand, total_votes=voting_times,
                              use_scoring=use_scoring)
             all_verdicts.append(vds)
 

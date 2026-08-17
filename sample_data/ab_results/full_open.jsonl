@@ -1,6 +1,0 @@
-{"id": "ab_choice_06", "domain": "一元函数积分学的应用(二)--积分等式与积分不等式", "question": "设f(x),g(x)在[0,1]上连续，则使得∫f(x)dx∫g(x)dx≥∫f(x)g(x)dx成立的条件是在[0,1]上( ). A. f(x),g(x)均为增函数 B. f(x),g(x)均为减函数 C. f(x)为减函数,g(x)为增函数 D. f(x)为奇函数,g(x)为偶函数", "gold": "C", "predicted": "对比选项，选出单调性相反的选项 C。", "response": "对比选项，选出单调性相反的选项 C。", "correct": false, "elapsed_sec": 374.81}
-{"id": "ab_deriv_05", "domain": "一元函数微分学的计算", "question": "已知函数f(x)=x^2(e^x+5)，则f^{(5)}(1)=_____", "gold": "31e", "predicted": "31e", "response": "31e", "correct": true, "elapsed_sec": 303.74}
-{"id": "ab_integral_02", "domain": "一元函数积分学的计算", "question": "计算定积分：∫_0^1 x e^x dx。", "gold": "1", "predicted": "代入积分上下限 0 和 1 计算差值，得出最终结果 1。", "response": "代入积分上下限 0 和 1 计算差值，得出最终结果 1。", "correct": true, "elapsed_sec": 247.31}
-{"id": "ab_integral_04", "domain": "积分", "question": "计算定积分: ∫_0^π x sin x dx", "gold": "π", "predicted": "$\\pi$", "response": "$\\pi$", "correct": true, "elapsed_sec": 219.02}
-{"id": "ab_limit_01", "domain": "函数极限与连续", "question": "计算极限：lim_{x→0} (sin x - x)/x^3", "gold": "-1/6", "predicted": "-\\frac{1}{6}", "response": "-\\frac{1}{6}", "correct": true, "elapsed_sec": 236.79}
-{"id": "ab_limit_03", "domain": "函数极限与连续", "question": "求极限: lim_{x→0} (e^x - 1 - x)/x^2.", "gold": "1/2", "predicted": "1/2", "response": "1/2", "correct": true, "elapsed_sec": 231.48}
