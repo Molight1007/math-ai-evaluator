@@ -234,6 +234,16 @@ class FormatterAgent(BaseAgent):
         a = re.sub(r"^\s*(?:[*#`~>]\s*)+", "", a)
         a = re.sub(r"^\s*-\s+", "", a)
 
+        # 2b) LaTeX 形式统一（2026-08-19：提高规则型 Judger 匹配率）
+        #   剥行内公式包裹 \( \) \[ \]；统一分数命令 \dfrac/\tfrac→\frac；剥 \left \right
+        a = re.sub(r"\\[\(\[]", "", a)
+        a = re.sub(r"\\[\)\]]", "", a)
+        a = re.sub(r"\\(?:dfrac|tfrac|cfrac)", r"\\frac", a)
+        a = a.replace("\\left", "").replace("\\right", "")
+
+        # 2c) 文本答案去尾部标点（"条件收敛。" → "条件收敛"）
+        a = re.sub(r"[。；;，,！!？?\s]+$", "", a)
+
         # 3) 选项题：(A) / 【A】 / 选A → A
         m2 = re.match(r"^[\(（\[【]\s*([A-Da-d])\s*[\)）\]】]$", a)
         if m2:

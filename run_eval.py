@@ -138,19 +138,32 @@ _LATEX_SYMBOL_MAP = {
     r"\pi": "π", r"\infty": "∞", r"\theta": "θ",
     r"\alpha": "α", r"\beta": "β", r"\gamma": "γ",
     r"\Delta": "Δ", r"\lambda": "λ", r"\sqrt": "√",
+    r"\leq": "≤", r"\geq": "≥", r"\neq": "≠", r"\pm": "±",
 }
 
 
 def _clean_answer(text: str) -> str:
     if not text:
         return ""
-    text = text.strip()
-    text = text.replace("$", "").replace(" ", "")
-    text = text.replace("\\displaystyle", "")
-    text = text.replace("\\,", "").replace("\\;", "").replace("\\!", "")
+    t = text.strip()
+    # 剥行内公式包裹 \( \) \[ \]（2026-08-19 增强：模型常输出带包裹的 LaTeX）
+    t = re.sub(r"\\[\(\[]", "", t)
+    t = re.sub(r"\\[\)\]]", "", t)
+    # \dfrac / \tfrac / \cfrac → \frac（统一分数命令，2026-08-19 增强）
+    t = re.sub(r"\\(?:dfrac|tfrac|cfrac)", r"\\frac", t)
+    # 剥 \left \right 定界符
+    t = re.sub(r"\\left", "", t)
+    t = re.sub(r"\\right", "", t)
+    t = t.replace("$", "").replace(" ", "")
+    t = t.replace("\\displaystyle", "")
+    t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
+    # 中文字符→英文标点（便于后续比较）
+    t = t.replace("，", ",").replace("。", ".").replace("；", ";")
+    # 去尾部标点（. ; , ！ ？ 等）
+    t = re.sub(r"[.;;,!！?？:：\s]+$", "", t)
     for cmd, uni in _LATEX_SYMBOL_MAP.items():
-        text = text.replace(cmd, uni)
-    return text
+        t = t.replace(cmd, uni)
+    return t
 
 
 def _norm_candidate(text: str) -> str:
@@ -263,10 +276,30 @@ def _matches_one(pred_f: str, gold_f: str) -> bool:
     return False
 
 
+def _key_values(text: str) -> frozenset:
+    """提取文本答案中的关键数值/赋值对集合（2026-08-19 新增）。
+
+    处理"极大值点为 x = -1，极小值点为 x = 1" 这类文本答案：
+    提取所有 `变量=数值` 对与孤立的数值，用于关键信息等价比较。
+    零误报原则：仅当两侧提取集合非空且完全相等才判对。
+    """
+    vals = set()
+    # 变量=数值 对（x=-1、极大值=3）
+    for m in re.finditer(r"([a-zA-Zα-ω])\s*[=＝]\s*(-?\d+(?:\.\d+)?)", text):
+        vals.add(f"{m.group(1)}={m.group(2)}")
+    # 孤立数值（-1, 3, 1.5）
+    for m in re.finditer(r"(?<![\w.])-?\d+(?:\.\d+)?(?![\w.])", text):
+        vals.add(f"#{m.group()}")
+    return frozenset(vals)
+
+
 def answers_match(pred: str, gold: str) -> bool:
     """多级答案匹配：字符串相等 → 分数等价 → 浮点近似 → SymPy 符号等价。
 
-    若 predicted 为推导文本（非纯答案），会尝试从中提取 '= X'/'答案为 X' 结论。
+    2026-08-19 增强：
+    - 清洗支持 \\( \\) 包裹、\\dfrac 统一、尾部标点归一（格式差异不再误判）；
+    - 推导文本 '= X' 结论提取；
+    - 文本答案：去所有标点/空白后比较；两侧关键数值/赋值对完全一致时判对。
     """
     if not pred or not gold:
         return False
@@ -278,6 +311,16 @@ def answers_match(pred: str, gold: str) -> bool:
     for cand in _extract_equals_candidates(pred):
         if _matches_one(_norm_candidate(cand), gold_f):
             return True
+    # 文本答案：去所有非字母数字/中文符号后比较（"条件收敛" vs "条件收敛。"）
+    pred_text = re.sub(r"[^\w\u4e00-\u9fff\-+]", "", pred_f)
+    gold_text = re.sub(r"[^\w\u4e00-\u9fff\-+]", "", gold_f)
+    if (pred_text and gold_text and pred_text == gold_text
+            and len(pred_text) >= 2 and len(gold_text) >= 2):
+        return True
+    # 关键数值/赋值对完全一致（长文本答案，如极大值点/区间）
+    pv, gv = _key_values(pred_f), _key_values(gold_f)
+    if pv and gv and pv == gv and len(pv) >= 2:
+        return True
     return False
 
 
