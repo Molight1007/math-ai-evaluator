@@ -9,7 +9,7 @@
 
 **MathPilot** — 基于 Intern-S 系列大模型的多智能体数学解题系统，参加"挑战杯"竞赛。
 
-- **核心架构**：`Classifier → Solver → Verifier → Formatter` 简洁流水线（v2.2 借鉴 ss-main）
+- **核心架构**：`Classifier → QuestionTypeClassifier → Solver → Verifier → Formatter` 简洁流水线（v2.3 题型识别增强版）
 - **关键模块**：`agent/`（核心智能体）、`prompts/`（提示词模板）、`utils/`（工具函数）、`测试工具/`（本地评测系统）
 - **竞赛提交版**：`赛事提交版/` 目录是正式提交的独立副本（v2.3：已同步全部本地优化，通过官方测试）
 
@@ -80,8 +80,19 @@ python run_eval.py --test_file tests.jsonl --output results.jsonl --resume
 `测试工具/main.py` 是完整的评测器，支持 PDF/Word/PPT/Markdown/Excel/JSON/CSV 自动导入：
 
 ```
-题目导入 → Intern-S1 推理 → DeepSeek 评判 → Lean 验证 → HTML 报告生成
+题目导入 → Intern-S1 推理（含双重审核） → DeepSeek 评判 → Lean 补充验证 → HTML 报告生成
 ```
+
+**双重审核机制（v2.5 新增）**：
+推理阶段的审核现在是并行双通道：
+1. **Intern-S1 自审核** — 从完整性/正确性/相关性/格式四维度审查
+2. **Lean 形式化验证** — Intern-S1 将逻辑链转为 Lean 4 代码，编译器验证
+3. 两者并行执行（`asyncio.gather`）
+4. 都通过 → 接受；任一不通过 → Intern-S1 二次复核判断真错/误判
+5. 真错 → 重新生成；误判 → 保留答案
+6. 最终正确性仅由 DeepSeek 判定
+
+> **注意**：Lean 验证步骤依赖 `测试工具/lean_verifier.py` 与 `测试工具/models.py` 中的 `LeanVerificationResult`。若修改 `LeanVerificationResult` 字段，需同步更新 `lean_verifier.py` 与 `main.py` 中的访问代码。
 
 ### 3.3 测试结果目录
 
@@ -150,6 +161,8 @@ python run_eval.py --test_file tests.jsonl --output results.jsonl --resume
 | `agent/base.py` — `TaskContext`、`Budget`、`BaseAgent` | 所有 Agent 的基类，修改会影响全局 |
 | `agent/orchestrator.py` — `Orchestrator.run()` | 编排器主入口，流程核心 |
 | `prompts/policy.py` — `DOMAIN_HINTS` | 33 个领域提示词，LLM 输出的关键 |
+| `测试工具/question_bank.py` — `DB_PATH` 常量（第 28 行） | GUI 入口硬编码指向 `测试工具/question_bank.db`，修改会影响 GUI 加载 |
+| `deploy/server.py` — DB 路径 | deploy 用 `题库/示例题库.db`，修改会影响部署 |
 
 ### 5.3 参考资源（只读，不要修改）
 
@@ -159,6 +172,8 @@ python run_eval.py --test_file tests.jsonl --output results.jsonl --resume
 | `数学建模参考资料/` | 参考论文和赛题说明 |
 | `计划文件夹/` | 竞赛申报材料 |
 | `项目资料/` | 已提交的项目文档 |
+| `题库/示例题库.db` | deploy 用，含第10届全国大学生数学竞赛赛题，独立维护 |
+| `题库/我的题库.db` | 用户个人题库，独立维护 |
 
 ### 5.4 外部工具链（不要修改）
 
@@ -225,10 +240,11 @@ python run_eval.py --test_file tests.jsonl --output results.jsonl --resume
 ```
 user_agent.py (平台入口)
   └── ReasoningAgent
-       └── Orchestrator.run()  [v2.2 简化版：无回环]
-            ├── ClassifierAgent (题型识别, 31领域)
-            ├── SolverAgent (3候选并行，无蓝图分解)
-            │    └── prompts/policy.py (领域提示)
+       └── Orchestrator.run()  [v2.3 题型识别增强版]
+            ├── ClassifierAgent (数学领域识别, 31领域)
+            ├── QuestionTypeClassifier (题目格式类型: 选择/判断/证明/解答/填空)
+            ├── SolverAgent (3候选并行，注入题型引导提示词)
+            │    └── prompts/policy.py (领域提示) + prompts/question_type.py (题型提示)
             ├── VerifierAgent (每候选1票 + 聚类选优)
             │    └── AnswerCluster (等价答案簇)
             ├── FormatterAgent (答案规范化)
@@ -239,9 +255,10 @@ user_agent.py (平台入口)
 
 ```
 问题输入
-  → Classifier: 题型 → domain
+  → Classifier: 数学领域 → domain
+  → QuestionTypeClassifier: 题型格式 → question_type + type_hint（注入 Solver）
   → 快车道检查: 可 SymPy 求解 → 直接输出（1次LLM）
-  → Solver: 生成候选解答 (policy_sample_times 次并行)
+  → Solver: 生成候选解答（携带题型引导提示词，policy_sample_times 次并行）
   → Verifier: 每个候选投 1 票 → 聚类选最大簇
   → Formatter: 选最优答案+规范化输出
 ```
@@ -257,6 +274,8 @@ user_agent.py (平台入口)
 | `max_time_per_question` | 300s | 单题时间上限（从1100s降至300s） |
 | `use_blueprint` | False | 关闭蓝图分解（对Intern-S不友好） |
 | `use_scoring` | False | 关闭多维评分（简化） |
+| `enable_domain_hint` | True | 启用数学领域分类提示 |
+| `enable_question_type_hint` | True | 启用题目格式类型识别与提示注入 |
 | `by_enable_fast_path` | True | 启用快车道(SymPy) |
 
 ---
@@ -278,7 +297,15 @@ user_agent.py (平台入口)
 | P2 | 壁钟时间守卫（竞赛新规则适配） | ✅ v2.1 — base.TaskContext + orchestrator 三级时间检查点 |
 | P3 | trace 脱敏与可解释增强 | 待实现 |
 | P0 | v2.2 简化架构（借鉴 ss-main） | ✅ 完成 — 去除回环/蓝图/重复投票，修复 token 截断 |
+| P0 | v2.5 双重审核机制（自审 + Lean 并行） | ✅ 完成 — Intern-S1 自审与 Lean 编译验证并行执行，二次复核兜底 |
+| P1 | 截断导致 Parse error | ✅ 已修复 — `_INFERENCE_MAX_TOKENS` 8192，截断后 continuation 续写 + 更大 token 重试，截断检测增强 |
+| P1 | 批量判题 ID 匹配失败 | ✅ 已修复 — 短 ID（P1/P2/P3）替代中文 problem_id，三层 fallback 匹配 + 单题判题兜底，截断重试修复 |
+| P2 | 题目格式类型识别与提示注入 | ✅ v2.3 — QuestionTypeClassifier（选择/判断/证明/解答/填空）+ 六种题型引导提示词注入 Solver |
+| P1 | Formatter 输出完整推理链（非仅短答案） | ✅ v2.3.1 — Formatter 对所有题型统一使用 reasoning（完整推导+答案）替代短答案，供 DeepSeek 判题评估逻辑链；跳过包裹文字剥离避免破坏推理结构 |
+| P0 | EvalConfig 字段缺失导致 Lean/二次复核崩溃 | ✅ v2.3.2 — EvalConfig 新增 lean_compiler/lean_timeout；intern_s1.py 嵌套访问修复；lean_verifier.py 参数修复 |
+| P0 | LLMClient 构造参数不匹配 & lean_version 字典键名错误 | ✅ v2.3.3 — intern_s1.py L769+L914：LLMClient(api_url=...) → LLMClient(cfg.intern_s1)；lean_verifier.py L979：'version' → 'lean_version'；清除 .pyc 缓存 |
+| P0 | v3 智能体升级（Intern-MO 策略 × DSH 编排） | 🔄 进行中 — P1 确定性验证通道 `agent/deterministic.py` + Formatter `_judger_friendly`（默认开，已同步赛事提交版）；P2 rubric 判分/反例挑战（`use_rubric`/`use_challenge`，默认关）；P3 视角采样/仲裁决策表（`use_view_sampling`/`use_arbitration`，默认关）；A/B 见 docs/MathPilot智能体升级架构设计_InternMO策略xDSH编排.md |
 
 ---
 
-*最后更新：2026-08-02（v2.3：6项优化同步到赛事提交版，官方测试全部通过）*
+*最后更新：2026-08-09（v2.3.3：LLMClient 构造修复 + lean_version 键名修复 — Lean 审核和二次复核完全恢复）*

@@ -10,6 +10,7 @@ from __future__ import annotations
 - ``BaseAgent``：抽象基类，统一封装 LLM 安全调用、预算扣减、trace 记录
 """
 
+import json
 import logging
 import re
 import threading
@@ -47,6 +48,7 @@ class Verdict:
     correct: bool = False       # 本次投票结果是否正确（verifier 使用）
     raw: str = ""               # 原始投票返回文本（verifier 使用）
     score: dict | None = None   # 评分模式的详细分数（verifier 使用）
+    deterministic: dict | None = None  # 确定性验证旁证（verifier 使用，0 LLM 预算）
 
 
 @dataclass
@@ -76,6 +78,415 @@ class Budget:
 
 
 @dataclass
+class RunState:
+    """运行期可变状态（与不可变 RunConfig 解耦）
+
+    B6（god-config 不可变）：PaperPacer 等运行时调控不得改写共享 config，
+    统一把"生效覆盖值"写入本对象，各 Agent 通过 ``ctx.state`` 读取，
+    从而消除 orchestrator 早期对 ``self.config`` 的运行时改写（状态不安全）。
+    """
+    emergency: bool = False            # 应急模式：候选/投票降至 1，跳过续写/复算
+    playoff_enabled: bool = False      # 是否启用 playoff 确定性复算
+    voting_times: Optional[int] = None  # 生效投票数（None=用 config 默认）
+    sample_times: Optional[int] = None  # 生效采样数（None=用 config 默认）
+
+
+class RunConfig:
+    """不可变配置快照（B6 / god-config 落地）
+
+    构造时从用户传入的 dataclass config 拷贝一份只读快照，运行期任何写属性
+    操作都会抛 ``AttributeError``，杜绝 orchestrator / solver / verifier 在
+    运行时改写共享配置导致的跨 Agent 状态污染。
+
+    运行时需要覆盖的值请写入 ``ctx.state``（RunState），由各 Agent 在读取处
+    做"生效覆盖"判断。
+    """
+    def __init__(self, config):
+        # 浅拷贝快照：config 为 dataclass，字段均为值类型/不可变容器，浅拷贝即隔离
+        object.__setattr__(self, "_store", dict(vars(config)))
+        object.__setattr__(self, "_locked", True)
+
+    def __getattr__(self, name: str):
+        try:
+            return object.__getattribute__(self, "_store")[name]
+        except KeyError:
+            raise AttributeError(
+                f"RunConfig 无字段 '{name}'（请确认已在 config dataclass 定义）")
+
+    def __setattr__(self, name: str, value):
+        if object.__getattribute__(self, "_locked"):
+            raise AttributeError(
+                f"RunConfig 不可变：禁止运行时改写 '{name}'（请改用 ctx.state）")
+        object.__setattr__(self, name, value)
+
+    def __getitem__(self, name: str):
+        """兼容 config['key'] 式访问。"""
+        return self._store[name]
+
+
+# ============================================================
+# 接口契约（P2-P7，由求解工程师起草，供 QA 按契约写测试）
+# ============================================================
+
+# ------------------------------------------------------------
+# P2：LemmaEntry / LemmaRepo（引理库）
+# ------------------------------------------------------------
+@dataclass
+class LemmaEntry:
+    """一条已验证引理（结构化条目，P2）
+
+    用于跨题/跨轮复用已验证的中间结论，减少重复推理。
+    """
+    text: str                     # 引理内容
+    source_problem: str = ""      # 来源题目
+    verified: bool = True         # 是否经 Verifier 验证通过
+    created_round: int = 0        # 创建时的自纠错轮次
+    usage_count: int = 0          # 被复用的次数
+    created_at: float = 0.0       # 创建时间戳
+
+
+class LemmaRepo:
+    """线程安全的引理库（P2）
+
+    支持增删查，可存结构化条目（LemmaEntry），供 Solver / Summarizer 复用。
+    契约：
+      - ``add(lemma, **meta) -> bool``：追加并去重，返回是否新加入；
+      - ``query(problem, limit) -> list[str]``：按关键词相关度检索可复用引理；
+      - ``remove(text) -> bool``：删除指定引理；
+      - ``__len__`` / ``to_list()``：遍历。
+    线程安全：内部用 RLock 保证并发增查不冲突。
+    """
+    def __init__(self, max_entries: int = 500):
+        self._entries: list[LemmaEntry] = []
+        self._lock = RLock()
+        self._max_entries = max_entries
+
+    def add(self, lemma: str, **meta) -> bool:
+        """追加一条引理，去重后返回是否真正新增。"""
+        if not lemma or not lemma.strip():
+            return False
+        with self._lock:
+            for e in self._entries:
+                if e.text == lemma:
+                    return False
+            entry = LemmaEntry(text=lemma, created_at=time.time(), **meta)
+            self._entries.append(entry)
+            if len(self._entries) > self._max_entries:
+                self._entries.pop(0)
+            return True
+
+    def query(self, problem: str = "", limit: int = 5) -> list[str]:
+        """按关键词相关度检索可复用引理，返回引理文本列表。
+
+        简单打分：与题目词共现越多越靠前；无题目时按时间倒序返回最近。
+        """
+        with self._lock:
+            if not problem:
+                return [e.text for e in self._entries[-limit:]]
+            scored = [(self._score(problem, e), e) for e in self._entries]
+            scored.sort(key=lambda x: (-x[0], x[1].created_at), reverse=False)
+            return [e.text for _, e in scored[:limit]]
+
+    def remove(self, text: str) -> bool:
+        """删除指定引理，成功返回 True。"""
+        with self._lock:
+            for i, e in enumerate(self._entries):
+                if e.text == text:
+                    self._entries.pop(i)
+                    return True
+            return False
+
+    def to_list(self) -> list[str]:
+        """返回全部引理文本（按加入顺序）。"""
+        with self._lock:
+            return [e.text for e in self._entries]
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def __iter__(self):
+        with self._lock:
+            return iter(list(self._entries))
+
+    @staticmethod
+    def _tokenize(text: str) -> set:
+        """把文本切分为小写 token 集合（中文按字、英文按词）。"""
+        words = set(re.findall(r"[a-zA-Z0-9]+", text.lower()))
+        # 中文：提取连续汉字簇
+        for ch in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+            words.add(ch)
+        return words
+
+    @classmethod
+    def _score(cls, problem: str, entry: LemmaEntry) -> int:
+        """引理与题目的关键词共现打分。"""
+        p_tokens = cls._tokenize(problem)
+        e_tokens = cls._tokenize(entry.text)
+        if not p_tokens or not e_tokens:
+            return 0
+        return len(p_tokens & e_tokens)
+
+
+# ------------------------------------------------------------
+# P3：Finding / BugReport（step 级分级验证报告）
+# ------------------------------------------------------------
+@dataclass
+class Finding:
+    """单个步骤级缺陷（P3）"""
+    location: str = ""     # 出错位置（步骤编号/行号/引用）
+    kind: str = "Gap"      # Critical（致命）| Gap（缺口/瑕疵）
+    severity: int = 0       # 严重度 1-5（5 最严重）
+    desc: str = ""         # 缺陷描述
+
+
+@dataclass
+class BugReport:
+    """步骤级验证报告（P3 一等公民）
+
+    契约：
+      - ``findings``：list[Finding]，含 location / kind(Critical|Gap) / severity / desc；
+      - ``verdict``：'proof_valid' | 'proof_invalid' | 'unknown'；
+      - ``is_valid()`` / ``has_critical()``；
+      - ``to_dict()`` / ``to_json()`` / ``from_dict()``：JSON 可序列化（P6 要求）。
+    """
+    findings: list = field(default_factory=list)  # list[Finding]
+    verdict: str = "unknown"
+
+    def is_valid(self) -> bool:
+        return self.verdict == "proof_valid"
+
+    def has_critical(self) -> bool:
+        return any(f.kind == "Critical" for f in self.findings)
+
+    def to_dict(self) -> dict:
+        return {
+            "findings": [
+                {"location": f.location, "kind": f.kind,
+                 "severity": f.severity, "desc": f.desc}
+                for f in self.findings
+            ],
+            "verdict": self.verdict,
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BugReport":
+        d = d or {}
+        findings = [
+            Finding(location=f.get("location", ""), kind=f.get("kind", "Gap"),
+                    severity=int(f.get("severity", 0)), desc=f.get("desc", ""))
+            for f in d.get("findings", []) or []
+        ]
+        return cls(findings=findings, verdict=d.get("verdict", "unknown"))
+
+
+# ------------------------------------------------------------
+# P4：RoundState（AcceptGate 门控状态）
+# ------------------------------------------------------------
+@dataclass
+class RoundState:
+    """AcceptGate 门控状态（P4）
+
+    契约：
+      - 连续通过 >= 5 → ACCEPT；
+      - 连续重大缺陷 >= 10 → REJECT；
+      - 复位逻辑：一次失败复位 pass 计数，一次通过复位 major_defect 计数；
+      - ``update(is_pass, has_major_defect) -> str`` 返回最新 decision。
+    """
+    consecutive_pass: int = 0
+    consecutive_major_defect: int = 0
+    decision: str = "HOLD"     # HOLD | ACCEPT | REJECT
+    rounds: int = 0
+
+    ACCEPT_PASS_THRESHOLD = 5       # 连续通过阈值
+    REJECT_DEFECT_THRESHOLD = 10    # 连续重大缺陷阈值
+
+    def update(self, is_pass: bool, has_major_defect: bool = False) -> str:
+        """按一轮结果更新门控，返回最新 decision。"""
+        self.rounds += 1
+        if is_pass:
+            self.consecutive_pass += 1
+            self.consecutive_major_defect = 0   # 通过即复位缺陷计数
+        else:
+            self.consecutive_pass = 0            # 失败即复位通过计数
+            if has_major_defect:
+                self.consecutive_major_defect += 1
+        if self.consecutive_pass >= self.ACCEPT_PASS_THRESHOLD:
+            self.decision = "ACCEPT"
+        elif self.consecutive_major_defect >= self.REJECT_DEFECT_THRESHOLD:
+            self.decision = "REJECT"
+        else:
+            self.decision = "HOLD"
+        return self.decision
+
+    def to_dict(self) -> dict:
+        return {
+            "consecutive_pass": self.consecutive_pass,
+            "consecutive_major_defect": self.consecutive_major_defect,
+            "decision": self.decision,
+            "rounds": self.rounds,
+        }
+
+
+# ------------------------------------------------------------
+# P6：Artifact（结构化上下文产物）
+# ------------------------------------------------------------
+@dataclass
+class Artifact:
+    """结构化上下文产物（P6）
+
+    把 ``_candidate_text()`` / ``VERIFIER_USER_TEMPLATE`` 的手拼大字符串
+    改为结构化渲染，含 reasoning / answer / lemmas / citations 四个字段。
+    契约：
+      - ``to_dict()`` / ``to_json()`` / ``from_candidate()``；
+      - ``render(template, **kw)`` 用模板渲染成提示词文本；
+      - schema 校验：``validate()``。
+    """
+    reasoning: str = ""
+    answer: str = ""
+    lemmas: list = field(default_factory=list)       # list[str]
+    citations: list = field(default_factory=list)    # list[str]
+
+    def to_dict(self) -> dict:
+        return {
+            "reasoning": self.reasoning,
+            "answer": self.answer,
+            "lemmas": list(self.lemmas),
+            "citations": list(self.citations),
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_candidate(cls, candidate, lemmas: list = None) -> "Artifact":
+        """从候选（dict 或对象）构建 Artifact。"""
+        if isinstance(candidate, dict):
+            reasoning = candidate.get("reasoning", "")
+            answer = candidate.get("answer", "")
+        else:
+            reasoning = getattr(candidate, "reasoning", "")
+            answer = getattr(candidate, "answer", "")
+        return cls(reasoning=reasoning or "", answer=answer or "",
+                   lemmas=list(lemmas or []))
+
+    def render(self, template: str, **kw) -> str:
+        """用模板渲染，缺省键从自身字段补全。"""
+        data = {
+            "reasoning": self.reasoning,
+            "answer": self.answer,
+            "lemmas": "\n".join(f"- {l}" for l in self.lemmas),
+            "candidate_answer": (self.reasoning + "\n【最终答案】" + self.answer)
+                                 if self.reasoning or self.answer else "",
+            "problem": kw.get("problem", ""),
+        }
+        data.update(kw)
+        return template.format(**data)
+
+    def validate(self) -> list[str]:
+        """schema 校验，返回错误列表（空=合法）。"""
+        errs = []
+        if not isinstance(self.reasoning, str):
+            errs.append("reasoning 必须为 str")
+        if not isinstance(self.answer, str):
+            errs.append("answer 必须为 str")
+        if not isinstance(self.lemmas, list):
+            errs.append("lemmas 必须为 list")
+        if not isinstance(self.citations, list):
+            errs.append("citations 必须为 list")
+        return errs
+
+
+# ------------------------------------------------------------
+# P7：ToolSpec / 工具注册表（B10 自发现）
+# ------------------------------------------------------------
+@dataclass
+class ToolSpec:
+    """工具规格契约（P7 / B10 注册表自发现）
+
+    注册表通过遍历具备 ``tool_spec`` 属性的模块/对象自发现工具。
+    """
+    name: str
+    description: str
+    parameters: dict = field(default_factory=dict)   # JSON-schema 风格
+    callable: Optional[object] = None                # 可调用对象
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": dict(self.parameters),
+        }
+
+
+class ToolRegistry:
+    """工具注册表（P7 / B10）：支持注册 + 自发现。
+
+    契约：
+      - ``register(spec: ToolSpec)`` / ``register_obj(obj)``（对象含 tool_spec 属性时自发现）；
+      - ``get(name)`` / ``list_tools()``；
+      - ``invoke(name, **kw)`` 调用并返回结果。
+    """
+    def __init__(self):
+        self._tools: dict[str, ToolSpec] = {}
+        self._lock = RLock()
+
+    def register(self, spec: ToolSpec) -> None:
+        with self._lock:
+            self._tools[spec.name] = spec
+
+    def register_obj(self, obj) -> None:
+        """自发现：对象若携带 ``tool_spec`` 属性则自动注册。"""
+        spec = getattr(obj, "tool_spec", None)
+        if isinstance(spec, ToolSpec):
+            self.register(spec)
+        # 对象本身即 ToolSpec
+        elif isinstance(obj, ToolSpec):
+            self.register(obj)
+
+    def get(self, name: str) -> Optional[ToolSpec]:
+        with self._lock:
+            return self._tools.get(name)
+
+    def list_tools(self) -> list[str]:
+        with self._lock:
+            return sorted(self._tools.keys())
+
+    def invoke(self, name: str, **kw):
+        spec = self.get(name)
+        if spec is None or spec.callable is None:
+            raise KeyError(f"Tool '{name}' 未注册或不可调用")
+        return spec.callable(**kw)
+
+
+# ------------------------------------------------------------
+# Agent / Verifier 接口协议（预留修订空间，命名不写死）
+# ------------------------------------------------------------
+try:
+    from typing import Protocol as _Protocol
+
+    class AgentProtocol(_Protocol):
+        """Agent 接口契约：run(ctx) 处理并返回上下文。"""
+        name: str
+
+        def run(self, ctx: TaskContext) -> TaskContext:  # noqa: D102
+            ...
+
+    class VerifierStrategy(_Protocol):
+        """验证策略契约：对候选产出 verdict / feedback。"""
+
+        def verify(self, ctx: TaskContext, problem: str, candidate) -> Verdict:  # noqa: D102
+            ...
+
+except ImportError:  # 极老 Python 无 typing.Protocol
+    AgentProtocol = None  # type: ignore
+    VerifierStrategy = None  # type: ignore
+
+
+@dataclass
 class TaskContext:
     """黑板：所有 Agent 共享的推理上下文"""
     problem: str
@@ -88,7 +499,9 @@ class TaskContext:
     budget: Optional[Budget] = None            # 预算控制器
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
-    lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
+    lemma_repo: LemmaRepo = field(default_factory=LemmaRepo)  # 引理库（P2）
+    state: RunState = field(default_factory=RunState)  # 运行期可变覆盖状态（B6）
+    round_state: RoundState = field(default_factory=RoundState)  # AcceptGate 门控状态（P4）
 
     # ---- 壁钟时间追踪（适配竞赛新规则：单题≤20分钟，总计≤6小时）----
     start_time: float = 0.0                    # 单题壁钟启动时间 (time.time())
@@ -138,7 +551,8 @@ class BaseAgent(ABC):
 
     def __init__(self, client, config):
         self.client = client
-        self.config = config
+        # B6：统一包装为不可变快照，杜绝运行时改写共享配置
+        self.config = RunConfig(config)
 
     @abstractmethod
     def run(self, ctx: TaskContext) -> TaskContext:

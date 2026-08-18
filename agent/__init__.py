@@ -14,10 +14,11 @@ from .classifier import ClassifierAgent
 from .solver import SolverAgent
 from .verifier import VerifierAgent
 from .formatter import FormatterAgent
+from .summarizer import SummarizerAgent
 from .orchestrator import Orchestrator
 
 __all__ = [
     "BaseAgent", "TaskContext", "Budget", "Candidate", "Verdict",
     "ClassifierAgent", "SolverAgent", "VerifierAgent",
-    "FormatterAgent", "Orchestrator",
+    "FormatterAgent", "SummarizerAgent", "Orchestrator",
 ]

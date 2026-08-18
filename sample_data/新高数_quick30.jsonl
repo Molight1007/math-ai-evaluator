@@ -1,0 +1,30 @@
+{"id": "Microsoft Word - 高等数学下册练习册_0081", "question": "设 z = e^(x/y)，求证：x ∂z/∂x + y ∂z/∂y = 2z。", "domain": "未知", "answer": "证明：∂z/∂x = (1/y) e^(x/y), ∂z/∂y = (-x/y²) e^(x/y)，则 x ∂z/∂x + y ∂z/∂y = x·(1/y)e^(x/y) + y·(-x/y²)e^(x/y) = (x/y - x/y)e^(x/y) = 0 ≠ 2z。原题结论有误，应为 x ∂z/∂x + y ∂z/∂y = 0。"}
+{"id": "Microsoft Word - 高等数学下册练习册_0076", "question": "设 z = y^x，则 (∂z/∂x + ∂z/∂y) 在点 (2,1) 处的值为（ ）。\nA. 2\nB. 1 + ln2\nC. 0\nD. 1", "domain": "未知", "answer": "B"}
+{"id": "Microsoft Word - 高等数学下册练习册_0288", "question": "判定级数 (1/2)^2 + (2/3)^2 + (3/4)^2 + ... + [n/(n+1)]^2 + ... 的敛散性。", "domain": "未知", "answer": "由于 lim_{n→∞} [n/(n+1)]^2 = 1 ≠ 0，根据级数收敛的必要条件，该级数发散。"}
+{"id": "gen_b104bf0e", "question": "计算定积分：\\(\\int_0^\\pi x \\sin x \\, dx\\)。", "domain": "微积分", "answer": "\\(\\pi\\)"}
+{"id": "gen_e345ffd8", "question": "求极限：lim_{x→0} (sin x - x)/x^3。", "domain": "微积分", "answer": "-1/6"}
+{"id": "gen_0703aba4", "question": "求函数 f(x) = x^3 - 3x + 1 在闭区间 [-2, 2] 上的最大值和最小值。", "domain": "微积分", "answer": "最大值为 3，最小值为 -1"}
+{"id": "gen_5980f7e6", "question": "求极限：lim_{x→0} (sin x - x) / x^3", "domain": "极限", "answer": "使用洛必达法则或泰勒展开：lim_{x→0} (sin x - x)/x^3 = lim_{x→0} (cos x - 1)/(3x^2) = lim_{x→0} (-sin x)/(6x) = -1/6。"}
+{"id": "gen_3181b645", "question": "求极限：lim_{x→0} (e^x - 1 - x) / (x^2)。", "domain": "极限", "answer": "1/2"}
+{"id": "gen_0cb6418f", "question": "求极限：lim_{x→0} (sin x - x)/x³。", "domain": "极限", "answer": "-1/6"}
+{"id": "gen_3b4a264a", "question": "计算定积分：∫₀¹ x e^x dx。", "domain": "积分", "answer": "1"}
+{"id": "gen_c1821858", "question": "计算不定积分：∫ x e^x dx", "domain": "积分", "answer": "x e^x - e^x + C"}
+{"id": "gen_5f7720f2", "question": "计算定积分：∫_{0}^{π} x sin x dx。", "domain": "积分", "answer": "π"}
+{"id": "gen_689de433", "question": "求函数 f(x) = x^3 - 3x + 1 的极值。", "domain": "导数", "answer": "极大值 f(-1)=3，极小值 f(1)=-1"}
+{"id": "gen_5b308690", "question": "求函数 \\(f(x) = x^3 - 3x + 1\\) 的极值点及极值。", "domain": "导数", "answer": "极大值点 \\(x = -1\\)，极大值 \\(3\\)；极小值点 \\(x = 1\\)，极小值 \\(-1\\)。"}
+{"id": "gen_32be875b", "question": "求函数 f(x) = x^3 - 3x^2 + 2 的单调区间和极值。", "domain": "导数", "answer": "单调递增区间：(-∞, 0) 和 (2, +∞)；单调递减区间：(0, 2)；极大值：f(0)=2；极小值：f(2)=-2。"}
+{"id": "gen_5395ab00", "question": "判断级数 ∑_{n=1}^{∞} (-1)^n / n 的收敛性，若收敛，是绝对收敛还是条件收敛？", "domain": "高等数学", "answer": "条件收敛。"}
+{"id": "gen_474a4e24", "question": "计算二重积分：\\(\\iint_D (x^2 + y^2) \\, d\\sigma\\)，其中 \\(D\\) 是由圆 \\(x^2 + y^2 = 1\\) 所围成的闭区域。", "domain": "高等数学", "answer": "\\(\\frac{\\pi}{2}\\)"}
+{"id": "gen_62bb30c4", "question": "判断级数 \\(\\sum_{n=1}^{\\infty} \\frac{(-1)^n}{n}\\) 的收敛性。", "domain": "高等数学", "answer": "条件收敛"}
+{"id": "gen_41d1754f", "question": "求极限：\\(\\lim_{x \\to 0} \\frac{\\sin x - x}{x^3}\\)。", "domain": "微积分", "answer": "-1/6"}
+{"id": "Microsoft Word - 高等数学下册练习册_0045", "question": "指出下列曲面类型（名称），并试用截痕法画出其草图：\n(3) x^2 - y^2 = z^2\n(4) x^2 - y^2 - z^2/9 = 1\n(5) x^2/4 + y^2 + 1 = z\n(6) y^2 - x^2/4 = z", "domain": "未知", "answer": "(3) 圆锥面\n(4) 双叶双曲面\n(5) 椭圆抛物面\n(6) 双曲抛物面（马鞍面）"}
+{"id": "gen_475f9998", "question": "计算定积分：\\(\\int_0^\\pi x \\sin x \\, dx\\)。", "domain": "微积分", "answer": "\\(\\pi\\)"}
+{"id": "Microsoft Word - 高等数学下册练习册_0039", "question": "求曲线 { x^2 + y^2 + z^2 = a^2, x^2 + y^2 - ax = 0 } 在 xOy 面和 yOz 面上的投影曲线的方程。", "domain": "未知", "answer": "在xOy面上的投影：消去z，由第一个方程得 z^2 = a^2 - x^2 - y^2，代入第二个方程？实际上，投影曲线由两个方程联立消去z得到。由 x^2 + y^2 + z^2 = a^2 和 x^2 + y^2 - ax = 0，消去z得 x^2 + y^2 - ax = 0，且 z=0。所以投影曲线为 { x^2 + y^2 - ax = 0, z = 0 }。\n在yOz面上的投影：消去x，由第二个方程得 x^2 + y^2 = ax，代入第一个方程得 ax + z^2 = a^2，即 x = (a^2 - z^2)/a。再代入第二个方程得 ((a^2 - z^2)/a)^2 + y^2 - a*(a^2 - z^2)/a = 0，化简得 (a^2 - z^2)^2 + a^2 y^2 - a^2 (a^2 - z^2) = 0，即 a^2 y^2 + z^4 - 2a^2 z^2 + a^4 - a^4 + a^2 z^2 = 0，即 a^2 y^2 + z^4 - a^2 z^2 = 0。所以投影曲线为 { a^2 y^2 + z^4 - a^2 z^2 = 0, x = 0 }。"}
+{"id": "Microsoft Word - 高等数学下册练习册_0171", "question": "选择题：二重积分 $\\iint_D xy \\, dxdy$（其中 $D: 0 \\leq y \\leq x^2, 0 \\leq x \\leq 1$）的值为（ ）\nA. $\\frac{1}{12}$  B. $\\frac{1}{6}$  C. $\\frac{1}{4}$  D. $\\frac{1}{3}$", "domain": "未知", "answer": "A"}
+{"id": "Microsoft Word - 高等数学下册练习册_0199", "question": "计算下列三重积分：\n(1) ∭_Ω z^2 dxdydz，其中Ω是两个球x^2+y^2+z^2 ≤ R^2和x^2+y^2+z^2 ≤ 2Rz (R>0)的公共部分。\n(2) ∭_Ω z dv，其中Ω是球体x^2+y^2+z^2 ≤ 4含在抛物面x^2+y^2=3z内部的区域。", "domain": "未知", "answer": "无统一答案，需分别计算。"}
+{"id": "Microsoft Word - 高等数学下册练习册_0245", "question": "设曲面 S 是上半球面 x^2 + y^2 + z^2 = R^2, z ≥ 0，曲面 S₁ 是曲面 S 在第一卦限中的部分，则有（ ）。\nA. ∬_S x dS = 4 ∬_{S₁} x dS\nB. ∬_S y dS = 4 ∬_{S₁} x dS\nC. ∬_S x dS = 4 ∬_{S₁} y dS\nD. ∬_S y dS = 4 ∬_{S₁} y dS", "domain": "未知", "answer": "C"}
+{"id": "gen_b34d8f65", "question": "求函数 \\(f(x) = x^3 - 3x + 1\\) 的极值点。", "domain": "导数", "answer": "极大值点 \\(x = -1\\)，极小值点 \\(x = 1\\)"}
+{"id": "gen_7b45fe2b", "question": "求函数 f(x) = x^3 - 3x + 1 的极值点。", "domain": "导数", "answer": "极大值点 x=-1，极小值点 x=1"}
+{"id": "Microsoft Word - 高等数学下册练习册_0267", "question": "设曲线L: y = -√(1 - x^2)，则 ∫_L (x^2 + y^2) ds = ?", "domain": "未知", "answer": "π"}
+{"id": "gen_8598d8e9", "question": "计算定积分：∫₀¹ x eˣ dx。", "domain": "积分", "answer": "使用分部积分法：∫ x eˣ dx = x eˣ - ∫ eˣ dx = x eˣ - eˣ + C，代入上下限得 (1*e¹ - e¹) - (0*e⁰ - e⁰) = 0 - (-1) = 1。"}
+{"id": "Microsoft Word - 高等数学下册练习册_0207", "question": "求柱面 x² + y² = a² (x≥0, y≥0) 被平面 x+z=0 和 x-z=0 所截部分的面积。", "domain": "未知", "answer": "利用第一类曲面积分计算。曲面为柱面在第一卦限的部分，被两平面截取。面积S = ∫∫_D √(1+z_x²+z_y²) dxdy，其中D为xOy面上的投影区域。计算得S = 2a²。"}

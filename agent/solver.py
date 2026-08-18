@@ -26,6 +26,7 @@ from .base import (
     BaseAgent, TaskContext, Candidate,
     detect_hallucination, detect_truncated,
     detect_template_leak,
+    LemmaRepo,
 )
 from prompts.policy import (
     POLICY_SYSTEM,
@@ -35,7 +36,13 @@ from prompts.policy import (
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
-from utils.extract import extract_final_answer, smart_fallback_answer, is_valid_final_answer
+from utils.extract import (
+    extract_final_answer,
+    smart_fallback_answer,
+    rescue_final_answer,
+    is_valid_final_answer,
+)
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -65,6 +72,16 @@ _REINFORCED_SYSTEM = (
     "即使题目看起来困难或信息不全，也要尽力推理并给出你最好的答案。"
     "绝对不能回答'无法求解'或'不能解决'。请务必在【最终答案】中给出一个确定的答案。"
 )
+
+# v3 P3：视角采样提示库（替代纯温度分层）。
+# 同模型、同题、不同解题路径 → 错误模式去相关（弱独立采样）。
+_VIEW_HINTS: list[tuple[str, str]] = [
+    ("direct",      ""),                                          # 视角0：直接求解
+    ("substitute",  "\n提示：考虑换元/设未知数/参数化，先化简再求解。"),  # 视角1：换元
+    ("geometric",   "\n提示：尝试从几何/图形/构造的角度重新理解问题。"),  # 视角2：几何
+    ("algebraic",   "\n提示：尝试代数变形/因式分解/对称性简化。"),        # 视角3：代数
+    ("backward",    "\n提示：尝试从目标倒推，先确定结论形式再找路径。"),  # 视角4：倒推
+]
 
 
 def _is_refusal(text: str) -> bool:
@@ -117,7 +134,8 @@ class SolverAgent(BaseAgent):
         proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
         if any(k in domain for k in proof_keywords):
             return max(1, default_count // 3)
-        # 高难度计算题 → 增加候选
+        # P0-4 修复：不再为高难度题提高候选数——3 候选 × 3 重试曾耗尽单题
+        # 300s 预算导致 45 error。保持 default_count（配置=2），省预算保产出。
         hard_signals = [
             problem_len > 500,
             any(k in domain for k in ("differential_equation", "微分方程")),
@@ -126,19 +144,52 @@ class SolverAgent(BaseAgent):
                                         "重积分", "曲线积分", "曲面积分")),
         ]
         if sum(hard_signals) >= 2:
-            return max(default_count, 3)
+            return default_count
         if any(k in domain for k in ("choice", "fill", "选择", "填空")):
-            return max(default_count, 3)
+            return default_count
         return default_count
+
+    @staticmethod
+    def _adaptive_max_tokens(ctx: TaskContext, base_tokens: int) -> int:
+        """P0-4/5 修复：按题目领域/长度分级 max_tokens，杜绝截断丢答案。
+
+        与 ICMA 高分样例对齐：简单题 8192 / 中等 base / 难题 24576。
+        base_tokens（policy_max_tokens）默认 24576，难题上探 24576，
+        cap 同步上调（user_agent max_tokens_cap=24576），不再被二次裁剪。
+        """
+        domain = (ctx.domain or "").lower()
+        problem_len = len(ctx.problem or "")
+        # 简单题（选择/填空/算术）→ 中小预算，快速出答案
+        simple_signals = any(k in domain for k in ("choice", "fill", "选择", "填空", "arithmetic", "算术"))
+        if simple_signals:
+            return min(base_tokens, 8192)
+        # 难题（证明/级数/积分/方程/长题）→ 大预算 24576（ICMA 对齐：上限而非实际用量，
+        # 实测模型仅用 3-7K token，24576 保住贴上限的奥赛题；超时由压缩 prefill 兜底）
+        hard_signals = any(k in domain for k in (
+            "proof", "prove", "证明", "series", "级数",
+            "integral", "积分", "equation", "方程", "derivative", "微分",
+        )) or problem_len > 500
+        if hard_signals:
+            return max(base_tokens, 24576)
+        return base_tokens
 
     def _collect_lemma_context(self, ctx: TaskContext) -> str:
         """收集已验证的子结论（引理库），作为解题上下文注入。"""
         if not getattr(self.config, 'use_lemma_accumulation', False):
             return ""
-        lemmas = getattr(ctx, 'lemma_repo', [])
-        if not lemmas:
+        repo = getattr(ctx, 'lemma_repo', None)
+        if repo is None:
             return ""
-        recent = lemmas[-5:]  # 最多注入 5 条
+        # P2：兼容 LemmaRepo（结构化）与旧式 list[str]
+        if isinstance(repo, LemmaRepo):
+            if len(repo) == 0:
+                return ""
+            recent = repo.query(ctx.problem, limit=5)
+        else:
+            lemmas = list(repo)
+            if not lemmas:
+                return ""
+            recent = lemmas[-5:]  # 最多注入 5 条
         return "【已验证的中间结论】\n" + "\n".join(f"- {l}" for l in recent) + "\n\n"
 
     # ----------------------------------------------------------
@@ -152,23 +203,57 @@ class SolverAgent(BaseAgent):
         user = PROOF_TEMPLATE.format(
             problem=ctx.problem, conditions=conditions, strategy_hint=strategy_hint
         )
-        raw = self.llm(ctx, [
-            {"role": "system", "content": PROOF_SYSTEM},
-            {"role": "user", "content": user},
-        ], 0.3, self.config.max_answer_tokens)
+        # v2.4.1：证明通道同样走 prefill（完整 CoT 在本环境必然超时）
+        raw = self._compressed_solve(
+            ctx, PROOF_SYSTEM, user,
+            temperature=0.3, max_tokens=self.config.max_answer_tokens,
+        )
         if not raw or len(raw) < 30:
             return None
-        answer = extract_final_answer(raw) or smart_fallback_answer(raw)
+        answer = extract_final_answer(raw)
+        if not answer or len(answer) > 300:
+            answer = rescue_final_answer(raw)[0]
+        if not answer:
+            answer = smart_fallback_answer(raw)
         if not is_valid_final_answer(answer) and len(raw) > 0:
             answer = raw[-500:]
         cid = len(ctx.candidates)
         return Candidate(id=cid, reasoning=raw, answer=answer)
 
+    def _compressed_solve(self, ctx: TaskContext, system: str, user: str,
+                          temperature: float = 0.1,
+                          max_tokens: int = 8192) -> str | None:
+        """ICMA 同款压缩求解：prefill 种子「## 问题分析」抑制 CoT，快速产出答案。
+
+        v2.4.1 起为本环境**主求解路径**：诊断实测完整 CoT 单次调用 >200s 不返回
+        （780s 仍读超时），而 prefill 压缩求解 36.7s 即返回 ~2000 tokens 结构化解答。
+        prefill 答案前置：即使输出被截断，也只损失思考、不损失答案。
+        """
+        try:
+            msgs = prefill_messages(
+                [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "## 问题分析\n",
+            )
+            resp = self.llm(ctx, msgs, temperature, max_tokens)
+            if resp:
+                return stitch("## 问题分析\n", resp)
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Compressed solve failed: %s", e)
+            return None
+
     # ----------------------------------------------------------
     # 初始求解（蓝图分解 + 领域提示）
     # ----------------------------------------------------------
     def _generate_initial(self, ctx: TaskContext, count: int = None) -> None:
-        count = count or self.config.policy_sample_times
+        # B6：PaperPacer 运行时收紧候选数（如应急模式）写入 ctx.state，此处读取生效值
+        if count is None:
+            count = (ctx.state.sample_times
+                     if ctx.state and ctx.state.sample_times
+                     else self.config.policy_sample_times)
         # 领域自适应候选数
         count = self._adaptive_count(ctx, count)
 
@@ -177,7 +262,7 @@ class SolverAgent(BaseAgent):
         proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
         if any(k in (ctx.domain or "").lower() for k in proof_keywords):
             is_proof = True
-        if is_proof and getattr(self.config, 'use_proof_channel', True):
+        if is_proof and getattr(self.config, 'use_proof_channel', False):
             proof_cand = self._generate_proof(ctx)
             if proof_cand:
                 ctx.candidates.append(proof_cand)
@@ -202,13 +287,29 @@ class SolverAgent(BaseAgent):
         if lemma_ctx:
             system_prompt = lemma_ctx + system_prompt
 
+        # ICMA 对齐（v2.4.0）：末尾追加章节输出引导。系统 prompt 已要求四章节
+        # 结构化输出并禁止思考过程，这里仅强调【最终答案】章节必须明确，不引导自由 CoT。
+        _ANSWER_GUIDE = (
+            "\n\n请严格按系统提示的四章节格式输出完整解答，"
+            "确保【最终答案】章节给出明确、简洁的最终结论。"
+        )
+        user_content = user_content + _ANSWER_GUIDE
+
         base_cid = len(ctx.candidates)
         _STRATIFIED_TEMPS = [0.1, 0.3, 0.5]
+        # v3 P3：视角采样开关（默认关，A/B 验证后开）
+        use_views = bool(getattr(self.config, 'use_view_sampling', False))
 
         def _make_one(i: int):
             cid = base_cid + i
-            # 温度分层：按索引轮转取值（count>=3 时生效）
-            base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
+            if use_views:
+                # 视角采样：视角轮转 + 小温度变化（错误模式去相关）
+                view_name, view_hint = _VIEW_HINTS[i % len(_VIEW_HINTS)]
+                base_temp = 0.1 + 0.1 * (i % 3)
+            else:
+                view_name, view_hint = "", ""
+                # 温度分层：按索引轮转取值（count>=3 时生效）
+                base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
             # 候选 2+ 追加微扰动提示，引导不同解题思路
             _perturb_hints = [
                 "",  # 候选 0: 无扰动
@@ -216,10 +317,12 @@ class SolverAgent(BaseAgent):
                 "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2
             ]
 
-            # 最多重试 3 次（原始请求 + 2 次重试），避免空响应/拒绝回答
+            # v2.4.1 主路径：prefill 压缩求解（诊断实测 37s 返回，答案前置不受截断影响）。
+            # 本环境完整 CoT >200s 不返回（780s 仍读超时），prefill 是唯一保证
+            # 300s 单题预算内出答案的路径。最多重试 2 次（原始 + 1 次重试）。
             resp = None
             template_leak_retry = False  # 标记是否为模板泄露后的重试
-            for retry in range(3):
+            for retry in range(2):
                 current_temp = base_temp
                 current_system = system_prompt
                 # 模板泄露重试时使用简化prompt（不覆盖）
@@ -229,44 +332,51 @@ class SolverAgent(BaseAgent):
                     current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
                     template_leak_retry = False
                 else:
-                    current_user = user_content + (_perturb_hints[i % len(_perturb_hints)] if retry == 0 else "")
+                    if use_views:
+                        hint = view_hint if retry == 0 else ""
+                    else:
+                        hint = _perturb_hints[i % len(_perturb_hints)] if retry == 0 else ""
+                    current_user = user_content + hint
                     if retry > 0:
                         current_system = _REINFORCED_SYSTEM
                         current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
 
-                resp = self.llm(
-                    ctx,
-                    [
-                        {"role": "system", "content": current_system},
-                        {"role": "user", "content": current_user},
-                    ],
-                    current_temp,
-                    self.config.policy_max_tokens,
+                # 主求解 = prefill（无完整 CoT 尝试；prefill 模式下模型输出克制，
+                # max_tokens 上限 16384 已远超实测用量 ~2K token）
+                resp = self._compressed_solve(
+                    ctx, current_system, current_user,
+                    temperature=current_temp,
+                    max_tokens=min(
+                        self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
+                        16384,
+                    ),
                 )
                 # 空响应 -> 重试
                 if resp is None or not resp.strip():
-                    if retry < 2:
-                        logger.warning("Candidate %d empty response (retry %d/2)", cid, retry + 1)
+                    if retry < 1:
+                        logger.warning("Candidate %d empty response (retry %d/1)", cid, retry + 1)
                         time.sleep(1)
                     continue
-                # 模板泄露检测（借鉴 math_agent-main）→ 重试
+                # 模板泄露检测 → 重试
                 if detect_template_leak(resp):
-                    if retry < 2:
-                        logger.warning("Candidate %d template leak (retry %d/2)", cid, retry + 1)
+                    if retry < 1:
+                        logger.warning("Candidate %d template leak (retry %d/1)", cid, retry + 1)
                         template_leak_retry = True
                         time.sleep(0.5)
                         continue
                 # 英文think泄露 → 追问中文答案
-                if _needs_followup(resp) and retry < 2:
+                if _needs_followup(resp) and retry < 1:
                     logger.warning("Candidate %d English think leak → followup", cid)
-                    followup_resp = self.llm(
+                    # v2.4.1：followup 也走 prefill，防止完整 CoT 超时
+                    followup_resp = self._compressed_solve(
                         ctx,
-                        [
-                            {"role": "system", "content": _REINFORCED_SYSTEM},
-                            {"role": "user",
-                             "content": f"请用中文重新表达你的解答过程，并给出【最终答案】。\n\n上轮回答：\n{resp[-1500:]}\n\n请用中文写出完整解答和最终答案："},
-                        ],
-                        0.3, self.config.policy_max_tokens,
+                        _REINFORCED_SYSTEM,
+                        f"请用中文重新表达你的解答过程，并给出【最终答案】。\n\n上轮回答：\n{resp[-1500:]}\n\n请用中文写出完整解答和最终答案：",
+                        temperature=0.3,
+                        max_tokens=min(
+                            self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
+                            16384,
+                        ),
                     )
                     if followup_resp and followup_resp.strip():
                         if not detect_template_leak(followup_resp) and not _needs_followup(followup_resp):
@@ -280,7 +390,7 @@ class SolverAgent(BaseAgent):
                     logger.warning("Candidate %d hallucination detected: %s", cid,
                                    ", ".join(f"{h[0]}({h[1]:.0%})" for h in hallu))
                     # 42 兜底 → 尝试重试
-                    if any("42" in h[0] for h in hallu) and retry < 2:
+                    if any("42" in h[0] for h in hallu) and retry < 1:
                         logger.warning("Candidate %d 42-dodge, retry", cid)
                         time.sleep(1)
                         continue
@@ -289,8 +399,8 @@ class SolverAgent(BaseAgent):
                     logger.info("Candidate %d truncated; will attempt completion", cid)
                 # 拒绝回答 -> 重试
                 if _is_refusal(resp):
-                    if retry < 2:
-                        logger.warning("Candidate %d refused to answer (retry %d/2)", cid, retry + 1)
+                    if retry < 1:
+                        logger.warning("Candidate %d refused to answer (retry %d/1)", cid, retry + 1)
                         time.sleep(1)
                     continue
                 # 有效回答
@@ -299,8 +409,12 @@ class SolverAgent(BaseAgent):
             return cid, resp, True
 
         # 并行生成候选（用线程池提高吞吐，限制最大并发防止 API 过载）
+        # P0-4 修复：并行度 6→2，降低并发 API 超时/限流风险
+        if use_views:
+            view_names = [v[0] for v in _VIEW_HINTS[:count]]
+            self.record(ctx, "solve", f"视角采样开启: {view_names}")
         results = []
-        max_workers = min(count, 6)
+        max_workers = min(count, 2)
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {pool.submit(_make_one, i): i for i in range(count)}
             for future in as_completed(futures):
@@ -315,11 +429,16 @@ class SolverAgent(BaseAgent):
                 logger.warning("Candidate %d generation failed/skipped", cid)
                 continue
             answer = extract_final_answer(resp)
-            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），取尾部
+            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），
+            # 先试 rescue 兜底（嵌套 boxed / 中段强模式结论），再取尾部
             if not answer or len(answer) > 300 and resp.strip():
-                fallback = smart_fallback_answer(resp)
-                if fallback and (not answer or len(fallback) < len(answer)):
-                    answer = fallback
+                rescued = rescue_final_answer(resp)[0]
+                if rescued:
+                    answer = rescued
+                else:
+                    fallback = smart_fallback_answer(resp)
+                    if fallback and (not answer or len(fallback) < len(answer)):
+                        answer = fallback
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,
@@ -349,14 +468,14 @@ class SolverAgent(BaseAgent):
             user_content = REVISE_USER_TEMPLATE.format(
                 problem=ctx.problem, feedback=feedback_text)
             for retry in range(3):
-                resp = self.llm(
-                    ctx,
-                    [
-                        {"role": "system", "content": REVISE_SYSTEM},
-                        {"role": "user", "content": user_content},
-                    ],
-                    self.config.policy_temperature,
-                    self.config.policy_max_tokens,
+                # v2.4.1：revise 也走 prefill（完整 CoT 在本环境必然超时）
+                resp = self._compressed_solve(
+                    ctx, REVISE_SYSTEM, user_content,
+                    temperature=self.config.policy_temperature,
+                    max_tokens=min(
+                        self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
+                        16384,
+                    ),
                 )
                 if resp is not None and resp.strip():
                     # 幻觉/拒绝检测（与 _generate_initial 一致）
@@ -392,9 +511,14 @@ class SolverAgent(BaseAgent):
                     id=cid, answer="", reasoning="[重解失败] 调用受限"))
                 logger.warning("Revise candidate %d failed/skipped", cid)
                 continue
+            answer = extract_final_answer(resp)
+            if not answer or len(answer) > 300:
+                answer = rescue_final_answer(resp)[0]
+            if not answer:
+                answer = smart_fallback_answer(resp)
             ctx.candidates.append(Candidate(
                 id=cid,
-                answer=extract_final_answer(resp),
+                answer=answer,
                 reasoning=resp,
                 revised=True,
             ))
@@ -416,18 +540,22 @@ class SolverAgent(BaseAgent):
         """
         direct_system = _REINFORCED_SYSTEM + "\n\n请直接在【最终答案】中给出答案，不要省略任何步骤。"
         user_content = f"请仔细求解以下数学问题，必须给出确定的答案。\n\n题目：\n{ctx.problem}"
+        # P0-4 修复：兜底场景用 prefill 让答案前置——时间紧时优先保答案而非推理
+        base_msgs = [
+            {"role": "system", "content": direct_system},
+            {"role": "user", "content": user_content},
+        ]
 
         for attempt in range(3):
             try:
                 resp = self.llm(
                     ctx,
-                    [
-                        {"role": "system", "content": direct_system},
-                        {"role": "user", "content": user_content},
-                    ],
+                    prefill_messages(base_msgs, "最终答案："),
                     0.1 if attempt == 0 else 0.4,   # 首次低温，重试时提高温度
                     8192,
                 )
+                if resp:
+                    resp = stitch("最终答案：", resp)
             except Exception:  # noqa: BLE001
                 resp = None
 
@@ -455,7 +583,13 @@ class SolverAgent(BaseAgent):
                 if answer:
                     self.record(ctx, "direct_solve", f"兜底直接求解成功 (attempt {attempt + 1})")
                     return answer
-                # 提取失败，取全文作为答案
+                # 常规提取失败 → rescue 兜底（嵌套 boxed / 中段强模式）
+                rescued = rescue_final_answer(resp)[0]
+                if rescued:
+                    self.record(ctx, "direct_solve",
+                               f"兜底求解成功但常规提取失败，rescue 截取 (attempt {attempt + 1})")
+                    return rescued
+                # 仍失败，取全文作为答案
                 self.record(ctx, "direct_solve",
                            f"兜底求解成功但提取失败，使用全文 (attempt {attempt + 1})")
                 return smart_fallback_answer(resp)
@@ -464,6 +598,43 @@ class SolverAgent(BaseAgent):
 
         self.record(ctx, "direct_solve", "兜底直接求解失败")
         return ""
+
+    # ----------------------------------------------------------
+    # 截断候选批量续写（P0-3）
+    # ----------------------------------------------------------
+    def complete_truncated_candidates(self, ctx: TaskContext, max_count: int = 1) -> int:
+        """对截断的候选发起续写，把完成的候选放回列表。返回续写成功数量。
+
+        P0-4 修复：默认只续写"最有希望恢复"的 1 个截断候选（reasoning 最长的
+        即信息最全、最接近完成的），避免 3 候选 × 多轮续写耗尽单题预算 → 45 error。
+        修复：此前 orchestrator 只在日志里记录 truncated，从不真正续写，
+        导致 65% 被截断的候选答案丢失 → invalid。
+        """
+        truncated = [c for c in ctx.candidates
+                     if c.reasoning and c.reasoning.strip() and detect_truncated(c.reasoning)]
+        if not truncated:
+            return 0
+        # 选信息最全的截断候选优先续写
+        truncated.sort(key=lambda c: len(c.reasoning), reverse=True)
+        chosen = truncated[:max_count]
+
+        completed = 0
+        new_list = []
+        for c in ctx.candidates:
+            if c not in chosen:
+                new_list.append(c)
+                continue
+            # 预算允许才续写
+            if ctx.budget is None or ctx.budget.can_spend(1):
+                new_c = self.complete_answer(ctx, c)
+                if new_c is not c and new_c.answer and len(new_c.answer) > 1:
+                    new_list.append(new_c)
+                    completed += 1
+                    self.record(ctx, "complete", f"候选 #{c.id} 截断续写成功")
+                    continue
+            new_list.append(c)
+        ctx.candidates = new_list
+        return completed
 
     # ----------------------------------------------------------
     # 答案完整性检查与续写
@@ -507,10 +678,21 @@ class SolverAgent(BaseAgent):
             return False
         return True
 
+    _COMPLETE_SYS = (
+        "你是数学解题专家，正在完成一段被中断的推理。"
+        "请直接续写剩下的推导并给出最终答案。"
+    )
+    _ANSWER_PREFIX_SYS = (
+        "你是数学解题专家。根据下面被截断的推理，直接给出最终答案。"
+        "只输出答案本身（数值、表达式或选项字母），不要解释、不要推理过程。"
+    )
+
     def complete_answer(self, ctx: TaskContext, candidate: Candidate) -> Candidate:
         """
         对不完整的推理进行续写。
-        将截断的推理发回模型，要求其继续完成，然后合并。
+
+        P0-2/P0-3 强化：先尝试续写推理；若仍提取不到答案，
+        再用【答案前置】紧急重问（prefill 精神：答案在前，截断不丢）。
         """
         if not candidate.reasoning or not candidate.reasoning.strip():
             return candidate
@@ -525,19 +707,24 @@ class SolverAgent(BaseAgent):
             f"--- 断点 ---\n{context_tail}\n--- 请继续 ---"
         )
 
-        for attempt in range(2):
+        # P0-4 修复：续写仅 1 次（2+1→1+1），压缩调用链防超时
+        for attempt in range(1):
             try:
+                # v2.4.1：续写也走 prefill（断点种子抑制 CoT，防 4096 token 超时）
                 continuation = self.llm(
                     ctx,
-                    [
-                        {"role": "system",
-                         "content": "你是数学解题专家，正在完成一段被中断的推理。请从断点处直接继续，"
-                                    "完成剩下的推导过程，并给出【最终答案】。"},
-                        {"role": "user", "content": continue_prompt},
-                    ],
+                    prefill_messages(
+                        [
+                            {"role": "system", "content": self._COMPLETE_SYS},
+                            {"role": "user", "content": continue_prompt},
+                        ],
+                        "--- 请继续 ---\n",
+                    ),
                     0.2,
                     4096,
                 )
+                if continuation:
+                    continuation = stitch("--- 请继续 ---\n", continuation)
             except Exception:
                 continuation = None
 
@@ -546,17 +733,47 @@ class SolverAgent(BaseAgent):
                 full_reasoning = reasoning + "\n\n[续写]\n" + continuation.strip()
                 new_answer = extract_final_answer(full_reasoning)
                 if not new_answer:
+                    new_answer = rescue_final_answer(full_reasoning)[0]
+                if not new_answer:
                     new_answer = smart_fallback_answer(continuation)
-                self.record(ctx, "complete",
-                           f"答案续写成功 (attempt {attempt + 1})")
-                return Candidate(
-                    id=candidate.id,
-                    answer=new_answer,
-                    reasoning=full_reasoning,
-                    revised=candidate.revised,
-                )
+                if new_answer:
+                    self.record(ctx, "complete",
+                               f"答案续写成功 (attempt {attempt + 1})")
+                    return Candidate(
+                        id=candidate.id,
+                        answer=new_answer,
+                        reasoning=full_reasoning,
+                        revised=candidate.revised,
+                    )
             logger.warning("Answer completion attempt %d returned empty", attempt + 1)
             time.sleep(0.5)
+
+        # 答案前置紧急重问（P0-4：正式 prefill）：即使推理不全，也要把答案抢救出来。
+        # 用 assistant 前缀"最终答案："抑制 CoT 开启，答案从开头生成——截断不丢答案。
+        try:
+            _prefill_msgs = prefill_messages(
+                [
+                    {"role": "system", "content": self._ANSWER_PREFIX_SYS},
+                    {"role": "user",
+                     "content": f"被截断的推理片段：\n{context_tail}"},
+                ],
+                "最终答案：",
+            )
+            direct = self.llm(ctx, _prefill_msgs, 0.0, 1024)
+            if direct:
+                direct = stitch("最终答案：", direct)
+            if direct and direct.strip():
+                direct_ans = smart_fallback_answer(direct)
+                if direct_ans:
+                    self.record(ctx, "complete", "答案前置重问成功")
+                    return Candidate(
+                        id=candidate.id,
+                        answer=direct_ans,
+                        reasoning=reasoning + "\n\n[答案重问]\n" + direct.strip(),
+                        revised=candidate.revised,
+                    )
+        except Exception as e:
+            logger.warning("Answer prefill retry failed: %s", e)
 
         self.record(ctx, "complete", "答案续写失败，使用原始答案")
         return candidate

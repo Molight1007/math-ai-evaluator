@@ -20,12 +20,27 @@ MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体�
     - 禁止使用绝对路径，所有文件读取使用相对路径
     - solve 返回的字典必须支持 JSON 序列化
     - final_response 不可为空
+
+平台契约防御（v2.3）：
+    - sys.path 自举：无论平台以何种 cwd 运行，都能找到本包
+    - solve(problem, metadata=None)：metadata 缺失时不崩溃
+    - 核心模块导入失败 → 降级到内置直答后端，保证永远有输出
+    - client.chat 响应归一化：兼容 str / dict / 对象 / 空值
+    - _validate_output：返回前强制校验 final_response 非空
 """
 
 import logging
+import os
+import sys
 from dataclasses import dataclass
+from typing import Any
 
-from agent.orchestrator import Orchestrator
+# ---------------------------------------------------------------------------
+# sys.path 自举：保证从任何 cwd 都能 import 到本包
+# ---------------------------------------------------------------------------
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 logger = logging.getLogger("MathPilot")
 
@@ -42,9 +57,13 @@ class AgentConfig:
     - 反rollout：减少候选数与投票次数，依赖聚类共识而非暴力采样
     """
     # 策略模型（解题）
-    policy_sample_times: int = 3       # 候选解答数量
+    # P0-4 修复：候选 3→2（平台并发=3，且 3 候选×3 重试曾耗尽单题预算 → 45 error）
+    # v2.4.0：恢复 24576 上限（ICMA 对齐）。ICMA 实测同模型首轮 24576 仅 143-231s，
+    # 模型实际只用 3-7K token，24576 只是上限；降上限会牺牲贴上限的奥赛题成功区间。
+    # 真正修超时靠：结构化四章节 prompt（抑制自由 CoT）+ 预算感知 + 压缩 prefill 兜底。
+    policy_sample_times: int = 2       # 候选解答数量
     policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
-    policy_max_tokens: int = 12288     # 策略最大 token（确保思考流+答案完整输出）
+    policy_max_tokens: int = 24576     # 策略最大 token（上限，模型实际用 3-7K）
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
     use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
@@ -60,16 +79,20 @@ class AgentConfig:
     extraction_mode: str = "auto"      # auto | last_line | regex
 
     # ---- 自主调控（大幅缩减）----
-    max_revise_rounds: int = 0         # 不做自纠错回环（省 LLM 调用）
-    max_total_calls: int = 10          # LLM 调用预算硬上限（≤10次，~2.5分钟）
+    max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
+    max_total_calls: int = 15          # LLM 调用预算硬上限（revise=1 需额外 1-3 次）
 
     # ---- 时间限制（适配竞赛新规则）----
-    max_time_per_question: int = 300   # 单题壁钟时间上限（秒，省下的时间给后面的题）
+    # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
+    #   此前 300s 对完整 CoT 求解（ICMA 实测中档 77-116s、奥赛 500-552s）是死限，
+    #   导致主求解调用被读超时/预算跳过 → 45 error。总时长由 PaperPacer 动态收紧控制。）
+    max_time_per_question: int = 1200  # 单题壁钟时间上限（秒，平台允许 20 分钟）
     max_total_time_seconds: int = 21000  # Agent总运行时间上限
 
     # ---- 智能体补充部件配置 ----
-    max_tokens: int = 12288            # 单次最大 token 数（匹配 policy_max_tokens）
-    max_tokens_cap: int = 12288        # 内部 token 裁剪上限（修复：之前 4096 截断严重）
+    # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
+    max_tokens: int = 24576            # 单次最大 token 数（匹配 policy_max_tokens）
+    max_tokens_cap: int = 24576        # 内部 token 裁剪上限（对齐 ICMA reasoning 24576）
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     temperature: float = 0.3           # 默认 LLM 温度
 
@@ -82,6 +105,129 @@ class AgentConfig:
     by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
+    use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
+
+    # ---- v3 升级：P1 零风险组件（设计文档 docs/MathPilot智能体升级架构设计）----
+    judger_friendly: bool = True       # Formatter 黑盒 Judger 友好输出（纯规则，0 预算）
+    use_deterministic: bool = True     # Verifier 确定性旁证（SymPy 代入/解析，0 LLM 预算）
+
+    # ---- 难题深度求解通道（v2.5）----
+    # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
+    enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
+    enable_llm_difficulty: bool = True      # 难题识别第二层：LLM 自评难度（1 次小调用）
+    tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:4}
+    tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
+    tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
+    tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
+    tier_max_calls: dict = None             # 每档 LLM 调用预算上限
+    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:480, deep:1200}
+    paper_target_time: int = 18000          # 全卷墙钟目标（秒，5 小时=18000）
+    paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
+    paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
+    deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
+    deep_revise_rounds: int = 1             # deep 档 0 票时 revise 自纠错轮数
+    deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
+
+    def __post_init__(self):
+        """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
+        if self.tier_sample_times is None:
+            self.tier_sample_times = {"fast": 1, "standard": 2, "deep": 4}
+        if self.tier_temperatures is None:
+            self.tier_temperatures = {
+                "fast": [0.1],
+                "standard": [0.1, 0.3],
+                "deep": [0.1, 0.3, 0.5, 0.7],
+            }
+        if self.tier_voting_times is None:
+            self.tier_voting_times = {"fast": 1, "standard": 1, "deep": 3}
+        if self.tier_max_completions is None:
+            self.tier_max_completions = {"fast": 0, "standard": 1, "deep": 2}
+        if self.tier_max_calls is None:
+            self.tier_max_calls = {"fast": 6, "standard": 15, "deep": 30}
+        if self.tier_budget is None:
+            self.tier_budget = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
+
+
+# ============================================================
+# 响应归一化工具（P0-1 契约防线核心）
+# ============================================================
+
+def _normalize_chat_response(resp: Any) -> str:
+    """把 client.chat 的返回值统一成字符串。
+
+    平台注入的 client 实现不定，常见返回形态：
+      - str: 直接可用
+      - dict: {"content": "...", "choices": [...], "message": {...}}
+      - list: [{"content": "..."}, ...]
+      - 对象: .content / .text / .message.content
+      - bytes: 解码为 UTF-8
+      - None / 异常: 返回 ""
+    """
+    if resp is None:
+        return ""
+    if isinstance(resp, str):
+        return resp
+    if isinstance(resp, bytes):
+        try:
+            return resp.decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+    if isinstance(resp, list):
+        # 取第一个元素
+        for item in resp:
+            text = _normalize_chat_response(item)
+            if text:
+                return text
+        return ""
+    if isinstance(resp, dict):
+        # 常见的几种字典形态
+        for key in ("content", "text", "output", "result"):
+            if key in resp and resp[key] is not None:
+                val = resp[key]
+                if isinstance(val, str):
+                    return val
+                return _normalize_chat_response(val)
+        if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
+            choice = resp["choices"][0]
+            if isinstance(choice, dict):
+                # OpenAI 风格: {"message": {"content": ...}} 或 {"text": ...}
+                if "message" in choice and isinstance(choice["message"], dict):
+                    msg = choice["message"]
+                    for key in ("content", "text"):
+                        if key in msg and msg[key] is not None:
+                            return str(msg[key])
+                if "text" in choice and choice["text"] is not None:
+                    return str(choice["text"])
+            return _normalize_chat_response(choice)
+        if "message" in resp and isinstance(resp["message"], dict):
+            msg = resp["message"]
+            for key in ("content", "text"):
+                if key in msg and msg[key] is not None:
+                    return str(msg[key])
+        if "data" in resp:
+            return _normalize_chat_response(resp["data"])
+        return ""
+    # 普通对象：尝试 .content / .text / .message
+    for attr in ("content", "text", "response"):
+        try:
+            val = getattr(resp, attr, None)
+            if val is not None:
+                return _normalize_chat_response(val)
+        except Exception:
+            pass
+    try:
+        if hasattr(resp, "message") and resp.message is not None:
+            return _normalize_chat_response(resp.message)
+    except Exception:
+        pass
+    # 最后兜底：字符串化
+    try:
+        s = str(resp)
+        if s and s != "None" and not s.startswith("<") and not s.startswith("{"):
+            return s
+    except Exception:
+        pass
+    return ""
 
 
 # ============================================================
@@ -94,7 +240,8 @@ class ReasoningAgent:
     solve() 的内部实现已委托给多智能体 Orchestrator，本类仅负责：
     - 接收平台注入的 client；
     - 组装配置；
-    - 透传 solve 调用并维持返回格式不变。
+    - 透传 solve 调用并维持返回格式不变；
+    - 平台契约防御：核心模块不可用时降级到内置直答后端。
     """
 
     def __init__(self, client, *args, **kwargs):
@@ -112,11 +259,28 @@ class ReasoningAgent:
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
+            "use_blueprint", "use_sub_goal",
+            # 难题深度求解通道
+            "enable_difficulty_router", "enable_llm_difficulty",
+            "tier_sample_times", "tier_temperatures", "tier_voting_times",
+            "tier_max_completions", "tier_max_calls", "tier_budget",
+            "paper_target_time", "paper_min_soft", "paper_total_questions",
+            "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
+            # v3 P1
+            "judger_friendly", "use_deterministic",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
+        # 覆盖 dict 型配置后需确保各档键完整
+        self.config.__post_init__()
 
-        self.orchestrator = Orchestrator(client, self.config)
+        self.orchestrator = None
+        # 核心模块导入失败时不崩溃：置为 None，solve 时走 fallback backend
+        try:
+            from agent.orchestrator import Orchestrator
+            self.orchestrator = Orchestrator(client, self.config)
+        except Exception as e:  # pragma: no cover
+            logger.warning("Orchestrator 初始化失败，启用内置直答后端: %s", e)
 
         logger.info(
             "MathPilot ReasoningAgent (v2 simplified) initialized: "
@@ -131,15 +295,98 @@ class ReasoningAgent:
             self.config.by_enable_fast_path,
         )
 
-    def solve(self, problem: str, metadata: dict) -> dict:
+    # ------------------------------------------------------------------
+    # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出
+    # ------------------------------------------------------------------
+    def _fallback_solve(self, problem: str) -> str:
+        """零依赖直答：直接要求模型给出最终答案，不经过 orchestrator。"""
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是数学解题专家。请解答下面的数学题，最后一行必须用"
+                        "【最终答案】:<答案> 的格式给出最终答案，答案只写数值、"
+                        "表达式或选项，不要多余解释。"
+                    ),
+                },
+                {"role": "user", "content": problem},
+            ]
+            resp = self.client.chat(
+                messages=messages,
+                temperature=0.0,
+                max_tokens=self.config.max_answer_tokens,
+            )
+            text = _normalize_chat_response(resp)
+            if not text:
+                return ""
+            # 提取【最终答案】行
+            import re
+            m = re.search(r"【最终答案】[:：]?\s*([\s\S]+)", text)
+            if m:
+                ans = m.group(1).strip().split("\n")[0].strip()
+                if ans:
+                    return ans
+            # 兜底：返回最后一个非空行
+            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+            if lines:
+                return lines[-1][:500]
+            return text.strip()[:500]
+        except Exception as e:  # pragma: no cover
+            logger.error("fallback_solve failed: %s", e)
+            return ""
+
+    def _validate_output(self, result: dict) -> dict:
+        """返回前强制校验：final_response 非空且可 JSON 序列化。"""
+        fr = result.get("final_response", "")
+        if not isinstance(fr, str) or not fr.strip():
+            result["final_response"] = "未给出有效解答。"
+        # 保证 JSON 可序列化
+        if not isinstance(result.get("trace"), list):
+            result["trace"] = []
+        return result
+
+    def solve(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
         """
         求解单道数学题（平台固定调用入口）。
 
         参数:
             problem: 原始数学题目文本
-            metadata: 题目元数据，必含 idx 字段
+            metadata: 题目元数据（可缺省，含 idx 字段）
 
         返回:
             {"final_response": str, "trace": list[dict]}
         """
-        return self.orchestrator.run(problem, metadata)
+        if metadata is None:
+            metadata = {}
+        if problem is None or not str(problem).strip():
+            return self._validate_output({
+                "final_response": "题目为空。",
+                "trace": [{"stage": "input", "note": "empty problem"}],
+            })
+
+        # 核心流水线可用 → 走 orchestrator
+        if self.orchestrator is not None:
+            try:
+                result = self.orchestrator.run(problem, metadata)
+                if result and isinstance(result, dict):
+                    return self._validate_output(result)
+            except Exception as e:  # pragma: no cover
+                logger.error("orchestrator.run failed, fallback to direct backend: %s", e)
+
+        # 降级：内置直答后端
+        answer = self._fallback_solve(problem)
+        if not answer:
+            answer = "未给出有效解答。"
+        return self._validate_output({
+            "final_response": answer,
+            "trace": [{"stage": "fallback_direct", "note": "orchestrator unavailable"}],
+        })
+
+    # 兼容平台直接调用 agent(problem, metadata) 的场景
+    def __call__(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
+        return self.solve(problem, metadata, *args, **kwargs)
+
+    # 兼容平台调用 agent.run(problem, metadata) 的场景
+    def run(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
+        return self.solve(problem, metadata, *args, **kwargs)

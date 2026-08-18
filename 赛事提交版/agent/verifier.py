@@ -26,6 +26,13 @@ from prompts.verifier import (
     VERIFIER_FEEDBACK_TEMPLATE,
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
+from utils.extract import smart_fallback_answer
+from utils.prefill import prefill_messages, stitch
+
+try:
+    from .deterministic import DeterministicChecker
+except ImportError:  # pragma: no cover - 极端导入失败降级
+    DeterministicChecker = None
 
 logger = logging.getLogger("MathPilot.Verifier")
 
@@ -72,6 +79,7 @@ class VerifierAgent(BaseAgent):
 
     def __init__(self, client, config):
         super().__init__(client, config)
+        self._checker = None  # DeterministicChecker 懒初始化
 
     # ==================================================================
     # 投票与解析
@@ -121,21 +129,29 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _normalize_answer_text(self, text: str) -> str:
-        """文本级归一化：去空白/去 $/浮点舍入/LaTeX 分数统一。"""
+        """文本级归一化：去空白/去 $/浮点舍入/文本分数→数值/LaTeX 分数统一。"""
         if not text:
             return ""
         t = text.strip()
         t = t.replace("$", "").replace(" ", "")
         t = t.replace("\\displaystyle", "")
         t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
+        # LaTeX 分数统一（与本地 _normalize_answer 一致，无括号便于数值解析）
+        t = re.sub(r'\\frac\s*\{\s*([^}]*)\s*\}\s*\{\s*([^}]*)\s*\}', r'\1/\2', t)
         # 浮点舍入 6 位
         try:
             f = float(t)
             t = f"{f:.6g}"
         except (ValueError, TypeError):
-            pass
-        # LaTeX 分数统一
-        t = re.sub(r'\\frac\s*\{\s*([^}]*)\s*\}\s*\{\s*([^}]*)\s*\}', r'(\1)/(\2)', t)
+            # 文本分数（如 1/2、(1)/(2)）→ 数值，统一 1/2 与 0.5、3 与 3.0
+            stripped = re.sub(r'^\((-?\d+)\)/\((-?\d+)\)$', r'\1/\2', t)
+            if re.fullmatch(r'-?\d+/\d+', stripped):
+                try:
+                    num, den = stripped.split("/")
+                    f = int(num) / int(den)
+                    t = f"{f:.6g}"
+                except (ValueError, ZeroDivisionError):
+                    pass
         return t
 
     def _are_answers_equivalent(self, a: str, b: str) -> bool:
@@ -221,24 +237,34 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _vote_one(self, ctx, problem: str, candidate_text: str) -> str:
-        """单次投票（返回原始文本）。"""
+        """单次投票（返回原始文本）。
+
+        v2.4.1：prefill「VERDICT: 」抑制 CoT——投票输出只需 A/B，
+        实测 prefill 仲裁 0.8s vs 普通 70.2s（140×），杜绝 Intern-S2 推理流占满预算。
+        """
         messages = [
             {"role": "system", "content": VERIFIER_SYSTEM},
             {"role": "user", "content": VERIFIER_USER_TEMPLATE.format(
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        return self.llm(ctx, messages, 0.0, self.config.max_tokens)
+        raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "), 0.0, 512)
+        return stitch("VERDICT: ", raw) if raw else raw
 
     def _vote_one_scoring(self, ctx, problem: str, candidate_text: str) -> dict | None:
-        """评分模式投票（返回 JSON 或 None）。"""
+        """评分模式投票（返回 JSON 或 None）。
+
+        v2.4.1：prefill「{"」引导直接输出 JSON，抑制 CoT 前置长推理。
+        """
         messages = [
             {"role": "system", "content": VERIFIER_SCORING_SYSTEM},
             {"role": "user", "content": VERIFIER_SCORING_TEMPLATE.format(
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        raw = self.llm(ctx, messages, 0.0, self.config.max_tokens)
+        raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 1024)
+        if raw:
+            raw = stitch('{"', raw)
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
@@ -306,10 +332,74 @@ class VerifierAgent(BaseAgent):
             )},
         ]
         try:
-            return self.llm(ctx, messages, 0.0, self.config.max_tokens)
+            # v2.4.1：prefill「错因：」抑制 CoT，直接输出错因定位
+            raw = self.llm(ctx, prefill_messages(messages, "错因："), 0.0, 1024)
+            return stitch("错因：", raw) if raw else "无法提取失败原因。"
         except Exception as e:
             logger.error(f"Feedback extraction failed: {e}")
             return "无法提取失败原因。"
+
+    # ==================================================================
+    # P1-1: Python/SymPy 独立验证通道 + 确定性复算（playoff）
+    # ==================================================================
+
+    _PLAYOFF_SYS = (
+        "你是数学解题专家。重新独立地解答下面这道题，"
+        "只输出最终答案（数值、表达式或选项字母），不要任何推理过程。"
+    )
+
+    def _sympy_spot_check(self, answer: str) -> dict:
+        """对候选答案做 SymPy 独立 sanity check（不消耗 LLM 预算）。
+
+        返回 {"parseable": bool, "value": str|None, "note": str}。
+        仅用于给投票做旁证：可解析的数值/表达式答案可信度更高。
+        """
+        if not answer:
+            return {"parseable": False, "value": None, "note": "empty"}
+        try:
+            from utils.sympy_tools import _try_parse, eval_expression
+            parsed, err = _try_parse(answer)
+            if parsed is None:
+                return {"parseable": False, "value": None, "note": err}
+            val = eval_expression(answer)
+            return {"parseable": True, "value": val, "note": "ok"}
+        except Exception as e:
+            return {"parseable": False, "value": None, "note": str(e)[:80]}
+
+    def _playoff_recheck(self, ctx, problem: str, top_answer: str) -> bool:
+        """确定性复算（playoff）：用 temperature=0 重新解一遍，比对答案。
+
+        解决"验证器与解题器同源一起错"的问题：低温重解是独立采样，
+        若两次独立求解答案一致，则置信度大幅提升。
+        """
+        try:
+            # v2.4.1：playoff 也走 prefill——「答案：」让答案前置，抑制 CoT 推理流
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": self._PLAYOFF_SYS},
+                        {"role": "user", "content": problem},
+                    ],
+                    "答案：",
+                ),
+                0.0,
+                2048,
+            )
+            if resp:
+                resp = stitch("答案：", resp)
+            if not resp or not resp.strip():
+                return False
+            recheck_ans = smart_fallback_answer(resp)
+            if not recheck_ans:
+                return False
+            return self._are_answers_equivalent(
+                self._normalize_answer_text(top_answer),
+                self._normalize_answer_text(recheck_ans),
+            )
+        except Exception as e:
+            logger.warning("playoff recheck failed: %s", e)
+            return False
 
     # ==================================================================
     # 证明步骤验证
@@ -323,7 +413,10 @@ class VerifierAgent(BaseAgent):
             )},
         ]
         try:
-            raw = self.llm(ctx, messages, 0.0, self.config.max_tokens)
+            # v2.4.1：prefill「{"」引导 JSON 输出，抑制 CoT 前置长推理
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 2048)
+            if raw:
+                raw = stitch('{"', raw)
             m = re.search(r'\{[^{}"]*(?:"[^"]*"[^{}]*)*\}', raw, re.DOTALL)
             if m:
                 return json.loads(m.group())
@@ -337,6 +430,40 @@ class VerifierAgent(BaseAgent):
             return None
 
     # ==================================================================
+    # P1: 确定性验证旁证（0 LLM 预算，借鉴 DeepSeek-Harness code-runner 判分哲学）
+    # ==================================================================
+
+    def _get_checker(self) -> "DeterministicChecker | None":
+        """懒初始化确定性验证器（无 SymPy 或导入失败时返回 None）。"""
+        if DeterministicChecker is None:
+            return None
+        if self._checker is None:
+            try:
+                self._checker = DeterministicChecker()
+            except Exception as e:  # pragma: no cover - 防御性兜底
+                logger.warning("DeterministicChecker 初始化失败: %s", e)
+                self._checker = None
+        return self._checker
+
+    def _deterministic_check(self, ctx, problem: str, candidate, cid: int) -> dict:
+        """对候选答案做确定性旁证（SymPy 代入/解析），只记录证据、不参与判分。"""
+        checker = self._get_checker()
+        if checker is None:
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": "确定性通道不可用", "method": "none"}
+        try:
+            ans = (candidate.get("answer", "") if isinstance(candidate, dict)
+                   else getattr(candidate, "answer", ""))
+            det = checker.check_answer(ctx, problem, str(ans),
+                                       domain=getattr(ctx, "domain", None))
+            self.record(ctx, "deterministic",
+                        f"候选#{cid} 确定性旁证: {det['verdict']} - {det['evidence'][:100]}")
+            return det
+        except Exception as e:  # pragma: no cover - 防御性兜底
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": f"异常: {str(e)[:80]}", "method": "error"}
+
+    # ==================================================================
     # 主流程
     # ==================================================================
 
@@ -345,9 +472,18 @@ class VerifierAgent(BaseAgent):
         use_clustering: bool = True,
         use_scoring: bool = False,
         is_proof: bool = False,
+        use_playoff: bool = False,
+        voting_times: int = None,
+        use_deterministic: bool | None = None,
     ) -> dict:
         """
         验证主流程。
+
+        参数:
+            voting_times: 每候选投票数；None 时回退 config.verifier_voting_times。
+                          （难题深度通道：deep 档传 3，fast/standard 传 1）
+            use_deterministic: P1 确定性旁证开关；None 时取 config.use_deterministic。
+                只产出旁证证据（挂到每条 Verdict.deterministic），不参与判分决策。
 
         返回:
             {
@@ -357,6 +493,8 @@ class VerifierAgent(BaseAgent):
                 "best_cluster": AnswerCluster | None,
             }
         """
+        if use_deterministic is None:
+            use_deterministic = bool(getattr(self.config, "use_deterministic", False))
         # 特殊处理证明题
         if is_proof and len(candidates) == 1:
             # 逐步骤验证
@@ -378,16 +516,42 @@ class VerifierAgent(BaseAgent):
                 "best_cluster": cluster,
             }
 
-        # 常规：每个候选投票
+        # 常规：每个候选投票（voting_times 参数化：难题深度通道 deep 档 3 票）
+        if voting_times is None:
+            voting_times = getattr(self.config, 'verifier_voting_times', 1)
         all_verdicts: list[list[Verdict]] = []
         for i, cand in enumerate(candidates):
-            vds = self._vote(ctx, problem, cand, total_votes=self.config.verifier_voting_times,
+            vds = self._vote(ctx, problem, cand, total_votes=voting_times,
                              use_scoring=use_scoring)
+            # P1：确定性旁证（0 LLM 预算，只出证据不改决策）
+            if use_deterministic:
+                det = self._deterministic_check(ctx, problem, cand, i)
+                for v in vds:
+                    v.deterministic = det
             all_verdicts.append(vds)
 
         # 聚类 + 共识
         cluster_data = self._cluster_candidates(candidates, all_verdicts) if use_clustering else []
         best_cluster = cluster_data[0] if cluster_data else None
+
+        # P1-1 确定性复算（playoff）：共识不强或验证全错时，低温独立重解
+        # P0-4 修复：默认关闭（use_playoff=False），仅在时间宽裕时由 orchestrator 开启，
+        # 避免叠加调用链耗尽单题预算 → 45 error
+        if use_playoff and best_cluster is not None and ctx.budget is not None:
+            confidence = (best_cluster.vote_correct / best_cluster.vote_total
+                          if best_cluster.vote_total else 0.0)
+            # 触发条件：置信度低（验证结果不可靠）或投票全否
+            if confidence < 0.5 and ctx.budget.can_spend(1):
+                top_ans = best_cluster.answer_norm or ""
+                if self._playoff_recheck(ctx, problem, top_ans):
+                    best_cluster.vote_correct += 1
+                    best_cluster.vote_total += 1
+                    self.record(ctx, "playoff", "确定性复算通过，答案可信")
+                else:
+                    # 复算不一致 → 置信度下调，标记供 orchestrator 走 revise
+                    best_cluster.vote_correct = 0
+                    best_cluster.vote_total = max(1, best_cluster.vote_total)
+                    self.record(ctx, "playoff", "确定性复算不一致，转自纠错")
 
         return {
             "cluster_data": cluster_data,
@@ -424,7 +588,8 @@ class VerifierAgent(BaseAgent):
             {"role": "user", "content": text + "\n\n这个答案是完整的吗？"},
         ]
         try:
-            raw = self.llm(ctx, messages, 0.0, 128)
+            # v2.4.1：prefill「COMPLETE 」抑制 CoT，秒级返回判定
+            raw = self.llm(ctx, prefill_messages(messages, "COMPLETE "), 0.0, 64)
             return "INCOMPLETE" not in raw.upper() or "COMPLETE" in raw.upper()
         except Exception:
             return True  # 网络异常时保守当作完整

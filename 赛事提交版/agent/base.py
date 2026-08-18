@@ -47,6 +47,7 @@ class Verdict:
     correct: bool = False       # 本次投票结果是否正确（verifier 使用）
     raw: str = ""               # 原始投票返回文本（verifier 使用）
     score: dict | None = None   # 评分模式的详细分数（verifier 使用）
+    deterministic: dict | None = None  # 确定性验证旁证（verifier 使用，0 LLM 预算）
 
 
 @dataclass
