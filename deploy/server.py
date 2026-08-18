@@ -15,7 +15,30 @@ sys.path.insert(0, os.path.join(_PROJECT_ROOT, "转化工具"))
 from flask import Flask, request, jsonify, send_from_directory, render_template_string, session, redirect
 
 app = Flask(__name__, static_folder=None)
-app.secret_key = secrets.token_hex(32)
+# session 密钥持久化：优先环境变量，其次从 deploy/.secret_key 文件读取，
+# 首次启动生成并落盘（该目录已随仓库挂载/持久化）。避免容器重启后
+# 所有登录会话失效（否则 Web 端会表现为"题库全没了"的 401 空列表）。
+def _load_or_create_secret_key() -> str:
+    env_key = os.getenv("SECRET_KEY", "").strip()
+    if env_key:
+        return env_key
+    # 写到挂载卷 测试结果/（容器内 = 宿主机 deploy/results，已持久化），
+    # 避免写在镜像层导致容器重建后密钥丢失、登录会话全部失效
+    key_file = os.path.join(_PROJECT_ROOT, "测试结果", ".secret_key")
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "r", encoding="utf-8") as f:
+                k = f.read().strip()
+                if k:
+                    return k
+        k = secrets.token_hex(32)
+        with open(key_file, "w", encoding="utf-8") as f:
+            f.write(k)
+        return k
+    except Exception:  # pragma: no cover - 极端环境（如只读文件系统）兜底
+        return secrets.token_hex(32)
+
+app.secret_key = _load_or_create_secret_key()
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
 _RESULT_BASE = "测试结果"
@@ -132,7 +155,9 @@ def _get_db():
     global _db_instance
     if _db_instance is None:
         import sqlite3
-        db_path = os.path.abspath(os.path.join(BANK_DIR, "示例题库.db"))
+        # Web 端权威题库：题库/question_bank.db（含 1000题高数/新高数/高数a，1705 题）
+        # （2026-08-19 由 示例题库.db 改为 question_bank.db，用户确认以该库为准）
+        db_path = os.path.abspath(os.path.join(BANK_DIR, "question_bank.db"))
         from question_bank import QuestionBankDB
         _db_instance = QuestionBankDB(db_path)
         orig_connect = _db_instance._connect
