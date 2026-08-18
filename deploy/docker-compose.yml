@@ -1,20 +1,41 @@
-﻿services:
+# MathPilot 数学智能体评测器 — 容器编排
+# ─────────────────────────────────────────────────────────────
+# 前置：deploy/.env 存在即可（仓库已跟踪占位模板，API key 留空；
+#       密钥由 Web 端「用户设置」写入 user_api_settings.json 后注入容器）。
+#
+# 常用命令（在 deploy/ 目录下执行）：
+#   docker compose up -d --build      # 构建并后台启动
+#   docker compose ps                 # 查看状态（含健康检查）
+#   docker compose logs -f            # 跟随日志
+#   docker compose down               # 停止（保留数据卷）
+# ─────────────────────────────────────────────────────────────
+services:
   math-evaluator:
     build:
-      context: ..
+      context: ..          # 仓库根目录（根 .dockerignore 控制构建上下文体积）
       dockerfile: deploy/Dockerfile
+    image: math-evaluator:latest
     container_name: math-evaluator
     ports:
-      - "5000:5000"
-    volumes:
-      # 持久化测试结果
-      - ./results:/app/测试结果
-      # 挂载本地题库目录
-      - ../题库:/app/题库
-      # 持久化用户数据
-      - ./users.json:/app/users.json
-      # 持久化用户API设置
-      - ./user_api_settings.json:/app/user_api_settings.json
+      - "5000:5000"        # 宿主机端口 : 容器端口；改端口改左侧即可
     env_file:
-      - .env
+      - path: .env
+        required: false    # .env 缺失不阻断启动（API key 由 Web 端设置注入）
+    volumes:
+      - ./results:/app/测试结果                    # 持久化评测结果
+      - ../题库:/app/题库                          # 挂载本地题库（覆盖镜像内置副本）
+      - ./users.json:/app/users.json              # 持久化用户账号
+      - ./user_api_settings.json:/app/user_api_settings.json  # 持久化各用户 API 设置
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket,sys; s=socket.create_connection(('127.0.0.1',5000),3); s.close(); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
+    # 可选：资源上限（取消注释启用）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 2G
+    #       cpus: "2.0"

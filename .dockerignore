@@ -1,22 +1,55 @@
-# 排除 git 与本地缓存，减小构建上下文
-.git
-**/__pycache__
-**/*.pyc
-**/*.pyo
+# MathPilot 评测器 — Docker 构建上下文排除清单
+# 作用：docker compose build 时 context 为仓库根，此文件控制哪些文件
+#       不发送给 docker daemon，显著减小构建上下文与首次构建耗时。
+# 注意：.dockerignore 只影响构建上下文，不影响运行期挂载卷。
 
-# 本地运行时数据（不需要进镜像）
+# VCS / 编辑器
+.git
+.gitignore
+.gitattributes
+.codebuddy
+.workbuddy
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Python 缓存
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.egg-info
+
+# 依赖目录
+node_modules
+
+# 评测产物与临时数据
+outputs
 测试结果
 deploy/results
 deploy/banks
 deploy/users.json
 deploy/user_api_settings.json
+*.tmp
+*.log
+
+# 参考/素材大目录（构建不需要；运行时所需数据走挂载卷）
+其他优秀样例
+数学建模参考资料
+计划文件夹
+项目资料
+幻灯片生成工具
+与lean相关的插件
+lean4-toolchain
+题库备份
+题库审核日志
+archive
+submit
+
+# 数据库（镜像内置题库由 Dockerfile 的 COPY 题库/ 单独控制）
 *.db
 *.db-shm
 *.db-wal
-
-# 其他本地产物
-node_modules
-.DS_Store
-Thumbs.db
-题库备份
-题库审核日志
+*.sqlite
