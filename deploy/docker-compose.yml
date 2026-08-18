@@ -1,4 +1,4 @@
-# MathPilot 数学智能体评测器 — 容器编排
+# MathPilot 数学智能体评测器 — 容器编排（v2 重构版）
 # ─────────────────────────────────────────────────────────────
 # 前置：deploy/.env 存在即可（仓库已跟踪占位模板，API key 留空；
 #       密钥由 Web 端「用户设置」写入 user_api_settings.json 后注入容器）。
@@ -8,6 +8,12 @@
 #   docker compose ps                 # 查看状态（含健康检查）
 #   docker compose logs -f            # 跟随日志
 #   docker compose down               # 停止（保留数据卷）
+#   docker compose -f docker-compose.dev.yml up -d   # 开发模式（代码热更新）
+#
+# 可配置环境变量（写进 deploy/.env 或宿主环境）：
+#   HOST_PORT=8080         # 宿主映射端口（默认 5000）
+#   GUNICORN_WORKERS=1     # gunicorn worker 数（默认 1，勿 >1，见 Dockerfile）
+#   GUNICORN_TIMEOUT=300   # 单请求超时（秒）
 # ─────────────────────────────────────────────────────────────
 services:
   math-evaluator:
@@ -16,11 +22,15 @@ services:
       dockerfile: deploy/Dockerfile
     image: math-evaluator:latest
     container_name: math-evaluator
+    environment:
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-1}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
     ports:
-      - "5000:5000"        # 宿主机端口 : 容器端口；改端口改左侧即可
+      - "${HOST_PORT:-5000}:5000"   # 宿主机端口可配（默认 5000）
     env_file:
       - path: .env
         required: false    # .env 缺失不阻断启动（API key 由 Web 端设置注入）
+    init: true             # 以 init 进程回收僵尸子进程（评测线程派生场景）
     volumes:
       - ./results:/app/测试结果                    # 持久化评测结果
       - ../题库:/app/题库                          # 挂载本地题库（覆盖镜像内置副本）
@@ -33,9 +43,8 @@ services:
       retries: 3
       start_period: 20s
     restart: unless-stopped
-    # 可选：资源上限（取消注释启用）
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 2G
-    #       cpus: "2.0"
+    deploy:
+      resources:
+        limits:
+          memory: 2G       # 内存上限（评测任务并发时防 OOM 拖垮宿主机）
+          cpus: "2.0"      # CPU 上限

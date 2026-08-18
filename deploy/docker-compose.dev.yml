@@ -1,0 +1,42 @@
+# MathPilot 评测器 — 开发模式（代码热更新）
+# ─────────────────────────────────────────────────────────────
+# 用途：修改 deploy/server.py / templates / 测试工具 后无需重建镜像，
+#       挂载卷实时生效 + gunicorn --reload 自动重启 worker。
+#
+# 用法（在 deploy/ 目录下）：
+#   docker compose -f docker-compose.dev.yml up -d --build
+#   docker compose -f docker-compose.dev.yml logs -f
+#
+# 注意：dev 模式挂载了宿主机源码（覆盖镜像内置副本），
+#       生产部署请用默认 docker-compose.yml（不挂源码、镜像自包含）。
+# ─────────────────────────────────────────────────────────────
+services:
+  math-evaluator:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: math-evaluator:latest
+    container_name: math-evaluator
+    environment:
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-1}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
+    ports:
+      - "${HOST_PORT:-5000}:5000"
+    env_file:
+      - path: .env
+        required: false
+    init: true
+    volumes:
+      # 开发热更新：宿主机源码覆盖镜像内置副本
+      - ../deploy/server.py:/app/server.py
+      - ../deploy/templates:/app/templates
+      - ../测试工具:/app/测试工具
+      - ../转化工具:/app/转化工具
+      # 运行数据持久化（与生产一致）
+      - ./results:/app/测试结果
+      - ../题库:/app/题库
+      - ./users.json:/app/users.json
+      - ./user_api_settings.json:/app/user_api_settings.json
+    # --reload：源码变化自动重启 worker（仅开发）
+    command: ["sh", "-c", "exec gunicorn -w ${GUNICORN_WORKERS:-1} -b 0.0.0.0:5000 --timeout ${GUNICORN_TIMEOUT:-300} --reload --access-logfile - server:app"]
+    restart: unless-stopped
