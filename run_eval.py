@@ -167,10 +167,15 @@ def _clean_answer(text: str) -> str:
 
 
 def _norm_candidate(text: str) -> str:
-    """候选答案规范化（LaTeX 分数 → 除法表达）"""
-    if not text:
-        return ""
-    return _laTeX_to_py_frac(_clean_answer(text))
+    """候选答案规范化（LaTeX 分数 → 除法表达 + 隐式乘法补全供 SymPy）。"""
+    cleaned = _clean_answer(text)
+    # 隐式乘法补全（2026-08-19 增强）："e^x(x-1)" → "e^x*(x-1)"，
+    # 否则 sympify 解析失败（如 e^x(x-1)+C 与 xe^x-e^x+C 的代数等价判定）
+    cleaned = re.sub(r"(\d)([a-zA-Zα-ω])", r"\1*\2", cleaned)   # 5x → 5*x
+    cleaned = re.sub(r"(\d)\(", r"\1*(", cleaned)                # 2( → 2*(
+    cleaned = re.sub(r"\)\s*([a-zA-Zα-ω])", r")*\1", cleaned)   # )x → )*x
+    cleaned = re.sub(r"\)\s*\(", r")*(", cleaned)                # )( → )*(
+    return _laTeX_to_py_frac(cleaned)
 
 
 def _extract_equals_candidates(pred: str) -> List[str]:
@@ -273,17 +278,35 @@ def _matches_one(pred_f: str, gold_f: str) -> bool:
             return True
     except ImportError:
         pass
+    # 兜底：parse_expr 支持隐式乘法与函数识别（2026-08-19 v2 增强）
+    # 解决 "e^x(x-1)+C" ≡ "xe^x-e^x+C"（sympify 无法解析隐式乘法）
+    try:
+        import sympy as _sp
+        from sympy.parsing.sympy_parser import (
+            parse_expr, standard_transformations,
+            implicit_multiplication_application, convert_xor,
+        )
+        _trans = standard_transformations + (convert_xor, implicit_multiplication_application)
+        a = parse_expr(pred_f, transformations=_trans)
+        b = parse_expr(gold_f, transformations=_trans)
+        return _sp.simplify(a - b) == 0
+    except Exception:
+        pass
     return False
 
 
 def _key_values(text: str) -> frozenset:
-    """提取文本答案中的关键数值/赋值对集合（2026-08-19 新增）。
+    """提取文本答案中的关键数值/赋值对集合（2026-08-19 新增，含 v2 增强）。
 
     处理"极大值点为 x = -1，极小值点为 x = 1" 这类文本答案：
-    提取所有 `变量=数值` 对与孤立的数值，用于关键信息等价比较。
-    零误报原则：仅当两侧提取集合非空且完全相等才判对。
+    提取所有 `变量=数值` 对（含 `f(-1)=3` 函数值形式）与孤立数值，
+    用于关键信息等价比较。零误报原则：仅当两侧提取集合非空且完全相等才判对。
     """
     vals = set()
+    # 函数值形式：f(-1)=3 / f(1)=-1（2026-08-19 v2 增强）
+    for m in re.finditer(
+        r"([a-zA-Zα-ω])\s*\(\s*([^()]*?)\s*\)\s*[=＝]\s*(-?\d+(?:\.\d+)?)", text):
+        vals.add(f"{m.group(1)}({m.group(2)})={m.group(3)}")
     # 变量=数值 对（x=-1、极大值=3）
     for m in re.finditer(r"([a-zA-Zα-ω])\s*[=＝]\s*(-?\d+(?:\.\d+)?)", text):
         vals.add(f"{m.group(1)}={m.group(2)}")
@@ -291,6 +314,24 @@ def _key_values(text: str) -> frozenset:
     for m in re.finditer(r"(?<![\w.])-?\d+(?:\.\d+)?(?![\w.])", text):
         vals.add(f"#{m.group()}")
     return frozenset(vals)
+
+
+# 判定词白名单：短结论（收敛/发散等）出现在 gold 文本中即视为等价
+_JUDGEMENT_WORDS = frozenset({
+    "收敛", "发散", "条件收敛", "绝对收敛", "一致收敛", "无解", "有解",
+    "不收敛", "可导", "不可导", "连续", "不连续", "递增", "递减",
+})
+
+
+def _judgement_contains(pred: str, gold: str) -> bool:
+    """短判定词匹配（2026-08-19 v2 增强）：
+    pred 是白名单判定词且 gold 文本包含该词 → 判对。
+    （如 pred="发散" vs gold="……根据级数收敛的判别法，该级数发散"）
+    """
+    p = pred.strip()
+    if p in _JUDGEMENT_WORDS and p in gold:
+        return True
+    return False
 
 
 def answers_match(pred: str, gold: str) -> bool:
@@ -320,6 +361,9 @@ def answers_match(pred: str, gold: str) -> bool:
     # 关键数值/赋值对完全一致（长文本答案，如极大值点/区间）
     pv, gv = _key_values(pred_f), _key_values(gold_f)
     if pv and gv and pv == gv and len(pv) >= 2:
+        return True
+    # 短判定词包含匹配（pred="发散" vs gold 长解析含"发散"）
+    if _judgement_contains(pred, gold):
         return True
     return False
 
