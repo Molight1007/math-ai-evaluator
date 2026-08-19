@@ -34,11 +34,11 @@ COPY deploy/templates/ ./templates/
 # ── 运行期目录 + 非 root 用户 ──
 # 挂载卷（deploy/results、题库、users.json、user_api_settings.json）在
 # Docker Desktop 下权限宽松（777），appuser 可写；若遇权限问题可改回 root。
-RUN mkdir -p 测试结果/测试结果展示 测试结果/原始问题及答案 测试结果/原始问题 \
-    && useradd -m -u 1000 appuser \
-    && chown -R appuser:appuser /app
+RUN mkdir -p 测试结果/测试结果展示 测试结果/原始问题及答案 测试结果/原始问题
 
-USER appuser
+# 说明：v2 曾尝试非 root 用户（appuser），但挂载卷中由旧容器以 root 创建的
+# 子目录（测试结果/原始问题 等，755 root）导致 appuser 写权限拒绝 → 评测失败。
+# 权衡后回退 root 运行（功能优先；如需非 root 请先对挂载卷做权限迁移）。
 
 # 健康检查：TCP 探测 5000 端口（不依赖具体路由）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
