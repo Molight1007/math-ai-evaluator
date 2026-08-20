@@ -218,7 +218,42 @@ class SolverAgent(BaseAgent):
         if not is_valid_final_answer(answer) and len(raw) > 0:
             answer = raw[-500:]
         cid = len(ctx.candidates)
-        return Candidate(id=cid, reasoning=raw, answer=answer)
+        cand = Candidate(id=cid, reasoning=raw, answer=answer)
+
+        # 队友 Lean 改造3（合并自 origin/main）：证明题通道接入 Lean 形式化验证
+        # （默认关闭 enable_lean_verify，保守兼容）。开启时用 LeanBridge 验证推理，
+        # 与 LLM 逐步骤验证结果融合写入 ctx.revise_feedback，驱动既有 _generate_revise 闭环。
+        if getattr(self.config, 'enable_lean_verify', False):
+            self._lean_verify_and_feedback(ctx, cand)
+        return cand
+
+    def _lean_verify_and_feedback(self, ctx: TaskContext, cand: Candidate) -> None:
+        """调用 LeanBridge 验证推理，把 Lean 结果融合进 ctx.revise_feedback。
+
+        - Lean 判定 proof_invalid 且含修正建议 → 直接作为 revise 反馈，驱动闭环；
+        - Lean 环境缺失 / 超时 / 纯翻译错误（unknown）→ 不污染 revise 反馈，
+          交由既有 LLM 逐步骤验证兜底。
+        """
+        try:
+            from .lean_bridge import LeanBridge
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[Solver] LeanBridge 导入失败，跳过 Lean 验证: %s", exc)
+            return
+        try:
+            bridge = LeanBridge(
+                self.client, config=self.config,
+                budget=getattr(ctx, 'budget', None))
+            timeout = float(getattr(self.config, 'lean_timeout', 60.0) or 60.0)
+            report = bridge.verify(ctx.problem, cand.reasoning,
+                                   domain=ctx.domain or "", timeout=timeout)
+            if report is None:
+                return
+            if not report.is_valid() and report.suggestion:
+                ctx.revise_feedback.append(report.suggestion)
+                self.record(ctx, "lean_verify",
+                            f"Lean 验证反馈: {report.suggestion[:80]}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[Solver] Lean 验证异常，跳过（由 LLM 兜底）: %s", e)
 
     def _compressed_solve(self, ctx: TaskContext, system: str, user: str,
                           temperature: float = 0.1,

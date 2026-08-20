@@ -87,6 +87,9 @@ PROOF_VERIFY_SYSTEM = """你是一位数学证明评审专家。请**逐步骤**
 - 若存在 fatal_error → proof_invalid，指出是哪一步、什么原因
 - 若只有 minor_issue → 注明但仍判定为 proof_valid
 
+改造2：请额外输出可修复性判定 ``repairable`` 与修正建议 ``suggestion``，
+对应评审的 critical/gap 分类（critical=fatal_error 难修复，gap=minor_issue 可修复）。
+
 输出格式（JSON）：
 {{
   "step_verdicts": [
@@ -94,7 +97,9 @@ PROOF_VERIFY_SYSTEM = """你是一位数学证明评审专家。请**逐步骤**
     {{"step": 2, "verdict": "fatal_error", "note": "错误原因"}}
   ],
   "overall": "proof_valid" | "proof_invalid",
-  "first_error_step": null | 步骤编号
+  "first_error_step": null | 步骤编号,
+  "repairable": "yes" | "no" | "partial",
+  "suggestion": "针对错误的定向修正建议"
 }}
 """
 

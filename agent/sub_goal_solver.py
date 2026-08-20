@@ -29,6 +29,8 @@ try:
         SUBGOAL_STEP_USER_TEMPLATE,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
+        SUBGOAL_REVIEW_SYSTEM,
+        SUBGOAL_REVIEW_USER_TEMPLATE,
     )
     from prompts.policy import get_domain_hint
     from utils.extract import extract_final_answer, smart_fallback_answer
@@ -41,6 +43,8 @@ except ImportError:
         SUBGOAL_STEP_USER_TEMPLATE,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
+        SUBGOAL_REVIEW_SYSTEM,
+        SUBGOAL_REVIEW_USER_TEMPLATE,
     )
     from submit.prompts.policy import get_domain_hint
     from submit.utils.extract import extract_final_answer, smart_fallback_answer
@@ -130,6 +134,11 @@ class SubGoalSolverAgent(BaseAgent):
         subgoal_plan_summary = self._format_plan_summary(subgoals, merge_strategy)
         results_map = {}  # subgoal_id → result_text
 
+        # 改造4：AND-OR DAG 递归深度上限（默认 2 层，受预算限制）
+        # 硬性约束：改造 4 默认关闭，仅当 enable_dag_plan=True 时启用（失败回溯 + Reviewer 剪枝）
+        enable_dag = bool(getattr(self.config, 'enable_dag_plan', False))
+        max_depth = int(getattr(self.config, 'subgoal_max_depth', 2) or 2)
+
         for sg in subgoals:
             if not ctx.budget.can_spend(2):
                 self.record(ctx, "subgoal", f"预算不足，跳过剩余子目标 (当前={sg['id']}/{len(subgoals)})")
@@ -137,12 +146,25 @@ class SubGoalSolverAgent(BaseAgent):
 
             prev_results = self._format_previous_results(results_map, subgoals)
             step_result = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results)
+
+            # 改造4：子目标求解失败时，尝试递归分解（OR 节点回溯）——仅 enable_dag_plan 开启时
+            if enable_dag and self._is_failed_result(step_result) and max_depth > 1:
+                self.record(ctx, "subgoal_backtrack",
+                            f"子目标 #{sg['id']} 求解失败，尝试递归分解（depth={max_depth}）")
+                step_result = self._solve_with_backtrack(
+                    ctx, sg, subgoal_plan_summary, prev_results, max_depth - 1)
+
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
 
             self.record(ctx, "subgoal_step",
                        f"子目标 #{sg['id']}「{sg['title']}」求解完成: {step_result[:80]}")
             time.sleep(0.2)  # 速率限制间隔
+
+        # 改造4：LLM Reviewer 过滤无前景子目标（LEAP 2.5），剪枝后更新结果
+        # 改造4：LLM Reviewer 剪枝（LEAP 2.5）——仅 enable_dag_plan 开启时启用
+        if enable_dag:
+            subgoals = self._review_and_prune(ctx, subgoals, results_map)
 
         # 阶段三：结论合并
         if not ctx.budget.can_spend(1):
@@ -247,6 +269,126 @@ class SubGoalSolverAgent(BaseAgent):
             return result_match.group(1).strip()
         # 如果没有标记，取最后 500 字符
         return resp.strip()[-500:]
+
+    # ---------- 改造4：AND-OR 回溯与 Reviewer 剪枝 ----------
+    @staticmethod
+    def _is_failed_result(result: str) -> bool:
+        """判断子目标求解结果是否失败（空、含失败标记、或过短无实质内容）。"""
+        if not result:
+            return True
+        if "求解失败" in result or "无法求解" in result or "无法解决" in result:
+            return True
+        if len(result.strip()) < 5:
+            return True
+        return False
+
+    def _solve_with_backtrack(self, ctx: TaskContext, sg: dict,
+                              plan_summary: str, prev_results: str,
+                              depth: int) -> str:
+        """OR 节点回溯：子目标直接求解失败时，递归分解成更小的子目标再求解。
+
+        - AND 节点：原问题的分解（一次生成多个子目标）；
+        - OR 节点：每个子目标有多条可选的更细分解路径，失败时尝试替代路径；
+        - 深度受 ``depth``（预算/配置上限）约束，过深不再递归，直接返回失败。
+        """
+        if depth <= 0 or not ctx.budget.can_spend(2):
+            return f"[子目标 #{sg['id']} 递归求解失败，已回溯]"
+        # 把当前失败子目标当作一个小问题，尝试再次规划并求解（OR 替代路径）
+        sub = self._plan_subgoal_again(ctx, sg)
+        if sub is None:
+            return f"[子目标 #{sg['id']} 无法进一步分解，已回溯]"
+        # 递归求解更细子目标，取最后一个成功结果
+        last = ""
+        for i, mini in enumerate(sub):
+            if not ctx.budget.can_spend(2):
+                break
+            prev = self._format_previous_results({}, [])
+            r = self._solve_subgoal(ctx, mini, plan_summary, prev)
+            if self._is_failed_result(r) and depth - 1 > 0:
+                r = self._solve_with_backtrack(ctx, mini, plan_summary, prev, depth - 1)
+            last = r if not self._is_failed_result(r) else last
+        return last or f"[子目标 #{sg['id']} 回溯后仍失败]"
+
+    def _plan_subgoal_again(self, ctx: TaskContext, sg: dict) -> list[dict] | None:
+        """把单个失败子目标当作小问题重新规划（OR 节点替代分解路径）。"""
+        domain = ctx.domain or ""
+        domain_hint = get_domain_hint(domain) if domain else ""
+        user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
+            domain_hint=domain_hint,
+            problem=sg.get("description") or sg.get("title") or ctx.problem,
+        )
+        resp = self.llm(
+            ctx,
+            prefill_messages(
+                [{"role": "system", "content": SUBGOAL_PLAN_SYSTEM},
+                 {"role": "user", "content": user_msg}],
+                '{"',
+            ),
+            0.2, 2048,
+        )
+        if resp:
+            resp = stitch('{"', resp)
+        raw = self._extract_json(resp) if resp else None
+        if not raw:
+            return None
+        return self._parse_subgoal_plan(raw)
+
+    def _review_subgoal(self, ctx: TaskContext, sg: dict) -> dict:
+        """调用 LLM Reviewer 判断单个子目标是否有前景（LEAP 2.5）。"""
+        user_msg = SUBGOAL_REVIEW_USER_TEMPLATE.format(
+            problem=ctx.problem,
+            subgoal_title=sg.get("title", ""),
+            subgoal_description=sg.get("description", ""),
+            subgoal_result=sg.get("result", "") or "（未求解）",
+        )
+        resp = self.llm(
+            ctx,
+            prefill_messages(
+                [{"role": "system", "content": SUBGOAL_REVIEW_SYSTEM},
+                 {"role": "user", "content": user_msg}],
+                '{"',
+            ),
+            0.2, 1024,
+        )
+        if resp:
+            resp = stitch('{"', resp)
+        raw = self._extract_json(resp) if resp else None
+        if raw is None:
+            return {"keep": True, "reason": "review 失败，保守保留", "suggestion": ""}
+        return {"keep": bool(raw.get("keep", True)),
+                "reason": str(raw.get("reason", "")),
+                "suggestion": str(raw.get("suggestion", ""))}
+
+    def _review_and_prune(self, ctx: TaskContext, subgoals: list[dict],
+                          results_map: dict) -> list[dict]:
+        """对已求解子目标做 Reviewer 过滤，剪枝无前景子目标（LEAP 2.5）。
+
+        若预算不足以逐个子目标 review，则整体跳过（保守兼容，不影响默认行为）。
+        返回剪枝后的子目标列表。
+        """
+        if not subgoals:
+            return subgoals
+        # 预算不足时跳过 reviewer（保守兼容：默认不启用该增强开销）
+        if not ctx.budget.can_spend(len(subgoals)):
+            self.record(ctx, "subgoal_review", "预算不足，跳过 Reviewer 剪枝")
+            return subgoals
+        kept = []
+        pruned = 0
+        for sg in subgoals:
+            verdict = self._review_subgoal(ctx, sg)
+            if verdict.get("keep", True):
+                # 有修正建议时，用建议覆盖 result 提示后续合并阶段
+                if verdict.get("suggestion") and sg.get("result"):
+                    sg["result"] = sg["result"] + f"\n[Reviewer 建议] {verdict['suggestion']}"
+                kept.append(sg)
+            else:
+                pruned += 1
+                self.record(ctx, "subgoal_prune",
+                            f"子目标 #{sg['id']}「{sg['title']}」被 Reviewer 剪枝: {verdict.get('reason', '')}")
+        if pruned:
+            self.record(ctx, "subgoal_review",
+                        f"Reviewer 过滤完成: 剪枝 {pruned} 个无前景子目标")
+        return kept or subgoals  # 若全部被剪枝则保留原列表兜底
 
     # ---------- 阶段三：合并 ----------
     def _merge_results(self, ctx: TaskContext, subgoals: list[dict],

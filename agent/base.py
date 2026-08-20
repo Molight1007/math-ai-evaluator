@@ -330,6 +330,9 @@ class BugReport:
     """
     findings: list = field(default_factory=list)  # list[Finding]
     verdict: str = "unknown"
+    # 队友 Lean 改造2（合并自 origin/main）：可修复性判定 + 修正建议（向后兼容）
+    repairable: str = ""       # 'yes' | 'no' | 'partial'（空=未判定）
+    suggestion: str = ""       # 修正建议文本（空=无）
 
     def is_valid(self) -> bool:
         return self.verdict == "proof_valid"
@@ -338,7 +341,7 @@ class BugReport:
         return any(f.kind == "Critical" for f in self.findings)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "findings": [
                 {"location": f.location, "kind": f.kind,
                  "severity": f.severity, "desc": f.desc}
@@ -346,6 +349,12 @@ class BugReport:
             ],
             "verdict": self.verdict,
         }
+        # 可选字段仅在非空时序列化，保持旧 JSON 契约兼容（队友 Lean 改造2）
+        if self.repairable:
+            d["repairable"] = self.repairable
+        if self.suggestion:
+            d["suggestion"] = self.suggestion
+        return d
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
@@ -358,7 +367,8 @@ class BugReport:
                     severity=int(f.get("severity", 0)), desc=f.get("desc", ""))
             for f in d.get("findings", []) or []
         ]
-        return cls(findings=findings, verdict=d.get("verdict", "unknown"))
+        return cls(findings=findings, verdict=d.get("verdict", "unknown"),
+                   repairable=d.get("repairable", ""), suggestion=d.get("suggestion", ""))
 
 
 # ------------------------------------------------------------

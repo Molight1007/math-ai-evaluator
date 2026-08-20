@@ -502,6 +502,15 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _extract_feedback(self, ctx, problem: str, candidate) -> str:
+        """从失败候选提取纠错反馈。
+
+        队友 Lean 改造2（合并自 origin/main）：若候选关联的 BugReport 带有
+        suggestion（修正建议），直接采用，省一次 LLM 调用；否则退回通用 LLM 提取。
+        """
+        report = getattr(candidate, "bug_report", None)
+        if report is not None and getattr(report, "suggestion", ""):
+            logger.info("Feedback: 优先采用结构化 suggestion（省一次 LLM 调用）")
+            return report.suggestion
         artifact = self._candidate_artifact(ctx, candidate)
         messages = [
             {"role": "system", "content": VERIFIER_FEEDBACK_SYSTEM},
@@ -674,7 +683,11 @@ class VerifierAgent(BaseAgent):
                     kind="Critical" if verdict == "proof_invalid" else "Gap",
                     severity=5 if verdict == "proof_invalid" else 1,
                     desc=parsed.get("raw", "")[:200]))
-            return BugReport(findings=findings, verdict=verdict)
+            # 队友 Lean 改造2（合并自 origin/main）：解析可修复性判定与修正建议
+            report = BugReport(findings=findings, verdict=verdict)
+            report.repairable = str(parsed.get("repairable", "") or "")
+            report.suggestion = str(parsed.get("suggestion", "") or "")
+            return report
         except Exception as e:
             logger.warning(f"Proof step verify failed: {e}")
             return BugReport(verdict="unknown", findings=[])
@@ -723,6 +736,9 @@ class VerifierAgent(BaseAgent):
             # 逐步骤验证（P3：产出 BugReport，包含 step 级 findings）
             proof_text = self._candidate_text(candidates[0])
             report = self._verify_proof_step(ctx, problem, proof_text)
+            # 队友 Lean 改造2（合并自 origin/main）：把 BugReport 挂到候选上，
+            # 供 _extract_feedback 优先取 suggestion（省一次 LLM 调用）
+            self._attach_report(candidates[0], report)
             overall_correct = report.is_valid() if report else False
             v = Verdict(correct=overall_correct,
                         raw=report.to_json() if report else "{}")
@@ -731,11 +747,15 @@ class VerifierAgent(BaseAgent):
             cluster.vote_correct = 1 if overall_correct else 0
             cluster.vote_total = 1
             # P1：失败时把首个致命缺陷/缺口作为自纠错反馈回传
+            # 队友改造2：优先取结构化 suggestion（修正建议），其次取首个 Critical/Gap desc
             feedback = ""
             if report and not overall_correct:
-                first = next((f for f in report.findings if f.kind == "Critical"),
-                             report.findings[0] if report.findings else None)
-                feedback = first.desc if first else report.verdict
+                if report.suggestion:
+                    feedback = report.suggestion
+                else:
+                    first = next((f for f in report.findings if f.kind == "Critical"),
+                                 report.findings[0] if report.findings else None)
+                    feedback = first.desc if first else report.verdict
             return {
                 "cluster_data": [cluster],
                 "feedback": feedback,
@@ -842,6 +862,21 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
     # 辅助
     # ==================================================================
+
+    def _attach_report(self, candidate, report) -> None:
+        """把 BugReport 挂到候选上（队友 Lean 改造2，供 _extract_feedback 优先取 suggestion）。
+
+        兼容 dict 候选与对象候选两种形态；report 为 None 时静默跳过。
+        """
+        if report is None:
+            return
+        if isinstance(candidate, dict):
+            candidate["bug_report"] = report
+        else:
+            try:
+                candidate.bug_report = report
+            except (AttributeError, TypeError):  # 不可写对象静默跳过
+                pass
 
     def _candidate_text(self, candidate) -> str:
         if isinstance(candidate, dict):

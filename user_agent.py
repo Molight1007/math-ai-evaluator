@@ -116,6 +116,12 @@ class AgentConfig:
     use_challenge: bool = False        # P2: Verifier 反例挑战（LLM 生成命题 + 程序验证）
     use_view_sampling: bool = False    # P3: Solver 视角采样（换元/几何/代数/倒推，替代纯温度分层）
 
+    # ---- 队友 Lean 改造（合并自 origin/main，默认关闭，保守兼容）----
+    enable_lean_verify: bool = False   # 证明题通道启用 Lean 验证（需 Lean 环境）
+    lean_timeout: float = 60.0         # Lean 编译/整体验证 wall-clock 超时（秒）
+    enable_dag_plan: bool = False      # AND-OR DAG 子目标规划（失败回溯 + Reviewer 剪枝）
+    subgoal_max_depth: int = 2         # 子目标失败回溯的递归深度上限（AND-OR DAG）
+
 
 # ============================================================
 # 响应归一化工具（P0-1 契约防线核心）
@@ -233,6 +239,9 @@ class ReasoningAgent:
             # v3 P1/P2/P3
             "judger_friendly", "use_deterministic",
             "use_rubric", "use_challenge", "use_view_sampling",
+            # 队友 Lean 改造
+            "enable_lean_verify", "lean_timeout",
+            "enable_dag_plan", "subgoal_max_depth",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
