@@ -73,32 +73,52 @@ install_with_elan() {
 }
 
 install_from_cache() {
-    log "尝试从离线缓存目录解压 lake/lean: $CACHE_DIR"
+    log "尝试从离线缓存目录加载 lake/lean: $CACHE_DIR"
     if [ ! -d "$CACHE_DIR" ]; then
         log "缓存目录不存在，离线安装不可用。"
         return 1
     fi
-    local bin_dir="$CACHE_DIR/bin"
-    if [ ! -d "$bin_dir" ]; then
-        # 支持 tar.gz 打包
-        local arc
-        for arc in "$CACHE_DIR"/*.tar.gz; do
-            [ -f "$arc" ] && { log "解压 $arc ..."; mkdir -p "$bin_dir"; tar -xzf "$arc" -C "$CACHE_DIR"; break; }
-        done
-        [ -d "$bin_dir" ] || { log "缓存中未找到 bin 目录"; return 1; }
-    fi
-    if [ -x "$bin_dir/lake" ]; then
-        log "写入环境文件 $ENV_FILE"
-        {
-            echo "export PATH=\"$bin_dir:\$PATH\""
-            echo "# 由 deploy/setup_lean.sh 生成：离线 Lean 工具链"
-        } > "$ENV_FILE"
-        export PATH="$bin_dir:$PATH"
-        command -v lake >/dev/null 2>&1
+
+    # 兼容两种缓存布局：
+    #   1) 官方 release 解压原样:  $CACHE_DIR/lean-4.31.0-linux/bin/lake
+    #   2) 铺平布局:              $CACHE_DIR/bin/lake
+    # lean/lake 二进制内嵌 $ORIGIN/../lib 与 $ORIGIN/../lib/lean 的 RPATH，
+    # 因此只需保证 bin/ 与 lib/ 相对结构不变，无需额外设置 LD_LIBRARY_PATH。
+    local bin_dir=""
+    local lib_dir=""
+    if [ -x "$CACHE_DIR/bin/lake" ]; then
+        bin_dir="$CACHE_DIR/bin"
+        lib_dir="$CACHE_DIR/lib"
     else
-        log "缓存中缺少 lake 可执行文件。"
+        local d
+        for d in "$CACHE_DIR"/lean-*/bin; do
+            if [ -x "$d/lake" ]; then
+                bin_dir="$d"
+                lib_dir="$(dirname "$d")/lib"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$bin_dir" ] || [ ! -x "$bin_dir/lake" ]; then
+        log "缓存中缺少 lake 可执行文件（期望 $CACHE_DIR/lean-*/bin/lake 或 $CACHE_DIR/bin/lake）。"
         return 1
     fi
+
+    log "写入环境文件 $ENV_FILE (bin=$bin_dir)"
+    {
+        echo "export PATH=\"$bin_dir:\$PATH\""
+        # RPATH 已内嵌 $ORIGIN/../lib，这里兜底显式导出，双保险
+        if [ -n "$lib_dir" ] && [ -d "$lib_dir" ]; then
+            echo "export LD_LIBRARY_PATH=\"$lib_dir:\$LD_LIBRARY_PATH\""
+        fi
+        echo "# 由 deploy/setup_lean.sh 生成：离线 Lean 工具链"
+    } > "$ENV_FILE"
+    export PATH="$bin_dir:$PATH"
+    if [ -n "$lib_dir" ] && [ -d "$lib_dir" ]; then
+        export LD_LIBRARY_PATH="$lib_dir:${LD_LIBRARY_PATH:-}"
+    fi
+    command -v lake >/dev/null 2>&1
 }
 
 # ---- 3) 按模式执行 ------------------------------------------------------
