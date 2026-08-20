@@ -571,6 +571,7 @@ def main():
     parser.add_argument("--use_rubric", type=str, default=None, choices=["true", "false"], help="use_rubric（Verifier 结构化 rubric 判分）")
     parser.add_argument("--use_challenge", type=str, default=None, choices=["true", "false"], help="use_challenge（Verifier 反例挑战）")
     parser.add_argument("--use_view_sampling", type=str, default=None, choices=["true", "false"], help="use_view_sampling（Solver 视角采样）")
+    parser.add_argument("--enable_domain_hint", type=str, default=None, choices=["true", "false"], help="enable_domain_hint（领域分类提示注入，false=裸奔解题，用于 A/B 对比）")
     args = parser.parse_args()
 
     if args.list_banks:
@@ -626,6 +627,8 @@ def main():
         overrides["use_challenge"] = args.use_challenge == "true"
     if args.use_view_sampling is not None:
         overrides["use_view_sampling"] = args.use_view_sampling == "true"
+    if args.enable_domain_hint is not None:
+        overrides["enable_domain_hint"] = args.enable_domain_hint == "true"
 
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,
