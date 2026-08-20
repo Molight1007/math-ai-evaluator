@@ -1,0 +1,2 @@
+# 强制 shell 脚本使用 LF 行尾，确保 Linux 评测容器能正确执行
+*.sh text eol=lf
