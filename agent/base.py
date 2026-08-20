@@ -158,6 +158,74 @@ class Budget:
             self.max_calls = max(self.used_calls, new_max)
 
 
+# ------------------------------------------------------------
+# P3：Finding / BugReport（step 级分级验证报告）
+# 供 agent/lean_bridge.py（Lean 形式化验证桥接层）使用。
+# ------------------------------------------------------------
+@dataclass
+class Finding:
+    """单个步骤级缺陷（P3）"""
+    location: str = ""     # 出错位置（步骤编号/行号/引用）
+    kind: str = "Gap"      # Critical（致命）| Gap（缺口/瑕疵）
+    severity: int = 0       # 严重度 1-5（5 最严重）
+    desc: str = ""         # 缺陷描述
+
+
+@dataclass
+class BugReport:
+    """步骤级验证报告（P3 一等公民）
+
+    契约：
+      - ``findings``：list[Finding]，含 location / kind(Critical|Gap) / severity / desc；
+      - ``verdict``：'proof_valid' | 'proof_invalid' | 'unknown'；
+      - ``is_valid()`` / ``has_critical()``；
+      - ``to_dict()`` / ``to_json()`` / ``from_dict()``：JSON 可序列化（P6 要求）。
+    """
+    findings: list = field(default_factory=list)  # list[Finding]
+    verdict: str = "unknown"
+    # 改造2：可修复性判定（yes/no/partial）+ 修正建议（可选字段，向后兼容）
+    repairable: str = ""       # 'yes' | 'no' | 'partial'（空=未判定）
+    suggestion: str = ""       # 修正建议文本（空=无）
+
+    def is_valid(self) -> bool:
+        return self.verdict == "proof_valid"
+
+    def has_critical(self) -> bool:
+        return any(f.kind == "Critical" for f in self.findings)
+
+    def to_dict(self) -> dict:
+        d = {
+            "findings": [
+                {"location": f.location, "kind": f.kind,
+                 "severity": f.severity, "desc": f.desc}
+                for f in self.findings
+            ],
+            "verdict": self.verdict,
+        }
+        # 可选字段仅在非空时序列化，保持旧 JSON 契约兼容
+        if self.repairable:
+            d["repairable"] = self.repairable
+        if self.suggestion:
+            d["suggestion"] = self.suggestion
+        return d
+
+    def to_json(self) -> str:
+        import json
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BugReport":
+        d = d or {}
+        findings = [
+            Finding(location=f.get("location", ""), kind=f.get("kind", "Gap"),
+                    severity=int(f.get("severity", 0)), desc=f.get("desc", ""))
+            for f in (d.get("findings", []) or [])
+        ]
+        return cls(findings=findings, verdict=d.get("verdict", "unknown"),
+                   repairable=d.get("repairable", "") or "",
+                   suggestion=d.get("suggestion", "") or "")
+
+
 @dataclass
 class TaskContext:
     """黑板：所有 Agent 共享的推理上下文"""
@@ -172,6 +240,9 @@ class TaskContext:
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
     lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
+    # ---- Lean 硬验证门禁字段（v2.5+LeanBridge）----
+    lean_gate: list = field(default_factory=list)       # 每候选 Lean 验证诊断记录
+    lean_reject_feedback: list = field(default_factory=list)  # 被 Lean 淘汰候选的反馈（供 revise）
 
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）

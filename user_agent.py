@@ -124,6 +124,15 @@ class AgentConfig:
     deep_revise_rounds: int = 1             # deep 档 0 票时 revise 自纠错轮数
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
 
+    # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
+    # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
+    # verdict=proof_valid → 候选计入有效；proof_invalid → 淘汰并注入 revise 反馈；
+    # unknown（Lean 环境缺失/超时/翻译错误）→ 按 lean_gate_strict 决定降级放行或保守拒绝。
+    enable_lean_verify: bool = True         # 总开关：deep 档证明题启用 Lean 硬验证
+    lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
+    lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
+    lean_executable: str = ""               # Lean 可执行文件名（默认 "lake"）
+
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
         if self.tier_sample_times is None:
@@ -262,6 +271,8 @@ class ReasoningAgent:
             "tier_max_completions", "tier_max_calls", "tier_budget",
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
+            # Lean 硬验证
+            "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

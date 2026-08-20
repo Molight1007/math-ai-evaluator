@@ -1,0 +1,184 @@
+# -*- coding: utf-8 -*-
+"""Lean 硬验证门禁（deep 档证明题专用）。
+
+设计背景
+========
+v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调用 LeanBridge，
+把 verdict 注入 revise_feedback，失败不阻断。本模块将其升级为 **deep 档的
+硬验证层**：
+
+- 仅对 deep 档且 domain ∈ {证明, 证明题} 的候选执行；
+- 对候选调用 :meth:`LeanBridge.verify`，把 NL 推理转 Lean 4 代码并编译；
+- verdict == 'proof_valid'   → 候选计入有效（lean_valid=True）；
+- verdict == 'proof_invalid' → 候选淘汰（lean_invalid=True），收集反馈供 revise；
+- verdict == 'unknown'（Lean 环境缺失 / 超时 / 翻译不确定）→ 按
+  ``lean_gate_strict`` 决定：False 降级放行（保守，不损失分数），True 保守拒绝。
+
+隔离原则
+========
+- 独立文件，不污染 orchestrator 主流程：orchestrator 只需调用
+  ``LeanGate(client, config).apply(ctx, tier, candidates)`` 一行；
+- 任何异常一律吞掉并降级 unknown 放行，**绝不**因 Lean 导致评测崩溃；
+- Lean 不可用时（环境缺失）仅打 warning 日志并整体降级，不阻断非证明题。
+
+对外契约
+========
+``apply()`` 返回 ``(kept, feedbacks)``：
+- kept: 通过 Lean 门禁（proof_valid 或 unknown 放行）的候选列表；
+- feedbacks: 被淘汰候选的错误反馈列表（注入 revise 用）。
+并把每候选结果写入 ctx.lean_gate 便于 trace/诊断。
+"""
+from __future__ import annotations
+
+import logging
+
+from .base import Budget, TaskContext
+from .lean_bridge import LeanBridge
+
+logger = logging.getLogger("MathPilot")
+
+
+class LeanGate:
+    """deep 档证明题的 Lean 硬验证门禁。"""
+
+    name = "LeanGate"
+
+    def __init__(self, client, config, budget: Budget | None = None):
+        self.client = client
+        self.config = config
+        self.budget = budget
+        self._bridge: LeanBridge | None = None
+
+    # ------------------------------------------------------------------
+    # 开关与适用性判定
+    # ------------------------------------------------------------------
+    def _enabled(self, tier: str, domain: str) -> bool:
+        cfg = self.config
+        if not getattr(cfg, "enable_lean_verify", True):
+            return False
+        if tier != "deep":          # 仅 deep 档
+            return False
+        if domain not in ("证明", "证明题"):   # 仅证明题
+            return False
+        return True
+
+    @property
+    def strict(self) -> bool:
+        return bool(getattr(self.config, "lean_gate_strict", False))
+
+    @property
+    def _bridge_inst(self) -> LeanBridge | None:
+        if self._bridge is None:
+            try:
+                self._bridge = LeanBridge(self.client, self.config, self.budget)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("LeanBridge 初始化失败，Lean 门禁整体降级: %s", e)
+                self._bridge = None
+        return self._bridge
+
+    # ------------------------------------------------------------------
+    # 主入口
+    # ------------------------------------------------------------------
+    def apply(self, ctx: TaskContext, tier: str,
+              candidates: list) -> tuple[list, list]:
+        """对 deep 档证明题候选执行 Lean 硬验证。
+
+        返回 ``(kept, feedbacks)``：kept 为通过门禁的候选，feedbacks 为
+        被淘汰候选的错误反馈（供 revise 回环注入）。并把每候选 lean 状态
+        记入 ``ctx.lean_gate``（list[dict]）。
+        """
+        kept = list(candidates)
+        feedbacks: list[str] = []
+        ctx.lean_gate = []
+
+        if not candidates:
+            return kept, feedbacks
+
+        domain = getattr(ctx, "domain", "")
+        if not self._enabled(tier, domain):
+            self._record_ctx(ctx, {"enabled": False, "tier": tier,
+                                   "domain": domain, "candidates": len(candidates)})
+            return kept, feedbacks
+
+        bridge = self._bridge_inst
+        if bridge is None:
+            # 环境缺失 / 初始化失败 → 整体降级放行（绝不阻断）
+            logger.warning("LeanGate: Lean 环境不可用，deep 档证明题门禁降级放行")
+            self._record_ctx(ctx, {"enabled": True, "degraded": "env_unavailable",
+                                   "tier": tier, "domain": domain})
+            return kept, feedbacks
+        if not bridge.lean_available:
+            logger.warning("LeanGate: detect_lean_environment 未发现 lake/elan，"
+                           "deep 档证明题门禁降级放行（可运行 deploy/setup_lean.sh）")
+            self._record_ctx(ctx, {"enabled": True, "degraded": "lean_missing",
+                                   "tier": tier, "domain": domain})
+            return kept, feedbacks
+
+        kept = []
+        for cand in candidates:
+            entry = {
+                "id": cand.id,
+                "verdict": "unknown",
+                "lean_valid": False,
+                "degraded": None,
+                "error": None,
+            }
+            try:
+                report = bridge.verify(
+                    problem=ctx.problem or "",
+                    reasoning=cand.reasoning or "",
+                    domain=domain,
+                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                )
+                if report is None:
+                    entry["degraded"] = "no_report"
+                    kept.append(cand)          # 无报告 → 降级放行
+                elif report.verdict == "proof_valid":
+                    entry["verdict"] = "proof_valid"
+                    entry["lean_valid"] = True
+                    kept.append(cand)
+                elif report.verdict == "proof_invalid":
+                    entry["verdict"] = "proof_invalid"
+                    # 淘汰（hard gate）：不进 kept
+                    msg = "Lean 编译/逻辑错误"
+                    if report.suggestion or report.findings:
+                        msg = report.suggestion or report.findings[0].desc
+                    feedbacks.append(
+                        f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：{msg}")
+                else:  # unknown
+                    entry["verdict"] = "unknown"
+                    if self.strict:
+                        entry["degraded"] = "strict_reject"
+                        feedbacks.append(
+                            f"[Lean 硬验证] 候选 {cand.id} Lean 验证未知（strict 保守拒绝）")
+                        # strict 模式：不进 kept
+                    else:
+                        entry["degraded"] = "lenient_pass"
+                        kept.append(cand)
+            except Exception as e:  # noqa: BLE001
+                entry["error"] = str(e)[:200]
+                entry["degraded"] = "exception_lenient"
+                logger.warning("LeanGate: 候选 %s Lean 验证异常，降级放行: %s",
+                               cand.id, e)
+                kept.append(cand)
+
+            self._record_ctx(ctx, entry)
+
+        if feedbacks:
+            self._record_ctx(ctx, {
+                "rejected": len(feedbacks),
+                "kept": len(kept),
+                "feedbacks": feedbacks,
+            })
+        else:
+            self._record_ctx(ctx, {"rejected": 0, "kept": len(kept)})
+        return kept, feedbacks
+
+    # ------------------------------------------------------------------
+    # 诊断记录
+    # ------------------------------------------------------------------
+    def _record_ctx(self, ctx: TaskContext, data: dict) -> None:
+        try:
+            ctx.lean_gate.append(data)
+        except Exception:  # noqa: BLE001
+            ctx.lean_gate = [data]

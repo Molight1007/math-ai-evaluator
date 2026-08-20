@@ -27,6 +27,7 @@ from .verifier import VerifierAgent, AnswerCluster
 from .formatter import FormatterAgent
 from .difficulty_router import DifficultyRouter
 from .paper_pacer import PaperPacer
+from .lean_gate import LeanGate
 from utils.extract import safe_json_serialize
 
 try:
@@ -54,6 +55,8 @@ class Orchestrator(BaseAgent):
         # 难题深度求解通道（v2.5）
         self.difficulty_router = DifficultyRouter(client, config)
         self.pacer = PaperPacer(config)
+        # deep 档证明题 Lean 硬验证门禁（v2.5+LeanBridge）
+        self.lean_gate = LeanGate(client, config)
 
     # ----------------------------------------------------------
     # 主入口（简化版流水线）
@@ -162,6 +165,23 @@ class Orchestrator(BaseAgent):
                             "触发子目标分解补充候选",
                             sub_goal_trigger=f"tier={tier}, candidates={len(ctx.candidates)}, is_proof={is_proof}")
                 self.sub_goal_solver.run(ctx)
+
+            # 3.6) deep 档证明题：Lean 硬验证门禁（v2.5+LeanBridge）
+            # 仅当 lean 门禁实际生效（deep+证明+环境可用）才过滤候选；
+            # proof_valid 候选进入后续验证，proof_invalid 淘汰并收集 revise 反馈。
+            # 若全部候选被 Lean 淘汰，则降级保留原候选（保证有输出，不损失分数）。
+            _lean_total = len(ctx.candidates)
+            lean_kept, lean_feedbacks = self.lean_gate.apply(
+                ctx, tier, ctx.candidates)
+            if lean_kept:
+                ctx.candidates = lean_kept
+                self.record(ctx, "lean_gate",
+                            f"Lean 硬验证通过 {len(lean_kept)}/{_lean_total} 候选")
+            if lean_feedbacks:
+                ctx.lean_reject_feedback = lean_feedbacks
+                self.record(ctx, "lean_gate",
+                            f"Lean 硬验证淘汰 {len(lean_feedbacks)} 候选，"
+                            f"revise 将注入 Lean 反馈")
 
             # 4) 验证（投票数按档位：fast=1/standard=1/deep=3）
             # P0-4 修复：playoff 复算按时间宽裕度开关，deep 档且时间宽裕时启用
@@ -334,6 +354,10 @@ class Orchestrator(BaseAgent):
         feedback = ver_result.get("feedback", "")
         if not feedback:
             feedback = "所有候选均未获验证通过，请重新审题并纠正推理错误。"
+        # deep 档证明题：注入 Lean 硬验证淘汰反馈，驱动定向修正
+        lean_fb = getattr(ctx, "lean_reject_feedback", None)
+        if lean_fb:
+            feedback = feedback + "\n" + "\n".join(lean_fb)
         for r in range(max_rounds):
             if not ctx.budget.can_spend(3):
                 self.record(ctx, "revise", "revise 回环预算不足，提前终止")
