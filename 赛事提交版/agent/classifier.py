@@ -13,6 +13,7 @@ import logging
 import re
 
 from .base import BaseAgent, TaskContext
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -45,6 +46,9 @@ _DOMAIN_KEYWORDS: list[dict] = [
         "直线方程", "平面方程", "公垂线", "曲线", "曲面",
         "二次曲面", "主轴变换", "配方", "Frenet", "曲率", "挠率", "标架",
         "切向量", "法向量", "参数方程", "坐标变换", "投影",
+        # 2026-08-20 扩充：空间解析几何术语
+        "切平面", "法线", "切线", "椭球", "旋转曲面", "空间曲线",
+        "柱面", "锥面", "抛物面", "双曲面", "平面束",
     ]},
     {"name": "微分几何", "keywords": [
         "黎曼", "流形", "曲率张量", "度量张量", "联络", "Riemann",
@@ -93,12 +97,24 @@ _DOMAIN_KEYWORDS: list[dict] = [
     {"name": "定积分", "keywords": ["定积分", "定积分的应用"]},
     {"name": "多元函数积分学", "keywords": [
         "重积分", "二重积分", "三重积分", "曲线积分", "曲面积分",
+        # 2026-08-20 扩充：符号/术语形态（"未知"领域题识别）
+        "∫_L", "∮", "第一类曲线", "第二类曲线", "格林", "斯托克斯",
+        "高斯公式", "散度", "旋度", "rot", "向量场", "通量", "环量",
+        "投影曲线", "弧长", "第一类曲面积分", "第二类曲面积分",
     ]},
     {"name": "常微分方程", "keywords": [
         "常微分", "ODE", "微分方程", "特征方程", "通解", "特解",
+        # 2026-08-20 扩充
+        "y'", "y''", "特征根", "齐次方程", "非齐次", "分离变量",
     ]},
     {"name": "无穷级数", "keywords": [
         "无穷级数", "数项级数", "函数项级数", "幂级数", "收敛域",
+    ]},
+    # 2026-08-20 新增粗粒度兜底：偏导数/全微分/多元函数微分学（"未知"题高频）
+    {"name": "多元函数微分学", "keywords": [
+        "偏导数", "全微分", "方向导数", "梯度", "拉格朗日乘数",
+        "条件极值", "驻点", "多元函数", "极值", "∂z", "∂f",
+        "隐函数", "复合函数求导",
     ]},
 ]
 
@@ -110,6 +126,9 @@ _HI_WEIGHT: frozenset = frozenset({
     "本原元素", "广义积分", "反常积分", "Jordan标准形",
     "二重积分", "三重积分", "曲线积分", "曲面积分",
     "傅里叶级数", "勒贝格", "伽罗瓦",
+    # 2026-08-20 扩充：符号/术语形态（"未知"领域题识别）
+    "∮", "散度", "旋度", "rot", "格林", "斯托克斯", "高斯公式",
+    "拉格朗日乘数", "切平面", "全微分", "方向导数",
 })
 
 # 已知有效领域（与 prompts/policy.py 中 DOMAIN_HINTS 键保持一致）
@@ -176,12 +195,13 @@ class ClassifierAgent(BaseAgent):
             return ctx
 
         # 第二优先级：LLM 分类（仅在关键词得分不足时回退）
-        resp = self.llm(ctx, [
+        # v2.4.1：prefill「本题类型：」抑制 CoT——分类只需输出域名，秒级返回
+        resp = self.llm(ctx, prefill_messages([
             {"role": "system", "content": CLASSIFY_PROMPT},
             {"role": "user", "content": ctx.problem},
-        ], 0.01, 256)
-
+        ], "本题类型："), 0.01, 128)
         if resp:
+            resp = stitch("本题类型：", resp)
             domain = resp.strip().rstrip("。.，,、")
             # 精确匹配
             if domain in _KNOWN_DOMAINS:

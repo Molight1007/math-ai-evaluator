@@ -1,0 +1,6 @@
+{"id": "ab_limit_01", "question": "计算极限：lim_{x→0} (sin x - x)/x^3", "domain": "函数极限与连续", "answer": "-1/6"}
+{"id": "ab_integral_02", "question": "计算定积分：∫_0^1 x e^x dx。", "domain": "一元函数积分学的计算", "answer": "1"}
+{"id": "ab_limit_03", "question": "求极限: lim_{x→0} (e^x - 1 - x)/x^2.", "domain": "函数极限与连续", "answer": "1/2"}
+{"id": "ab_integral_04", "question": "计算定积分: ∫_0^π x sin x dx", "domain": "积分", "answer": "π"}
+{"id": "ab_deriv_05", "question": "已知函数f(x)=x^2(e^x+5)，则f^{(5)}(1)=_____", "domain": "一元函数微分学的计算", "answer": "31e"}
+{"id": "ab_choice_06", "question": "设f(x),g(x)在[0,1]上连续，则使得∫f(x)dx∫g(x)dx≥∫f(x)g(x)dx成立的条件是在[0,1]上( ). A. f(x),g(x)均为增函数 B. f(x),g(x)均为减函数 C. f(x)为减函数,g(x)为增函数 D. f(x)为奇函数,g(x)为偶函数", "domain": "一元函数积分学的应用(二)--积分等式与积分不等式", "answer": "C"}

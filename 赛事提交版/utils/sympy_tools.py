@@ -1,10 +1,20 @@
 from __future__ import annotations
-# -*- coding: utf-8 -*-
 """
 MathPilot SymPy 数学引擎
-提供真实符号计算能力 — 计算、化简、微分、积分、方程求解、符号等价判定。
-灵感来自 ss-main 的 sympy_tools.py 和 math_agent 的 sympy_tool.py，
-但采用 MathPilot 一致的风格：显式安全守卫、中文注释、分级降级。
+========================
+
+提供真实符号计算能力 — 化简、求值、微分、积分、方程求解、极限、符号等价判定。
+采用显式安全守卫、中文注释、分级降级策略。
+
+核心接口:
+- are_expressions_equal(a, b) → bool: 符号等价判定（最常用）
+- normalize_with_sympy(expr) → str|None: 表达式标准化
+- safe_simplify / eval_expression / compute_derivative / compute_integral / solve_equation / compute_limit
+
+修改影响:
+- 修改 are_expressions_equal 签名时需同步检查: agent/verifier.py, agent/orchestrator.py
+- 修改安全黑名单 _SYMPY_BLACKLIST 时需确保不误封数学函数
+- 被 agent/orchestrator.py (快车道 SymPy 调用) 延迟导入引用
 """
 
 import logging

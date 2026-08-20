@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Mapping, Optional, Union
 
@@ -7,7 +8,72 @@ import requests
 
 
 DEFAULT_API_BASE = "https://chat.intern-ai.org.cn/api/v1/chat/completions"
-DEFAULT_MODEL = "intern-s2-preview"
+DEFAULT_MODEL = "Intern-S2-Preview-397B"
+
+
+def _strip_thinking_process(text: str) -> str:
+    """去除 Intern-S 模型的思维流（Thinking Process）前缀，提取实际输出。
+    
+    Intern-S 的 content 格式为：
+        Thinking Process:
+        1.  **Analyze the Request:** ...
+        ...
+        N.  **Final Decision:** CORRECT
+        
+        CORRECT
+    
+    实际答案/判决在思维流之后的最末尾位置。
+    """
+    if not text or not isinstance(text, str):
+        return text
+    
+    # 检测是否以思维流开头
+    if not re.search(r'(?:Thinking Process|Thought Process|Let me think|Let\'s think)', text[:200]):
+        return text
+    
+    # 策略1: 提取 "Final Decision: CORRECT" / "Final Decision: INCORRECT"
+    fd_match = re.search(
+        r'(?:Final|最终)\s*(?:Decision|决策|结论|Answer|答案)[：:]\s*\*?\*?\s*(CORRECT|INCORRECT|TRUE|FALSE|VALID|INVALID|正确|错误)',
+        text, re.IGNORECASE,
+    )
+    if fd_match:
+        return fd_match.group(1).upper()
+    
+    # 策略2: 提取 "CORRECT" / "INCORRECT" 的最后一个独立出现
+    verdict_match = re.findall(r'\b(CORRECT|INCORRECT)\b', text)
+    if verdict_match:
+        return verdict_match[-1].upper()
+    
+    # 策略3: 提取思维流之后的尾部内容（跳过步骤编号行和 bullet points）
+    lines = text.strip().split('\n')
+    tail_lines = []
+    found_step = False
+    for line in reversed(lines):
+        stripped = line.strip()
+        if not stripped:
+            if tail_lines:
+                continue
+            else:
+                continue
+        # 跳过步骤标题: "N.  **Title:**"
+        if re.match(r'^\d+\.?\s*\*\*', stripped):
+            if tail_lines:
+                break  # 步骤标题出现在结果内容之上，停止
+            continue
+        # 跳过 bullet points
+        if re.match(r'^\s*\*', stripped) and not re.search(r'[\d=]', stripped):
+            continue
+        # 跳过最终决策行（已处理）
+        if re.match(r'.*(?:Final|最终)\s*(?:Decision|决策|结论)', stripped, re.IGNORECASE):
+            continue
+        tail_lines.append(stripped)
+    
+    if tail_lines:
+        result = '\n'.join(reversed(tail_lines))
+        if len(result.strip()) > 0:
+            return result.strip()
+    
+    return text
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_MAX_TOKENS = 4096
 
@@ -97,7 +163,14 @@ class InternChatClient:
                 message = data["choices"][0]["message"]
                 if "tool_calls" in message:
                     return message
-                return message["content"]
+                # Intern-S 模型可能将 CoT 放在 reasoning_content，content 可能为空
+                reasoning = message.get("reasoning_content", "") or ""
+                content = message.get("content", "") or ""
+                # 不再全局剥离思维流——solver 需要完整的推理链，
+                # verifier 的 _is_correct_vote 自己解析 VERDICT
+                if reasoning and content:
+                    return reasoning + "\n" + content
+                return content or reasoning or ""
             except Exception as exc:  # noqa: BLE001 - keep sample robust and simple.
                 last_error = exc
                 if attempt + 1 < self.retry:

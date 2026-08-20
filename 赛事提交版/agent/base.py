@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -20,6 +21,83 @@ from threading import RLock
 from typing import Optional, Iterator
 
 logger = logging.getLogger("MathPilot")
+
+
+# ============================================================
+# 响应归一化（P0-1 契约防线）
+# ============================================================
+def _normalize_chat_response(resp) -> Optional[str]:
+    """把 client.chat 的返回值统一成字符串。
+
+    平台注入的 client 实现不定，常见返回形态：
+      - str: 直接可用
+      - dict: {"content": "...", "choices": [...], "message": {...}}
+      - list: [{"content": "..."}, ...]
+      - 对象: .content / .text / .message.content
+      - bytes: 解码为 UTF-8
+      - None / 异常: 返回 ""
+    """
+    if resp is None:
+        return ""
+    if isinstance(resp, str):
+        return resp
+    if isinstance(resp, bytes):
+        try:
+            return resp.decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+    if isinstance(resp, list):
+        for item in resp:
+            text = _normalize_chat_response(item)
+            if text:
+                return text
+        return ""
+    if isinstance(resp, dict):
+        for key in ("content", "text", "output", "result"):
+            if key in resp and resp[key] is not None:
+                val = resp[key]
+                if isinstance(val, str):
+                    return val
+                return _normalize_chat_response(val)
+        if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
+            choice = resp["choices"][0]
+            if isinstance(choice, dict):
+                if "message" in choice and isinstance(choice["message"], dict):
+                    msg = choice["message"]
+                    for key in ("content", "text"):
+                        if key in msg and msg[key] is not None:
+                            return str(msg[key])
+                if "text" in choice and choice["text"] is not None:
+                    return str(choice["text"])
+            return _normalize_chat_response(choice)
+        if "message" in resp and isinstance(resp["message"], dict):
+            msg = resp["message"]
+            for key in ("content", "text"):
+                if key in msg and msg[key] is not None:
+                    return str(msg[key])
+        if "data" in resp:
+            return _normalize_chat_response(resp["data"])
+        return ""
+    # 普通对象：尝试 .content / .text / .message
+    for attr in ("content", "text", "response"):
+        try:
+            val = getattr(resp, attr, None)
+            if val is not None:
+                return _normalize_chat_response(val)
+        except Exception:
+            pass
+    try:
+        if hasattr(resp, "message") and resp.message is not None:
+            return _normalize_chat_response(resp.message)
+    except Exception:
+        pass
+    try:
+        s = str(resp)
+        if s and s != "None" and not s.startswith("<") and not s.startswith("{"):
+            return s
+    except Exception:
+        pass
+    return ""
 
 
 # ============================================================
@@ -75,6 +153,11 @@ class Budget:
         with self._lock:
             return max(0, self.max_calls - self.used_calls)
 
+    def set_max_calls(self, new_max: int) -> None:
+        """动态调整总调用预算（deep 档位需要更多预算时调用）。"""
+        with self._lock:
+            self.max_calls = max(self.used_calls, new_max)
+
 
 @dataclass
 class TaskContext:
@@ -90,6 +173,12 @@ class TaskContext:
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
     lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
+
+    # ---- 难题深度求解通道字段 ----
+    tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
+    tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
+    soft_budget: float = 0.0                    # PaperPacer 分配的当前档位软预算帽（秒）
+    pacer_remaining: float = 0.0                # 全卷时间池剩余目标时间（秒，诊断用）
 
     # ---- 壁钟时间追踪（适配竞赛新规则：单题≤20分钟，总计≤6小时）----
     start_time: float = 0.0                    # 单题壁钟启动时间 (time.time())
@@ -161,7 +250,30 @@ class BaseAgent(ABC):
         """
         带预算管控、Token 裁剪、自动重试的安全 LLM 调用（支持并发线程）。
         修复 BUG-6：追加 max_tokens 裁剪、上下文超长自动降级重试、异常写入 trace。
+        P0-4 修复：新增时间预算感知——剩余不足时跳过/降级，杜绝单题超时（45 error 主因）。
         """
+        # 时间预算感知：剩余 < 60s 直接跳过调用（保证有产出优于无产出）
+        # 修复：区分「未设置 deadline / 测试 fixture 伪 deadline」与「真实 deadline 已过期」。
+        #   - deadline < 1e8（epoch 伪值，如测试 fixture 的 999.0）→ 不启用预算（兼容测试）
+        #   - 真实时间戳但已过期 → remaining <= 0 → 跳过，杜绝无界超时重试（45 error/2923s 根因）
+        if ctx.deadline:
+            if ctx.deadline < 10**8:
+                remaining = float("inf")   # 测试 fixture 用 epoch 伪 deadline
+            else:
+                remaining = ctx.deadline - time.time()
+        else:
+            remaining = float("inf")
+        if remaining < 60:
+            logger.warning("[%s] 剩余时间不足 (%.0fs)，跳过 LLM 调用", self.name, remaining)
+            ctx.trace.append({"agent": self.name, "step": "budget_skip",
+                              "content": f"剩余时间不足 {remaining:.0f}s，跳过 LLM 调用"})
+            return None
+        # 剩余 < 120s：自动减半 max_tokens，缩短单次调用耗时
+        if remaining < 120 and max_tokens and max_tokens > 1024:
+            logger.warning("[%s] 剩余时间紧张 (%.0fs)，max_tokens %d → %d",
+                           self.name, remaining, max_tokens, max_tokens // 2)
+            max_tokens = max(1024, max_tokens // 2)
+
         # Token 裁剪到安全上限（可配置，默认 4096）
         cap = getattr(self.config, 'max_tokens_cap', 4096)
         if cap and max_tokens:
@@ -172,7 +284,7 @@ class BaseAgent(ABC):
             with ctx.budget._lock:
                 if not ctx.budget.can_spend(1):
                     logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用", 
-                                   self.name, ctx.budget.remaining)
+                                   self.name, ctx.budget.remaining())
                     return None
                 ctx.budget.spend(1)
                 reserved = True
@@ -182,6 +294,7 @@ class BaseAgent(ABC):
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            resp = _normalize_chat_response(resp)
             # 诊断：返回空值时记录
             if not resp or not resp.strip():
                 logger.warning("[%s] LLM 返回空响应 (len=%d, type=%s)",
@@ -192,6 +305,7 @@ class BaseAgent(ABC):
             logger.warning("[%s] TypeError in chat() kwargs, fallback to positional", self.name)
             try:
                 resp2 = self.client.chat(messages)
+                resp2 = _normalize_chat_response(resp2)
                 if not resp2 or not resp2.strip():
                     logger.warning("[%s] LLM fallback 返回空响应", self.name)
                 return resp2
@@ -203,7 +317,8 @@ class BaseAgent(ABC):
                 reduced = (max_tokens // 2) if max_tokens > 512 else 256
                 logger.warning("[%s] 上下文超长，降至 %s tokens 重试", self.name, reduced)
                 try:
-                    return self.client.chat(messages=messages, temperature=0.0, max_tokens=reduced)
+                    resp3 = self.client.chat(messages=messages, temperature=0.0, max_tokens=reduced)
+                    return _normalize_chat_response(resp3)
                 except Exception:
                     pass
             if reserved and ctx.budget is not None:

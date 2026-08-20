@@ -111,6 +111,11 @@ class AgentConfig:
     judger_friendly: bool = True       # Formatter 黑盒 Judger 友好输出（纯规则，0 预算）
     use_deterministic: bool = True     # Verifier 确定性旁证（SymPy 代入/解析，0 LLM 预算）
 
+    # ---- v3 升级：P2/P3（默认关，A/B 验证后开；与根目录 sq 保持一致）----
+    use_rubric: bool = False           # Verifier 结构化 rubric 判分（JSON：verdict/置信度/错因定位）
+    use_challenge: bool = False        # Verifier 反例挑战（LLM 生成命题 + 程序验证）
+    use_view_sampling: bool = False    # Solver 视角采样（换元/几何/代数/倒推，替代纯温度分层）
+
     # ---- 难题深度求解通道（v2.5）----
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
     enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
@@ -268,6 +273,7 @@ class ReasoningAgent:
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             # v3 P1
             "judger_friendly", "use_deterministic",
+            "use_rubric", "use_challenge", "use_view_sampling",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
