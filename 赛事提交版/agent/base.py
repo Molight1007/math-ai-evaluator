@@ -260,6 +260,9 @@ class BaseAgent(ABC):
         带预算管控、Token 裁剪、自动重试的安全 LLM 调用（支持并发线程）。
         修复 BUG-6：追加 max_tokens 裁剪、上下文超长自动降级重试、异常写入 trace。
         P0-4 修复：新增时间预算感知——剩余不足时跳过/降级，杜绝单题超时（45 error 主因）。
+        空响应恢复（本次修复）：prefill 调用在部分后端返回空 content（连 reasoning_content
+        都没有），导致抽取/投票退化为空 → 大面积 0 分。若本次为 prefill 调用（消息末尾为
+        assistant 轮），_safe_chat 会自动去掉 prefix 用普通 completion 重试一次，保证有产出。
         """
         # 时间预算感知：剩余 < 60s 直接跳过调用（保证有产出优于无产出）
         # 修复：区分「未设置 deadline / 测试 fixture 伪 deadline」与「真实 deadline 已过期」。
@@ -292,42 +295,20 @@ class BaseAgent(ABC):
         if ctx.budget is not None:
             with ctx.budget._lock:
                 if not ctx.budget.can_spend(1):
-                    logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用", 
+                    logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用",
                                    self.name, ctx.budget.remaining())
                     return None
                 ctx.budget.spend(1)
                 reserved = True
         try:
-            resp = self.client.chat(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            resp = _normalize_chat_response(resp)
-            # 诊断：返回空值时记录
-            if not resp or not resp.strip():
-                logger.warning("[%s] LLM 返回空响应 (len=%d, type=%s)",
-                               self.name, len(resp) if resp else 0, type(resp).__name__)
-            return resp
-        except TypeError:
-            # 平台 client 仅接受 positional args → 降级
-            logger.warning("[%s] TypeError in chat() kwargs, fallback to positional", self.name)
-            try:
-                resp2 = self.client.chat(messages)
-                resp2 = _normalize_chat_response(resp2)
-                if not resp2 or not resp2.strip():
-                    logger.warning("[%s] LLM fallback 返回空响应", self.name)
-                return resp2
-            except Exception as e2:
-                logger.warning("[%s] LLM fallback 也失败: %s", self.name, e2)
+            return self._safe_chat(messages, temperature, max_tokens)
         except Exception as e:  # noqa: BLE001
             err_str = str(e)[:200]
             if any(kw in err_str.lower() for kw in ('context length', 'too long', 'max token')):
                 reduced = (max_tokens // 2) if max_tokens > 512 else 256
                 logger.warning("[%s] 上下文超长，降至 %s tokens 重试", self.name, reduced)
                 try:
-                    resp3 = self.client.chat(messages=messages, temperature=0.0, max_tokens=reduced)
-                    return _normalize_chat_response(resp3)
+                    return self._safe_chat(messages, 0.0, reduced)
                 except Exception:
                     pass
             if reserved and ctx.budget is not None:
@@ -336,6 +317,58 @@ class BaseAgent(ABC):
                               "content": f"LLM 调用失败: {err_str}"})
             logger.warning("[%s] LLM call failed: %s", self.name, e)
             return None
+
+    def _safe_chat(self, messages: list, temperature: float,
+                   max_tokens: int) -> str:
+        """
+        统一封装 client.chat：归一化 + 空响应/失败恢复。
+
+        行为：
+          - 优先 kwargs 调用；捕获 TypeError 降级为 positional（平台 client 兼容）。
+          - 归一化后为空 **或** client.chat 抛异常（如 LLMError "Empty content"）：
+            若本次为 prefill 调用（消息末尾为 assistant 轮），去掉 prefix 用普通
+            completion 重试一次（放大 token 预算到 ≥2048，保证完整产出）。
+          - 超长类异常不在此吞掉，向上抛给 llm() 做减小 max_tokens 重试。
+        """
+        try:
+            try:
+                resp = self.client.chat(messages=messages, temperature=temperature,
+                                         max_tokens=max_tokens)
+            except TypeError:
+                # 平台 client 仅接受 positional args → 降级
+                logger.warning("[%s] TypeError in chat() kwargs, fallback to positional", self.name)
+                resp = self.client.chat(messages)
+            resp = _normalize_chat_response(resp)
+            if resp and resp.strip():
+                return resp
+            client_err = None
+        except Exception as e:
+            err_str = str(e)
+            # 超长类异常交给 llm() 减小 max_tokens 重试
+            if any(kw in err_str.lower() for kw in ('context length', 'too long', 'max token')):
+                raise
+            client_err = e
+            resp = None
+
+        # 空响应恢复：prefill 调用（末尾 assistant 轮）在部分后端返回空，
+        # 去掉 prefix 用普通 completion 重试一次，避免该次抽取/投票退化为空 → 0 分。
+        if messages and messages[-1].get("role") == "assistant":
+            logger.warning("[%s] 空响应/异常且为 prefill 调用，去 prefix 重试一次", self.name)
+            retry_messages = messages[:-1]
+            try:
+                try:
+                    r = self.client.chat(messages=retry_messages, temperature=temperature,
+                                         max_tokens=max(max_tokens, 2048))
+                except TypeError:
+                    r = self.client.chat(retry_messages)
+                r = _normalize_chat_response(r)
+                if r and r.strip():
+                    return r
+            except Exception as e2:
+                logger.warning("[%s] 去 prefix 重试失败: %s", self.name, str(e2)[:120])
+        if client_err is not None:
+            raise client_err
+        return resp
 
 
 # ============================================================
