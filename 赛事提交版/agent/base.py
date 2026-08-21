@@ -53,36 +53,45 @@ def _normalize_chat_response(resp) -> Optional[str]:
                 return text
         return ""
     if isinstance(resp, dict):
+        # 1) 优先非空 content / text / output / result
         for key in ("content", "text", "output", "result"):
-            if key in resp and resp[key] is not None:
+            if key in resp and resp[key]:
                 val = resp[key]
                 if isinstance(val, str):
                     return val
                 return _normalize_chat_response(val)
+        # 2) reasoning_content 兜底（推理模型：平台可能仅在此返回最终答案，
+        #    本地 LLMClient 已支持此通道，平台路径此前缺失 → 答案被抽空 → 大面积 0 分）
+        if resp.get("reasoning_content"):
+            return _normalize_chat_response(resp["reasoning_content"])
         if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
             choice = resp["choices"][0]
             if isinstance(choice, dict):
                 if "message" in choice and isinstance(choice["message"], dict):
                     msg = choice["message"]
+                    # 优先非空 content / text
                     for key in ("content", "text"):
-                        if key in msg and msg[key] is not None:
+                        if key in msg and msg[key]:
                             return str(msg[key])
-                if "text" in choice and choice["text"] is not None:
+                    # message 内 reasoning_content 兜底
+                    if msg.get("reasoning_content"):
+                        return str(msg["reasoning_content"])
+                if "text" in choice and choice["text"]:
                     return str(choice["text"])
             return _normalize_chat_response(choice)
         if "message" in resp and isinstance(resp["message"], dict):
             msg = resp["message"]
-            for key in ("content", "text"):
-                if key in msg and msg[key] is not None:
+            for key in ("content", "text", "reasoning_content"):
+                if key in msg and msg[key]:
                     return str(msg[key])
         if "data" in resp:
             return _normalize_chat_response(resp["data"])
         return ""
-    # 普通对象：尝试 .content / .text / .message
-    for attr in ("content", "text", "response"):
+    # 普通对象：尝试 .content / .text / .reasoning_content / .message
+    for attr in ("content", "text", "reasoning_content", "response"):
         try:
             val = getattr(resp, attr, None)
-            if val is not None:
+            if val:  # 非空才采用，空字符串应让位给 reasoning_content 兜底
                 return _normalize_chat_response(val)
         except Exception:
             pass
