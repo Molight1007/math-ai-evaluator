@@ -114,9 +114,11 @@ class VerifierAgent(BaseAgent):
         if re.search(r'VERDICT\s*:\s*B', text_upper):
             return False
 
-        # 4) 无法判断 → 保守当作正确（宁可假阳，丢给共识过滤）
-        logger.warning(f"无法从文本中解析 VERDICT，默认为正确: {text[:100]}")
-        return True
+        # 4) 无法判断 → 保守当作错误（宁可假阴，交给共识/revise 兜底）
+        #    v2.6 修复"虚高置信度"：此前默认判对会导致未解析的票计入正确票，
+        #    使错误答案也拿到高置信度。改为判错后，低共识会触发 revise/协作复核。
+        logger.warning(f"无法从文本中解析 VERDICT，默认为错误: {text[:100]}")
+        return False
 
     # ==================================================================
     # 答案归一化与等价判定

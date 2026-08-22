@@ -232,6 +232,7 @@ class TaskContext:
     problem: str
     metadata: dict
     domain: Optional[str] = None               # ClassifierAgent 写入
+    question_type: str = ""                    # 题型（证明题/选择题/判断题/填空题/解答题）
     candidates: list = field(default_factory=list)   # SolverAgent 写入
     verdicts: list = field(default_factory=list)     # VerifierAgent 写入
     revise_feedback: list = field(default_factory=list)  # 回传给 Solver 的错误原因

@@ -57,35 +57,86 @@ class SubGoalSolverAgent(BaseAgent):
     # ---------- JSON 提取 ----------
     @staticmethod
     def _extract_json(text: str) -> dict | None:
-        """从 LLM 输出中提取 JSON 对象（支持 ```json 代码块和纯 JSON）"""
+        r"""从 LLM 输出中提取 JSON 对象。
+
+        v2.6 修复：原实现对最外层一对花括号到另一对花括号做贪婪匹配，会被 LaTeX /
+        中文解释 / 嵌套 JSON 干扰（LaTeX 里的左花括号、右花括号、解释文字里的成对
+        花括号都会被吃进 JSON 段导致解析失败）。改为**平衡括号匹配**：从每个左
+        花括号出发，用栈找匹配的右花括号，并正确处理字符串内花括号与反斜杠转义。
+        """
         if not text:
             return None
-        # 优先匹配 ```json ... ``` 代码块
+        # 1) 优先 ```json ... ``` 代码块
         m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
         if m:
-            candidate = m.group(1).strip()
-        else:
-            # 尝试匹配 { ... } 的最外层
-            m = re.search(r"\{[\s\S]*\}", text)
-            if m:
-                candidate = m.group(0).strip()
-            else:
-                return None
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            # 尝试修复常见错误：尾随逗号、单引号等
             try:
-                fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
-                return json.loads(fixed)
+                return json.loads(m.group(1).strip())
             except json.JSONDecodeError:
-                return None
+                pass  # 代码块不合法，回退到平衡括号匹配
+
+        # 2) 平衡括号匹配：扫描每个 {，用深度栈找到对应的 }。
+        #    关键：正确处理字符串字面量（跳过字符串内的 { 和 }）
+        def _try_parse(candidate: str):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                # 尝试修复常见错误：尾随逗号
+                try:
+                    fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    return None
+
+        for i, c in enumerate(text):
+            if c != '{':
+                continue
+            depth, j, in_str, esc = 1, i + 1, False, False
+            while j < len(text):
+                ch = text[j]
+                if esc:
+                    esc = False
+                elif in_str and ch == '\\':
+                    esc = True
+                elif ch == '"':
+                    in_str = not in_str
+                elif not in_str:
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            parsed = _try_parse(text[i:j + 1])
+                            if parsed is not None:
+                                return parsed
+                            break  # 该 { 不是合法 JSON 起点，继续找下一个
+                j += 1
+        return None
 
     @staticmethod
     def _parse_subgoal_plan(raw: dict) -> list[dict] | None:
-        """验证并规范化子目标规划，返回按拓扑序排列的子目标列表"""
-        subgoals = raw.get("subgoals", [])
-        if not isinstance(subgoals, list) or len(subgoals) == 0:
+        """验证并规范化子目标规划，返回按拓扑序排列的子目标列表。
+
+        v2.6 宽容性增强：LLM 实际输出常省略字段（如用 step/name/task 代替
+        id/title/description）、或把列表字段命名为 plan/steps/subproblems/tasks
+        等。本方法兼容多种字段名，单个条目缺失字段时也能构造出可用条目，
+        而不再直接放弃。
+        """
+        # 1) 宽容多种列表字段名
+        subgoals = None
+        for key in ("subgoals", "subproblems", "sub_problems",
+                    "plan", "steps", "tasks", "items"):
+            v = raw.get(key)
+            if isinstance(v, list) and v:
+                subgoals = v
+                break
+        if subgoals is None:
+            # 兜底：找任何非空 list[dict] 字段
+            for v in raw.values():
+                if (isinstance(v, list) and v
+                        and all(isinstance(x, dict) for x in v)):
+                    subgoals = v
+                    break
+        if subgoals is None:
             return None
         if len(subgoals) > 10:
             subgoals = subgoals[:10]  # 安全上限
@@ -94,17 +145,46 @@ class SubGoalSolverAgent(BaseAgent):
         seen_ids = set()
         parsed = []
         for sg in subgoals:
-            sg_id = sg.get("id", len(parsed) + 1)
+            # 宽容 id 字段名：id / step / index / number
+            raw_id = sg.get("id", sg.get("step", sg.get("index",
+                          sg.get("number", len(parsed) + 1))))
+            try:
+                sg_id = int(raw_id)
+            except (TypeError, ValueError):
+                sg_id = len(parsed) + 1
             if sg_id in seen_ids:
                 continue
             seen_ids.add(sg_id)
+
+            # 宽容 title/description/expected_output/depends_on/type 字段名
+            title = str(sg.get("title",
+                       sg.get("name",
+                       sg.get("step_name",
+                       sg.get("task_name", f"子目标{sg_id}")))))
+            description = str(sg.get("description",
+                            sg.get("task",
+                            sg.get("content",
+                            sg.get("detail", "")))))
+            sg_type = sg.get("type", sg.get("kind", "compute"))
+            if sg_type not in valid_types:
+                sg_type = "compute"
+            deps_raw = sg.get("depends_on",
+                       sg.get("deps",
+                       sg.get("dependencies", [])))
+            if not isinstance(deps_raw, list):
+                deps_raw = []
+            expected_output = str(sg.get("expected_output",
+                                   sg.get("output",
+                                   sg.get("expected",
+                                   sg.get("result", "")))))
             parsed.append({
                 "id": sg_id,
-                "title": str(sg.get("title", f"子目标{sg_id}")),
-                "description": str(sg.get("description", "")),
-                "type": sg.get("type", "compute") if sg.get("type") in valid_types else "compute",
-                "depends_on": [d for d in sg.get("depends_on", []) if isinstance(d, int) and d in seen_ids],
-                "expected_output": str(sg.get("expected_output", "")),
+                "title": title,
+                "description": description,
+                "type": sg_type,
+                "depends_on": [d for d in deps_raw
+                               if isinstance(d, int) and d in seen_ids],
+                "expected_output": expected_output,
                 "result": "",
             })
         return parsed if parsed else None
@@ -175,7 +255,9 @@ class SubGoalSolverAgent(BaseAgent):
             problem=ctx.problem,
         )
 
-        for attempt in range(2):
+        last_resp = None
+        for attempt in range(2):  # v2.6.1：3→2 次（解析失败说明 LLM 输出结构异常，
+            # 重试成功率低；省下时间给真正有意义的求解步骤）
             # v2.4.1：prefill「{"」引导直接输出规划 JSON，抑制 CoT
             resp = self.llm(
                 ctx,
@@ -190,6 +272,7 @@ class SubGoalSolverAgent(BaseAgent):
             )
             if resp:
                 resp = stitch('{"', resp)
+                last_resp = resp
             if resp is None:
                 continue
             raw = self._extract_json(resp)
@@ -206,8 +289,25 @@ class SubGoalSolverAgent(BaseAgent):
                 "merge_strategy": raw.get("merge_strategy", ""),
             }
 
-        self.record(ctx, "subgoal", "子目标规划两次尝试均失败")
-        return None
+        # v2.6.1 兜底：LLM 反复输出不合规 JSON 时，不再返回 None（损失整个候选来源），
+        # 而是构造一个最小可用 plan（单步求解整道题），让 SubGoalSolver 至少产出 1 个
+        # 候选；同时把最后一次响应记到 trace 便于排查 LLM 实际输出形态。
+        self.record(ctx, "subgoal",
+                    f"子目标规划 2 次尝试均失败; 最后响应片段: {(last_resp or '<None>')[:200]};"
+                    " 回退到单步求解整道题")
+        return {
+            "problem_analysis": {},
+            "subgoals": [{
+                "id": 1,
+                "title": "完整求解",
+                "description": ctx.problem,
+                "type": "compute",
+                "depends_on": [],
+                "expected_output": "",
+                "result": "",
+            }],
+            "merge_strategy": "直接给出最终答案",
+        }
 
     # ---------- 阶段二：逐步求解 ----------
     def _solve_subgoal(self, ctx: TaskContext, sg: dict,

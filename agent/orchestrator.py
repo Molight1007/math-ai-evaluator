@@ -28,6 +28,7 @@ from .formatter import FormatterAgent
 from .difficulty_router import DifficultyRouter
 from .paper_pacer import PaperPacer
 from .lean_gate import LeanGate
+from .collaborative_solver import CollaborativeSolver
 from utils.extract import safe_json_serialize
 
 try:
@@ -57,6 +58,8 @@ class Orchestrator(BaseAgent):
         self.pacer = PaperPacer(config)
         # deep 档证明题 Lean 硬验证门禁（v2.5+LeanBridge）
         self.lean_gate = LeanGate(client, config)
+        # deep 档难题三Agent协作求解器（v2.6：解题→审查→整合→反复验证）
+        self.collab = CollaborativeSolver(client, config)
 
     # ----------------------------------------------------------
     # 主入口（简化版流水线）
@@ -76,6 +79,16 @@ class Orchestrator(BaseAgent):
             # 0) PaperPacer 全卷时间池：5h 目标动态预算帽 + MIN_SOFT 保底
             self.pacer.begin()
             ctx.pacer_remaining = self.pacer.hard_remaining()
+            # 单题 20 分钟硬限：超时直接跳过（保留已有候选/兜底产出）
+            if ctx.is_timed_out():
+                self.record(ctx, "timeout", "单题超过 20 分钟，跳过处理")
+                answer = self._emergency_direct_solve(ctx.problem)
+                if not answer:
+                    answer = "未给出有效解答。"
+                self.pacer.end()
+                return safe_json_serialize({
+                    "final_response": answer, "trace": ctx.trace,
+                })
             elapsed_total = time.time() - ctx.total_start_time
             total_budget = ctx.total_deadline - ctx.total_start_time
             ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
@@ -154,8 +167,18 @@ class Orchestrator(BaseAgent):
                         self.record(ctx, "control",
                                     f"截断续写完成 {n_completed} 个候选")
 
+            # 3.4) deep 档难题：三Agent协作（解题→审查→整合→反复验证）
+            #      只要时间未到且未验证通过，CollaborativeSolver 内部反复循环，
+            #      保证难题高正确率。
+            if (tier == 'deep'
+                    and getattr(self.config, 'enable_collaborative_deep', True)
+                    and not getattr(self.config, '_emergency', False)):
+                self.record(ctx, "control", "deep 档启用三Agent协作验证机制")
+                self.collab.run(ctx)
+
             # 3.5) 子目标分解补充候选：deep 档强制；其他档候选不足或证明题时触发
-            is_proof = getattr(ctx, 'domain', '') in ('证明', '证明题')
+            is_proof = getattr(ctx, 'question_type', '') == '证明题' or \
+                getattr(ctx, 'domain', '') in ('证明', '证明题')
             use_sub = (getattr(self.config, 'deep_use_sub_goal', True)
                        if tier == 'deep' else getattr(self.config, 'use_sub_goal', False))
             if (use_sub
@@ -225,6 +248,19 @@ class Orchestrator(BaseAgent):
                             "final_response": best, "trace": ctx.trace,
                         })
 
+            # 5.5) 低置信度强制复核（v2.6 杀掉虚高置信度）：
+            #   deep 档 best_cluster 置信度 < 0.5（正确票未过半，验证器自身都不确定）
+            #   且时间/预算宽裕时，不自信接受低共识答案，而是触发 revise 提升共识。
+            _bc = getattr(ctx, '_best_cluster', None)
+            if (tier == 'deep' and _bc is not None
+                    and getattr(_bc, 'confidence', 1.0) < 0.5
+                    and not getattr(self.config, '_emergency', False)):
+                self.record(
+                    ctx, "control",
+                    f"deep 档低置信度({_bc.confidence:.2f})，强制 revise 复核提升共识",
+                )
+                self._deep_revise_loop(ctx, ver_result, tier_votes)
+
             # 6) 格式化输出
             self.formatter.run(ctx)
             self.pacer.end(tier=tier)
@@ -281,8 +317,11 @@ class Orchestrator(BaseAgent):
         (r"(?:极限|limit)", "limit"),
     ]
 
+    _FAST_PATH_TIME_LIMIT = 20.0  # 快车道总耗时上限（秒），超限即放弃、回退主流程
+
     def _fast_path(self, ctx: TaskContext) -> str | None:
         problem = ctx.problem or ""
+        start = time.time()
         for pattern, tag in self._FAST_PATH_PATTERNS:
             if not _re.search(pattern, problem, _re.IGNORECASE):
                 continue
@@ -290,6 +329,10 @@ class Orchestrator(BaseAgent):
             if not _HAS_SYMPY:
                 self.record(ctx, "fast_path", "SymPy 未安装，跳过快车道")
                 continue
+            # 耗时控制：超过预算立即放弃快车道，避免过度消耗时间
+            if time.time() - start > self._FAST_PATH_TIME_LIMIT:
+                self.record(ctx, "fast_path", "快车道耗时超限，放弃，回退主流程")
+                return None
             result = self._try_sympy_solve(problem, tag)
             if result:
                 self.record(ctx, "fast_path", f"快车道 SymPy 求解成功: {result}")

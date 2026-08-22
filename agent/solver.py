@@ -289,6 +289,18 @@ class SolverAgent(BaseAgent):
         )
         user_content = user_content + _ANSWER_GUIDE
 
+        # 题型差异化策略注入（v2.6）：
+        #   选择题→选项逆推验证；判断题→不确定时合理猜测；
+        #   证明题→逐步反复校验；解答题→附带答案结果检测；填空题→只输出结果。
+        if getattr(self.config, 'enable_question_type', True) and getattr(ctx, 'question_type', ''):
+            from .question_type import get_question_type_hint, format_options
+            qtype_hint = get_question_type_hint(ctx.question_type)
+            if ctx.question_type == "选择题":
+                opts = format_options(ctx.problem)
+                if opts:
+                    qtype_hint += opts
+            user_content = user_content + qtype_hint
+
         base_cid = len(ctx.candidates)
         if temperatures is None:
             tier_tbl = getattr(self.config, 'tier_temperatures', None)

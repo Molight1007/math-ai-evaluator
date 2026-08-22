@@ -74,13 +74,14 @@ class AgentConfig:
 
     # 题型分类（可选）
     enable_domain_hint: bool = True    # 是否启用领域提示增强
+    enable_question_type: bool = True  # 是否启用题型识别（证明/选择/判断/填空/解答）+ 差异化策略
 
     # 解析
     extraction_mode: str = "auto"      # auto | last_line | regex
 
     # ---- 自主调控（大幅缩减）----
     max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
-    max_total_calls: int = 15          # LLM 调用预算硬上限（revise=1 需额外 1-3 次）
+    max_total_calls: int = 60          # LLM 调用预算硬上限（v2.6.1：15→60，覆盖协作反复验证场景）
 
     # ---- 时间限制（适配竞赛新规则）----
     # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
@@ -123,6 +124,8 @@ class AgentConfig:
     deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
     deep_revise_rounds: int = 1             # deep 档 0 票时 revise 自纠错轮数
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
+    enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
+    collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
 
     # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
     # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
@@ -148,7 +151,12 @@ class AgentConfig:
         if self.tier_max_completions is None:
             self.tier_max_completions = {"fast": 0, "standard": 1, "deep": 2}
         if self.tier_max_calls is None:
-            self.tier_max_calls = {"fast": 6, "standard": 15, "deep": 30}
+            # v2.6.1：deep 档 30→60
+            # deep 档需要：三Agent协作反复验证(每轮 4 次 × max_rounds) + 多候选求解
+            #   + 子目标分解 + 验证投票 + revise。collab_max_rounds=6 时单协作链就 24 次
+            #   调用，30 次预算不够。60 次才能覆盖协作反复验证场景。
+            # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
+            self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 60}
         if self.tier_budget is None:
             self.tier_budget = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
 
@@ -257,7 +265,7 @@ class ReasoningAgent:
         for key in (
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
             "verifier_voting_times", "verifier_temperature",
-            "enable_domain_hint", "extraction_mode",
+            "enable_domain_hint", "enable_question_type", "extraction_mode",
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
             "by_enable_fast_path", "use_scoring",
@@ -271,6 +279,7 @@ class ReasoningAgent:
             "tier_max_completions", "tier_max_calls", "tier_budget",
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
+            "enable_collaborative_deep", "collab_max_rounds",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
         ):

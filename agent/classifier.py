@@ -13,6 +13,7 @@ import logging
 import re
 
 from .base import BaseAgent, TaskContext
+from .question_type import classify_question_type
 from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
@@ -157,6 +158,12 @@ class ClassifierAgent(BaseAgent):
     name = "Classifier"
 
     def run(self, ctx: TaskContext) -> TaskContext:
+        # 题型识别（关键词，零 LLM 调用）：证明题/选择题/判断题/填空题/解答题
+        if getattr(self.config, 'enable_question_type', True):
+            ctx.question_type = classify_question_type(ctx.problem)
+            self.record(ctx, "classify_type",
+                        f"题型识别结果: {ctx.question_type}", question_type=ctx.question_type)
+
         if not self.config.enable_domain_hint:
             ctx.domain = None
             self.record(ctx, "classify", "领域提示已禁用，使用通用策略")
