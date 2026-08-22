@@ -26,7 +26,7 @@ logger = logging.getLogger("MathPilot")
 # ============================================================
 # 响应归一化（P0-1 契约防线）
 # ============================================================
-def _normalize_chat_response(resp) -> Optional[str]:
+def _normalize_chat_response(resp, include_reasoning: bool = True) -> Optional[str]:
     """把 client.chat 的返回值统一成字符串。
 
     平台注入的 client 实现不定，常见返回形态：
@@ -36,6 +36,12 @@ def _normalize_chat_response(resp) -> Optional[str]:
       - 对象: .content / .text / .message.content
       - bytes: 解码为 UTF-8
       - None / 异常: 返回 ""
+
+    include_reasoning:
+      - True（默认，供答案抽取 / 末尾兜底）：content 为空时回退 reasoning_content。
+      - False（供 _safe_chat 判断"是否有真实文本产出"）：忽略 reasoning_content，
+        仅当确有 content / text 等才视作有效产出。避免 content 为空、但
+        reasoning_content 有值（思考链）被误判为"有产出"，从而跳过空响应重试。
     """
     if resp is None:
         return ""
@@ -48,7 +54,7 @@ def _normalize_chat_response(resp) -> Optional[str]:
             return ""
     if isinstance(resp, list):
         for item in resp:
-            text = _normalize_chat_response(item)
+            text = _normalize_chat_response(item, include_reasoning=include_reasoning)
             if text:
                 return text
         return ""
@@ -59,11 +65,12 @@ def _normalize_chat_response(resp) -> Optional[str]:
                 val = resp[key]
                 if isinstance(val, str):
                     return val
-                return _normalize_chat_response(val)
-        # 2) reasoning_content 兜底（推理模型：平台可能仅在此返回最终答案，
-        #    本地 LLMClient 已支持此通道，平台路径此前缺失 → 答案被抽空 → 大面积 0 分）
-        if resp.get("reasoning_content"):
-            return _normalize_chat_response(resp["reasoning_content"])
+                return _normalize_chat_response(val, include_reasoning=include_reasoning)
+        # 2) reasoning_content 兜底（推理模型：平台可能仅在此返回最终答案）。
+        #    仅在 include_reasoning=True 时生效——_safe_chat 用 False 模式判断
+        #    "是否有真实产出"，防止思考链被当成答案、跳过空响应重试。
+        if include_reasoning and resp.get("reasoning_content"):
+            return _normalize_chat_response(resp["reasoning_content"], include_reasoning=include_reasoning)
         if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
             choice = resp["choices"][0]
             if isinstance(choice, dict):
@@ -74,30 +81,34 @@ def _normalize_chat_response(resp) -> Optional[str]:
                         if key in msg and msg[key]:
                             return str(msg[key])
                     # message 内 reasoning_content 兜底
-                    if msg.get("reasoning_content"):
+                    if include_reasoning and msg.get("reasoning_content"):
                         return str(msg["reasoning_content"])
                 if "text" in choice and choice["text"]:
                     return str(choice["text"])
-            return _normalize_chat_response(choice)
+            return _normalize_chat_response(choice, include_reasoning=include_reasoning)
         if "message" in resp and isinstance(resp["message"], dict):
             msg = resp["message"]
             for key in ("content", "text", "reasoning_content"):
                 if key in msg and msg[key]:
+                    if key == "reasoning_content" and not include_reasoning:
+                        continue
                     return str(msg[key])
         if "data" in resp:
-            return _normalize_chat_response(resp["data"])
+            return _normalize_chat_response(resp["data"], include_reasoning=include_reasoning)
         return ""
     # 普通对象：尝试 .content / .text / .reasoning_content / .message
     for attr in ("content", "text", "reasoning_content", "response"):
         try:
             val = getattr(resp, attr, None)
-            if val:  # 非空才采用，空字符串应让位给 reasoning_content 兜底
-                return _normalize_chat_response(val)
+            if val:  # 非空才采用
+                if attr == "reasoning_content" and not include_reasoning:
+                    continue
+                return _normalize_chat_response(val, include_reasoning=include_reasoning)
         except Exception:
             pass
     try:
         if hasattr(resp, "message") and resp.message is not None:
-            return _normalize_chat_response(resp.message)
+            return _normalize_chat_response(resp.message, include_reasoning=include_reasoning)
     except Exception:
         pass
     try:
@@ -338,10 +349,15 @@ class BaseAgent(ABC):
                 # 平台 client 仅接受 positional args → 降级
                 logger.warning("[%s] TypeError in chat() kwargs, fallback to positional", self.name)
                 resp = self.client.chat(messages)
-            resp = _normalize_chat_response(resp)
-            if resp and resp.strip():
-                return resp
+            # 严格归一化（不含 reasoning_content）判断"是否有真实文本产出"：
+            # 仅当确有 content/text 等才视作有效，避免 content 为空但 reasoning_content
+            # 有值（思考链）被误判为"有产出"而跳过下方的空响应重试。
+            resp_strict = _normalize_chat_response(resp, include_reasoning=False)
+            resp_full = _normalize_chat_response(resp, include_reasoning=True)
+            if resp_strict and resp_strict.strip():
+                return resp_full
             client_err = None
+            resp = resp_full  # 供末尾兜底返回（可能为 reasoning_content）
         except Exception as e:
             err_str = str(e)
             # 超长类异常交给 llm() 减小 max_tokens 重试
@@ -366,6 +382,9 @@ class BaseAgent(ABC):
                     return r
             except Exception as e2:
                 logger.warning("[%s] 去 prefix 重试失败: %s", self.name, str(e2)[:120])
+        # 重试仍空：末尾兜底返回完整归一化结果（可能仅为 reasoning_content）
+        if resp and resp.strip():
+            return resp
         if client_err is not None:
             raise client_err
         return resp
