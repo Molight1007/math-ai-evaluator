@@ -157,7 +157,7 @@ class AgentConfig:
 # 响应归一化工具（P0-1 契约防线核心）
 # ============================================================
 
-def _normalize_chat_response(resp: Any) -> str:
+def _normalize_chat_response(resp, include_reasoning: bool = True) -> str:
     """把 client.chat 的返回值统一成字符串。
 
     平台注入的 client 实现不定，常见返回形态：
@@ -167,6 +167,10 @@ def _normalize_chat_response(resp: Any) -> str:
       - 对象: .content / .text / .message.content
       - bytes: 解码为 UTF-8
       - None / 异常: 返回 ""
+
+    include_reasoning: 是否在 content 为空时回退 reasoning_content
+    （推理模型可能仅在此返回内容；但思考链非干净答案，调用方如需
+     判断"是否有真实产出"应传 False——与 agent/base.py 的 _safe_chat 严格模式对齐）。
     """
     if resp is None:
         return ""
@@ -178,20 +182,24 @@ def _normalize_chat_response(resp: Any) -> str:
         except Exception:
             return ""
     if isinstance(resp, list):
-        # 取第一个元素
+        # 取第一个非空元素
         for item in resp:
-            text = _normalize_chat_response(item)
+            text = _normalize_chat_response(item, include_reasoning=include_reasoning)
             if text:
                 return text
         return ""
     if isinstance(resp, dict):
-        # 常见的几种字典形态
+        # 1) 优先非空 content / text / output / result
         for key in ("content", "text", "output", "result"):
-            if key in resp and resp[key] is not None:
+            if key in resp and resp[key]:
                 val = resp[key]
                 if isinstance(val, str):
                     return val
-                return _normalize_chat_response(val)
+                return _normalize_chat_response(val, include_reasoning=include_reasoning)
+        # 2) reasoning_content 兜底（推理模型：可能仅在此返回内容）
+        if include_reasoning and resp.get("reasoning_content"):
+            return _normalize_chat_response(resp["reasoning_content"],
+                                            include_reasoning=include_reasoning)
         if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
             choice = resp["choices"][0]
             if isinstance(choice, dict):
@@ -199,30 +207,34 @@ def _normalize_chat_response(resp: Any) -> str:
                 if "message" in choice and isinstance(choice["message"], dict):
                     msg = choice["message"]
                     for key in ("content", "text"):
-                        if key in msg and msg[key] is not None:
+                        if key in msg and msg[key]:
                             return str(msg[key])
-                if "text" in choice and choice["text"] is not None:
+                    if include_reasoning and msg.get("reasoning_content"):
+                        return str(msg["reasoning_content"])
+                if "text" in choice and choice["text"]:
                     return str(choice["text"])
-            return _normalize_chat_response(choice)
+            return _normalize_chat_response(choice, include_reasoning=include_reasoning)
         if "message" in resp and isinstance(resp["message"], dict):
             msg = resp["message"]
             for key in ("content", "text"):
-                if key in msg and msg[key] is not None:
+                if key in msg and msg[key]:
                     return str(msg[key])
+            if include_reasoning and msg.get("reasoning_content"):
+                return str(msg["reasoning_content"])
         if "data" in resp:
-            return _normalize_chat_response(resp["data"])
+            return _normalize_chat_response(resp["data"], include_reasoning=include_reasoning)
         return ""
-    # 普通对象：尝试 .content / .text / .message
+    # 普通对象：尝试 .content / .text / .response（非空才采用）
     for attr in ("content", "text", "response"):
         try:
             val = getattr(resp, attr, None)
-            if val is not None:
-                return _normalize_chat_response(val)
+            if val:
+                return _normalize_chat_response(val, include_reasoning=include_reasoning)
         except Exception:
             pass
     try:
         if hasattr(resp, "message") and resp.message is not None:
-            return _normalize_chat_response(resp.message)
+            return _normalize_chat_response(resp.message, include_reasoning=include_reasoning)
     except Exception:
         pass
     # 最后兜底：字符串化

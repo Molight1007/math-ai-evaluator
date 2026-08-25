@@ -459,10 +459,24 @@ class EvalEngine:
         is_correct = answers_match(pred_answer, gold) if pred_answer and gold else None
         if not gold:
             is_correct = None
+        # 保留推理轨迹（orchestrator 返回的 trace 字段），供错题深挖分析；
+        # 每个 step 的长文本截断到 1200 字，避免 jsonl 单行过大。
+        raw_trace = result.get("trace", []) if isinstance(result, dict) else []
+        safe_trace = []
+        for step in (raw_trace or []):
+            if isinstance(step, dict):
+                s = dict(step)
+                for _k in ("text", "content", "output", "reasoning", "message"):
+                    if _k in s and isinstance(s[_k], str) and len(s[_k]) > 1200:
+                        s[_k] = s[_k][:1200] + "...[truncated]"
+                safe_trace.append(s)
+            else:
+                safe_trace.append(step)
         return {
             "id": pid, "domain": domain,
             "question": question, "gold": gold,
             "predicted": pred_answer, "response": response[:2000],
+            "trace": safe_trace,
             "correct": is_correct, "elapsed_sec": round(elapsed, 2),
         }
 
@@ -548,7 +562,7 @@ class EvalEngine:
 def main():
     parser = argparse.ArgumentParser(description="MathPilot 本地评测工具")
     parser.add_argument("--test_file", default="", help="JSONL 测试文件路径")
-    parser.add_argument("--bank", default="", help="题库名称（如 新高数、1000题高数、高数a、IMO-AnswerBench、all）")
+    parser.add_argument("--bank", default="IMO-AnswerBench", help="题库名称（默认 IMO-AnswerBench；可选 新高数、1000题高数、高数a、all）")
     parser.add_argument("--list_banks", action="store_true", help="列出所有已注册题库")
     parser.add_argument("--output", default="eval_results.jsonl", help="输出结果文件")
     parser.add_argument("--concurrency", type=int, default=2, help="并发数")
@@ -584,9 +598,12 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # 解析 test_file：--bank 优先
+    # 解析 test_file：显式 --test_file 优先于 --bank（覆盖语义）；
+    # 未指定 --test_file 时才回退 --bank（默认 IMO-AnswerBench）。
     test_files: List[str] = []
-    if args.bank:
+    if args.test_file:
+        test_files = [args.test_file]
+    elif args.bank:
         resolved = resolve_bank(args.bank)
         if resolved is None:
             print(f"错误: 未知题库 '{args.bank}'。使用 --list_banks 查看可用题库。")
@@ -595,8 +612,6 @@ def main():
             test_files = resolved
         else:
             test_files = [resolved]
-    elif args.test_file:
-        test_files = [args.test_file]
     else:
         print("错误: 请指定 --test_file 或 --bank。使用 --list_banks 查看可用题库。")
         sys.exit(1)
