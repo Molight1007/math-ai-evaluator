@@ -94,7 +94,7 @@ class DifficultyRouter(BaseAgent):
         static_tier, static_score, evidence = self._static_assess(ctx.problem, ctx.domain)
 
         # 应急模式：跳过 LLM 自评，直接静态判定（省 1 次调用保预算）
-        if getattr(self.config, '_emergency', False):
+        if getattr(ctx.state, 'emergency', False):
             ctx.tier = static_tier
             ctx.tier_evidence = {
                 "static": round(static_score, 2),

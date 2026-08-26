@@ -29,6 +29,7 @@ from .difficulty_router import DifficultyRouter
 from .paper_pacer import PaperPacer
 from .lean_gate import LeanGate
 from .collaborative_solver import CollaborativeSolver
+from .lean_pre_verifier import LeanPreVerifier
 from utils.extract import safe_json_serialize
 
 try:
@@ -60,6 +61,8 @@ class Orchestrator(BaseAgent):
         self.lean_gate = LeanGate(client, config)
         # deep 档难题三Agent协作求解器（v2.6：解题→审查→整合→反复验证）
         self.collab = CollaborativeSolver(client, config)
+        # Lean 前置形式化验证（v2.9）：解题前把题目转 Lean 声明校验理解
+        self.lean_pre_verifier = LeanPreVerifier(client, config)
 
     # ----------------------------------------------------------
     # 主入口（简化版流水线）
@@ -92,22 +95,24 @@ class Orchestrator(BaseAgent):
             elapsed_total = time.time() - ctx.total_start_time
             total_budget = ctx.total_deadline - ctx.total_start_time
             ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
-            self.config._time_ratio = ratio
-            if ratio > 0.75:
+            # v2.8：运行时覆盖统一写入 ctx.state（RunState），不再改写共享 config，
+            # 消除并发=3 时跨题污染（时间预算自律核心）。
+            if ratio > 0.95:
+                # P1 修复：阈值 0.75→0.95。本地测试更晚进入应急模式，把准确率放在时间前面。
                 # 应急模式：候选→1、投票→1，跳过续写/复算（45 error 主因根治）
-                self.config.policy_sample_times = max(1, self.config.policy_sample_times - 1)
-                self.config.verifier_voting_times = 1
-                self.config._emergency = True
-                self.config._playoff_enabled = False
+                ctx.state.sample_times = max(1, self.config.policy_sample_times - 1)
+                ctx.state.voting_times = 1
+                ctx.state.emergency = True
+                ctx.state.playoff_enabled = False
                 self.record(ctx, "paper_pacer", f"应急模式：已用 {ratio:.0%} 总预算")
-            elif ratio > 0.5:
-                self.config.verifier_voting_times = 1
-                self.config._emergency = False
-                self.config._playoff_enabled = False
+            elif ratio > 0.8:
+                ctx.state.voting_times = 1
+                ctx.state.emergency = False
+                ctx.state.playoff_enabled = False
                 self.record(ctx, "paper_pacer", f"时间收紧：已用 {ratio:.0%} 总预算")
             else:
-                self.config._emergency = False
-                self.config._playoff_enabled = True
+                ctx.state.emergency = False
+                ctx.state.playoff_enabled = True
 
             # 1) 题型识别（元数据已知时跳过 LLM）
             pre_known_domain = (metadata or {}).get("domain", "")
@@ -133,7 +138,7 @@ class Orchestrator(BaseAgent):
             self.difficulty_router.run(ctx)
             tier = getattr(ctx, 'tier', 'standard')
             # 应急模式：所有档位强制降级到 fast（预算收紧，保产出）
-            if getattr(self.config, '_emergency', False) and tier != 'fast':
+            if ctx.state.emergency and tier != 'fast':
                 ctx.tier = 'fast'
                 tier = 'fast'
                 self.record(ctx, "paper_pacer", "应急模式：强制降档到 fast")
@@ -149,7 +154,33 @@ class Orchestrator(BaseAgent):
                         f"(剩余目标 {ctx.pacer_remaining:.0f}s, 调用预算 {max_calls})",
                         tier=tier, soft_budget=round(ctx.soft_budget))
 
-            # 3) 求解（候选数/温度分层按档位，solver 内部读取 ctx.tier）
+            # 2.6) Lean 前置形式化验证（v2.9）：解题前把题目转 Lean 声明校验理解，
+            # 通过后 ctx.formal_spec 会注入后续子目标规划；失败/降级不阻断主流程。
+            if (getattr(self.config, 'enable_lean_preverify', True)
+                    and not ctx.state.emergency):
+                self.lean_pre_verifier.run(ctx)
+
+            # 2.7) 子目标细化主路径（v2.9）：全部档位统一先跑一次子目标分解逐步求解
+            if (getattr(self.config, 'enable_subgoal_main_path', True)
+                    and not ctx.state.emergency
+                    and ctx.budget.can_spend(3)):
+                self.record(ctx, "control",
+                            "子目标细化主路径先行（前置形式化已校准题意）")
+                self.sub_goal_solver.run(ctx)
+                ctx._subgoal_main_done = True
+
+            # 3) 求解
+            # deep 档：Plan-and-Execute 主路径先行（子目标分解逐步求解 + 每步 oracle 校验），
+            # 让结构化计划-执行候选先进入后续 Lean 验证与投票。
+            if (tier == 'deep'
+                    and getattr(self.config, 'deep_use_sub_goal', True)
+                    and not getattr(ctx, '_subgoal_main_done', False)
+                    and not ctx.state.emergency
+                    and ctx.budget.can_spend(3)):
+                self.record(ctx, "control", "deep 档 Plan-and-Execute 主路径先行（子目标分解）")
+                self.sub_goal_solver.run(ctx)
+
+            # Solver 多路采样（候选数/温度分层按档位，solver 内部读取 ctx.tier）
             self.solver.run(ctx)
             if not ctx.candidates:
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
@@ -158,7 +189,7 @@ class Orchestrator(BaseAgent):
 
             # 3.2) 截断候选续写：每档 max_completions 个（fast=0 跳过），应急模式跳过
             if (getattr(ctx, 'candidates', None)
-                    and not getattr(self.config, '_emergency', False)):
+                    and not ctx.state.emergency):
                 max_comp = self.config.tier_max_completions.get(tier, 1)
                 if max_comp > 0:
                     n_completed = self.solver.complete_truncated_candidates(
@@ -172,18 +203,19 @@ class Orchestrator(BaseAgent):
             #      保证难题高正确率。
             if (tier == 'deep'
                     and getattr(self.config, 'enable_collaborative_deep', True)
-                    and not getattr(self.config, '_emergency', False)):
+                    and not ctx.state.emergency):
                 self.record(ctx, "control", "deep 档启用三Agent协作验证机制")
                 self.collab.run(ctx)
 
-            # 3.5) 子目标分解补充候选：deep 档强制；其他档候选不足或证明题时触发
+            # 3.5) 子目标分解补充候选：仅非 deep 档（deep 档已作为主路径提前执行）
             is_proof = getattr(ctx, 'question_type', '') == '证明题' or \
                 getattr(ctx, 'domain', '') in ('证明', '证明题')
-            use_sub = (getattr(self.config, 'deep_use_sub_goal', True)
-                       if tier == 'deep' else getattr(self.config, 'use_sub_goal', False))
-            if (use_sub
+            use_sub = getattr(self.config, 'use_sub_goal', False)
+            if (tier != 'deep'
+                    and use_sub
+                    and not getattr(ctx, '_subgoal_main_done', False)
                     and ctx.budget.can_spend(3)
-                    and (len(ctx.candidates) < 2 or is_proof or tier == 'deep')):
+                    and (len(ctx.candidates) < 2 or is_proof)):
                 self.record(ctx, "control",
                             "触发子目标分解补充候选",
                             sub_goal_trigger=f"tier={tier}, candidates={len(ctx.candidates)}, is_proof={is_proof}")
@@ -214,13 +246,20 @@ class Orchestrator(BaseAgent):
                 use_clustering=True,
                 use_scoring=self.config.use_scoring,
                 is_proof=is_proof,
-                use_playoff=(getattr(self.config, '_playoff_enabled', False)
-                             and (tier != 'deep' or self.config.deep_use_playoff)),
+                use_playoff=(
+                    (tier == 'deep' and getattr(self.config, 'deep_use_playoff', True))
+                    or (tier != 'deep' and ctx.state.playoff_enabled)
+                ),
+                use_deterministic=getattr(self.config, 'enable_deterministic', True),
                 voting_times=tier_votes,
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
             ctx._best_cluster = ver_result.get("best_cluster")
             ctx._cluster_data = ver_result.get("cluster_data", [])
+
+            # 4.5) deep 档：AnswerOracle 客观复核 best_cluster（区别于投票同源自评）
+            if tier == 'deep' and getattr(ctx, '_best_cluster', None) is not None:
+                self._oracle_review_best(ctx, ver_result, tier_votes)
 
             # 5) 全部 0 正确票：
             #    - deep 档：先 revise 自纠错回环（最多 deep_revise_rounds 轮）
@@ -229,7 +268,7 @@ class Orchestrator(BaseAgent):
                     and all(v.total_votes > 0 for v in ctx.verdicts)
                     and all(v.correct_votes == 0 for v in ctx.verdicts)):
                 revised_ok = False
-                if tier == 'deep' and not getattr(self.config, '_emergency', False):
+                if tier == 'deep' and not ctx.state.emergency:
                     revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
                 if not revised_ok:
                     self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
@@ -251,10 +290,13 @@ class Orchestrator(BaseAgent):
             # 5.5) 低置信度强制复核（v2.6 杀掉虚高置信度）：
             #   deep 档 best_cluster 置信度 < 0.5（正确票未过半，验证器自身都不确定）
             #   且时间/预算宽裕时，不自信接受低共识答案，而是触发 revise 提升共识。
+            # 所有档位（不只 deep）启用低置信度强制复核：
+            # 只要投票共识 < 0.5（验证器自身都不确定），就不再"自信接受"错答案，
+            # 而是触发 revise 反复验证，直到获得正确票或超时/预算耗尽。
             _bc = getattr(ctx, '_best_cluster', None)
-            if (tier == 'deep' and _bc is not None
+            if (_bc is not None
                     and getattr(_bc, 'confidence', 1.0) < 0.5
-                    and not getattr(self.config, '_emergency', False)):
+                    and not ctx.state.emergency):
                 self.record(
                     ctx, "control",
                     f"deep 档低置信度({_bc.confidence:.2f})，强制 revise 复核提升共识",
@@ -392,7 +434,7 @@ class Orchestrator(BaseAgent):
         返回是否在回环中获得至少 1 个候选获得正确票。
         """
         max_rounds = getattr(self.config, 'deep_revise_rounds', 1)
-        if max_rounds <= 0 or getattr(self.config, '_emergency', False):
+        if max_rounds <= 0 or ctx.state.emergency:
             return False
         feedback = ver_result.get("feedback", "")
         if not feedback:
@@ -416,18 +458,93 @@ class Orchestrator(BaseAgent):
                 use_clustering=True,
                 use_scoring=self.config.use_scoring,
                 is_proof=getattr(ctx, 'domain', '') in ('证明', '证明题'),
-                use_playoff=getattr(self.config, '_playoff_enabled', False),
+                use_playoff=ctx.state.playoff_enabled,
+                use_deterministic=getattr(self.config, 'enable_deterministic', True),
                 voting_times=tier_votes,
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver2, ctx.candidates)
             ctx._best_cluster = ver2.get("best_cluster")
             ctx._cluster_data = ver2.get("cluster_data", [])
+            # v2.8 AcceptGate：按本轮结果更新门控，连续重大缺陷达阈值 → 提前放弃
+            decision = self._update_accept_gate(
+                ctx, is_proof=getattr(ctx, 'domain', '') in ('证明', '证明题'))
             if any(v.correct_votes > 0 for v in ctx.verdicts):
                 self.record(ctx, "revise", f"revise 第{ctx.revise_round}轮获得正确票")
                 return True
+            if decision == "REJECT":
+                self.record(ctx, "revise", "AcceptGate 连续重大缺陷达阈值，放弃 revise")
+                return False
             feedback = ver2.get("feedback") or feedback
         self.record(ctx, "revise", f"revise 回环 {max_rounds} 轮仍未获得正确票")
         return False
+
+    def _update_accept_gate(self, ctx: TaskContext, is_proof: bool = False) -> str:
+        """按本轮验证结果更新 AcceptGate（RoundState），返回最新 decision。
+
+        - is_pass：best_cluster 置信度 >= accept_confidence；
+        - has_major_defect：证明题全部 0 正确票，或常规题置信度 < 0.3。
+        """
+        accept_conf = getattr(self.config, 'accept_confidence', 0.6)
+        bc = getattr(ctx, '_best_cluster', None)
+        conf = bc.confidence if bc is not None else 0.0
+        is_pass = conf >= accept_conf
+        has_major = False
+        if is_proof:
+            has_major = bool(ctx.verdicts) and all(v.correct_votes == 0 for v in ctx.verdicts)
+        elif conf < 0.3:
+            has_major = True
+        decision = ctx.round_state.update(is_pass=is_pass, has_major_defect=has_major)
+        self.record(
+            ctx, "accept_gate",
+            f"AcceptGate={decision} (pass={ctx.round_state.consecutive_pass}, "
+            f"defect={ctx.round_state.consecutive_major_defect})",
+            confidence=round(conf, 3),
+        )
+        return decision
+
+    def _oracle_review_best(self, ctx: TaskContext, ver_result: dict,
+                            tier_votes: int) -> None:
+        """deep 档：对 best_cluster 代表候选做 AnswerOracle 客观复核。
+
+        投票是"验证器与解题器同源"的自评，会一起错；这里用 AnswerOracle
+        （证明题 Lean / 计算题 SymPy）做独立客观验证。incorrect 时把客观反馈
+        注入 revise 通道并触发一次定向修正。
+
+        证明题已由 lean_gate 硬验证覆盖，此处仅对计算/解答题做 SymPy 客观复核，
+        避免重复 Lean 编译。
+        """
+        qt = getattr(ctx, 'question_type', '') or ''
+        domain = getattr(ctx, 'domain', '') or ''
+        if qt == '证明题' or any(k in domain for k in ('证明', '证明题')):
+            return
+        try:
+            from .answer_oracle import AnswerOracle
+        except Exception:  # noqa: BLE001
+            return
+        bc = getattr(ctx, '_best_cluster', None)
+        if bc is None or not ctx.candidates:
+            return
+        cids = getattr(bc, 'candidate_ids', []) or []
+        idx = cids[0] if cids and cids[0] < len(ctx.candidates) else 0
+        rep = ctx.candidates[idx]
+        oracle = AnswerOracle(self.client, self.config, ctx.budget)
+        try:
+            result = oracle.verify(ctx, rep, candidates=ctx.candidates)
+        except Exception as e:  # noqa: BLE001
+            self.record(ctx, "oracle_review", f"AnswerOracle 复核异常: {e}")
+            return
+        self.record(ctx, "oracle_review",
+                    f"AnswerOracle 客观复核: {result.verdict} ({result.oracle_type})",
+                    verdict=result.verdict, oracle_type=result.oracle_type)
+        if (result.is_incorrect and result.feedback
+                and not ctx.state.emergency):
+            # 客观反馈注入 revise 通道（复用 lean_reject_feedback 字段）
+            if not getattr(ctx, 'lean_reject_feedback', None):
+                ctx.lean_reject_feedback = []
+            ctx.lean_reject_feedback.append(result.feedback)
+            self.record(ctx, "oracle_review",
+                        f"客观复核判错，触发定向修正: {result.feedback[:120]}")
+            self._deep_revise_loop(ctx, ver_result, tier_votes)
 
     def _verdicts_from_ver_result(self, ver_result: dict, candidates: list = None) -> list:
         """将验证器产出的多票结果汇总为 Verdict 数据类列表。

@@ -205,6 +205,7 @@ def _compile_lean(
     work_dir: str,
     lean_executable: str = _DEFAULT_LEAN_EXECUTABLE,
     timeout: float = _DEFAULT_LEAN_TIMEOUT,
+    allow_sorry: bool = False,
 ) -> dict:
     """调用 Lean 编译器编译一段 Lean 代码（纯编译路径，不依赖 LLM 栈）。
 
@@ -213,9 +214,12 @@ def _compile_lean(
         work_dir: 编译工作目录（写入 .lean 文件并执行 lake 的目录）。
         lean_executable: Lean 可执行文件名（默认 "lake"，配合 lean-toolchain）。
         timeout: 编译超时（秒）。
+        allow_sorry: 声明模式开关。True 时「编译通过但含 sorry」视为 ok
+            （用于题目前置形式化验证：只校验命题声明类型正确，不要求证明完整）；
+            默认 False 保持后置证明验证原行为（含 sorry 视为未完全验证）。
 
     返回:
-        {"ok": bool, "error": str} —— ok=True 表示编译通过（且无未解决的 sorry 关键错误）。
+        {"ok": bool, "error": str}。
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
     lean_file = os.path.join(work_dir, "verify.lean")
@@ -235,8 +239,9 @@ def _compile_lean(
         )
         err = (result.stderr or "") + (result.stdout or "")
         if result.returncode == 0:
-            # 编译通过，但仍需检查是否使用了 sorry 占位（视为未完全验证）
-            if re.search(r"\bsorry\b", code):
+            # 编译通过；声明模式（allow_sorry=True）允许 sorry 占位，
+            # 否则仍视为未完全验证（含 sorry 视为失败）。
+            if not allow_sorry and re.search(r"\bsorry\b", code):
                 return {"ok": False,
                         "error": "编译通过但包含 sorry 占位（存在未形式化步骤）"}
             return {"ok": True, "error": ""}
@@ -441,6 +446,101 @@ class LeanBridge:
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
             return BugReport(verdict="unknown", findings=[])
+
+    # ------------------------------------------------------------------
+    # 前置形式化验证：题目 → Lean 定理声明 → 声明模式编译
+    # ------------------------------------------------------------------
+
+    def _formalize_to_lean(self, problem: str, domain: str = "",
+                           feedback: str = "") -> Optional[dict]:
+        """把题目转化为 Lean 定理声明（依赖注入 client），返回 {"formal_spec", "lean_code"}。
+
+        feedback 非空时，把上一次编译错误回传给书生，要求重新理解题目并修正形式化。
+        转化失败（LLM 空返回 / JSON 解析失败 / 无 lean_code）返回 None。
+        """
+        try:
+            from prompts.lean_pre_verify import (
+                LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
+        except ImportError:  # 提交包（submit/）路径兜底
+            from submit.prompts.lean_pre_verify import (
+                LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
+        feedback_block = ""
+        if feedback:
+            feedback_block = ("## 上一次形式化声明编译失败（请重新理解题目并修正）\n"
+                              + _truncate_error_output(feedback) + "\n\n")
+        messages = [
+            {"role": "system", "content": LEAN_FORMALIZE_PROBLEM_SYSTEM},
+            {"role": "user", "content": LEAN_FORMALIZE_PROBLEM_USER.format(
+                problem=problem, domain=domain or "未知", feedback=feedback_block)},
+        ]
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        parsed = _parse_analysis_json(raw)  # 通用 JSON 提取（功能与 analysis 一致）
+        if not parsed:
+            return None
+        lean_code = _strip_code_fence(str(parsed.get("lean_code", "") or ""))
+        formal_spec = str(parsed.get("formal_spec", "") or "")
+        if not lean_code:
+            return None
+        return {"formal_spec": formal_spec, "lean_code": lean_code}
+
+    def formalize_problem(self, problem: str, domain: str = "",
+                          timeout: Optional[float] = None,
+                          feedback: str = "") -> dict:
+        """题目前置形式化验证（同步接口，不抛异常）。
+
+        把题目转成 Lean 定理声明（证明 sorry 占位），用声明模式（allow_sorry）编译校验：
+        - 声明 well-typed（编译 returncode==0，允许 sorry）→ verdict="ok"
+        - 声明类型/语法错误 → verdict="fail"（附编译错误，供修正循环回传）
+        - Lean 不可用 / 超时 / 转化失败 → verdict="unknown"（安全降级，不阻断主流程）
+
+        参数:
+            problem: 原题文本。
+            domain: 题目领域（可选）。
+            timeout: 整体 wall-clock 超时（秒），缺省用 self._lean_timeout。
+            feedback: 上一次编译错误（非空时回传书生重新理解题目修正）。
+
+        返回:
+            {"verdict": "ok"|"fail"|"unknown", "lean_code": str,
+             "formal_spec": str, "error": str}。
+        """
+        deadline = time.monotonic() + max(1.0, timeout or self._lean_timeout)
+        try:
+            # 1) Lean 环境缺失 → 降级 unknown
+            if not self.lean_available:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "Lean 环境不可用"}
+            if time.monotonic() > deadline:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "前置形式化超时"}
+
+            # 2) 题目 → Lean 定理声明
+            converted = self._formalize_to_lean(problem, domain, feedback)
+            if not converted:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "题目形式化转化失败"}
+
+            # 3) 声明模式编译（允许 sorry）
+            if time.monotonic() > deadline:
+                return {"verdict": "unknown", "lean_code": converted["lean_code"],
+                        "formal_spec": converted["formal_spec"], "error": "前置形式化超时"}
+            with tempfile.TemporaryDirectory(prefix="lean_preverify_") as work_dir:
+                comp = _compile_lean(
+                    converted["lean_code"], work_dir,
+                    lean_executable=self._lean_executable,
+                    timeout=min(self._lean_timeout,
+                                max(1.0, deadline - time.monotonic())),
+                    allow_sorry=True,
+                )
+            if comp.get("ok"):
+                return {"verdict": "ok", "lean_code": converted["lean_code"],
+                        "formal_spec": converted["formal_spec"], "error": ""}
+            return {"verdict": "fail", "lean_code": converted["lean_code"],
+                    "formal_spec": converted["formal_spec"],
+                    "error": comp.get("error", "声明编译失败")}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[LeanBridge] formalize_problem 异常（降级 unknown）: %s", exc)
+            return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                    "error": str(exc)[:200]}
 
 
 # =====================================================================

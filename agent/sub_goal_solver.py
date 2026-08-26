@@ -219,6 +219,16 @@ class SubGoalSolverAgent(BaseAgent):
             step_result = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results)
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
+            # v2.9：结构化输出每步子目标的过程与中间结果
+            ctx.subgoal_trace.append({
+                "id": sg["id"],
+                "title": sg["title"],
+                "description": sg["description"],
+                "type": sg["type"],
+                "depends_on": sg["depends_on"],
+                "expected_output": sg["expected_output"],
+                "result": step_result,
+            })
 
             self.record(ctx, "subgoal_step",
                        f"子目标 #{sg['id']}「{sg['title']}」求解完成: {step_result[:80]}")
@@ -233,10 +243,16 @@ class SubGoalSolverAgent(BaseAgent):
             final_answer = self._merge_results(ctx, subgoals, subgoal_plan_summary,
                                                results_map, merge_strategy)
 
+        # v2.9：结构化输出最终整合方案
+        ctx.subgoal_merge_plan = (
+            f"合并策略: {merge_strategy or '将各子目标结果按逻辑顺序组合'}\n"
+            f"最终答案: {final_answer}"
+        )
+
         # 构造 Candidate
         full_reasoning = self._build_full_reasoning(subgoals, problem_analysis, final_answer)
         candidate = Candidate(
-            id=len(ctx.candidates) + 1,
+            id=len(ctx.candidates),
             answer=final_answer,
             reasoning=full_reasoning,
             revised=False,
@@ -250,9 +266,15 @@ class SubGoalSolverAgent(BaseAgent):
         """调用 LLM 生成子目标规划 JSON"""
         domain = ctx.domain or ""
         domain_hint = get_domain_hint(domain) if domain else ""
+        # v2.9：前置形式化验证通过后，把题目的形式化描述注入规划提示，
+        # 帮助书生准确理解题意后再做子目标分解。
+        problem_text = ctx.problem
+        if getattr(ctx, "formal_spec", ""):
+            problem_text = (ctx.problem + "\n\n[题目的形式化理解（已知条件→结论）]\n"
+                            + ctx.formal_spec)
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
-            problem=ctx.problem,
+            problem=problem_text,
         )
 
         last_resp = None
@@ -312,7 +334,12 @@ class SubGoalSolverAgent(BaseAgent):
     # ---------- 阶段二：逐步求解 ----------
     def _solve_subgoal(self, ctx: TaskContext, sg: dict,
                        plan_summary: str, prev_results: str) -> str:
-        """求解单个子目标，返回结果文本"""
+        """求解单个子目标，返回结果文本。
+
+        v2.7：计算类子目标（compute/derive）求解后用 AnswerOracle 做客观
+        sanity check，若结果明显非法（不可解析为数学表达式），带反馈重解一次，
+        实现"每步 oracle 校验"（Plan-and-Execute + oracle-in-the-loop）。
+        """
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=ctx.problem,
             subgoal_plan_summary=plan_summary,
@@ -324,7 +351,26 @@ class SubGoalSolverAgent(BaseAgent):
             subgoal_expected_output=sg["expected_output"],
         )
 
-        # v2.4.1：prefill「【本步结果】」让答案前置，抑制 CoT
+        step_result = self._call_step(ctx, user_msg)
+
+        # 每步 oracle 校验：仅对计算类子目标（预期数值/表达式结果）做客观检查
+        sg_type = sg.get("type", "compute")
+        if (sg_type in ("compute", "derive")
+                and step_result
+                and not step_result.startswith("[子目标")):
+            oracle_fb = self._oracle_check_step(step_result)
+            if oracle_fb and ctx.budget is not None and ctx.budget.can_spend(1):
+                retry_msg = user_msg + (
+                    f"\n\n[上一步结果客观校验未通过] {oracle_fb}\n"
+                    f"请修正错误后重新给出【本步结果】。"
+                )
+                retry_result = self._call_step(ctx, retry_msg)
+                if retry_result and not retry_result.startswith("[子目标"):
+                    return retry_result
+        return step_result
+
+    def _call_step(self, ctx: TaskContext, user_msg: str) -> str:
+        """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。"""
         resp = self.llm(
             ctx,
             prefill_messages(
@@ -339,7 +385,7 @@ class SubGoalSolverAgent(BaseAgent):
         if resp:
             resp = stitch("【本步结果】", resp)
         if resp is None:
-            return f"[子目标 #{sg['id']} 求解失败]"
+            return "[子目标求解失败]"
 
         # 提取「本步结果」部分
         result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
@@ -347,6 +393,18 @@ class SubGoalSolverAgent(BaseAgent):
             return result_match.group(1).strip()
         # 如果没有标记，取最后 500 字符
         return resp.strip()[-500:]
+
+    @staticmethod
+    def _oracle_check_step(step_result: str) -> str:
+        """用 AnswerOracle 对子目标结果做客观 sanity check，返回反馈（空=通过）。"""
+        try:
+            from .answer_oracle import AnswerOracle
+            # 结果可解析为数学表达式 → 通过；否则视为非法（可能为幻觉/格式错误）
+            if not AnswerOracle.is_parseable(step_result):
+                return "该步结果无法解析为有效数学表达式"
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
 
     # ---------- 阶段三：合并 ----------
     def _merge_results(self, ctx: TaskContext, subgoals: list[dict],

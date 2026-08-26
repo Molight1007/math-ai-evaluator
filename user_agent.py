@@ -81,7 +81,11 @@ class AgentConfig:
 
     # ---- 自主调控（大幅缩减）----
     max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
-    max_total_calls: int = 60          # LLM 调用预算硬上限（v2.6.1：15→60，覆盖协作反复验证场景）
+    max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
+                                        # 覆盖 5 题 batch + 限流重试 + deep 档完整流程
+                                        # = classifier 1 + 求解 3 + 投票 6 + self_audit 1
+                                        # + revise 1 + lean 转换 1 + collab 6 轮
+                                        # + sub_goal 规划 1 + N 个子目标 ≈ 25-30 次/题）
 
     # ---- 时间限制（适配竞赛新规则）----
     # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
@@ -103,6 +107,7 @@ class AgentConfig:
 
     # ---- 新功能开关（简化）----
     use_scoring: bool = False          # Verifier 不用多维评分（简化，减少误判）
+    enable_deterministic: bool = True  # 确定性硬否决（v2.8）：SymPy 代入回验 fail 淘汰候选、unknown 放行
     by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
@@ -126,15 +131,22 @@ class AgentConfig:
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
     enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
+    accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
 
     # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
     # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
     # verdict=proof_valid → 候选计入有效；proof_invalid → 淘汰并注入 revise 反馈；
     # unknown（Lean 环境缺失/超时/翻译错误）→ 按 lean_gate_strict 决定降级放行或保守拒绝。
-    enable_lean_verify: bool = True         # 总开关：deep 档证明题启用 Lean 硬验证
+    enable_lean_verify: bool = True         # 总开关：证明题启用 Lean 硬验证（v2.8 扩展到全部档位）
+    lean_gate_all_proofs: bool = True       # v2.8：扩展到全部证明题（含 standard 档）；False=仅 deep 档
     lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
     lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
     lean_executable: str = ""               # Lean 可执行文件名（默认 "lake"）
+    # ---- Lean 前置形式化验证 + 子目标主路径（v2.9）----
+    enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
+    preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
+    preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
+    enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
 
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
@@ -155,8 +167,11 @@ class AgentConfig:
             # deep 档需要：三Agent协作反复验证(每轮 4 次 × max_rounds) + 多候选求解
             #   + 子目标分解 + 验证投票 + revise。collab_max_rounds=6 时单协作链就 24 次
             #   调用，30 次预算不够。60 次才能覆盖协作反复验证场景。
+            # v2.8.1：deep 档 60→100（评测日志显示 60 在"协作 6 轮 + 子目标 + Lean +
+            #   投票 + revise + oracle" 链路下仍耗尽，触发大量「跳过 LLM 调用」；
+            #   100 留出余量，避免因预算紧绷导致的误判/跳过，提升难题正确率）
             # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
-            self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 60}
+            self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 100}
         if self.tier_budget is None:
             self.tier_budget = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
 

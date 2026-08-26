@@ -125,6 +125,7 @@ class Verdict:
     correct: bool = False       # 本次投票结果是否正确（verifier 使用）
     raw: str = ""               # 原始投票返回文本（verifier 使用）
     score: dict | None = None   # 评分模式的详细分数（verifier 使用）
+    deterministic: dict | None = None  # 确定性验证旁证/否决证据（verifier 使用，0 LLM 预算）
 
 
 @dataclass
@@ -226,6 +227,58 @@ class BugReport:
                    suggestion=d.get("suggestion", "") or "")
 
 
+# ------------------------------------------------------------
+# B6 运行时覆盖态 + P4 AcceptGate 门控（v2.8，自 sq 增量移植）
+# ------------------------------------------------------------
+@dataclass
+class RunState:
+    """运行期可变状态（承载运行时覆盖值，不冻结 config）。
+
+    每题为独立 TaskContext，天然并发隔离；orchestrator 不再改写共享 config，
+    消除并发=3 时跨题污染（时间预算自律核心）。
+    """
+    emergency: bool = False              # 应急模式：候选/投票降至 1，跳过续写/复算
+    playoff_enabled: bool = False        # 是否启用 playoff 确定性复算
+    voting_times: Optional[int] = None   # 生效投票数（None=用 config 默认）
+    sample_times: Optional[int] = None   # 生效采样数（None=用 config 默认）
+
+
+@dataclass
+class RoundState:
+    """AcceptGate 门控状态（P4）。
+
+    契约：
+    - 连续通过 >= 5 → ACCEPT；
+    - 连续重大缺陷 >= 10 → REJECT；
+    - 复位逻辑：一次失败复位 pass 计数，一次通过复位 major_defect 计数；
+    - ``update(is_pass, has_major_defect) -> str`` 返回最新 decision。
+    """
+    consecutive_pass: int = 0
+    consecutive_major_defect: int = 0
+    decision: str = "HOLD"     # HOLD | ACCEPT | REJECT
+    rounds: int = 0
+    ACCEPT_PASS_THRESHOLD = 5
+    REJECT_DEFECT_THRESHOLD = 10
+
+    def update(self, is_pass: bool, has_major_defect: bool = False) -> str:
+        """按一轮结果更新门控，返回最新 decision。"""
+        self.rounds += 1
+        if is_pass:
+            self.consecutive_pass += 1
+            self.consecutive_major_defect = 0
+        else:
+            self.consecutive_pass = 0
+            if has_major_defect:
+                self.consecutive_major_defect += 1
+        if self.consecutive_pass >= self.ACCEPT_PASS_THRESHOLD:
+            self.decision = "ACCEPT"
+        elif self.consecutive_major_defect >= self.REJECT_DEFECT_THRESHOLD:
+            self.decision = "REJECT"
+        else:
+            self.decision = "HOLD"
+        return self.decision
+
+
 @dataclass
 class TaskContext:
     """黑板：所有 Agent 共享的推理上下文"""
@@ -240,10 +293,18 @@ class TaskContext:
     budget: Optional[Budget] = None            # 预算控制器
     revise_round: int = 0                       # 已触发的自纠错轮数
     final_response: str = ""
+    state: RunState = field(default_factory=RunState)          # 运行期覆盖态（B6）
+    round_state: RoundState = field(default_factory=RoundState)  # AcceptGate 门控态（P4）
     lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
     # ---- Lean 硬验证门禁字段（v2.5+LeanBridge）----
     lean_gate: list = field(default_factory=list)       # 每候选 Lean 验证诊断记录
     lean_reject_feedback: list = field(default_factory=list)  # 被 Lean 淘汰候选的反馈（供 revise）
+
+    # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
+    formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）
+    preverify_trace: dict = field(default_factory=dict)  # 前置验证轨迹（通过/失败/修正轮次/lean声明）
+    subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
+    subgoal_merge_plan: str = ""                    # 最终整合方案
 
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
@@ -270,8 +331,8 @@ class TaskContext:
         return self.deadline - time.time()
 
     def is_time_critical(self) -> bool:
-        """距当前题目超时不足2分钟 → 跳过所有可选步骤"""
-        return self.time_remaining() < 120.0
+        """距当前题目超时不足5分钟 → 跳过所有可选步骤（P1 修复：阈值 120→300）"""
+        return self.time_remaining() < 300.0
 
     def is_timed_out(self) -> bool:
         """当前题目是否已超时"""
@@ -334,13 +395,15 @@ class BaseAgent(ABC):
                 remaining = ctx.deadline - time.time()
         else:
             remaining = float("inf")
-        if remaining < 60:
+        if remaining < 10:
+            # P1 修复：阈值从 60s 降到 10s。本地测试不再因"剩余时间不足"跳过验证；
+            # 真要超时也只损失最后 < 10s 的 LLM 调用，单题 deadline 仍由 is_timed_out 把控。
             logger.warning("[%s] 剩余时间不足 (%.0fs)，跳过 LLM 调用", self.name, remaining)
             ctx.trace.append({"agent": self.name, "step": "budget_skip",
                               "content": f"剩余时间不足 {remaining:.0f}s，跳过 LLM 调用"})
             return None
-        # 剩余 < 120s：自动减半 max_tokens，缩短单次调用耗时
-        if remaining < 120 and max_tokens and max_tokens > 1024:
+        # 剩余 < 30s：减半 max_tokens，避免单次调用跨过 deadline
+        if remaining < 30 and max_tokens and max_tokens > 1024:
             logger.warning("[%s] 剩余时间紧张 (%.0fs)，max_tokens %d → %d",
                            self.name, remaining, max_tokens, max_tokens // 2)
             max_tokens = max(1024, max_tokens // 2)

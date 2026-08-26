@@ -240,14 +240,17 @@ class SolverAgent(BaseAgent):
                    （难题深度通道由 orchestrator 按档位传入）
             temperatures: 温度分层列表；None 时用默认 [0.1, 0.3, 0.5]
         """
-        # 档位候选数：ctx.tier 有配置则优先（orchestrator 已写入）
+        # 档位候选数：ctx.state.sample_times 优先（RunState 应急覆盖），config 兜底
         if count is None:
-            tier_tbl = getattr(self.config, 'tier_sample_times', None)
-            if tier_tbl:
-                count = tier_tbl.get(getattr(ctx, 'tier', 'standard'),
-                                     self.config.policy_sample_times)
+            if getattr(ctx.state, 'sample_times', None) is not None:
+                count = ctx.state.sample_times
             else:
-                count = self.config.policy_sample_times
+                tier_tbl = getattr(self.config, 'tier_sample_times', None)
+                if tier_tbl:
+                    count = tier_tbl.get(getattr(ctx, 'tier', 'standard'),
+                                         self.config.policy_sample_times)
+                else:
+                    count = self.config.policy_sample_times
         # 领域自适应候选数
         count = self._adaptive_count(ctx, count)
 
@@ -314,9 +317,10 @@ class SolverAgent(BaseAgent):
             base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
             # 候选 2+ 追加微扰动提示，引导不同解题思路
             _perturb_hints = [
-                "",  # 候选 0: 无扰动
-                "\n请特别注意计算过程中的每一步细节，确保数值精确。",  # 候选 1
-                "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2
+                "",  # 候选 0: 无扰动（直接求解）
+                "\n请特别注意计算过程中的每一步细节，确保数值精确。",  # 候选 1: 精度
+                "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2: 换方法
+                "\n请先列出解题关键思路与可能用到的定理/公式，再逐步求解。",  # 候选 3: 计划先行
             ]
 
             # v2.4.1 主路径：prefill 压缩求解（诊断实测 37s 返回，答案前置不受截断影响）。

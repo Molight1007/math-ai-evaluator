@@ -54,8 +54,10 @@ _INTEGRATOR_SYS = (
 )
 
 _VERIFIER_SYS = (
-    "你是严谨的数学解答评审专家。请独立验证下面的解答是否正确："
-    "独立重算、对比答案、审查推理后，只输出一行 VERDICT: A（正确）或 VERDICT: B（错误）。"
+    "你是一名极其严格的数学审稿人。你必须**首先假设给出的解答是【错误的】**，"
+    "除非你能严格证明它正确。请带着这个假设去主动寻找：具体反例、计算或符号错误、"
+    "逻辑漏洞、隐藏假设或跳步。只有经过严谨核查确实【无法找到任何错误】，"
+    "才输出 VERDICT: A（确认正确）；一旦发现任何问题，输出 VERDICT: B（简述错误类型）。"
 )
 
 
@@ -165,6 +167,11 @@ class CollaborativeSolver(BaseAgent):
 
     def _role_review(self, ctx: TaskContext, target: str) -> str:
         user = f"题目：\n{ctx.problem}\n\n待审查的解答：\n{target[-4000:]}"
+        # v2.7：注入 oracle 客观错误信息（Lean Finding / 计算校验），让审查
+        # Agent 有据可依地挑错，而非泛泛审查。
+        oracle_ctx = self._collect_oracle_context(ctx, target)
+        if oracle_ctx:
+            user += f"\n\n[客观验证依据，请据此重点核查]\n{oracle_ctx}"
         resp = self.llm(
             ctx,
             prefill_messages(
@@ -178,6 +185,24 @@ class CollaborativeSolver(BaseAgent):
             4096,
         )
         return stitch("## 审查意见\n", resp) if resp else ""
+
+    @staticmethod
+    def _collect_oracle_context(ctx: TaskContext, target: str) -> str:
+        """收集客观验证依据（供审查 Agent 重点核查）。"""
+        notes = []
+        # 1) 上层已产生的客观反馈（Lean Finding / oracle 复核）
+        lean_fb = getattr(ctx, 'lean_reject_feedback', None) or []
+        for fb in lean_fb[:3]:
+            notes.append(f"- {fb}")
+        # 2) 对 target 答案的轻量客观 sanity check（SymPy 可解析性）
+        try:
+            from .answer_oracle import AnswerOracle
+            ans = extract_final_answer(target)
+            if ans and not AnswerOracle.is_parseable(ans):
+                notes.append("- 该解答的最终答案无法解析为有效数学表达式，请重点核查")
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n".join(notes) if notes else ""
 
     def _role_integrate(self, ctx: TaskContext, solution: str, review: str) -> str:
         user = (

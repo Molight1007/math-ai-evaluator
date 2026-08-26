@@ -335,6 +335,62 @@ class VerifierAgent(BaseAgent):
             logger.error(f"Feedback extraction failed: {e}")
             return "无法提取失败原因。"
 
+    def _extract_revise_feedback(self, ctx, problem: str,
+                                 candidates: list, best_cluster) -> str:
+        """恢复 Reflexion 反馈：仅在需要 revise 时提取错因（受预算约束）。
+
+        触发条件：best_cluster 存在且置信度 < 0.5（正确票未过半，验证器自身
+        都不确定）。此时提取 LLM 错因定位，并叠加 AnswerOracle 的客观
+        sanity check（纯本地、不消耗预算）。
+
+        返回空串表示无需 revise 或预算不足。
+        """
+        if best_cluster is None:
+            return ""
+        if getattr(best_cluster, "confidence", 0.0) >= 0.5:
+            return ""
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            return ""
+
+        # 取 best_cluster 的代表候选（共识簇内第一个候选）
+        rep_candidate = None
+        cids = getattr(best_cluster, "candidate_ids", []) or []
+        if cids and candidates:
+            idx = cids[0] if cids[0] < len(candidates) else 0
+            rep_candidate = candidates[idx]
+        if rep_candidate is None and candidates:
+            rep_candidate = candidates[0]
+        if rep_candidate is None:
+            return ""
+
+        parts = []
+        # 1) LLM 错因提取（消耗 1 次预算）
+        llm_feedback = self._extract_feedback(ctx, problem, rep_candidate)
+        if llm_feedback and llm_feedback != "无法提取失败原因。":
+            parts.append(llm_feedback)
+        # 2) AnswerOracle 客观 sanity check（纯本地，不消耗预算）
+        oracle_fb = self._oracle_sanity_feedback(rep_candidate)
+        if oracle_fb:
+            parts.append(oracle_fb)
+
+        if parts:
+            return "\n".join(parts)
+        return "所有候选均未获验证通过，请重新审题并纠正推理错误。"
+
+    @staticmethod
+    def _oracle_sanity_feedback(candidate) -> str:
+        """用 AnswerOracle 做客观 sanity check（纯本地），返回客观反馈。"""
+        answer = getattr(candidate, "answer", "") or ""
+        if not answer:
+            return "候选答案为空，需重新求解。"
+        try:
+            from .answer_oracle import AnswerOracle
+            if not AnswerOracle.is_parseable(answer):
+                return "候选答案无法解析为有效数学表达式，可能为幻觉或格式错误。"
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
+
     # ==================================================================
     # P1-1: Python/SymPy 独立验证通道 + 确定性复算（playoff）
     # ==================================================================
@@ -361,6 +417,29 @@ class VerifierAgent(BaseAgent):
             return {"parseable": True, "value": val, "note": "ok"}
         except Exception as e:
             return {"parseable": False, "value": None, "note": str(e)[:80]}
+
+    def _deterministic_check(self, ctx, problem: str, candidate) -> dict:
+        """对候选答案做确定性旁证/否决（0 LLM 预算）。
+
+        返回 DeterministicChecker.check_answer 的结果 dict：
+        {"verdict": "pass"|"fail"|"unknown", "confidence": float,
+         "evidence": str, "method": str}。
+        任何异常一律降级 unknown（宁可 unknown 绝不误杀）。
+        """
+        answer = (candidate.get("answer", "") if isinstance(candidate, dict)
+                  else getattr(candidate, "answer", ""))
+        if not answer:
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": "答案为空", "method": "none"}
+        try:
+            from .deterministic import DeterministicChecker
+            checker = DeterministicChecker()
+            return checker.check_answer(ctx, problem, answer,
+                                        getattr(ctx, "domain", "") or "")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Deterministic check failed: %s", e)
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": f"异常: {str(e)[:80]}", "method": "exception"}
 
     def _playoff_recheck(self, ctx, problem: str, top_answer: str) -> bool:
         """确定性复算（playoff）：用 temperature=0 重新解一遍，比对答案。
@@ -436,6 +515,7 @@ class VerifierAgent(BaseAgent):
         is_proof: bool = False,
         use_playoff: bool = False,
         voting_times: int = None,
+        use_deterministic: bool = False,
     ) -> dict:
         """
         验证主流程。
@@ -474,13 +554,44 @@ class VerifierAgent(BaseAgent):
             }
 
         # 常规：每个候选投票（voting_times 参数化：难题深度通道 deep 档 3 票）
+        # v2.8：ctx.state.voting_times 优先（RunState 运行时覆盖），config 兜底
         if voting_times is None:
-            voting_times = getattr(self.config, 'verifier_voting_times', 1)
+            voting_times = (getattr(ctx.state, 'voting_times', None)
+                            or getattr(self.config, 'verifier_voting_times', 1))
         all_verdicts: list[list[Verdict]] = []
         for i, cand in enumerate(candidates):
             vds = self._vote(ctx, problem, cand, total_votes=voting_times,
                              use_scoring=use_scoring)
             all_verdicts.append(vds)
+
+        # v2.8 确定性硬否决：SymPy 代入回验/反例对候选做客观旁证，
+        # fail → 该候选全部票判错（淘汰）；unknown/pass → 仅挂证据不改判决。
+        # 全部 fail 时回退保留（宁可 unknown 绝不误杀，镜像 LeanGate 降级逻辑）。
+        if use_deterministic and candidates:
+            det_results = [self._deterministic_check(ctx, problem, c) for c in candidates]
+            n_fail = sum(1 for r in det_results if r.get("verdict") == "fail")
+            if 0 < n_fail < len(candidates):
+                for i, r in enumerate(det_results):
+                    if r.get("verdict") == "fail":
+                        for v in all_verdicts[i]:
+                            v.correct = False
+                            v.deterministic = r
+                        all_verdicts[i].append(Verdict(
+                            correct=False, raw="deterministic_fail", deterministic=r))
+                        self.record(ctx, "deterministic",
+                                    f"确定性硬否决候选 #{i}: {r.get('evidence', '')[:120]}")
+                    else:
+                        for v in all_verdicts[i]:
+                            if v.deterministic is None:
+                                v.deterministic = r
+            else:
+                for i, r in enumerate(det_results):
+                    for v in all_verdicts[i]:
+                        if v.deterministic is None:
+                            v.deterministic = r
+                if n_fail == len(candidates) and n_fail > 0:
+                    self.record(ctx, "deterministic",
+                                "全部候选确定性否决，回退保留（宁 unknown 不误杀）")
 
         # 聚类 + 共识
         cluster_data = self._cluster_candidates(candidates, all_verdicts) if use_clustering else []
@@ -505,9 +616,14 @@ class VerifierAgent(BaseAgent):
                     best_cluster.vote_total = max(1, best_cluster.vote_total)
                     self.record(ctx, "playoff", "确定性复算不一致，转自纠错")
 
+        # Reflexion 修复：恢复失败反馈提取。仅在 best_cluster 低置信度/全错时
+        # 提取（受预算约束），让 revise 回环拿到真实错误定位，而非空串导致的
+        # "请重新审题"泛泛提示。
+        feedback = self._extract_revise_feedback(ctx, problem, candidates, best_cluster)
+
         return {
             "cluster_data": cluster_data,
-            "feedback": "",  # 已移除反馈提取（不再需要回环修正）
+            "feedback": feedback,
             "verdicts": all_verdicts,
             "best_cluster": best_cluster,
         }

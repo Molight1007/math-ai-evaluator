@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Lean 硬验证门禁（deep 档证明题专用）。
+"""Lean 硬验证门禁（证明题专用，v2.8 扩展到全部档位）。
 
 设计背景
 ========
@@ -7,7 +7,7 @@ v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调�
 把 verdict 注入 revise_feedback，失败不阻断。本模块将其升级为 **deep 档的
 硬验证层**：
 
-- 仅对 deep 档且 domain ∈ {证明, 证明题} 的候选执行；
+- 对 domain ∈ {证明, 证明题} 的候选执行（v2.8 起含全部档位，受时间/预算护栏）；
 - 对候选调用 :meth:`LeanBridge.verify`，把 NL 推理转 Lean 4 代码并编译；
 - verdict == 'proof_valid'   → 候选计入有效（lean_valid=True）；
 - verdict == 'proof_invalid' → 候选淘汰（lean_invalid=True），收集反馈供 revise；
@@ -39,7 +39,7 @@ logger = logging.getLogger("MathPilot")
 
 
 class LeanGate:
-    """deep 档证明题的 Lean 硬验证门禁。"""
+    """证明题的 Lean 硬验证门禁（v2.8 扩展到全部档位）。"""
 
     name = "LeanGate"
 
@@ -56,9 +56,11 @@ class LeanGate:
         cfg = self.config
         if not getattr(cfg, "enable_lean_verify", True):
             return False
-        if tier != "deep":          # 仅 deep 档
-            return False
         if domain not in ("证明", "证明题"):   # 仅证明题
+            return False
+        # v2.8：扩展到全部证明题（含 standard 档）；旧行为（仅 deep）由
+        # lean_gate_all_proofs=False 保留。
+        if not getattr(cfg, "lean_gate_all_proofs", True) and tier != "deep":
             return False
         return True
 
@@ -98,6 +100,17 @@ class LeanGate:
         if not self._enabled(tier, domain):
             self._record_ctx(ctx, {"enabled": False, "tier": tier,
                                    "domain": domain, "candidates": len(candidates)})
+            return kept, feedbacks
+
+        # v2.8 时间/预算护栏：应急/时间紧张/预算不足时降级放行，
+        # 避免 standard 档证明题的 Lean 编译拖垮单题 20 分钟硬限。
+        if getattr(ctx.state, 'emergency', False) or ctx.is_time_critical():
+            self._record_ctx(ctx, {"enabled": True, "degraded": "time_critical",
+                                   "tier": tier, "domain": domain})
+            return kept, feedbacks
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            self._record_ctx(ctx, {"enabled": True, "degraded": "budget_exhausted",
+                                   "tier": tier, "domain": domain})
             return kept, feedbacks
 
         bridge = self._bridge_inst
@@ -140,11 +153,23 @@ class LeanGate:
                 elif report.verdict == "proof_invalid":
                     entry["verdict"] = "proof_invalid"
                     # 淘汰（hard gate）：不进 kept
+                    # v2.7：结构化注入 Finding 精确错误定位（location/kind/desc），
+                    # 而非只取 suggestion 或第一个 finding 的 desc，让 revise 拿到
+                    # "第 X 步/某位置：错误描述" 的定向修正依据。
                     msg = "Lean 编译/逻辑错误"
-                    if report.suggestion or report.findings:
-                        msg = report.suggestion or report.findings[0].desc
+                    try:
+                        from .answer_oracle import AnswerOracle
+                        structured = AnswerOracle.findings_to_feedback(
+                            getattr(report, "findings", []) or [])
+                        if structured:
+                            msg = structured
+                        elif getattr(report, "suggestion", ""):
+                            msg = report.suggestion
+                    except Exception:  # noqa: BLE001
+                        if report.suggestion or report.findings:
+                            msg = report.suggestion or report.findings[0].desc
                     feedbacks.append(
-                        f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：{msg}")
+                        f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：\n{msg}")
                 else:  # unknown
                     entry["verdict"] = "unknown"
                     if self.strict:
