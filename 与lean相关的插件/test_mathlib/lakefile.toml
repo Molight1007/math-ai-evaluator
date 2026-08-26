@@ -1,0 +1,7 @@
+name = "test_mathlib"
+reservoir = "leanprover-community"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "master"

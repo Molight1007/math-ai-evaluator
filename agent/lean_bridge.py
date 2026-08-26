@@ -143,11 +143,26 @@ def _truncate_error_output(text: str, limit: int = _MAX_ERROR_CHARS) -> str:
     return text[:limit] + "\n... [已截断，共 %d 字符]" % len(text)
 
 
+def _mathlib_project_usable(proj_dir: str) -> bool:
+    """判断目录是否为「可用 Mathlib 工程」：存在 .lake/packages/mathlib 且包源码非空。"""
+    if not proj_dir or not os.path.isdir(proj_dir):
+        return False
+    mathlib_pkg = os.path.join(proj_dir, ".lake", "packages", "mathlib")
+    if not os.path.isdir(mathlib_pkg):
+        return False
+    try:
+        entries = os.listdir(mathlib_pkg)
+    except OSError:
+        return False
+    return any(not e.startswith(".") for e in entries)
+
+
 def _compile_lean(
     code: str,
     work_dir: str,
     lean_executable: str = _DEFAULT_LEAN_EXECUTABLE,
     timeout: float = _DEFAULT_LEAN_TIMEOUT,
+    mathlib_project_dir: str = "",
 ) -> dict:
     """调用 Lean 编译器编译一段 Lean 代码（纯编译路径，不依赖 LLM 栈）。
 
@@ -156,20 +171,36 @@ def _compile_lean(
         work_dir: 编译工作目录（写入 .lean 文件并执行 lake 的目录）。
         lean_executable: Lean 可执行文件名（默认 "lake"，配合 lean-toolchain）。
         timeout: 编译超时（秒）。
+        mathlib_project_dir: 可选 Mathlib 工程目录。非空且可用时走「工程模式」：
+            在带 .lake 缓存（含 mathlib 包）的工程目录编译，使 `import Mathlib`
+            可解析；verify.lean 以临时文件名写入、编译后清理，不污染工程。
 
     返回:
-        {"ok": bool, "error": str} —— ok=True 表示编译通过（且无未解决的 sorry 关键错误）。
+        {"ok": bool, "error": str, "env_missing": bool}
+        —— ok=True 表示编译通过（且无未解决的 sorry 关键错误）；
+           env_missing=True 表示工具链缺失（区别于真实编译失败）。
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
-    lean_file = os.path.join(work_dir, "verify.lean")
+    env_missing = False
+
+    use_mathlib = bool(mathlib_project_dir and _mathlib_project_usable(mathlib_project_dir))
+    if use_mathlib:
+        # 工程模式：利用 .lake 缓存让 import Mathlib 可解析
+        lean_file = os.path.join(mathlib_project_dir, "verify_lean_bridge.lean")
+        cwd = mathlib_project_dir
+        fname = os.path.basename(lean_file)
+        cmd = [exe, "env", "lean", fname] if exe == "lake" else [exe, fname]
+    else:
+        lean_file = os.path.join(work_dir, "verify.lean")
+        cwd = work_dir
+        cmd = [exe, "env", "lean", "verify.lean"] if exe == "lake" else [exe, "verify.lean"]
+
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)
-
-    cmd = [exe, "env", "lean", "verify.lean"] if exe == "lake" else [exe, "verify.lean"]
     try:
         result = subprocess.run(
             cmd,
-            cwd=work_dir,
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -179,16 +210,28 @@ def _compile_lean(
             # 编译通过，但仍需检查是否使用了 sorry 占位（视为未完全验证）
             if re.search(r"\bsorry\b", code):
                 return {"ok": False,
-                        "error": "编译通过但包含 sorry 占位（存在未形式化步骤）"}
-            return {"ok": True, "error": ""}
-        return {"ok": False, "error": _truncate_error_output(err)}
+                        "error": "编译通过但包含 sorry 占位（存在未形式化步骤）",
+                        "env_missing": False}
+            return {"ok": True, "error": "", "env_missing": False}
+        return {"ok": False, "error": _truncate_error_output(err),
+                "env_missing": False}
     except subprocess.TimeoutExpired:
         return {"ok": False,
-                "error": f"Lean 编译超时（>{timeout:.0f}s）"}
+                "error": f"Lean 编译超时（>{timeout:.0f}s）",
+                "env_missing": False}
     except FileNotFoundError:
-        return {"ok": False, "error": f"Lean executable not found: {exe}"}
+        env_missing = True
+        return {"ok": False, "error": f"Lean executable not found: {exe}",
+                "env_missing": True}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": _truncate_error_output(str(exc))}
+        return {"ok": False, "error": _truncate_error_output(str(exc)),
+                "env_missing": False}
+    finally:
+        if use_mathlib and os.path.exists(lean_file):
+            try:
+                os.remove(lean_file)
+            except Exception:  # noqa: BLE001 沙箱可能拦截删除，忽略即可
+                pass
 
 
 # =====================================================================
@@ -278,11 +321,33 @@ class LeanBridge:
     # 阶段二：编译验证（纯编译路径）
     # ------------------------------------------------------------------
 
-    def _compile(self, code: str, work_dir: str) -> dict:
-        """复用纯编译路径 ``_compile_lean`` 对转化出的 Lean 代码做编译验证。"""
+    def _compile(self, code: str, work_dir: str, mathlib_dir: str = "") -> dict:
+        """复用纯编译路径 ``_compile_lean`` 对转化出的 Lean 代码做编译验证。
+
+        mathlib_dir 非空且为有效 Mathlib 工程时走「工程模式」：在带 .lake 缓存
+        的工程目录编译，`import Mathlib` 可解析（Phase 0 修复：消除单文件
+        临时目录解析不到 Mathlib 导致的空转/误降级）。"""
         return _compile_lean(code, work_dir,
                              lean_executable=self._lean_executable,
-                             timeout=self._lean_timeout)
+                             timeout=self._lean_timeout,
+                             mathlib_project_dir=mathlib_dir)
+
+    @property
+    def _mathlib_dir(self) -> str:
+        """探测可用的 Mathlib 工程目录（含非空 .lake/packages/mathlib 缓存）。
+
+        优先取配置 mathlib_dir；否则默认探测项目内置
+        `与lean相关的插件/test_mathlib`（要求 mathlib 包源码非空，空壳不算）。"""
+        cfg = getattr(self.config, "config", self.config)
+        d = (getattr(cfg, "mathlib_dir", "") or "").strip()
+        if d and os.path.isdir(d) and _mathlib_project_usable(d):
+            return d
+        cand = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "与lean相关的插件", "test_mathlib")
+        if _mathlib_project_usable(cand):
+            return cand
+        return ""
 
     # ------------------------------------------------------------------
     # 阶段三：错误分析（映射为 BugReport / Finding）
@@ -354,7 +419,8 @@ class LeanBridge:
         try:
             # 1) Lean 环境缺失 → 降级 unknown
             if not self.lean_available:
-                logger.warning("[LeanBridge] Lean 环境不可用，降级为 unknown")
+                logger.warning("[LeanBridge] Lean 环境不可用，降级为 unknown"
+                               "（工具链缺失，非验证失败）")
                 return BugReport(verdict="unknown", findings=[])
 
             # 2) 阶段一：NL → Lean 转化
@@ -367,8 +433,11 @@ class LeanBridge:
             # 3) 阶段二：编译验证
             if time.monotonic() > deadline:
                 return BugReport(verdict="unknown", findings=[])
+            mathlib_dir = self._mathlib_dir
+            if mathlib_dir:
+                logger.info("[LeanBridge] Mathlib 工程模式编译: %s", mathlib_dir)
             with tempfile.TemporaryDirectory(prefix="lean_bridge_") as work_dir:
-                comp = self._compile(lean_code, work_dir)
+                comp = self._compile(lean_code, work_dir, mathlib_dir=mathlib_dir)
                 if comp.get("ok"):
                     # 编译通过且无 sorry → proof_valid
                     return BugReport(verdict="proof_valid", findings=[])
