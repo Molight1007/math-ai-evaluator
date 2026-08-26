@@ -39,6 +39,16 @@ _JUDGER_WRAP_RE = re.compile(
     r"结果[为是]?|答案[是为]|即|也就是?|我们得到|可得)[,，:：]?\s*(.+?)\s*[。.]?$"
 )
 
+# P1.1 增强：答案框架引导语剥离（"所有满足条件的函数为 X" → "X"）
+_EXTRA_WRAP_HEAD_RE = re.compile(
+    r"^(?:所有满足条件的(?:函数|数|点|整数|正整数|解|集合|三元组)?为"
+    r"|所有(?:正整数|整数|实数|自然数|点|数|函数)\s*[a-zA-Zα-ω]?\s*为"
+    r"|满足条件的(?:函数|数)?为|函数为|解为|集合为|所求(?:为|是)|解得|求得)[,，:：]?\s*"
+)
+# P1.1 增强：尾部"其中…"说明剥离（"…，其中 c 为任意常数。" → "…"）
+_EXTRA_WRAP_TAIL_RE = re.compile(r"[，,]\s*其中\s*[^。;；]*[。]?\s*$")
+_EXTRA_WRAP_TAIL2_RE = re.compile(r"（[^）]*(?:任意常数|常数)[^）]*）\s*$")
+
 
 class FormatterAgent(BaseAgent):
     name = "Formatter"
@@ -196,6 +206,11 @@ class FormatterAgent(BaseAgent):
             inner = m.group(1).strip()
             if inner != a:
                 a = inner
+
+        # 1.5) P1.1 增强：剥离答案框架引导语 + 尾部"其中…"说明（纯规则，不动数学内容）
+        a = _EXTRA_WRAP_HEAD_RE.sub("", a)
+        a = _EXTRA_WRAP_TAIL_RE.sub("", a)
+        a = _EXTRA_WRAP_TAIL2_RE.sub("", a)
 
         # 2) 去除 $ 与 markdown 标记（只清标记本身，不动公式内容）
         a = a.replace("$", "").replace("**", "").replace("__", "")
