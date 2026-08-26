@@ -98,6 +98,9 @@ class LeanPreVerifier(BaseAgent):
             final["lean_code"] = result["lean_code"]
             final["formal_spec"] = result["formal_spec"]
             final["error"] = result["error"]
+            # 缺口（缺失定义/引理/模块/类型）：供子目标规划优先拆解
+            final["gaps"] = result.get("gaps", [])
+            ctx.formal_gaps = result.get("gaps", [])
 
             if result["verdict"] == "ok":
                 ctx.formal_spec = result["formal_spec"]

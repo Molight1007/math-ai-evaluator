@@ -141,7 +141,8 @@ class AgentConfig:
     lean_gate_all_proofs: bool = True       # v2.8：扩展到全部证明题（含 standard 档）；False=仅 deep 档
     lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
     lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
-    lean_executable: str = ""               # Lean 可执行文件名（默认 "lake"）
+    lean_executable: str = ""               # Lean 可执行文件名（默认自动探测本地工具链）
+    lean_project_dir: str = ""              # 带 Mathlib 依赖的 Lean 工程目录（默认自动探测 <root>/lean下载版/test_mathlib）
     # ---- Lean 前置形式化验证 + 子目标主路径（v2.9）----
     enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
     preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限

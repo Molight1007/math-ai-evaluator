@@ -3,8 +3,12 @@
 # deploy/setup_lean.sh — 评测环境 Lean 工具链安装脚本
 # =============================================================================
 # 目标：让 MathPilot 的 deep 档证明题硬验证（agent/lean_gate.py + lean_bridge.py）
-#       真正生效。lean_bridge 的编译路径为 `lake env lean verify.lean`（单文件，
-#       不依赖 mathlib），因此只需保证 `lake` 与 `lean` 可用且版本匹配 lean-toolchain。
+#       真正生效。lean_bridge 的编译路径为：当 <root>/lean下载版/test_mathlib 工程已挂载
+#       且 Mathlib 已编译就绪时，向该工程目录写入 verify_*.lean 并以
+#       `lake env lean verify_*.lean` 编译（该工程 require mathlib，故能真正加载 Mathlib，
+#       提供 norm_num / ring / omega / linarith 等 tactic）；否则回退到单文件临时目录、
+#       纯核心 Lean（不依赖 mathlib）。因此需保证 `lake` 与 `lean` 可用且版本匹配
+#       lean-toolchain（v4.31.0），并已完成 mathlib 的本地编译（见 lean下载版/test_mathlib）。
 #
 # 策略（双保险）：
 #   1) 在线：优先用 elan（Lean 版本管理器）安装 lean-toolchain 指定版本（v4.31.0）；

@@ -302,6 +302,7 @@ class TaskContext:
 
     # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
     formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）
+    formal_gaps: list = field(default_factory=list) # Lean 形式化编译发现的「缺口」（缺失定义/引理/模块/类型），供子目标规划优先拆解
     preverify_trace: dict = field(default_factory=dict)  # 前置验证轨迹（通过/失败/修正轮次/lean声明）
     subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
     subgoal_merge_plan: str = ""                    # 最终整合方案

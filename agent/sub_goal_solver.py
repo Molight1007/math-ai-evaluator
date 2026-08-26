@@ -192,6 +192,11 @@ class SubGoalSolverAgent(BaseAgent):
     # ---------- 主流程 ----------
     def run(self, ctx: TaskContext) -> TaskContext:
         """执行子目标规划 → 逐步求解 → 结论合并 全流程，结果追加到 ctx.candidates"""
+        # 预算闸门：连规划所需的 1 次 LLM 调用都负担不起时，整体跳过、不追加候选
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
+            return ctx
+
         # 阶段一：子目标规划
         plan_data = self._plan_subgoals(ctx)
         if plan_data is None:
@@ -272,6 +277,18 @@ class SubGoalSolverAgent(BaseAgent):
         if getattr(ctx, "formal_spec", ""):
             problem_text = (ctx.problem + "\n\n[题目的形式化理解（已知条件→结论）]\n"
                             + ctx.formal_spec)
+        # v2.9+：把 Lean 形式化编译发现的「缺口」注入规划提示，
+        # 让 AI 优先把"缺失的定义/引理/模块/类型问题"拆成子目标
+        # （即"根据 Lean 编译的逻辑，看缺哪些" → 帮助构建子目标）。
+        gaps = getattr(ctx, "formal_gaps", [])
+        if gaps:
+            gap_lines = "\n".join(
+                "  - [%s] %s: %s" % (g.get("kind", "other"), g.get("detail", ""),
+                                     g.get("suggestion", ""))
+                for g in gaps)
+            problem_text = (problem_text
+                            + "\n\n[Lean 形式化验证发现的缺口（建议优先作为子目标拆解）]\n"
+                            + gap_lines)
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
             problem=problem_text,
