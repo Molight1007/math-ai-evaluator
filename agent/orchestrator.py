@@ -20,7 +20,7 @@ import logging
 import time
 import re as _re
 
-from .base import BaseAgent, TaskContext, Budget, Verdict, BugReport, _normalize_chat_response
+from .base import BaseAgent, TaskContext, Budget, Verdict, BugReport, LemmaRepo, _normalize_chat_response
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
@@ -67,6 +67,12 @@ class Orchestrator(BaseAgent):
             total_start_time=now,
             total_deadline=now + getattr(self.config, 'max_total_time_seconds', 21000),
         )
+        # P5.1：跨进程 lemma 记忆（#30）——开启引理累积且配置了存储路径时，
+        # 从文件加载历史引理（官方要求不假设多题共用同一进程，文件即记忆）
+        if getattr(self.config, 'use_lemma_accumulation', False):
+            lemma_store = getattr(self.config, 'lemma_store_path', "") or ""
+            if lemma_store:
+                ctx.lemma_repo = LemmaRepo.load(lemma_store)
         try:
             # 0) PaperPacer 简化版：按剩余时间动态收紧预算（P0-4 提前收紧防超时）
             # B6：不可再改写共享 config，运行时调控统一写入 ctx.state（RunState）

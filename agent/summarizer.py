@@ -95,6 +95,11 @@ class SummarizerAgent(BaseAgent):
         for c in conclusions:
             if repo.add(c, verified=True):
                 added += 1
+        # #30：跨进程 lemma 记忆——沉淀后立即写盘（文件即跨题记忆）
+        if added > 0:
+            store = getattr(self.config, "lemma_store_path", "") or ""
+            if store:
+                repo.save(store)
         return added
 
     # ----------------------------------------------------------

@@ -108,6 +108,7 @@ class AgentConfig:
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
     use_summarizer: bool = False         # P5：Summarizer 压缩中间结论写入 LemmaRepo
     use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
+    lemma_store_path: str = ""          # #30：lemma 记忆持久化路径（跨进程复用；空=不持久化）
 
     # ---- v3 升级：P1/P2/P3（设计文档 docs/MathPilot智能体升级架构设计）----
     judger_friendly: bool = True       # P1: Formatter 黑盒 Judger 友好输出（纯规则，0 预算）
@@ -242,6 +243,8 @@ class ReasoningAgent:
             # 队友 Lean 改造
             "enable_lean_verify", "lean_timeout",
             "enable_dag_plan", "subgoal_max_depth",
+            # #30 lemma 记忆持久化
+            "lemma_store_path",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

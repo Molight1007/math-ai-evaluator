@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -298,6 +299,36 @@ class LemmaRepo:
         """返回全部引理文本（按加入顺序）。"""
         with self._lock:
             return [e.text for e in self._entries]
+
+    # ---- P5.1：跨进程持久化（#30 lemma 记忆；官方要求不假设多题共用进程）----
+
+    def save(self, path: str) -> bool:
+        """持久化到 JSON 文件（跨题/跨会话复用）。失败静默返回 False。"""
+        try:
+            with self._lock:
+                data = [{"text": e.text, "created_at": e.created_at}
+                        for e in self._entries]
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    @classmethod
+    def load(cls, path: str) -> "LemmaRepo":
+        """从 JSON 文件恢复引理库；文件不存在/损坏返回空库。"""
+        repo = cls()
+        try:
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and item.get("text"):
+                            repo.add(item["text"])
+        except Exception:  # noqa: BLE001
+            pass
+        return repo
 
     def __len__(self) -> int:
         with self._lock:
