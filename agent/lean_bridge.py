@@ -46,6 +46,7 @@ _DEFAULT_LEAN_EXECUTABLE = "lake"      # Lean 4 可执行文件名
 _DEFAULT_LEAN_TIMEOUT = 60.0           # 单次编译超时（秒）
 _LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
 _MAX_ERROR_CHARS = 5000                # 编译错误输出截断上限（防 token 爆炸）
+_MAX_LEAN_CONVERT_TRIES = 2            # NL→Lean 转化最大尝试次数（编译失败反馈重试）
 
 # =====================================================================
 # LLM 提示词模板（Lean 转化 / 错误分析）
@@ -60,7 +61,14 @@ LEAN_CONVERT_SYSTEM = """你是一位 Lean 4 形式化专家。请把下面的�
 3. 优先使用 Mathlib 中已有的定理/引理（如 omega、linarith、ring、norm_num、positivity）。
 4. 如果推理中某步无法形式化，用 ``sorry`` 占位并在代码末尾用注释标注：
    ``-- UNFORMALIZED: <该步的原始中文推理>``。
-5. 不要修改题目本身，只对给定推理做形式化。"""
+5. 不要修改题目本身，只对给定推理做形式化。
+6. import 路径必须真实存在（当前 Mathlib = last_bump_for_v4.31.0）：
+   - 自然数/整除/素数基础：``import Mathlib.Data.Nat.Defs``、``import Mathlib.Data.Nat.Prime.Defs``
+   - 整数：``import Mathlib.Data.Int.Defs``
+   - 算术策略可用：omega / norm_num / ring / linarith（这些在基础库内置）
+   - 不确定定理所在模块时，优先用上面的已验证模块；
+     不要使用旧版路径（如 Mathlib.NumberTheory.Prime 已不存在），
+     也不要 ``import Mathlib``（全量导入）。"""
 
 LEAN_CONVERT_USER = """## 原题
 {problem}
@@ -323,12 +331,22 @@ class LeanBridge:
     # 阶段一：NL → Lean 转化
     # ------------------------------------------------------------------
 
-    def _convert_to_lean(self, problem: str, reasoning: str) -> str:
-        """把自然语言推理转化为 Lean 4 代码（依赖注入的 client）。"""
+    def _convert_to_lean(self, problem: str, reasoning: str,
+                         prev_error: str = "") -> str:
+        """把自然语言推理转化为 Lean 4 代码（依赖注入的 client）。
+
+        prev_error 非空时作为「编译失败反馈」附带，让 LLM 修正代码
+        （对应论文方法主线：搜定理→informal 推理→翻译 Lean→审核闭环）。
+        """
+        user_content = LEAN_CONVERT_USER.format(
+            problem=problem, reasoning=reasoning)
+        if prev_error:
+            user_content += (
+                "\n\n你上一版代码编译失败，错误如下：\n%s\n"
+                "请修正后重新输出完整 Lean 4 代码。" % prev_error[:1500])
         messages = [
             {"role": "system", "content": LEAN_CONVERT_SYSTEM},
-            {"role": "user", "content": LEAN_CONVERT_USER.format(
-                problem=problem, reasoning=reasoning)},
+            {"role": "user", "content": user_content},
         ]
         raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
         return _strip_code_fence(raw)
@@ -439,31 +457,36 @@ class LeanBridge:
                                "（工具链缺失，非验证失败）")
                 return BugReport(verdict="unknown", findings=[])
 
-            # 2) 阶段一：NL → Lean 转化
-            if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
-            lean_code = self._convert_to_lean(problem, reasoning)
-            if not lean_code:
-                return BugReport(verdict="unknown", findings=[])
-
-            # 3) 阶段二：编译验证
-            if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
-            mathlib_dir = self._mathlib_dir
-            if mathlib_dir:
-                logger.info("[LeanBridge] Mathlib 工程模式编译: %s", mathlib_dir)
-            with tempfile.TemporaryDirectory(prefix="lean_bridge_") as work_dir:
-                comp = self._compile(lean_code, work_dir, mathlib_dir=mathlib_dir)
+            # 2) 阶段一：NL → Lean 转化（编译失败时带错误反馈重试，最多 MAX_LEAN_CONVERT_TRIES 轮）
+            lean_code = ""
+            comp = None
+            for attempt in range(_MAX_LEAN_CONVERT_TRIES):
+                if time.monotonic() > deadline:
+                    return BugReport(verdict="unknown", findings=[])
+                prev_error = (comp or {}).get("error", "") if comp else ""
+                lean_code = self._convert_to_lean(problem, reasoning,
+                                                  prev_error=prev_error)
+                if not lean_code:
+                    return BugReport(verdict="unknown", findings=[])
+                mathlib_dir = self._mathlib_dir
+                if mathlib_dir:
+                    logger.info("[LeanBridge] Mathlib 工程模式编译: %s (attempt %d)",
+                                mathlib_dir, attempt + 1)
+                with tempfile.TemporaryDirectory(prefix="lean_bridge_") as work_dir:
+                    comp = self._compile(lean_code, work_dir,
+                                         mathlib_dir=mathlib_dir)
                 if comp.get("ok"):
                     # 编译通过且无 sorry → proof_valid
                     return BugReport(verdict="proof_valid", findings=[])
-
-                # 4) 阶段三：错误分析
-                if time.monotonic() > deadline:
-                    return BugReport(verdict="unknown", findings=[])
-                return self._analyze_error(
-                    problem, reasoning, lean_code,
-                    comp.get("error", "编译失败（无详细输出）"))
+                if attempt < _MAX_LEAN_CONVERT_TRIES - 1:
+                    logger.info("[LeanBridge] 编译失败，带错误反馈重试转化 "
+                                "(attempt %d): %s",
+                                attempt + 1,
+                                (comp.get("error") or "")[:120])
+            # 4) 阶段三：错误分析（多次重试仍失败）
+            return self._analyze_error(
+                problem, reasoning, lean_code,
+                comp.get("error", "编译失败（无详细输出）"))
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
             return BugReport(verdict="unknown", findings=[])
