@@ -320,18 +320,27 @@ class Orchestrator(BaseAgent):
         if not raw_expr or len(raw_expr) > 500:
             return None
         try:
+            result = None
             if tag in ("arithmetic", "quadratic"):
-                return eval_expression(raw_expr)
+                result = eval_expression(raw_expr)
             elif tag == "derivative":
-                return compute_derivative(raw_expr)
+                result = compute_derivative(raw_expr)
             elif tag == "integral":
-                return compute_integral(raw_expr)
+                result = compute_integral(raw_expr)
             elif tag == "determinant":
-                return compute_determinant(raw_expr)
+                result = compute_determinant(raw_expr)
             elif tag in ("equation",):
-                return solve_equation(raw_expr)
+                result = solve_equation(raw_expr)
             elif tag == "limit":
-                return compute_limit(raw_expr)
+                result = compute_limit(raw_expr)
+            # 防垃圾（P0）：结果含中文说明/原始表达式残留 → 视为失败回退 LLM 链，
+            # 避免把 sympy 退化输出（如 "x 表达式：∫₀¹xe^{xdx}"）当正确答案
+            if result and (_re.search(r"[\u4e00-\u9fff]", result)
+                           or raw_expr[:12] in result):
+                self.record(ctx, "fast_path",
+                            f"快车道 {tag}: 结果疑似退化垃圾，回退")
+                return None
+            return result
         except Exception:
             pass
         return None

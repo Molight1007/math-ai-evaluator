@@ -153,7 +153,14 @@ def compute_derivative(expr_str: str, var: str = "x") -> Optional[str]:
 def compute_integral(expr_str: str, var: str = "x",
                      lower: Optional[str] = None,
                      upper: Optional[str] = None) -> Optional[str]:
-    """计算积分。"""
+    """计算积分。
+
+    防垃圾（P0）：输入含 sympy 无法理解的字符（积分符号 ∫、中文、上下标）
+    时直接返回 None —— 否则 sympy 会把未知标识符当符号相乘，产出
+    如 "x ∫₀¹xe^{xdx}" 的垃圾结果，fast path 误当正确答案 → 平台 0 分。
+    """
+    if not expr_str or re.search(r"[∫\u4e00-\u9fff]", expr_str):
+        return None
     parsed, err = _try_parse(expr_str)
     if parsed is None:
         return None
