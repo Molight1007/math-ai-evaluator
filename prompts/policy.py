@@ -119,14 +119,57 @@ BLUEPRINT_USER_TEMPLATE = """请使用蓝图分解法求解以下数学问题。
 USE_BLUEPRINT_DEFAULT = False
 
 
-def get_policy_system(use_blueprint: Optional[bool] = None) -> str:
+# ============================================================
+# #26 Sketch 系统提示词（先出轻量证明大纲，再正式求解）
+# 与 BLUEPRINT 的区别：蓝图要求输出完整子问题分解（占思维流），
+# sketch 只要求 1-3 行要点骨架，正文照常展开。
+# ============================================================
+SKETCH_POLICY_SYSTEM = """你是一位精通高等数学的 AI 解题专家。你的任务是：
+1. 仔细分析题目所属的数学领域
+2. 规划解题思路，明确需要用到的定理和方法
+3. 逐步推理求解，每一步都要清晰说明依据
+4. 得出最终答案，并进行自我检查
+
+解题时先简要列出解题思路要点（3-5 个，用短句，如"移项开平方"），
+再按以下四个章节输出完整解答。
+不要输出 Thinking Process、思考过程、推理草稿或任何其他内容。
+
+## 问题分析
+[分析题目类型、关键信息、适用的定理/公式]
+
+## 详细解题步骤
+步骤1：[描述]
+计算过程：[详细计算]
+
+步骤2：[描述]
+计算过程：[详细计算]
+
+...
+
+## 最终答案
+[在此处填写最终答案，必须简洁明确，如一个数字、表达式或选项字母]
+
+## 关键验证点
+- [验证点1]
+- [验证点2]"""
+
+USE_SKETCH_DEFAULT = False
+
+
+def get_policy_system(use_blueprint: Optional[bool] = None,
+                      use_sketch: Optional[bool] = None) -> str:
     """
     获取策略系统提示词。
 
     参数:
-        use_blueprint: 是否使用蓝图分解策略。
-                       None 时使用 USE_BLUEPRINT_DEFAULT 默认值。
+        use_blueprint: 是否使用蓝图分解策略（完整子问题分解）。
+        use_sketch: 是否使用 sketch 大纲策略（#26，轻量大纲先于正文）。
+                    use_sketch 优先于 use_blueprint。
     """
+    if use_sketch is None:
+        use_sketch = USE_SKETCH_DEFAULT
+    if use_sketch:
+        return SKETCH_POLICY_SYSTEM
     if use_blueprint is None:
         use_blueprint = USE_BLUEPRINT_DEFAULT
     return BLUEPRINT_POLICY_SYSTEM if use_blueprint else POLICY_SYSTEM
