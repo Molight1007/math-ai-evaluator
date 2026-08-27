@@ -144,17 +144,31 @@ def _truncate_error_output(text: str, limit: int = _MAX_ERROR_CHARS) -> str:
 
 
 def _mathlib_project_usable(proj_dir: str) -> bool:
-    """判断目录是否为「可用 Mathlib 工程」：存在 .lake/packages/mathlib 且包源码非空。"""
+    """判断目录是否为「可用 Mathlib 工程」：有 lakefile 且带 .lake 依赖缓存。
+
+    兼容两种形态：
+    A) mathlib 包在 .lake/packages/mathlib（本地缓存）；
+    B) mathlib 是外部 path 依赖（如 E:/mathlib4-...），工程仅需 lakefile + .lake/packages。
+    """
     if not proj_dir or not os.path.isdir(proj_dir):
         return False
+    has_lakefile = (os.path.exists(os.path.join(proj_dir, "lakefile.toml"))
+                    or os.path.exists(os.path.join(proj_dir, "lakefile.lean")))
+    if not has_lakefile:
+        return False
+    # 形态 A：mathlib 包本地缓存非空
     mathlib_pkg = os.path.join(proj_dir, ".lake", "packages", "mathlib")
-    if not os.path.isdir(mathlib_pkg):
-        return False
-    try:
-        entries = os.listdir(mathlib_pkg)
-    except OSError:
-        return False
-    return any(not e.startswith(".") for e in entries)
+    if os.path.isdir(mathlib_pkg):
+        try:
+            entries = os.listdir(mathlib_pkg)
+        except OSError:
+            entries = []
+        if any(not e.startswith(".") for e in entries):
+            return True
+    # 形态 B：有 .lake/packages（path 依赖声明在 lakefile 内）即视为可用
+    if os.path.isdir(os.path.join(proj_dir, ".lake", "packages")):
+        return True
+    return False
 
 
 def _compile_lean(
@@ -182,6 +196,8 @@ def _compile_lean(
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
     env_missing = False
+    # exe 可能是完整路径（如 E:/.../lake.exe），按文件名判断是否为 lake
+    is_lake = os.path.basename(exe).lower() in ("lake", "lake.exe")
 
     use_mathlib = bool(mathlib_project_dir and _mathlib_project_usable(mathlib_project_dir))
     if use_mathlib:
@@ -189,11 +205,11 @@ def _compile_lean(
         lean_file = os.path.join(mathlib_project_dir, "verify_lean_bridge.lean")
         cwd = mathlib_project_dir
         fname = os.path.basename(lean_file)
-        cmd = [exe, "env", "lean", fname] if exe == "lake" else [exe, fname]
+        cmd = [exe, "env", "lean", fname] if is_lake else [exe, fname]
     else:
         lean_file = os.path.join(work_dir, "verify.lean")
         cwd = work_dir
-        cmd = [exe, "env", "lean", "verify.lean"] if exe == "lake" else [exe, "verify.lean"]
+        cmd = [exe, "env", "lean", "verify.lean"] if is_lake else [exe, "verify.lean"]
 
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)
