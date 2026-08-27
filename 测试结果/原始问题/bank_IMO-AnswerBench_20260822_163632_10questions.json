@@ -1,0 +1,62 @@
+[
+  {
+    "id": "imo-bench-algebra-003",
+    "question": "Find all functions $g:\\mathbb{R}\\rightarrow\\mathbb{R}$ which is not a linear or constant function and satisfies\n\n\\[\n4g\\left(x^{2}y+y^{2}z+z^{2}x\\right)-(g(y)-g(x))(g(z)-g(y))(g(x)-g(z))=4g\\left(xy^{2}+yz^{2}+zx^{2}\\right)\n\\]\n\nfor all real numbers $x,y,z$.",
+    "domain": "Algebra",
+    "reference_answer": "$g(x)=2x^{3}+c, g(x)=-2x^{3}+c$"
+  },
+  {
+    "id": "imo-bench-combinatorics-032",
+    "question": "A classroom contains 68 pairs of nonzero integers. Suppose that for each positive integer $k$ at most one of the pairs $(k, k)$ and $(-k, -k)$ is written on the classroom board.  A student erases some of the 136 integers, subject to the condition that no two erased integers may add to 0. The student then scores one point for each of the 68 pairs in which at least one integer is erased. Additionally, the classroom has another broken whiteboard, and some integers might be invisible. Determine, with proof, the largest number $N$ of points that the student can guarantee to score regardless of which 68 pairs have been written on the board.",
+    "domain": "Combinatorics",
+    "reference_answer": "43"
+  },
+  {
+    "id": "imo-bench-combinatorics-040",
+    "question": "A sequence of $15$ positive integers (not necessarily distinct) is called kawaii if it satisfies the following condition: for each positive integer $k\\geq2$, if the number $k$ appears in the sequence then so does the number $k-1$, and moreover the first occurrence of $k-1$ comes before the last occurrence of $k$.  Suppose there is a set $S$ of distinct integers, with $|S| = 16$.  How many kawaii sequences are there?",
+    "domain": "Combinatorics",
+    "reference_answer": "1307674368000"
+  },
+  {
+    "id": "imo-bench-geometry-051",
+    "question": "Let $\\overline{CD}$ be a chord of a circle $\\Omega$, and let $R$ be a point on the chord $\\overline{CD}$. Circle $\\Omega_1$ passes through $C$ and $R$ and is internally tangent to $\\Omega$. Circle $\\Omega_2$ passes through $D$ and $R$ and is internally tangent to $\\Omega$. Circles $\\Omega_1$ and $\\Omega_2$ intersect at points $R$ and $S$. Line $RS$ intersects $\\Omega$ at $U$ and $V$. Assume that $CR=4$, $RD=6$, $UV=11$, and $RS^2 = \\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+    "domain": "Geometry",
+    "reference_answer": "29"
+  },
+  {
+    "id": "imo-bench-geometry-068",
+    "question": "In $\\triangle XYZ$ with side lengths $XY=13$, $YZ=14$, and $ZX=15$, let $N$ be the midpoint of $\\overline{YZ}$. Let $R$ be the point on the circumcircle of $\\triangle XYZ$ such that $N$ is on $\\overline{XR}$. There exists a unique point $S$ on segment $\\overline{XN}$ such that $\\angle RYS = \\angle RZS$. Then $XS$ can be written as $\\frac{a}{\\sqrt{b}}$, where $a$ and $b$ are relatively prime positive integers. Find $a+b$.",
+    "domain": "Geometry",
+    "reference_answer": "247"
+  },
+  {
+    "id": "imo-bench-geometry-082",
+    "question": "Let $F$ be the footpoint of the altitude from $Y$ in the triangle $XYZ$ , where $XY=1$ . The incircle of triangle $YZF$ coincides with the centroid of triangle $XYZ$. Find the lengths of $XZ$.",
+    "domain": "Geometry",
+    "reference_answer": "$\\frac{\\sqrt{10}}{2}$"
+  },
+  {
+    "id": "imo-bench-number_theory-031",
+    "question": "Let $k>l$ be given coprime positive integers greater than 1. Define a function $f: \\mathbb{Z}\\rightarrow \\mathbb{Z}$ as follows: for $x$, $f(x)$ is the smallest value of $|a|+|b|$ among all integers $a,b$ satisfying $ka+lb = x$.\n An integer $x$ is called 'nice' if $f(x)\\geq \\max (f(x-k),f(x+k),f(x-l),f(x+l))$. Denote by $F(k,l)$ the the number of nice integers when both $k$ and $l$ are odd, and denote by $G(k,l)$ the number of nice integers when either $k$ or $l$ is even. Suppose that there exists polynomials $p(k,l)$ and $q(k,l)$ such that $F(k,l)=p(k,l)$ for all odd integers $k,l$ and $G(k,l)=q(k,l)$ whenever at least one of $k$ or $l$ is even.  Evaluate $p(k,l)^2 + q(k,l)^2$.",
+    "domain": "Number theory",
+    "reference_answer": "$5(l-1)^2$"
+  },
+  {
+    "id": "imo-bench-number_theory-073",
+    "question": "Let $q$ be an odd prime number. For an integer $i$ from 1 to $q-1$, let $n_i$ denote the number of divisors of $qi+1$ that are greater than or equal to $i$ and less than or equal to $q-1$. Find the sum of $n_1, n_2, \\ldots, n_{q-1}$.",
+    "domain": "Number theory",
+    "reference_answer": "$q-1$"
+  },
+  {
+    "id": "imo-bench-number_theory-075",
+    "question": "Find all monic polynomials $P(x)$ with integer coefficients for which\n\\[\n    \\frac{6(|P(q)|!) - 1}{q}\n\\]\nis an integer for every prime $q$ greater than 3.",
+    "domain": "Number theory",
+    "reference_answer": "$P(x) = x - 4$"
+  },
+  {
+    "id": "imo-bench-number_theory-093",
+    "question": "Non-negative integers $a<b<c$ satisfy $c\\le a+b$, and $3^a, 3^b, 3^c$ all have the same remainder when divided by $10000$. Find the minimum possible value of $a+b+c$.",
+    "domain": "Number theory",
+    "reference_answer": "3000"
+  }
+]

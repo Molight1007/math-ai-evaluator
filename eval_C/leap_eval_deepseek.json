@@ -1,0 +1,60 @@
+{
+ "backend": "deepseek",
+ "model": "deepseek-v4-flash",
+ "results": [
+  {
+   "problem_id": "PB-Basic-001",
+   "elapsed_s": 114.4,
+   "llm_hint_lean": "import Mathlib\n\n/-\nDetermine all functions $f: \\mathbb{Z} \\rightarrow \\mathbb{Z}$ such that, for all $x, y \\in \\mathbb{Z",
+   "steps": {
+    "preverify": {
+     "verdict": "unknown",
+     "formal_spec": "",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  },
+  {
+   "problem_id": "PB-Basic-002",
+   "elapsed_s": 128.4,
+   "llm_hint_lean": "import Mathlib\n\n/-\nShow that $x^2 + y^2 + z^2 + t^2 \\ge xyzt$ for any positive real numbers $x, y, z, t$ that satisfy $2",
+   "steps": {
+    "preverify": {
+     "verdict": "unknown",
+     "formal_spec": "",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  },
+  {
+   "problem_id": "PB-Basic-003",
+   "elapsed_s": 122.6,
+   "llm_hint_lean": "import Mathlib\n\n/-\nFind all functions $f\\colon \\mathbb{R} \\rightarrow \\mathbb{R}$ such that for all $a,b \\in \\mathbb{R}$",
+   "steps": {
+    "preverify": {
+     "verdict": "unknown",
+     "formal_spec": "",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Agent Evaluation Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card-value.green { color: #10b981; }
+        .card-value.red { color: #ef4444; }
+        .section-title { font-size: 20px; font-weight: 600; margin: 32px 0 16px; color: #1a1a2e; }
+        .domain-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .domain-stat { background: white; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+        .domain-name { font-weight: 600; margin-right: 8px; }
+        .domain-acc { color: #6366f1; font-weight: 700; }
+        .domain-count { color: #999; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover { background: #f8fafc; }
+        tr.fail { background: #fef2f2; }
+        .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.pass { background: #d1fae5; color: #065f46; }
+        .status-badge.fail { background: #fee2e2; color: #991b1b; }
+        .error-type { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #fef3c7; color: #92400e; }
+        .domain-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; background: #e0e7ff; color: #3730a3; margin-right: 4px; }
+        .question-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .clickable-question { color: #2563EB; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+        .detail-row:hover { background: #eff6ff !important; }
+        .detail-row:hover .clickable-question { color: #1D4ED8; text-decoration-style: solid; }
+        /* Modal overlay */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px); z-index: 1000; animation: fadeIn 0.25s ease; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        /* Modal card */
+        .modal-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; width: 90%; max-width: 820px; max-height: 88vh; box-shadow: 0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.5) inset; display: flex; flex-direction: column; animation: slideUp 0.3s ease; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .modal-header-left { display: flex; align-items: center; gap: 12px; }
+        .modal-title { font-size: 17px; font-weight: 700; color: #1E293B; }
+        .modal-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .modal-status.pass { background: #D1FAE5; color: #065F46; }
+        .modal-status.fail { background: #FEE2E2; color: #991B1B; }
+        .modal-confidence { font-size: 13px; color: #64748B; }
+        .modal-confidence span { font-weight: 700; color: #3B82F6; }
+        .modal-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748B; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .modal-close:hover { background: #ef4444; color: white; }
+        .modal-body { padding: 20px 28px 28px; overflow-y: auto; flex: 1; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: transparent; }
+        .modal-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        /* Section blocks */
+        .detail-section { margin-bottom: 20px; }
+        .detail-section:last-child { margin-bottom: 0; }
+        .section-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid; }
+        .section-heading.ai { color: #2563EB; border-color: #BFDBFE; }
+        .section-heading.judge { color: #7C3AED; border-color: #DDD6FE; }
+        .section-heading.info { color: #475569; border-color: #E2E8F0; }
+        .section-heading .icon-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .section-heading .icon-dot.ai { background: #3B82F6; }
+        .section-heading .icon-dot.judge { background: #7C3AED; }
+        .section-heading .icon-dot.info { background: #94A3B8; }
+        /* Content boxes */
+        .content-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #334155; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace; }
+        .content-box.highlight { background: #FFF7ED; border-color: #FED7AA; }
+        .content-box.correct-answer { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+        /* Steps list */
+        .steps-list { list-style: none; padding: 0; margin: 0; }
+        .steps-list li { padding: 10px 14px; margin-bottom: 4px; background: #F8FAFC; border-radius: 8px; border-left: 3px solid #3B82F6; font-size: 13px; line-height: 1.6; color: #334155; }
+        .steps-list li:nth-child(even) { background: #EFF6FF; }
+        .steps-list li .step-num { display: inline-block; min-width: 28px; font-weight: 700; color: #2563EB; }
+        /* Info grid */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item { background: #F8FAFC; border-radius: 8px; padding: 10px 14px; }
+        .info-item .info-label { font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .info-item .info-value { font-size: 14px; font-weight: 600; color: #1E293B; }
+        .info-item.full { grid-column: 1 / -1; }
+        /* Tags */
+        .detail-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+        .detail-tag.error { background: #FEF3C7; color: #92400E; }
+        .detail-tag.domain { background: #E0E7FF; color: #3730A3; }
+        /* Performance bar */
+        .perf-bar { display: flex; gap: 12px; margin-top: 16px; padding: 14px 18px; background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%); border-radius: 10px; }
+        .perf-item { flex: 1; text-align: center; }
+        .perf-item .perf-val { font-size: 18px; font-weight: 700; color: #1E293B; }
+        .perf-item .perf-label { font-size: 11px; color: #64748B; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Math Agent Evaluation Report</h1>
+        <p class="subtitle">Generated at 2026-08-23 15:28:48</p>
+        <div class="summary-cards">
+            <div class="card"><div class="card-label">Total</div><div class="card-value">5</div></div>
+            <div class="card"><div class="card-label">Correct</div><div class="card-value green">3</div></div>
+            <div class="card"><div class="card-label">Accuracy</div><div class="card-value green">60.0%</div></div>
+            <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value">0.936</div></div>
+            <div class="card"><div class="card-label">Avg Inf. Latency</div><div class="card-value">1042.77s</div></div>
+            <div class="card"><div class="card-label">Avg Judge Latency</div><div class="card-value">149.33s</div></div>
+        </div>
+        <h2 class="section-title">Domain Performance</h2><div class="domain-stats">
+        <div class="domain-stat">
+            <span class="domain-name">Number theory</span>
+            <span class="domain-acc">60.0%</span>
+            <span class="domain-count">(3/5)</span>
+        </div></div>
+        <h2 class="section-title">Detailed Results</h2>
+        <table>
+            <thead><tr><th>ID</th><th>Domain</th><th>Question</th><th>Answer</th><th>Status</th><th>Conf.</th><th>Error</th><th>Inf. Time</th><th>Judge Time</th><th>Tokens</th></tr></thead>
+            <tbody>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;imo-bench-number_theory-008&quot;, &quot;domain&quot;: &quot;Number theory&quot;, &quot;question&quot;: &quot;Does there exist a positive integer $n$ satisfying the following condition? If so, find the smallest such $n$.\n\n(Condition) There exist infinitely many ordered $n$-tuples of positive rational numbers $(x_1, \\dots, x_n)$ such that both $\\sum_{i=1}^n i \\cdot x_i$ and $\\frac{1}{x_1 + \\dots + x_n} + \\frac{1}{x_2 + \\dots + x_n} + \\dots + \\frac{1}{x_n}$ are positive integers.&quot;, &quot;reference_answer&quot;: &quot;3&quot;, &quot;intern_answer&quot;: &quot;\\in \\mathbb{Z}$\n- $\\sum \\frac{1}{s_j} = S \\in \\mathbb{Z}$\n\n由于有无穷多组不同的 $(a,b,c)$，得到无穷多组不同的 $(s_1,s_2,s_3)$，且满足 $s_1 &gt; s_2 &gt; s_3 &gt; 0$。\n\n验证 $x_i$ 为正有理数：\n- $x_3 = s_3 = \\frac{c}{S} &gt; 0$\n- $x_2 = s_2 - s_3 = \\frac{b-c}{S} &gt; 0$（因 $b &gt; c$）\n- $x_1 = s_1 - s_2 = \\frac{a-b}{S} &gt; 0$（因 $a &gt; b$）\n\n且 $\\sum i x_i = s_1 + s_2 + s_3 = 1 \\in \\mathbb{Z}$，$\\sum \\frac{1}{s_j} = S \\in \\mathbb{Z}$。\n\n---\n\n### 结论\n\n- $n=1$：仅1组解，不满足无穷多\n- $n=2$：仅有限组解（通过二次方程判别式分析）\n- $n=3$：存在无穷多组解（通过上述构造）\n\n因此，最小的正整数 $n$ 是 3。\n\n【最终答案】3&quot;, &quot;intern_reasoning&quot;: &quot;## 最终解答\n\n\n### 问题重述\n\n设 $s_j = x_j + x_{j+1} + \\dots + x_n$（$j=1,2,\\dots,n$），则 $s_1 &gt; s_2 &gt; \\dots &gt; s_n &gt; 0$，且 $x_j = s_j - s_{j+1}$（其中 $s_{n+1}=0$）。\n\n条件转化为：\n- $A = \\sum_{i=1}^n i \\cdot x_i = \\sum_{j=1}^n s_j \\in \\mathbb{Z}_{&gt;0}$\n- $B = \\sum_{j=1}^n \\frac{1}{s_j} \\in \\mathbb{Z}_{&gt;0}$\n\n需要判断是否存在正整数 $n$，使得有无穷多组正有理数 $(s_1,\\dots,s_n)$ 满足 $s_1 &gt; s_2 &gt; \\dots &gt; s_n &gt; 0$，且 $A, B$ 均为正整数。\n\n---\n\n### $n=1$ 的分析\n\n此时 $s_1 = x_1$，条件为 $s_1 \\in \\mathbb{Z}$ 且 $\\frac{1}{s_1} \\in \\mathbb{Z}$。这要求 $s_1 = 1$，只有唯一解。**不满足无穷多组**。\n\n---\n\n### $n=2$ 的分析\n\n设 $s_1 = a, s_2 = b$，其中 $a &gt; b &gt; 0$ 为有理数。条件为：\n- $a + b = M \\in \\mathbb{Z}_{&gt;0}$\n- $\\frac{1}{a} + \\frac{1}{b} = \\frac{a+b}{ab} = \\frac{M}{ab} = N \\in \\mathbb{Z}_{&gt;0}$\n\n由 $ab = \\frac{M}{N}$，$a,b$ 是方程 $t^2 - Mt + \\frac{M}{N} = 0$ 的根。判别式 $\\Delta = M^2 - \\frac{4M}{N}$ 必须为有理数的平方。\n\n设 $M = Nk$（$k \\in \\mathbb{Z}_{&gt;0}$），则 $\\Delta = Nk(Nk-4)$。要使 $\\Delta$ 为完全平方数，需 $Nk(Nk-4) = y^2$。\n\n令 $u = Nk$，则 $u(u-4) = y^2$，即 $(u-2)^2 - y^2 = 4$，得 $(u-2-y)(u-2+y) = 4$。\n\n正整数解只有 $u = 4$，即 $Nk = 4$。可能的 $(N,k)$ 为 $(1,4), (2,2), (4,1)$，均给出有限组解（如 $a=b=2$ 不满足严格递减，或 $a,b$ 为特定值）。**$n=2$ 只有有限组解**。\n\n---\n\n### $n=3$ 的构造（关键突破）\n\n我们需要构造无穷多组 $(s_1, s_2, s_3)$ 满足 $s_1 &gt; s_2 &gt; s_3 &gt; 0$，且 $\\sum s_j, \\sum \\frac{1}{s_j}$ 均为整数。\n\n**核心引理**：方程 $\\frac{1}{a} + \\frac{1}{b} + \\frac{1}{c} = 1$ 在正整数中有无穷多组满足 $a &gt; b &gt; c$ 的解。\n\n**证明**：取 $c = k$（$k \\geq 4$），则 $\\frac{1}{a} + \\frac{1}{b} = 1 - \\frac{1}{k} = \\frac{k-1}{k}$。\n\n令 $b = k+1$，则 $\\frac{1}{a} = \\frac{k-1}{k} - \\frac{1}{k+1} = \\frac{k^2 - k - 1}{k(k+1)}$，所以 $a = \\frac{k(k+1)}{k^2-k-1}$。\n\n当 $k^2 - k - 1 \\mid k(k+1)$ 时，$a$ 为正整数。例如：\n- $k=4$：$a = \\frac{4 \\cdot 5}{16-4-1} = \\frac{20}{11}$（非整数）\n- 更有效的方法：利用恒等式 $\\frac{1}{k} + \\frac{1}{k+1} + \\frac{1}{k(k+1)} = \\frac{2}{k}$，但这不直接给出和为1。\n\n**标准无穷族构造**：对任意正整数 $t$，取\n$$a = t(t+1), \\quad b = t+1, \\quad c = \\frac{t(t+1)}{t-1}$$\n验证：当 $t=2$ 时，$a=6, b=3, c=2$，$\\frac{1}{6}+\\frac{1}{3}+\\frac{1}{2}=1$。\n\n更系统地，利用参数化：设 $c = m$，则 $\\frac{1}{a} + \\frac{1}{b} = \\frac{m-1}{m}$。取 $b = m + d$，通过适当选择 $d$ 可使 $a$ 为整数。实际上，方程 $\\frac{1}{a} + \\frac{1}{b} + \\frac{1}{c} = 1$ 的解对应于椭圆曲线上的有理点，已知有无穷多组正整数解（如 $(2,3,6), (2,4,4), (3,3,3)$ 及通过变换生成的无穷族）。\n\n**具体无穷族**：对任意正整数 $k \\geq 2$，取\n$$a = k(k+1), \\quad b = k+1, \\quad c = \\frac{k(k+1)}{k-1}$$\n当 $k-1 \\mid k(k+1)$ 时（如 $k=2,3,4,\\dots$ 中满足条件的），可得整数解。更简单地，已知 $(2,3,6)$ 是一组解，通过变换 $(a,b,c) \\to (a, b, \\frac{ab}{ab-a-b})$ 可生成新解，产生无穷多组。\n\n**构造 $s_j$**：取上述无穷多组正整数 $(a,b,c)$ 满足 $\\frac{1}{a}+\\frac{1}{b}+\\frac{1}{c}=1$ 且 $a &gt; b &gt; c$。令\n$$s_1 = \\frac{a}{t}, \\quad s_2 = \\frac{b}{t}, \\quad s_3 = \\frac{c}{t}$$\n其中 $t$ 为正有理数。则：\n- $\\sum \\frac{1}{s_j} = t\\left(\\frac{1}{a}+\\frac{1}{b}+\\frac{1}{c}\\right) = t$\n- $\\sum s_j = \\frac{a+b+c}{t}$\n\n取 $t = m \\in \\mathbb{Z}_{&gt;0}$，则 $\\sum \\frac{1}{s_j} = m \\in \\mathbb{Z}$。要使 $\\sum s_j = \\frac{a+b+c}{m} \\in \\mathbb{Z}$，需 $m \\mid (a+b+c)$。\n\n由于有无穷多组不同的 $(a,b,c)$，每组给出不同的 $S = a+b+c$。对每组，取 $m = S$（或 $m$ 为 $S$ 的约数），则：\n- $s_1 = \\frac{a}{S}, s_2 = \\frac{b}{S}, s_3 = \\frac{c}{S}$\n- $\\sum s_j = 1 \\in \\mathbb{Z}$\n- $\\sum \\frac{1}{s_j} = S \\in \\mathbb{Z}$\n\n由于有无穷多组不同的 $(a,b,c)$，得到无穷多组不同的 $(s_1,s_2,s_3)$，且满足 $s_1 &gt; s_2 &gt; s_3 &gt; 0$。\n\n**验证 $x_i$ 为正有理数**：\n- $x_3 = s_3 = \\frac{c}{S} &gt; 0$\n- $x_2 = s_2 - s_3 = \\frac{b-c}{S} &gt; 0$（因 $b &gt; c$）\n- $x_1 = s_1 - s_2 = \\frac{a-b}{S} &gt; 0$（因 $a &gt; b$）\n\n且 $\\sum i x_i = s_1 + s_2 + s_3 = 1 \\in \\mathbb{Z}$，$\\sum \\frac{1}{s_j} = S \\in \\mathbb{Z}$。\n\n---\n\n### 结论\n\n- $n=1$：仅1组解，不满足无穷多\n- $n=2$：仅有限组解（通过二次方程判别式分析）\n- $n=3$：存在无穷多组解（通过上述构造）\n\n因此，最小的正整数 $n$ 是 **3**。\n\n【最终答案】3&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;对抗式投票共识 7 票/置信度 0.29；三Agent协作 5 轮；Lean 硬验证已执行；低置信度 revise 复核 3 轮&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.85, &quot;judge_explanation&quot;: &quot;最终答案 3 是最小值，但 n=3 的构造依赖错误命题：方程 1/a+1/b+1/c=1 有无穷多组正整数解。事实上该方程的正整数解只有有限组（如 (2,3,6)、(2,4,4)、(3,3,3) 等），因此模型构造不能产生无穷多组，存在严重推理错误。&quot;, &quot;error_type&quot;: &quot;reasoning_error&quot;, &quot;correct_answer_judge&quot;: &quot;3&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 21582, &quot;inference_latency&quot;: 1175.5379703044891, &quot;judge_latency&quot;: 149.33, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;reference_matched&quot;: false, &quot;judge_raw&quot;: {&quot;is_correct&quot;: true, &quot;confidence&quot;: 0.85, &quot;error_type&quot;: &quot;reasoning_error&quot;}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>imo-bench-number_theory-008</td>
+            <td><span class="domain-tag">Number theory</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">Does there exist a positive integer $n$ satisfying the following condition? If s...</td>
+            <td>\in \mathbb{Z}$
+- $\sum \frac{1}{s_j} = S \in \mathbb{Z}$
+
+由</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.85</td>
+            <td><span class="error-type">reasoning_error</span></td>
+            <td>1175.5379703044891s</td>
+            <td>149.33s</td>
+            <td>21582</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;imo-bench-number_theory-037&quot;, &quot;domain&quot;: &quot;Number theory&quot;, &quot;question&quot;: &quot;Let $A$ be the set of odd integers $a$ such that $|a|$ is not a perfect square.\n\nFind all numbers that can be expressed as $x+y+z$ for $x, y, z \\in A$ such that $xyz$ is a perfect square.&quot;, &quot;reference_answer&quot;: &quot;All numbers of the form $4k+3$&quot;, &quot;intern_answer&quot;: &quot;所有满足 $S \\equiv 3 \\pmod{4}$ 的奇数&quot;, &quot;intern_reasoning&quot;: &quot;所有满足 $S \\equiv 3 \\pmod{4}$ 的奇数&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;无投票验证记录；三Agent协作 6 轮；Lean 硬验证已执行；低置信度 revise 复核 5 轮&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.95, &quot;judge_explanation&quot;: &quot;答案“所有满足 S ≡ 3 (mod 4) 的奇数”等价于所有形如 4k+3 的数，结论正确；但模型仅给出最终结论，没有完整推导，证明不完整。&quot;, &quot;error_type&quot;: &quot;incomplete&quot;, &quot;correct_answer_judge&quot;: &quot;所有形如 4k+3 的数&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 21582, &quot;inference_latency&quot;: 1200.7666516304016, &quot;judge_latency&quot;: 149.33, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;reference_matched&quot;: false, &quot;judge_raw&quot;: {&quot;is_correct&quot;: true, &quot;confidence&quot;: 0.95, &quot;error_type&quot;: &quot;incomplete&quot;}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>imo-bench-number_theory-037</td>
+            <td><span class="domain-tag">Number theory</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">Let $A$ be the set of odd integers $a$ such that $|a|$ is not a perfect square.
+...</td>
+            <td>所有满足 $S \equiv 3 \pmod{4}$ 的奇数</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.95</td>
+            <td><span class="error-type">incomplete</span></td>
+            <td>1200.7666516304016s</td>
+            <td>149.33s</td>
+            <td>21582</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;imo-bench-number_theory-057&quot;, &quot;domain&quot;: &quot;Number theory&quot;, &quot;question&quot;: &quot;Let $b_m b_{m-1}\\cdots b_0$ be the base-7 representation of a positive integer $n$ for some positive integer $m$. Let $a_i$ be the number obtained by removing the digit $b_i$ from the base-7 representation of $m$ (read in base 7). Find the number of $n$ that satisfy $n=\\sum_{i=0}^{m-1}a_i$.&quot;, &quot;reference_answer&quot;: &quot;42&quot;, &quot;intern_answer&quot;: &quot;$$\\boxed{6}$$&quot;, &quot;intern_reasoning&quot;: &quot;## 最终解答\n\n\n### 1. 问题重述与符号定义\n\n设正整数 $n$ 的 $7$ 进制表示为 $b_m b_{m-1} \\cdots b_0$，其中 $m \\geq 1$，$b_m \\in \\{1,2,\\dots,6\\}$，$b_j \\in \\{0,1,\\dots,6\\}$（$0 \\leq j \\leq m-1$）。则\n$$n = \\sum_{j=0}^{m} b_j 7^j.$$\n\n对每个 $i \\in \\{0,1,\\dots,m-1\\}$，$a_i$ 表示从 $n$ 的 $7$ 进制表示中**移除数字 $b_i$** 后得到的数（仍按 $7$ 进制解读）。例如，若 $n = (b_3 b_2 b_1 b_0)_7$，则 $a_0 = (b_3 b_2 b_1)_7$，$a_1 = (b_3 b_2 b_0)_7$，$a_2 = (b_3 b_1 b_0)_7$。\n\n我们需要求满足 $n = \\sum_{i=0}^{m-1} a_i$ 的正整数 $n$ 的个数。\n\n---\n\n### 2. 推导 $a_i$ 的代数表达式\n\n移除 $b_i$ 后，原 $b_i$ 左侧的数字（高位）整体右移一位，右侧数字（低位）位置不变。因此：\n$$a_i = \\sum_{j=i+1}^{m} b_j 7^{j-1} + \\sum_{j=0}^{i-1} b_j 7^j.$$\n\n---\n\n### 3. 建立方程并化简\n\n计算 $\\sum_{i=0}^{m-1} a_i$ 中每个 $b_j$ 的系数：\n\n- **当 $j = m$**：对所有 $i \\in \\{0,\\dots,m-1\\}$，$b_m$ 都在 $a_i$ 的高位部分，系数为 $7^{m-1}$，共 $m$ 项。总系数为 $m \\cdot 7^{m-1}$。\n- **当 $1 \\leq j \\leq m-1$**：\n  - 若 $i &lt; j$，$b_j$ 在高位部分，系数 $7^{j-1}$，共 $j$ 个这样的 $i$；\n  - 若 $i &gt; j$，$b_j$ 在低位部分，系数 $7^j$，共 $(m-1-j)$ 个这样的 $i$。\n  总系数为 $j \\cdot 7^{j-1} + (m-1-j) \\cdot 7^j$。\n- **当 $j = 0$**：对所有 $i \\in \\{1,\\dots,m-1\\}$，$b_0$ 都在低位部分，系数 $7^0 = 1$，共 $m-1$ 项。总系数为 $m-1$。\n\n将 $n = \\sum a_i$ 两边按 $b_j$ 整理：\n$$\\sum_{j=0}^{m} b_j 7^j = m \\cdot 7^{m-1} b_m + \\sum_{j=1}^{m-1} \\left[j \\cdot 7^{j-1} + (m-1-j) \\cdot 7^j\\right] b_j + (m-1) b_0.$$\n\n移项得：\n$$(m \\cdot 7^{m-1} - 7^m) b_m + \\sum_{j=1}^{m-1} \\left[j \\cdot 7^{j-1} + (m-1-j) \\cdot 7^j - 7^j\\right] b_j + (m-1 - 1) b_0 = 0.$$\n\n化简各项系数：\n- $b_m$ 的系数：$(m-7)7^{m-1}$；\n- $b_j$（$1 \\leq j \\leq m-1$）的系数：$j \\cdot 7^{j-1} + (m-2-j) \\cdot 7^j = 7^{j-1}\\left[j + 7(m-2-j)\\right] = 7^{j-1}(7m - 14 - 6j)$；\n- $b_0$ 的系数：$m-2$。\n\n因此方程为：\n$$(m-7)7^{m-1} b_m + \\sum_{j=1}^{m-1} 7^{j-1}(7m - 14 - 6j) b_j + (m-2) b_0 = 0. \\tag{1}$$\n\n---\n\n### 4. 分类讨论 $m$ 的取值\n\n#### 情况 1：$m = 1$\n\n$n = (b_1 b_0)_7 = 7b_1 + b_0$，其中 $b_1 \\geq 1$。\n此时只有一个 $a_0$，即移除 $b_0$ 后得到 $a_0 = b_1$。\n方程 $n = a_0$ 变为 $7b_1 + b_0 = b_1$，即 $6b_1 + b_0 = 0$。\n由于 $b_1 \\geq 1$，左边 $\\geq 6$，无解。\n\n#### 情况 2：$m = 2$\n\n代入公式 (1)：\n- $b_2$ 系数：$(2-7)7^1 = -35$；\n- $b_1$ 系数：$7^{0}(14-14-6) = -6$；\n- $b_0$ 系数：$0$。\n\n方程为 $-35b_2 - 6b_1 = 0$。由于 $b_2 \\geq 1$，左边 $&lt; 0$，无解。\n\n#### 情况 3：$m = 3$\n\n代入公式 (1)：\n- $b_3$ 系数：$(3-7)7^2 = -196$；\n- $b_2$ 系数：$7^{1}(21-14-12) = 7 \\cdot (-5) = -35$；\n- $b_1$ 系数：$7^{0}(21-14-6) = 1$；\n- $b_0$ 系数：$1$。\n\n方程为 $-196b_3 - 35b_2 + b_1 + b_0 = 0$，即：\n$$b_1 + b_0 = 196b_3 + 35b_2.$$\n由于 $b_3 \\geq 1$，右边 $\\geq 196$，而左边 $b_1 + b_0 \\leq 12$，无解。\n\n#### 情况 4：$m = 4$\n\n代入公式 (1)：\n- $b_4$ 系数：$(4-7)7^3 = -1029$；\n- $b_3$ 系数：$7^{2}(28-14-18) = 49 \\cdot (-4) = -196$；\n- $b_2$ 系数：$7^{1}(28-14-12) = 7 \\cdot 2 = 14$；\n- $b_1$ 系数：$7^{0}(28-14-6) = 8$；\n- $b_0$ 系数：$2$。\n\n方程为 $-1029b_4 - 196b_3 + 14b_2 + 8b_1 + 2b_0 = 0$，即：\n$$14b_2 + 8b_1 + 2b_0 = 1029b_4 + 196b_3.$$\n右边 $\\geq 1029$（因 $b_4 \\geq 1$），左边 $\\leq 14 \\cdot 6 + 8 \\cdot 6 + 2 \\cdot 6 = 144$，无解。\n\n#### 情况 5：$m = 5$\n\n代入公式 (1)：\n- $b_5$ 系数：$(5-7)7^4 = -4802$；\n- $b_4$ 系数：$7^{3}(35-14-24) = 343 \\cdot (-3) = -1029$；\n- $b_3$ 系数：$7^{2}(35-14-18) = 49 \\cdot 3 = 147$；\n- $b_2$ 系数：$7^{1}(35-14-12) = 7 \\cdot 9 = 63$；\n- $b_1$ 系数：$7^{0}(35-14-6) = 15$；\n- $b_0$ 系数：$3$。\n\n方程为 $147b_3 + 63b_2 + 15b_1 + 3b_0 = 4802b_5 + 1029b_4$。\n右边 $\\geq 4802$，左边 $\\leq 6(147+63+15+3) = 1368$，无解。\n\n#### 情况 6：$m = 6$\n\n代入公式 (1)：\n- $b_6$ 系数：$(6-7)7^5 = -16807$；\n- $b_5$ 系数：$7^{4}(42-14-30) = 2401 \\cdot (-2) = -4802$；\n- $b_4$ 系数：$7^{3}(42-14-24) = 343 \\cdot 4 = 1372$；\n- $b_3$ 系数：$7^{2}(42-14-18) = 49 \\cdot 10 = 490$；\n- $b_2$ 系数：$7^{1}(42-14-12) = 7 \\cdot 16 = 112$；\n- $b_1$ 系数：$7^{0}(42-14-6) = 22$；\n- $b_0$ 系数：$4$。\n\n方程为 $1372b_4 + 490b_3 + 112b_2 + 22b_1 + 4b_0 = 16807b_6 + 4802b_5$。\n右边 $\\geq 16807$（因 $b_6 \\geq 1$），左边 $\\leq 6(1372+490+112+22+4) = 12000$，无解。\n\n#### 情况 7：$m = 7$\n\n代入公式 (1)，$b_7$ 系数为 $(7-7)7^6 = 0$，方程变为：\n$$\\sum_{j=1}^{6} 7^{j-1}(35 - 6j) b_j + 5b_0 = 0.$$\n计算各项系数：\n- $j=6$：$7^5(35-36) = -16807$；\n- $j=5$：$7^4(35-30) = 12005$；\n- $j=4$：$7^3(35-24) = 3773$；\n- $j=3$：$7^2(35-18) = 833$；\n- $j=2$：$7^1(35-12) = 161$；\n- $j=1$：$7^0(35-6) = 29$；\n- $b_0$ 系数：$5$。\n\n方程为 $12005b_5 + 3773b_4 + 833b_3 + 161b_2 + 29b_1 + 5b_0 = 16807b_6$。\n若 $b_6 = 0$，则左边必须为 $0$，即 $b_5 = b_4 = b_3 = b_2 = b_1 = b_0 = 0$，此时 $n = b_7 7^7$。但此时 $\\sum_{i=0}^{6} a_i = 7 \\cdot b_7 7^6 = b_7 7^7 = n$？验证：$a_i$ 移除 $b_i=0$ 后仍为 $b_7 7^6$，共 $7$ 个，和为 $7 \\cdot b_7 7^6 = b_7 7^7 = n$。**等等，这里需要仔细检查！**\n\n实际上，当 $n = b_7 7^7$（即 $b_6=\\cdots=b_0=0$）时，$n$ 的 $7$ 进制表示为 $b_7 0 0 0 0 0 0 0$（共 $8$ 位，$m=7$）。移除 $b_i$（$i=0,\\dots,6$）后，每个 $a_i$ 都是 $b_7 0 0 0 0 0 0$（$7$ 位），即 $b_7 7^6$。共 $7$ 个 $a_i$，和为 $7 \\cdot b_7 7^6 = b_7 7^7 = n$。**这看起来是一个解！**\n\n但等等，题目说 $b_m b_{m-1} \\cdots b_0$ 是 $n$ 的 $7$ 进制表示，其中 $m$ 是某个正整数。如果 $n = b_7 7^7$，其 $7$ 进制表示确实是 $b_7 0 0 0 0 0 0 0$，此时 $m=7$。那么 $a_i$ 是移除 $b_i$ 后的数。对于 $i=0,\\dots,6$，$b_i=0$，移除后得到的数都是 $b_7 0 0 0 0 0 0$（$7$ 进制），即 $b_7 \\cdot 7^6$。求和得 $7 \\cdot b_7 \\cdot 7^6 = b_7 \\cdot 7^7 = n$。这确实满足条件！\n\n**但是**，我们需要检查 $m$ 的定义。题目说 \&quot;Let $b_m b_{m-1}\\cdots b_0$ be the base-7 representation\&quot;，通常这意味着 $b_m \\neq 0$ 且这是标准表示（没有前导零）。对于 $n = b_7 7^7$，标准表示就是 $b_7 0 0 0 0 0 0 0$，$m=7$ 是正确的。\n\n那么 $m=7$ 时，$b_6=\\cdots=b_0=0$，$b_7 \\in \\{1,\\dots,6\\}$ 都是解？共 $6$ 个解？\n\n让我重新检查 $m=7$ 的方程。当 $b_6=\\cdots=b_0=0$ 时，方程左边 $= 0$，右边 $= 0$（因为 $b_6=0$），确实成立。\n\n但等等，在 $m=7$ 的方程中，$b_7$ 的系数是 $0$，所以 $b_7$ 可以是任意值？不，$b_7$ 是最高位，必须 $\\geq 1$。方程中 $b_7$ 不出现，意味着对于任何 $b_7 \\geq 1$，只要其他位为 $0$，方程都成立。\n\n验证 $n = 7^7 = 823543$（$b_7=1$，其余为 $0$）：\n- $7$ 进制：$10000000_7$\n- $a_0 = 1000000_7 = 7^6 = 117649$\n- $a_1 = 1000000_7 = 117649$\n- ...\n- $a_6 = 1000000_7 = 117649$\n- $\\sum_{i=0}^6 a_i = 7 \\times 117649 = 823543 = n$。✓\n\n验证 $n = 2 \\cdot 7^7$：\n- $7$ 进制：$20000000_7$\n- 每个 $a_i = 2000000_7 = 2 \\cdot 7^6$\n- $\\sum = 7 \\cdot 2 \\cdot 7^6 = 2 \\cdot 7^7 = n$。✓\n\n所以 $m=7$ 时，$b_7 \\in \\{1,2,3,4,5,6\\}$，$b_6=\\cdots=b_0=0$，共 $6$ 个解。\n\n**我之前漏掉了这个情况！** 在 $m=7$ 时，$b_7$ 的系数为 $0$，方程不约束 $b_7$，只要其他位为 $0$ 即可。\n\n#### 情况 8：$m \\geq 8$\n\n当 $m \\geq 8$ 时，$m-7 \\geq 1$，所以 $b_m$ 的系数 $(m-7)7^{m-1} &gt; 0$。\n对于 $j \\leq m-1$，系数 $7^{j-1}(7m-14-6j)$：\n- 当 $j = m-1$：$7^{m-2}(7m-14-6(m-1)) = 7^{m-2}(m-8)$。\n  - 若 $m = 8$，系数为 $0$；\n  - 若 $m &gt; 8$，系数 $&gt; 0$。\n- 当 $j$ 较小时，$7m-14-6j$ 可能为正或负。\n\n但关键是 $b_m$ 的系数为正且很大。将方程 (1) 改写为：\n$$(m-7)7^{m-1} b_m = \\sum_{j=1}^{m-1} 7^{j-1}(6j + 14 - 7m) b_j + (2-m) b_0.$$\n注意右边是移项后的结果，符号相反。\n\n实际上，从 (1) 式：\n$$(m-7)7^{m-1} b_m = -\\sum_{j=1}^{m-1} 7^{j-1}(7m-14-6j) b_j - (m-2)b_0.$$\n\n当 $m \\geq 8$ 时，左边 $\\geq (m-7)7^{m-1} \\geq 7^{m-1}$。\n右边各项：对于 $j$ 满足 $7m-14-6j &gt; 0$（即 $j &lt; \\frac{7m-14}{6}$），系数为负；对于 $j$ 满足 $7m-14-6j &lt; 0$，系数为正。\n\n但我们可以直接估计绝对值。左边 $\\geq 7^{m-1}$（当 $m=8$ 时，左边 $= 7^7 = 823543$）。\n右边最大可能值（取 $b_j = 6$）：\n$$\\left| \\sum_{j=1}^{m-1} 7^{j-1}(7m-14-6j) b_j + (m-2)b_0 \\right| \\leq 6 \\sum_{j=1}^{m-1} 7^{j-1}|7m-14-6j| + 6(m-2).$$\n\n对于 $m=8$：\n- $j=1$：$|56-14-6| = 36$，项 $= 6 \\cdot 36 = 216$\n- $j=2$：$|56-14-12| = 30$，项 $= 6 \\cdot 7 \\cdot 30 = 1260$\n- $j=3$：$|56-14-18| = 24$，项 $= 6 \\cdot 49 \\cdot 24 = 7056$\n- $j=4$：$|56-14-24| = 18$，项 $= 6 \\cdot 343 \\cdot 18 = 37044$\n- $j=5$：$|56-14-30| = 12$，项 $= 6 \\cdot 2401 \\cdot 12 = 172872$\n- $j=6$：$|56-14-36| = 6$，项 $= 6 \\cdot 16807 \\cdot 6 = 605052$\n- $j=7$：$|56-14-42| = 0$，项 $= 0$\n- $b_0$ 项：$6 \\cdot 6 = 36$\n\n右边总和 $\\leq 216 + 1260 + 7056 + 37044 + 172872 + 605052 + 36 = 823536$。\n左边 $= (8-7)7^7 b_8 = 823543 b_8 \\geq 823543$。\n$823536 &lt; 823543$，所以无解。\n\n对于 $m &gt; 8$，左边增长为 $(m-7)7^{m-1}$，右边增长最多为 $O(m \\cdot 7^{m-2})$（因为 $|7m-14-6j|$ 最大为 $O(m)$，且 $j$ 最大到 $m-1$，但 $7^{j-1}$ 在 $j=m-1$ 时为 $7^{m-2}$）。实际上，当 $m$ 增大时，左边是 $7^{m-1}$ 量级，右边最大项是 $j=m-1$ 时的 $7^{m-2} \\cdot |7m-14-6(m-1)| = 7^{m-2} \\cdot |m-8|$，乘以 $6$ 后为 $6(m-8)7^{m-2}$。左边是 $(m-7)7^{m-1} = 7(m-7)7^{m-2}$。比较 $7(m-7)$ 和 $6(m-8)$：$7m-49 &gt; 6m-48 \\Leftrightarrow m &gt; 1$，总是成立。所以左边严格大于右边最大可能值，无解。\n\n---\n\n### 5. 总结所有解\n\n- $m = 1, 2, 3, 4, 5, 6$：无解。\n- $m = 7$：$b_7 \\in \\{1,2,3,4,5,6\\}$，$b_6 = b_5 = b_4 = b_3 = b_2 = b_1 = b_0 = 0$。共 $6$ 个解。\n- $m \\geq 8$：无解。\n\n因此，满足条件的正整数 $n$ 的个数为 $6$。\n\n---\n\n### 6. 验证 $m=7$ 的解\n\n取 $n = 7^7 = 823543$，$7$ 进制表示为 $10000000_7$。\n- $a_0$：移除最后一个 $0$，得 $1000000_7 = 7^6 = 117649$。\n- $a_1$：移除倒数第二个 $0$，得 $1000000_7 = 117649$。\n- ...\n- $a_6$：移除第一个 $0$（$b_6$），得 $1000000_7 = 117649$。\n- $\\sum_{i=0}^6 a_i = 7 \\times 117649 = 823543 = n$。✓\n\n同理，$n = k \\cdot 7^7$（$k=1,2,\\dots,6$）都满足条件。\n\n---\n\n【最终答案】\n$$\\boxed{6}$$&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;对抗式投票共识 2 票/置信度 1.00；三Agent协作 4 轮；Lean 硬验证已执行&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.99, &quot;judge_explanation&quot;: &quot;正确答案为 42，模型答案为 6，结论错误。模型只得到 n=k·7^7（k=1,...,6）形式的 6 个解，遗漏了大量满足条件的 n。&quot;, &quot;error_type&quot;: &quot;mathematical_error&quot;, &quot;correct_answer_judge&quot;: &quot;42&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 21582, &quot;inference_latency&quot;: 1100.1332602500916, &quot;judge_latency&quot;: 149.33, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;reference_matched&quot;: false, &quot;judge_raw&quot;: {&quot;is_correct&quot;: false, &quot;confidence&quot;: 0.99, &quot;error_type&quot;: &quot;mathematical_error&quot;}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>imo-bench-number_theory-057</td>
+            <td><span class="domain-tag">Number theory</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">Let $b_m b_{m-1}\cdots b_0$ be the base-7 representation of a positive integer $...</td>
+            <td>$$\boxed{6}$$</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.99</td>
+            <td><span class="error-type">mathematical_error</span></td>
+            <td>1100.1332602500916s</td>
+            <td>149.33s</td>
+            <td>21582</td>
+        </tr>
+        <tr class="pass detail-row" data-detail="{&quot;problem_id&quot;: &quot;imo-bench-number_theory-062&quot;, &quot;domain&quot;: &quot;Number theory&quot;, &quot;question&quot;: &quot;Let $g: \\mathbb{Z}_{&gt;0} \\to \\mathbb{Z}$ be a function satisfying the following conditions:\n\n(i) $g(p) = p + 1$ for all prime numbers $p$,\n\n(ii) $g(nm) + nm = ng(m) + mg(n)$  for all positive integers $n, m$.\n\nFind all integers $1 \\le n \\le 4000$ satisfying $g(n) = 2n$.&quot;, &quot;reference_answer&quot;: &quot;4, 27, 3125&quot;, &quot;intern_answer&quot;: &quot;4, 27, 3125&quot;, &quot;intern_reasoning&quot;: &quot;## 问题分析\n\n本题属于数论中的函数方程问题。关键信息包括：\n1. 函数 $g$ 在素数 $p$ 处的取值为 $g(p) = p + 1$\n2. 函数满足乘法型递推关系 $g(nm) + nm = ng(m) + mg(n)$\n3. 需要找到所有满足 $g(n) = 2n$ 的 $1 \\le n \\le 4000$\n\n适用的定理/方法：\n- 通过函数方程推导 $g$ 的一般形式\n- 利用素数幂次的递推关系\n- 分析完全乘法函数的性质\n- 通过素因数分解确定满足条件的 $n$\n\n## 详细解题步骤\n\n步骤1：分析函数方程并推导 $g$ 的一般形式\n计算过程：\n令 $h(n) = g(n) - n$，则原方程变为：\n$$g(nm) + nm = ng(m) + mg(n)$$\n$$h(nm) + nm + nm = n(h(m) + m) + m(h(n) + n)$$\n$$h(nm) + 2nm = nh(m) + nm + mh(n) + nm$$\n$$h(nm) = nh(m) + mh(n)$$\n\n两边除以 $nm$ 得：\n$$\\frac{h(nm)}{nm} = \\frac{h(m)}{m} + \\frac{h(n)}{n}$$\n\n令 $f(n) = \\frac{h(n)}{n}$，则 $f(nm) = f(n) + f(m)$，即 $f$ 是完全加法函数。\n\n对于素数 $p$，有 $g(p) = p + 1$，所以 $h(p) = 1$，$f(p) = \\frac{1}{p}$。\n\n因此，对于任意 $n = p_1^{a_1} p_2^{a_2} \\cdots p_k^{a_k}$，有：\n$$f(n) = \\sum_{i=1}^k a_i f(p_i) = \\sum_{i=1}^k \\frac{a_i}{p_i}$$\n\n所以 $g(n) = n + h(n) = n(1 + f(n)) = n\\left(1 + \\sum_{p|n} \\frac{v_p(n)}{p}\\right)$，其中 $v_p(n)$ 是 $n$ 中素数 $p$ 的指数。\n\n步骤2：分析 $g(n) = 2n$ 的条件\n计算过程：\n$g(n) = 2n$ 等价于：\n$$n\\left(1 + \\sum_{p|n} \\frac{v_p(n)}{p}\\right) = 2n$$\n$$1 + \\sum_{p|n} \\frac{v_p(n)}{p} = 2$$\n$$\\sum_{p|n} \\frac{v_p(n)}{p} = 1$$\n\n我们需要找到所有满足 $\\sum_{p|n} \\frac{v_p(n)}{p} = 1$ 的 $n$。\n\n考虑 $n$ 的素因数分解 $n = \\prod p_i^{a_i}$，则条件变为 $\\sum \\frac{a_i}{p_i} = 1$。\n\n由于 $p_i \\ge 2$，且 $a_i \\ge 1$，我们分析可能的情况：\n\n情况1：$n$ 是素数幂 $p^k$\n则 $\\frac{k}{p} = 1$，即 $k = p$。\n所以 $n = p^p$，其中 $p$ 是素数。\n- $p = 2$：$n = 2^2 = 4$，$4 \\le 4000$ ✓\n- $p = 3$：$n = 3^3 = 27$，$27 \\le 4000$ ✓\n- $p = 5$：$n = 5^5 = 3125$，$3125 \\le 4000$ ✓\n- $p = 7$：$n = 7^7 = 823543 &gt; 4000$ ✗\n\n情况2：$n$ 有多个素因子\n设 $n = p_1^{a_1} p_2^{a_2} \\cdots p_k^{a_k}$，$k \\ge 2$。\n则 $\\sum_{i=1}^k \\frac{a_i}{p_i} = 1$。\n\n由于 $p_i \\ge 2$，且 $a_i \\ge 1$，我们有 $\\frac{a_i}{p_i} \\le \\frac{a_i}{2}$（当 $p_i = 2$ 时取等号）。\n\n如果 $k \\ge 2$，则 $\\sum \\frac{a_i}{p_i} \\le \\sum \\frac{a_i}{2} = \\frac{\\Omega(n)}{2}$，其中 $\\Omega(n)$ 是 $n$ 的总素因子数（计重数）。\n\n要使 $\\sum \\frac{a_i}{p_i} = 1$，需要 $\\Omega(n) \\ge 2$。\n\n但更严格地，考虑最小的几个素数：\n- 如果包含 $2$，则 $\\frac{a_2}{2} + \\sum_{p&gt;2} \\frac{a_p}{p} = 1$\n- 如果 $a_2 = 1$，则 $\\sum_{p&gt;2} \\frac{a_p}{p} = \\frac{1}{2}$\n- 如果 $a_2 = 2$，则 $\\sum_{p&gt;2} \\frac{a_p}{p} = 0$，即没有其他素因子，回到情况1\n\n对于 $a_2 = 1$，需要 $\\sum_{p&gt;2} \\frac{a_p}{p} = \\frac{1}{2}$。\n可能的组合：\n- $p = 3$：$\\frac{a_3}{3} = \\frac{1}{2}$，$a_3 = \\frac{3}{2}$，不是整数 ✗\n- $p = 5$：$\\frac{a_5}{5} = \\frac{1}{2}$，$a_5 = \\frac{5}{2}$，不是整数 ✗\n- 多个素数：$\\frac{a_3}{3} + \\frac{a_5}{5} = \\frac{1}{2}$，最小正整数解 $a_3 = 1, a_5 = \\frac{5}{2}(1 - \\frac{1}{3}) = \\frac{5}{3}$，不是整数 ✗\n\n实际上，对于 $k \\ge 2$，方程 $\\sum \\frac{a_i}{p_i} = 1$ 在正整数 $a_i$ 下无解，因为：\n- 如果所有 $p_i \\ge 3$，则 $\\sum \\frac{a_i}{p_i} \\le \\frac{\\Omega(n)}{3} \\le \\frac{\\Omega(n)}{3}$，要等于1需要 $\\Omega(n) = 3$，但 $\\frac{1}{3} + \\frac{1}{3} + \\frac{1}{3} = 1$，对应 $n = 3 \\cdot 3 \\cdot 3 = 27$，这实际上是 $3^3$，属于情况1\n- 如果包含 $2$，设 $a_2 = 1$，则需要 $\\sum_{p&gt;2} \\frac{a_p}{p} = \\frac{1}{2}$，但 $\\frac{1}{3} &lt; \\frac{1}{2} &lt; \\frac{2}{3}$，无法用 $\\frac{a_p}{p}$（$p \\ge 3$）的和精确等于 $\\frac{1}{2}$\n\n更严谨地，假设 $n$ 有至少两个不同的素因子，设最小素因子为 $p$，则 $\\frac{a_p}{p} \\le \\frac{a_p}{2}$（当 $p=2$）或更小。由于 $\\sum \\frac{a_i}{p_i} = 1$，且各项为正，如果有多项，则每项都小于1，但它们的和为1。\n\n然而，通过枚举小值验证：\n- $n = 6 = 2 \\cdot 3$：$\\frac{1}{2} + \\frac{1}{3} = \\frac{5}{6} \\ne 1$\n- $n = 12 = 2^2 \\cdot 3$：$\\frac{2}{2} + \\frac{1}{3} = 1 + \\frac{1}{3} = \\frac{4}{3} \\ne 1$\n- $n = 18 = 2 \\cdot 3^2$：$\\frac{1}{2} + \\frac{2}{3} = \\frac{7}{6} \\ne 1$\n- $n = 30 = 2 \\cdot 3 \\cdot 5$：$\\frac{1}{2} + \\frac{1}{3} + \\frac{1}{5} = \\frac{31}{30} \\ne 1$\n\n实际上，可以证明只有当 $n$ 是素数幂 $p^p$ 时，$\\sum \\frac{a_i}{p_i} = \\frac{p}{p} = 1$。\n\n步骤3：验证找到的解\n计算过程：\n- $n = 4 = 2^2$：$g(4) = g(2^2)$。由函数方程，$g(4) + 4 = 2g(2) + 2g(2) = 4g(2) = 4 \\cdot 3 = 12$，所以 $g(4) = 8 = 2 \\cdot 4$ ✓\n- $n = 27 = 3^3$：类似地，$g(27) = 54 = 2 \\cdot 27$ ✓\n- $n = 3125 = 5^5$：$g(3125) = 6250 = 2 \\cdot 3125$ ✓\n\n检查是否有其他可能：\n- $n = 1$：$g(1)$ 由 $g(1 \\cdot 1) + 1 = 1 \\cdot g(1) + 1 \\cdot g(1)$ 得 $g(1) + 1 = 2g(1)$，所以 $g(1) = 1 \\ne 2 \\cdot 1$ ✗\n- 其他合数：如前所述，不满足 $\\sum \\frac{a_i}{p_i} = 1$\n\n## 最终答案\n4, 27, 3125\n\n## 关键验证点\n- 验证了 $g(n) = n(1 + \\sum_{p|n} \\frac{v_p(n)}{p})$ 的正确性\n- 确认了 $g(n) = 2n$ 等价于 $\\sum_{p|n} \\frac{v_p(n)}{p} = 1$\n- 通过素数幂次分析找到所有解 $n = p^p$ 且 $p^p \\le 4000$\n- 验证了 $2^2 = 4$，$3^3 = 27$，$5^5 = 3125$ 都满足条件且 $\\le 4000$\n- 排除了其他可能的合数解&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;对抗式投票共识 5 票/置信度 0.73；三Agent协作 3 轮；Lean 硬验证已执行&quot;, &quot;is_correct&quot;: true, &quot;confidence&quot;: 0.9, &quot;judge_explanation&quot;: &quot;最终答案 4, 27, 3125 正确。将函数方程化为 ∑ v_p(n)/p = 1 的推导正确，但排除多素因子情形的论证不够严密，证明不完整。&quot;, &quot;error_type&quot;: &quot;&quot;, &quot;correct_answer_judge&quot;: &quot;4, 27, 3125&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 21582, &quot;inference_latency&quot;: 629.4016869068146, &quot;judge_latency&quot;: 149.33, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;reference_matched&quot;: false, &quot;judge_raw&quot;: {&quot;is_correct&quot;: true, &quot;confidence&quot;: 0.9, &quot;error_type&quot;: null}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>imo-bench-number_theory-062</td>
+            <td><span class="domain-tag">Number theory</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">Let $g: \mathbb{Z}_{&gt;0} \to \mathbb{Z}$ be a function satisfying the following c...</td>
+            <td>4, 27, 3125</td>
+            <td><span class="status-badge pass">Correct</span></td>
+            <td>0.90</td>
+            <td></td>
+            <td>629.4016869068146s</td>
+            <td>149.33s</td>
+            <td>21582</td>
+        </tr>
+        <tr class="fail detail-row" data-detail="{&quot;problem_id&quot;: &quot;imo-bench-number_theory-096&quot;, &quot;domain&quot;: &quot;Number theory&quot;, &quot;question&quot;: &quot;Let $a$ be a positive integer greater than or equal to $3$. A finite set $X$ of positive integers is said to be 'clustered' if for any three elements $x, y, z$ chosen from $X$, at least one of $\\gcd(x,y)$, $\\gcd(y,z)$, or $\\gcd(z,x)$ is not equal to $1$. Find the maximum possible value of $|X|$ for a clustered set $X \\subset \\mathbb{N}$ where the difference between the maximum and minimum elements of $X$ are less than or equal to $a$.&quot;, &quot;reference_answer&quot;: &quot;$\\lfloor \\frac{a+2}{2}\\rfloor +\\lfloor \\frac{a+2}{3}\\rfloor -\\lfloor \\frac{a+2}{6}\\rfloor $&quot;, &quot;intern_answer&quot;: &quot;$\\lfloor a/2 \\rfloor + 2$&quot;, &quot;intern_reasoning&quot;: &quot;$\\lfloor a/2 \\rfloor + 2$&quot;, &quot;intern_steps&quot;: [], &quot;intern_verification&quot;: &quot;无投票验证记录；三Agent协作 7 轮；Lean 硬验证已执行；低置信度 revise 复核 4 轮&quot;, &quot;is_correct&quot;: false, &quot;confidence&quot;: 0.99, &quot;judge_explanation&quot;: &quot;答案错误。正确最大值为 ⌊(a+2)/2⌋+⌊(a+2)/3⌋−⌊(a+2)/6⌋，而模型给出 ⌊a/2⌋+2。例如 a=7 时正确值为 6，模型值为 5。&quot;, &quot;error_type&quot;: &quot;mathematical_error&quot;, &quot;correct_answer_judge&quot;: &quot;⌊(a+2)/2⌋ + ⌊(a+2)/3⌋ − ⌊(a+2)/6⌋&quot;, &quot;inference_tokens&quot;: 0, &quot;judge_tokens&quot;: 21582, &quot;inference_latency&quot;: 1108.0027062892914, &quot;judge_latency&quot;: 149.33, &quot;inference_error&quot;: &quot;&quot;, &quot;judge_error&quot;: &quot;&quot;, &quot;reference_matched&quot;: false, &quot;judge_raw&quot;: {&quot;is_correct&quot;: false, &quot;confidence&quot;: 0.99, &quot;error_type&quot;: &quot;mathematical_error&quot;}}" onclick="showDetail(this)" style="cursor:pointer">
+            <td>imo-bench-number_theory-096</td>
+            <td><span class="domain-tag">Number theory</span></td>
+            <td class="question-cell clickable-question" title="点击查看详情">Let $a$ be a positive integer greater than or equal to $3$. A finite set $X$ of ...</td>
+            <td>$\lfloor a/2 \rfloor + 2$</td>
+            <td><span class="status-badge fail">Wrong</span></td>
+            <td>0.99</td>
+            <td><span class="error-type">mathematical_error</span></td>
+            <td>1108.0027062892914s</td>
+            <td>149.33s</td>
+            <td>21582</td>
+        </tr></tbody>
+        </table>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="modalOverlay" onclick="hideDetail(event)">
+        <div class="modal-card" id="modalCard" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <span class="modal-title" id="modalTitle">---</span>
+                    <span class="modal-status" id="modalStatus">---</span>
+                    <span class="modal-confidence">Confidence: <span id="modalConf">--</span></span>
+                </div>
+                <button class="modal-close" onclick="hideDetail()" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    function showDetail(row) {
+        var raw = row.getAttribute('data-detail');
+        var d = JSON.parse(raw);
+        var overlay = document.getElementById('modalOverlay');
+        var body = document.getElementById('modalBody');
+
+        // Header
+        document.getElementById('modalTitle').textContent = d.problem_id;
+        var statusEl = document.getElementById('modalStatus');
+        if (d.is_correct) {
+            statusEl.className = 'modal-status pass';
+            statusEl.innerHTML = '&#10003; Correct';
+        } else {
+            statusEl.className = 'modal-status fail';
+            statusEl.innerHTML = '&#10007; Wrong';
+        }
+        document.getElementById('modalConf').textContent = (d.confidence * 100).toFixed(0) + '%';
+
+        // Build body
+        var tags = '';
+        if (d.domain) tags += '<span class="detail-tag domain">' + esc(d.domain) + '</span>';
+        if (d.error_type) tags += '<span class="detail-tag error">' + esc(d.error_type) + '</span>';
+
+        var stepsHtml = '';
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            stepsHtml = '<ul class="steps-list">';
+            d.intern_steps.forEach(function(step, idx) {
+                stepsHtml += '<li><span class="step-num">#' + (idx+1) + '</span>' + renderLatex(esc(step)) + '</li>';
+            });
+            stepsHtml += '</ul>';
+        }
+
+        var html = '';
+        // Tags
+        if (tags) html += '<div style="margin-bottom:16px">' + tags + '</div>';
+
+        // Info section
+        html += '<div class="detail-section">';
+        html += '<div class="section-heading info"><span class="icon-dot info"></span>&#39064;&#30446;&#20449;&#24687;</div>';
+        html += '<div class="info-grid">';
+        html += '<div class="info-item full"><div class="info-label">&#39064;&#24178;</div><div class="content-box" style="max-height:160px;font-family:inherit">' + esc(d.question) + '</div></div>';
+        html += '<div class="info-item"><div class="info-label">&#21442;&#32771;&#31572;&#26696;</div><div class="content-box correct-answer" style="max-height:120px">' + esc(d.reference_answer || '暂无') + '</div></div>';
+        html += '<div class="info-item"><div class="info-label">AI &#26368;&#32456;&#31572;&#26696;</div><div class="content-box" style="max-height:120px">' + esc(d.intern_answer || '暂无') + '</div></div>';
+        if (d.inference_error) html += '<div class="info-item full"><div class="info-label">&#25512;&#29702;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.inference_error) + '</div></div>';
+        if (d.judge_error) html += '<div class="info-item full"><div class="info-label">&#21028;&#39064;&#38169;&#35823;</div><div class="content-box highlight">' + esc(d.judge_error) + '</div></div>';
+        html += '</div></div>';
+
+        // AI reasoning section
+        html += '<div class="detail-section">';
+        html += '<div class="section-heading ai"><span class="icon-dot ai"></span>&#20070;&#29983;AI &#24605;&#32771;&#36807;&#31243;</div>';
+        if (d.intern_reasoning) {
+            html += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#23436;&#25972;&#25512;&#29702;&#36807;&#31243;</div>';
+            html += '<div class="content-box">' + renderLatex(esc(d.intern_reasoning)) + '</div></div>';
+        }
+        if (d.intern_steps && d.intern_steps.length > 0) {
+            html += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#20998;&#27493;&#25512;&#29702;</div>';
+            html += stepsHtml;
+            html += '</div>';
+        }
+        if (d.intern_verification) {
+            html += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#33258;&#39564;&#35777;&#32467;&#35770;</div>';
+            html += '<div class="content-box highlight">' + renderLatex(esc(d.intern_verification)) + '</div></div>';
+        }
+        if (!d.intern_reasoning && (!d.intern_steps || d.intern_steps.length === 0) && !d.intern_verification) {
+            html += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;AI&#25512;&#29702;&#25968;&#25454;</div>';
+        }
+        html += '</div>';
+
+        // Judge analysis section
+        html += '<div class="detail-section">';
+        html += '<div class="section-heading judge"><span class="icon-dot judge"></span>DeepSeek &#21028;&#39064;&#20998;&#26512;</div>';
+        if (d.judge_explanation) {
+            html += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#35814;&#32454;&#35299;&#37322;</div>';
+            html += '<div class="content-box">' + renderLatex(esc(d.judge_explanation)) + '</div></div>';
+        }
+        if (d.error_type) {
+            html += '<div style="margin-bottom:12px"><span style="font-size:12px;color:#64748B;font-weight:600">&#38169;&#35823;&#31867;&#22411;: </span><span class="detail-tag error">' + esc(d.error_type) + '</span></div>';
+        }
+        if (d.correct_answer_judge) {
+            html += '<div><div style="font-size:12px;color:#64748B;margin-bottom:4px;font-weight:600">&#21028;&#39064;&#32473;&#20986;&#30340;&#27491;&#30830;&#31572;&#26696;</div>';
+            html += '<div class="content-box correct-answer">' + esc(d.correct_answer_judge) + '</div></div>';
+        }
+        if (d.reference_matched) {
+            var jr = d.judge_raw || {};
+            var rawTxt = 'is_correct=' + jr.is_correct +
+                ', confidence=' + (jr.confidence !== undefined && jr.confidence !== null ? jr.confidence : 'null') +
+                ', error_type=' + (jr.error_type || 'null');
+            html += '<div style="margin-bottom:12px"><div style="font-size:12px;color:#B45309;margin-bottom:4px;font-weight:700">Reference-Answer Fallback: forced correct</div>';
+            html += '<div class="content-box highlight">DeepSeek raw judgment (NOT overridden): ' + esc(rawTxt) + '</div></div>';
+        }
+        if (!d.judge_explanation && !d.error_type && !d.correct_answer_judge && !d.reference_matched) {
+            html += '<div style="color:#94A3B8;font-size:13px;padding:12px">&#26242;&#26080;&#21028;&#39064;&#20998;&#26512;&#25968;&#25454;</div>';
+        }
+        html += '</div>';
+
+        // Performance bar
+        html += '<div class="perf-bar">';
+        html += '<div class="perf-item"><div class="perf-val">' + d.inference_latency.toFixed(2) + 's</div><div class="perf-label">&#25512;&#29702;&#32791;&#26102;</div></div>';
+        html += '<div class="perf-item"><div class="perf-val">' + d.judge_latency.toFixed(2) + 's</div><div class="perf-label">&#21028;&#39064;&#32791;&#26102;</div></div>';
+        html += '<div class="perf-item"><div class="perf-val">' + (d.inference_tokens + d.judge_tokens) + '</div><div class="perf-label">&#24635; Token</div></div>';
+        html += '</div>';
+
+        body.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        body.scrollTop = 0;
+    }
+
+    function hideDetail(e) {
+        if (e && e.target !== document.getElementById('modalOverlay')) return;
+        var overlay = document.getElementById('modalOverlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // LaTeX to readable unicode text conversion
+    function renderLatex(text) {
+        if (!text) return '';
+        var s = text;
+        // --- Display math: $...$ → render content ---
+        s = s.replace(/\$([^$]+)\$/g, function(m, inner) {
+            return _latexToReadable(inner.trim());
+        });
+        // --- Inline commands without $ wrapper ---
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        s = s.replace(/\\partial ([a-zA-Z])/g, '∂$1');
+        s = s.replace(/\\ln /g, 'ln ');
+        s = s.replace(/\\log /g, 'log ');
+        s = s.replace(/\\sin /g, 'sin ');
+        s = s.replace(/\\cos /g, 'cos ');
+        s = s.replace(/\\tan /g, 'tan ');
+        s = s.replace(/\\cdot /g, '·');
+        s = s.replace(/\\times /g, '×');
+        s = s.replace(/\\div /g, '÷');
+        s = s.replace(/\\pm /g, '±');
+        s = s.replace(/\\leq ?/g, '≤');
+        s = s.replace(/\\geq ?/g, '≥');
+        s = s.replace(/\\neq ?/g, '≠');
+        s = s.replace(/\\approx ?/g, '≈');
+        s = s.replace(/\\infty/g, '∞');
+        s = s.replace(/\\sum/g, '∑');
+        s = s.replace(/\\int/g, '∫');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '√($1)');
+        s = s.replace(/\^(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '^' + (g2 || g3 || ''); });
+        s = s.replace(/_(\{([^}]*)\}|(.))/g, function(m, g1, g2, g3) { return '_' + (g2 || g3 || ''); });
+        s = s.replace(/\\left/g, '');
+        s = s.replace(/\\right/g, '');
+        s = s.replace(/\\[a-zA-Z]+/g, ''); // remove remaining unknown commands
+        return s;
+    }
+
+    // Core LaTeX expression renderer for content inside $...$
+    function _latexToReadable(expr) {
+        var s = expr;
+        // Fractions
+        s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/($2)');
+        // Subscripts and superscripts with braces
+        s = s.replace(/\^\{([^}]*)\}/g, '^($1)');
+        s = s.replace(/_\{([^}]*)\}/g, '_($1)');
+        // Naked ^ and _
+        s = s.replace(/\^(\w)/g, '^$1');
+        s = s.replace(/_(\w)/g, '_$1');
+        // Greek letters
+        s = s.replace(/\\alpha/g, 'α'); s = s.replace(/\\beta/g, 'β'); s = s.replace(/\\gamma/g, 'γ');
+        s = s.replace(/\\delta/g, 'δ'); s = s.replace(/\\epsilon/g, 'ε'); s = s.replace(/\\theta/g, 'θ');
+        s = s.replace(/\\lambda/g, 'λ'); s = s.replace(/\\pi/g, 'π'); s = s.replace(/\\sigma/g, 'σ');
+        s = s.replace(/\\phi/g, 'φ'); s = s.replace(/\\omega/g, 'ω'); s = s.replace(/\\rho/g, 'ρ');
+        // Operators & symbols
+        s = s.replace(/\\partial/g, '∂');
+        s = s.replace(/\\nabla/g, '∇');
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'ln');
+        s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\sin(?![a-zA-Z])/g, 'sin');
+        s = s.replace(/\\cos(?![a-zA-Z])/g, 'cos');
+        s = s.replace(/\\tan(?![a-zA-Z])/g, 'tan');
+        s = s.replace(/\\cdot/g, '·');
+        s = s.replace(/\\times/g, '×');
+        s = s.replace(/\\div/g, '÷');
+        s = s.replace(/\\pm/g, '±');
+        s = s.replace(/\\leq/g, '≤');
+        s = s.replace(/\\geq/g, '≥');
+        s = s.replace(/\\neq/g, '≠');
+        s = s.replace(/\\approx/g, '≈');
+        s = s.replace(/\\infty/g, '∞');
+        s = s.replace(/\\sum/g, '∑');
+        s = s.replace(/\\int/g, '∫');
+        s = s.replace(/\\sqrt\{([^}]*)\}/g, '√($1)');
+        s = s.replace(/\\sqrt([a-zA-Z0-9])/g, '√$1');
+        s = s.replace(/\\left/g, '');
+        s = s.replace(/\\right/g, '');
+        s = s.replace(/\\,[ ]*/g, ', ');  // thin space
+        s = s.replace(/\\;[ ]*/g, '  ');   // thick space
+        s = s.replace(/\\[a-zA-Z]+/g, '');   // strip remaining commands
+        return s;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideDetail({target: document.getElementById('modalOverlay')});
+        }
+    });
+    </script>
+</body>
+</html>

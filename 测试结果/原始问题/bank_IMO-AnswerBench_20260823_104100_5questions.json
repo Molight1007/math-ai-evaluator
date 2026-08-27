@@ -1,0 +1,32 @@
+[
+  {
+    "id": "imo-bench-algebra-064",
+    "question": "Let $a, b, c, k$ be nonzero real numbers such that\n\\[\n    a - b = kbc, \\quad b - c = kca, \\quad c- a = kab.\n\\]\nFind all possible values of $\\frac{a}{c} + \\frac{b}{a} + \\frac{c}{b}$.",
+    "domain": "Algebra",
+    "reference_answer": "-3"
+  },
+  {
+    "id": "imo-bench-algebra-094",
+    "question": "A polynomial $P$ with integer coefficients is called a geometric polynomial if its degree is at least 2 and the set $\\{P(k): k \\in \\mathbb{Z}\\}$ contains an infinite geometric progression. Suppose that the leading coefficient and constant term of a geometric polynomial $Q$ are $64$ and $-486$, respectively. Find $Q(5)$.",
+    "domain": "Algebra",
+    "reference_answer": "33614"
+  },
+  {
+    "id": "imo-bench-combinatorics-004",
+    "question": "A player removes at least $95$ numbers from the set $\\{1, 2, \\ldots, 191}$ according to the following rules:\n(i) If $x$ is removed, so is $2x$;\n(ii) If $x$ and $y$ are removed, then $x + y$ is also removed.\nWhat is the maximum value of the sum of the remaining numbers?",
+    "domain": "Combinatorics",
+    "reference_answer": "9216"
+  },
+  {
+    "id": "imo-bench-geometry-095",
+    "question": "In quadrilateral $PQRS$, $\\angle QPS=\\angle PQR=110^{\\circ}$, $\\angle QRS=35^{\\circ}$, $\\angle RSP=105^{\\circ}$, and $PR$ bisects $\\angle QPS$. Find $\\angle PQS$ in terms of degree.",
+    "domain": "Geometry",
+    "reference_answer": "40"
+  },
+  {
+    "id": "imo-bench-number_theory-022",
+    "question": "For a given positive integer $n$, let $m$ be the exponent of 2 in the prime factorization of $n$. Define $f(n) = \\frac{n}{2^m}$. Find all positive integers $v$ for which there exists a positive integer $u$ such that\n\n(Condition) $f(u+v) - f(u), f(u+v+1) - f(u+1), \\cdots, f(u+2v-1) - f(u+v-1)$ are all multiples of 4.",
+    "domain": "Number theory",
+    "reference_answer": "$1,3,5$"
+  }
+]

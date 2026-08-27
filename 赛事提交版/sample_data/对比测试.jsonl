@@ -1,0 +1,4 @@
+{"problem": "“sin²α+sin²β=1”是“sinα+cosβ=0”的( ).\nA. 充分非必要条件\nB. 必要非充分条件\nC. 充分必要条件\nD. 既非充分又非必要条件", "answer": "B", "domain": "零基础"}
+{"problem": "函数 f(x) = x^2 * tan(x) * e^{cos(x)} 是（ ）。\nA. 有界函数\nB. 单调函数\nC. 周期函数\nD. 奇函数", "answer": "D", "domain": "函数极限与连续"}
+{"problem": "设数列{x n { 满足x n+1 =lnx n +1,x n >0,n=1,2,⋯,则{x n { ( ). A. 单调不减 B. 单调不增 C. 严格单调递增 D. 严格单调递减", "answer": "B", "domain": "数列极限"}
+{"problem": "函数 f(x) = (eˣ - 1) |x³ - x² + x| 的不可导点的个数为（ ）。\nA. 0\nB. 1\nC. 2\nD. 3", "answer": "B", "domain": "一元函数微分学的概念"}

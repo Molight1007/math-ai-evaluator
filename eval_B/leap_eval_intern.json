@@ -1,0 +1,33 @@
+{
+ "backend": "intern",
+ "model": "Intern-S2-Preview-397B",
+ "results": [
+  {
+   "problem_id": "PB-Basic-001",
+   "mode": "bare",
+   "compiled": false,
+   "sorries": 1,
+   "error": "refine_23896_39331170215.lean:14:6: error: Type mismatch\n  this\nhas type\n  f 0 + 2 * f y = f (f y)\nbut is expected to have type\n  f (f y) = 2 * f y + f 0\nrefine_23896_39331170215.lean:21:6: error: `si",
+   "lean_code_len": 3719,
+   "elapsed_s": 189.4
+  },
+  {
+   "problem_id": "PB-Basic-002",
+   "mode": "bare",
+   "compiled": false,
+   "sorries": 1,
+   "error": "refine_23896_39512349429.lean:17:48: error: unexpected token 'sorry'; expected ':='\nrefine_23896_39512349429.lean:13:29: error: Type mismatch\n  x ^ 2\nhas type\n  ℝ\nof sort `Type` but is expected to hav",
+   "lean_code_len": 2249,
+   "elapsed_s": 181.5
+  },
+  {
+   "problem_id": "PB-Basic-003",
+   "mode": "bare",
+   "compiled": false,
+   "sorries": 3,
+   "error": "refine_23896_39698674641.lean:30:7: error: unknown tactic\nrefine_23896_39698674641.lean:13:6: error: Type mismatch\n  this\nhas type\n  b = 0 ∨ f (f 0) = 0\nbut is expected to have type\n  b * f (f 0) = 0\n",
+   "lean_code_len": 8283,
+   "elapsed_s": 185.5
+  }
+ ]
+}

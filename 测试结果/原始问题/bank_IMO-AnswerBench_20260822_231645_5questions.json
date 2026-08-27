@@ -1,0 +1,32 @@
+[
+  {
+    "id": "imo-bench-combinatorics-027",
+    "question": "Two rational numbers \\(\\tfrac{m}{n}\\) and \\(\\tfrac{n}{m}\\) are written on a blackboard, where \\(m\\) and \\(n\\) are relatively prime positive integers.  At any point, Lin may pick two of the numbers \\(x\\) and \\(y\\) written on the board and write either their arithmetic mean \\(\\tfrac{x+y}{2}\\) or their harmonic mean \\(\\tfrac{2xy}{x+y}\\) on the board as well. For a pair \\((m,n)\\) such that Lin can write 1 on the board in finitely many steps, find the largest value of $m+n$ knowing that $m+n < 3000$.",
+    "domain": "Combinatorics",
+    "reference_answer": "2048"
+  },
+  {
+    "id": "imo-bench-geometry-033",
+    "question": "Let $XYZ$ be a triangle with $\\angle X = 90^o, \\angle Y = 60^o$ and $YZ = 1$. Draw outside of $\\vartriangle XYZ$ three equilateral triangles $XYU, XZV$ and $YZW$. Determine the area of $\\vartriangle UVW$.",
+    "domain": "Geometry",
+    "reference_answer": "$\\frac{9\\sqrt{3}}{16}$"
+  },
+  {
+    "id": "imo-bench-geometry-053",
+    "question": "In $\\triangle XYZ$ with $XY=XZ$, point $P$ lies strictly between $X$ and $Z$ on side $\\overline{XZ}$, and point $Q$ lies strictly between $X$ and $Y$ on side $\\overline{XY}$ such that $XQ=QP=PY=YZ$. The degree measure of $\\angle XYZ$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+    "domain": "Geometry",
+    "reference_answer": "547"
+  },
+  {
+    "id": "imo-bench-geometry-067",
+    "question": "Let $\\triangle{XYZ}$ be an isosceles triangle with $\\angle X=90^{\\circ}$. There exists a point $Q$ inside $\\triangle{XYZ}$ such that $\\angle QXY=\\angle QYZ=\\angle QZX$ and $XQ=14$. Find the area of $\\triangle{XYZ}$.",
+    "domain": "Geometry",
+    "reference_answer": "490"
+  },
+  {
+    "id": "imo-bench-geometry-080",
+    "question": "Let $Q$ be a point inside the square $WXYZ$ and $QW = 1$, $QX = \\sqrt2$ and $QY =\\sqrt3$. Determine the angle $\\angle WQX$ in terms of degree.",
+    "domain": "Geometry",
+    "reference_answer": "105"
+  }
+]

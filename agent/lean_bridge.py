@@ -57,16 +57,22 @@ def _project_root() -> str:
 
 
 def _detect_lean_executable() -> str:
-    """自动探测本地离线 Lean 工具链（lake/lake.exe）的绝对路径。
+    """自动探测本地 Lean 编译器（lean.exe）的绝对路径。
 
-    命中即返回绝对路径，否则返回空串（调用方回退到 "lake"）：
-      - Windows: <root>/lean下载版/lean-toolchain/bin/lake.exe
-      - Linux:   <root>/deploy/lean-cache/lean-4.31.0-linux/bin/lake
+    优先级（命中即返回）：
+      1) elan 管理的当前工具链 lean.exe（C:/Users/<user>/.elan/toolchains/.../bin/lean.exe）
+      2) Windows: <root>/lean下载版/lean-toolchain/bin/lean.exe
+      3) Linux:   <root>/deploy/lean-cache/lean-4.31.0-linux/bin/lean
+    返回空串表示未探测到（调用方回退 "lake"）。
     """
+    # elan 工具链（与实际 lake env 使用的版本一致）
+    elan_toolchains = os.path.expanduser(
+        r"~\.elan\toolchains\leanprover--lean4---v4.31.0\bin\lean.exe")
     candidates = [
-        os.path.join(_project_root(), "lean下载版", "lean-toolchain", "bin", "lake.exe"),
+        elan_toolchains,
+        os.path.join(_project_root(), "lean下载版", "lean-toolchain", "bin", "lean.exe"),
         os.path.join(_project_root(), "deploy", "lean-cache",
-                     "lean-4.31.0-linux", "bin", "lake"),
+                     "lean-4.31.0-linux", "bin", "lean"),
     ]
     for c in candidates:
         if os.path.isfile(c):
@@ -94,16 +100,27 @@ def _detect_lean_project_dir() -> str:
 
 
 def _prepend_mathlib_import(code: str) -> str:
-    """若代码尚未导入 Mathlib，则在顶部插入 ``import Mathlib``。
+    """归一化代码的 Mathlib import（兼容本地部分编译布局）。
 
-    仅当验证路径挂载了带 Mathlib 依赖的 Lean 工程时调用，使生成的定理
-    真正能用到 Mathlib 的 tactic（norm_num / ring / omega / linarith …）。
+    本地 mathlib 工程因 v4.31.0 兼容问题缺失 517 个冷门模块（代数几何/拓扑/
+    层论等），无法 import 全量 Mathlib；但核心 tactic 模块（Mathlib.Tactic，
+    含 norm_num / ring / omega / linarith / positivity / aesop / simp）
+    已编译完成，跑分证明完全够用。
+
+    规则：
+    - 代码有 `import Mathlib.Tactic` 或具体 `import Mathlib.X` → 原样返回
+    - 代码有全量 `import Mathlib`（裸）→ 替换为 `import Mathlib.Tactic`
+    - 无任何 import → 补 `import Mathlib.Tactic`
     """
     if not code:
-        return "import Mathlib\n"
-    if code.lstrip().startswith("import Mathlib"):
+        return "import Mathlib.Tactic\n"
+    # 已有具体模块导入（含 Mathlib.Tactic）→ 不动
+    if re.search(r"^\s*import Mathlib\.", code, re.MULTILINE):
         return code
-    return "import Mathlib\n\n" + code
+    # 全量 import Mathlib → 替换为 Mathlib.Tactic
+    if re.search(r"^\s*import Mathlib\b", code, re.MULTILINE):
+        return re.sub(r"(?m)^\s*import Mathlib\b.*$", "import Mathlib.Tactic", code)
+    return "import Mathlib.Tactic\n\n" + code
 
 
 # =====================================================================
@@ -285,7 +302,12 @@ def _compile_lean(
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)
 
-    cmd = [exe, "env", lean_filename] if exe == "lake" else [exe, lean_filename]
+    # lake 分支（含绝对路径 lake.exe）：lake env lean <file> 正确加载工程
+    # LEAN_PATH（注意必须带 "lean"，lake env 的语义是"在 lake 环境下运行命令"）
+    is_lake = (exe == "lake"
+               or os.path.basename(exe).lower().startswith("lake"))
+    cmd = ([exe, "env", "lean", lean_filename] if is_lake
+           else [exe, lean_filename])
     try:
         result = subprocess.run(
             cmd,
@@ -369,31 +391,32 @@ class LeanBridge:
         return pdir
 
     def _mathlib_ready(self) -> bool:
-        """探测 Mathlib 是否已编译就绪（存在 Mathlib.olean）。
+        """探测 Mathlib 是否已编译就绪（核心 tactic 模块可用）。
 
-        即使工程目录已挂载，若 Mathlib 尚未编译，import 会失败导致误判，
-        故仅在就绪时才在验证代码顶部插入 import Mathlib。结果按进程缓存。
+        本地工程采用「部分编译」布局：因 v4.31.0 兼容问题，全量 Mathlib 聚合
+        无法生成，但核心模块 Mathlib.Tactic（norm_num/ring/omega/linarith 等）
+        已编译完成，跑分证明足够。故就绪判定以 Mathlib.Tactic.olean 为准
+        （而非全量 Mathlib.olean）。结果按进程缓存。
         """
         if getattr(self, "_mathlib_ready_cache", None) is not None:
             return self._mathlib_ready_cache
         pdir = self._lean_project_dir
         ready = False
         if pdir:
-            # 先查最可能的构建路径（O(1)），命中即返回
-            #  - test_mathlib 布局：.lake/packages/mathlib/.lake/build/.../Mathlib.olean
-            #  - 独立 mathlib 工程布局：.lake/build/.../Mathlib.olean
             candidates = [
                 os.path.join(pdir, ".lake", "packages", "mathlib", ".lake",
-                             "build", "lib", "lean", "Mathlib.olean"),
+                             "build", "lib", "lean", "Mathlib", "Tactic.olean"),
                 os.path.join(pdir, ".lake", "build", "lib", "lean",
-                             "Mathlib.olean"),
+                             "Mathlib", "Tactic.olean"),
+                os.path.join(pdir, ".lake", "build", "lib", "lean",
+                             "Mathlib.olean"),  # 全量布局兼容
             ]
             if any(os.path.isfile(c) for c in candidates):
                 ready = True
             else:
-                # 兜底：在 .lake 子树内查找 Mathlib.olean
+                # 兜底：.lake 子树内找 Mathlib/Tactic.olean 或 Mathlib.olean
                 for root, _d, files in os.walk(os.path.join(pdir, ".lake")):
-                    if "Mathlib.olean" in files:
+                    if "Tactic.olean" in files or "Mathlib.olean" in files:
                         ready = True
                         break
         self._mathlib_ready_cache = ready
@@ -445,13 +468,26 @@ class LeanBridge:
                  allow_sorry: bool = False) -> dict:
         """复用纯编译路径 ``_compile_lean`` 对转化出的 Lean 代码做编译验证。
 
+        work_dir 为带 lakefile 的工程目录时强制走 ``lake env lean``
+        （正确加载 Mathlib 的 LEAN_PATH）；否则用探测到的 lean.exe 编译
+        （纯核心 Lean，临时目录回退路径）。
+
         lean_filename 仅在使用带 Mathlib 的 Lean 工程目录（避免覆盖工程内已有
         verify.lean）或需并发安全时指定；缺省仍写 verify.lean。
         allow_sorry 透传给 ``_compile_lean``：前置形式化（声明模式）允许 sorry
         占位，后置答案验证（默认）不允许。
         """
+        is_lake_project = any(
+            os.path.isfile(os.path.join(work_dir, f))
+            for f in ("lakefile.toml", "lakefile.lean", "lake-manifest.json"))
+        if is_lake_project:
+            # 用 elan lake 绝对路径（避免 subprocess PATH 解析问题）
+            elan_lake = os.path.expanduser(r"~\.elan\bin\lake.exe")
+            exe = elan_lake if os.path.isfile(elan_lake) else "lake"
+        else:
+            exe = self._lean_executable
         return _compile_lean(code, work_dir,
-                             lean_executable=self._lean_executable,
+                             lean_executable=exe,
                              timeout=self._lean_timeout,
                              lean_filename=lean_filename,
                              allow_sorry=allow_sorry)
@@ -540,6 +576,7 @@ class LeanBridge:
             if time.monotonic() > deadline:
                 return BugReport(verdict="unknown", findings=[])
             project_dir = self._lean_project_dir
+            comp = None
             if project_dir:
                 # 走带 Mathlib 依赖的 Lean 工程目录：Mathlib 真正可用。
                 # 仅当 Mathlib 已编译就绪时才 import Mathlib，避免未编译时误判。
@@ -554,26 +591,25 @@ class LeanBridge:
                     os.remove(os.path.join(project_dir, lean_file))
                 except OSError:
                     pass
-                if comp.get("ok"):
-                    # 编译通过且无 sorry（_compile_lean 已拦截 sorry）→ proof_valid。
-                    # 关键修复：此前 project_dir 分支会穿透到 _analyze_error 而把
-                    # 一次成功的 Mathlib 形式化验证误判为 unknown（与老师要求的
-                    # "AI解答→Lean形式化(mathlib)→自动判定通过/不通过" 不符）。
-                    return BugReport(verdict="proof_valid", findings=[])
             else:
                 # 回退：单文件临时目录，纯核心 Lean，不依赖 Mathlib
                 with tempfile.TemporaryDirectory(prefix="lean_bridge_") as work_dir:
                     comp = self._compile(lean_code, work_dir)
-                if comp.get("ok"):
-                    # 编译通过且无 sorry → proof_valid
-                    return BugReport(verdict="proof_valid", findings=[])
 
-                # 4) 阶段三：错误分析
-                if time.monotonic() > deadline:
-                    return BugReport(verdict="unknown", findings=[])
-                return self._analyze_error(
-                    problem, reasoning, lean_code,
-                    comp.get("error", "编译失败（无详细输出）"))
+            if comp and comp.get("ok"):
+                # 编译通过且无 sorry（_compile_lean 已拦截 sorry）→ proof_valid。
+                # 关键修复：此前 project_dir 分支会穿透到 _analyze_error 而把
+                # 一次成功的 Mathlib 形式化验证误判为 unknown（与老师要求的
+                # "AI解答→Lean形式化(mathlib)→自动判定通过/不通过" 不符）。
+                return BugReport(verdict="proof_valid", findings=[])
+
+            # 4) 阶段三：错误分析（project_dir 分支编译失败同样走此路径，
+            #    避免 verify() 落空返回 None 导致上层拿不到 BugReport）
+            if time.monotonic() > deadline:
+                return BugReport(verdict="unknown", findings=[])
+            return self._analyze_error(
+                problem, reasoning, lean_code,
+                comp.get("error", "编译失败（无详细输出）") if comp else "编译失败（无详细输出）")
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
             return BugReport(verdict="unknown", findings=[])
@@ -696,6 +732,124 @@ class LeanBridge:
             logger.warning("[LeanBridge] formalize_problem 异常（降级 unknown）: %s", exc)
             return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
                     "error": str(exc)[:200]}
+
+    # ------------------------------------------------------------------
+    # 骨架(sketch) 形式化 + Lean 语法审核（#28）
+    # ------------------------------------------------------------------
+    def _formalize_sketch_to_lean(self, sketch_nl: str, problem: str = "",
+                                  domain: str = "", feedback: str = "") -> Optional[dict]:
+        """把 AI 生成的题目骨架(sketch / Proof Body Outline)形式化为 Lean 骨架声明。
+
+        与 ``_formalize_to_lean``（形式化题目命题）不同，这里形式化的是**解题骨架**：
+        把骨架里每个子目标转成 ``theorem subgoal_i : <stmt> := by sorry`` 的声明，
+        外加最终目标 ``theorem main_goal : <final> := by sorry``。编译这些声明即可用
+        Lean 校验「骨架是否 well-typed」——子目标命题本身类型是否正确、彼此是否一致，
+        这正是老师要求的「骨架严谨性需 Lean 审核」。
+
+        feedback 非空时回传上一次编译错误，要求重新生成骨架。
+        """
+        try:
+            from prompts.lean_pre_verify import (
+                LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
+        except ImportError:
+            from submit.prompts.lean_pre_verify import (
+                LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
+        feedback_block = ""
+        if feedback:
+            feedback_block = ("## 上一次骨架 Lean 声明编译失败（请修正骨架的形式化）\n"
+                              + _truncate_error_output(feedback) + "\n\n")
+        messages = [
+            {"role": "system", "content": LEAN_FORMALIZE_SKETCH_SYSTEM},
+            {"role": "user", "content": LEAN_FORMALIZE_SKETCH_USER.format(
+                problem=problem, domain=domain or "未知",
+                sketch=sketch_nl, feedback=feedback_block)},
+        ]
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        parsed = _parse_analysis_json(raw)
+        if not parsed:
+            return None
+        lean_code = _strip_code_fence(str(parsed.get("lean_code", "") or ""))
+        formal_spec = str(parsed.get("formal_spec", "") or parsed.get("outline", ""))
+        if not lean_code:
+            return None
+        return {"formal_spec": formal_spec, "lean_code": lean_code}
+
+    def audit_sketch(self, sketch_nl: str, problem: str = "", domain: str = "",
+                     timeout: Optional[float] = None,
+                     feedback: str = "") -> dict:
+        """骨架(sketch) Lean 语法/类型审核（#28）。
+
+        把 AI 生成的骨架形式化为 Lean 骨架声明（子目标 theorem + sorry 占位），
+        用声明模式（allow_sorry）编译，仅校验**命题声明是否 well-typed**：
+        - 全部声明 well-typed → verdict="ok"（骨架严谨，可进入求解）
+        - 某子目标声明类型/语法错误 → verdict="fail"，附结构化 ``gaps``
+          （缺失定义/引理/模块/类型不匹配），直接告诉 AI「骨架哪一步不对」
+        - Lean 不可用 / 超时 / 转化失败 → verdict="unknown"（安全降级）
+
+        参数:
+            sketch_nl: 书生生成的骨架/Proof Body Outline（自然语言或含 Lean 片段）。
+            problem/domain: 原题与领域（注入形式化提示，提升骨架形式化质量）。
+            timeout: 整体 wall-clock 超时（秒）。
+            feedback: 上一次编译错误（非空时回传重新生成骨架）。
+
+        返回:
+            {"verdict": "ok"|"fail"|"unknown", "lean_code": str,
+             "formal_spec": str, "error": str, "gaps": list}
+        """
+        deadline = time.monotonic() + max(1.0, timeout or self._lean_timeout)
+        try:
+            if not self.lean_available:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "Lean 环境不可用", "gaps": []}
+            if time.monotonic() > deadline:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "骨架审核超时", "gaps": []}
+
+            converted = self._formalize_sketch_to_lean(sketch_nl, problem, domain, feedback)
+            if not converted:
+                return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                        "error": "骨架形式化转化失败", "gaps": []}
+
+            if time.monotonic() > deadline:
+                return {"verdict": "unknown", "lean_code": converted["lean_code"],
+                        "formal_spec": converted["formal_spec"],
+                        "error": "骨架审核超时", "gaps": []}
+
+            project_dir = self._lean_project_dir
+            use_mathlib = self._mathlib_ready()
+            code_to_compile = (_prepend_mathlib_import(converted["lean_code"])
+                               if use_mathlib else converted["lean_code"])
+            if project_dir:
+                lean_file = "sketch_%d_%d.lean" % (
+                    os.getpid(), int(time.monotonic() * 1e6))
+                comp = self._compile(code_to_compile, project_dir,
+                                     lean_filename=lean_file, allow_sorry=True)
+                try:
+                    os.remove(os.path.join(project_dir, lean_file))
+                except OSError:
+                    pass
+            else:
+                with tempfile.TemporaryDirectory(prefix="lean_sketch_") as work_dir:
+                    comp = _compile_lean(
+                        code_to_compile, work_dir,
+                        lean_executable=self._lean_executable,
+                        timeout=min(self._lean_timeout,
+                                    max(1.0, deadline - time.monotonic())),
+                        allow_sorry=True,
+                    )
+            if comp.get("ok"):
+                return {"verdict": "ok", "lean_code": converted["lean_code"],
+                        "formal_spec": converted["formal_spec"], "error": "",
+                        "gaps": []}
+            gaps = _analyze_formal_gaps(comp.get("error", ""))
+            return {"verdict": "fail", "lean_code": converted["lean_code"],
+                    "formal_spec": converted["formal_spec"],
+                    "error": comp.get("error", "骨架声明编译失败"),
+                    "gaps": gaps}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[LeanBridge] audit_sketch 异常（降级 unknown）: %s", exc)
+            return {"verdict": "unknown", "lean_code": "", "formal_spec": "",
+                    "error": str(exc)[:200], "gaps": []}
 
 
 # =====================================================================

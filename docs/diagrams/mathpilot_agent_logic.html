@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MathPilot 多智能体逻辑架构</title>
+<style>
+  :root {
+    --bg-deep: #070b14;
+    --bg-card: #0d1526;
+    --bg-card-hover: #12203a;
+    --border: #1e3a5f;
+    --primary: #3b82f6;
+    --primary-glow: rgba(59,130,246,.35);
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --text: #dbeafe;
+    --text-dim: #7d94b8;
+    --line: #2a4a7f;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,.12), transparent 60%),
+      radial-gradient(800px 500px at 10% 110%, rgba(34,211,238,.08), transparent 60%),
+      var(--bg-deep);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 30px 16px 60px;
+  }
+  .header { text-align:center; margin-bottom: 28px; }
+  .header h1 {
+    font-size: 26px; font-weight: 700; letter-spacing: 1px;
+    background: linear-gradient(90deg, #60a5fa, #22d3ee);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header p { color: var(--text-dim); font-size: 13px; margin-top: 8px; }
+  .badges { display:flex; justify-content:center; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  .badge {
+    font-size:12px; padding:4px 12px; border-radius:999px;
+    border:1px solid var(--border); color:var(--text-dim); background:rgba(13,21,38,.7);
+  }
+  .badge.hl { border-color:var(--primary); color:var(--cyan); box-shadow:0 0 12px var(--primary-glow); }
+
+  .container { max-width: 960px; margin: 0 auto; position: relative; }
+
+  /* 阶段标签 */
+  .phase {
+    display:flex; align-items:center; gap:10px; margin: 30px 0 14px;
+    color: var(--cyan); font-size: 13px; font-weight:600; letter-spacing: 2px;
+  }
+  .phase::after { content:""; flex:1; height:1px; background:linear-gradient(90deg, var(--line), transparent); }
+  .phase .idx {
+    width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    background:var(--primary); color:#fff; font-size:12px; font-weight:700;
+  }
+
+  /* 节点卡片 */
+  .node {
+    position:relative;
+    background: linear-gradient(160deg, var(--bg-card), #0a111f);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 10px 0;
+    transition: all .25s ease;
+    animation: fadeUp .5s ease both;
+  }
+  .node:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 24px var(--primary-glow);
+    transform: translateY(-2px);
+  }
+  .node .title { font-size: 15px; font-weight: 700; display:flex; align-items:center; gap:8px; }
+  .node .agent-tag {
+    font-size: 11px; padding:2px 10px; border-radius:999px;
+    background: rgba(59,130,246,.15); color:#60a5fa; border:1px solid rgba(59,130,246,.3);
+    font-weight:600; letter-spacing:.5px;
+  }
+  .node .desc { font-size: 12.5px; color: var(--text-dim); margin-top: 7px; line-height: 1.7; }
+  .node .sub { display:flex; flex-wrap:wrap; gap:6px; margin-top: 9px; }
+  .node .sub span {
+    font-size: 11px; padding: 2px 8px; border-radius:6px;
+    background: rgba(30,58,95,.35); color: var(--text);
+    border: 1px solid rgba(30,58,95,.6);
+  }
+
+  /* 侧链样式 */
+  .node.side { border-style: dashed; border-color: var(--purple); }
+  .node.side .agent-tag { background: rgba(167,139,250,.12); color:#a78bfa; border-color:rgba(167,139,250,.3); }
+  .node.lean { border-color: #7c3aed; }
+  .node.lean .title { color: #c4b5fd; }
+
+  /* 状态色 */
+  .ok { color: var(--green); }
+  .warn { color: var(--amber); }
+  .err { color: var(--red); }
+
+  /* 分支行 */
+  .branch {
+    display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0;
+  }
+  .branch .node { margin: 0; }
+  .branch .node.half { font-size: 12.5px; padding: 12px 14px; }
+  .branch .node.half .title { font-size: 13px; }
+
+  /* 循环标注 */
+  .loop-box {
+    border: 1px dashed var(--amber);
+    border-radius: 12px; padding: 12px 14px; margin: 10px 0 4px;
+    background: rgba(251,191,36,.04);
+  }
+  .loop-box .title { color: var(--amber); font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .loop-box .desc { font-size: 12px; color: var(--text-dim); margin-top:6px; line-height:1.7; }
+
+  /* 箭头 */
+  .arrow { display:flex; justify-content:center; padding: 6px 0; }
+  .arrow::before {
+    content:"▼"; font-size:16px; color: var(--primary);
+    text-shadow: 0 0 10px var(--primary-glow);
+  }
+
+  /* 数据流说明 */
+  .dataflow { margin-top: 36px; }
+  .dataflow .chip {
+    display:inline-block; margin:4px; padding:6px 12px; border-radius:8px;
+    background: rgba(13,21,38,.85); border:1px solid var(--border);
+    font-size:12px; color:var(--text); cursor:default; transition:.2s;
+  }
+  .dataflow .chip:hover { border-color:var(--primary); box-shadow:0 0 12px var(--primary-glow); }
+  .dataflow .chip b { color:var(--cyan); font-weight:600; }
+
+  .footer { text-align:center; color:var(--text-dim); font-size:11px; margin-top:40px; opacity:.7; }
+
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+
+  /* 图例 */
+  .legend { display:flex; justify-content:center; gap:22px; margin-top:10px; flex-wrap:wrap; font-size:12px; color:var(--text-dim); }
+  .legend .item { display:flex; align-items:center; gap:6px; }
+  .legend .dot { width:10px; height:10px; border-radius:3px; }
+  .legend .dot.core { background:var(--primary); }
+  .legend .dot.side { background:var(--purple); }
+  .legend .dot.loop { background:var(--amber); }
+  .legend .dot.data { background:var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>MathPilot 多智能体逻辑架构</h1>
+  <p>题目输入 → 题型识别 → 并行求解 → 验证精炼闭环 → 共识格式化 ｜ 吸收 IMO2025 验证-精炼 + LEAP 蓝图规划思想</p>
+  <div class="badges">
+    <span class="badge hl">科技蓝 · 流转式</span>
+    <span class="badge">9 大 Agent 组件</span>
+    <span class="badge">验证-精炼闭环</span>
+    <span class="badge">Lean 形式化验证</span>
+    <span class="badge">共享黑板 TaskContext</span>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="dot core"></span>核心 Agent</div>
+    <div class="item"><span class="dot side"></span>Lean 侧链</div>
+    <div class="item"><span class="dot loop"></span>精炼闭环</div>
+    <div class="item"><span class="dot data"></span>共享数据</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ===== 阶段 0：入口 ===== -->
+  <div class="phase"><span class="idx">0</span>入口与时间管理</div>
+
+  <div class="node" style="animation-delay:.05s">
+    <div class="title">用户 / 评测平台调用 <span class="agent-tag">user_agent.ReasoningAgent</span></div>
+    <div class="desc">统一入口 <code>solve(problem, metadata)</code> → 创建 <b>TaskContext</b>（共享黑板）与 <b>Budget</b>（LLM 调用预算）；超时或异常时降级到内置直答后端 <code>_fallback_solve</code>。</div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="node" style="animation-delay:.1s">
+    <div class="title">时间管理 <span class="agent-tag">Orchestrator + PaperPacer</span></div>
+    <div class="desc">按<em>已用总时间比例</em>动态切换三档：<span class="ok">正常</span>（3 候选×3 票）→ <span class="warn">收紧</span>（>50% 减票）→ <span class="err">应急</span>（>75% 最小开销），保证每道题在截止前交付。</div>
+    <div class="sub"><span>Budget 预算控制</span><span>PaperPacer 时间门控</span></div>
+  </div>
+
+  <!-- ===== 阶段 1：识别 ===== -->
+  <div class="phase"><span class="idx">1</span>题型识别与快车道分流</div>
+
+  <div class="node" style="animation-delay:.15s">
+    <div class="title">题型识别 <span class="agent-tag">ClassifierAgent</span></div>
+    <div class="desc">读取元数据：<b>domain 已知</b>（如"代数/几何/数论"）→ 直接跳过 LLM；未知 → 一次性分类识别题型与领域，注入后续求解提示词。</div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="branch">
+    <div class="node half" style="animation-delay:.2s">
+      <div class="title">快车道 <span class="agent-tag">SymPy 确定性求解</span></div>
+      <div class="desc"><span class="ok">✓</span> 算术 / 求导 / 积分 / 行列式 / 方程 / 极限 → 计算器直出结果，零 LLM 开销，直接进入验证。</div>
+    </div>
+    <div class="node half" style="animation-delay:.22s">
+      <div class="title">求解通道 <span class="agent-tag">SolverAgent</span></div>
+      <div class="desc"><span class="warn">→</span> 复杂/证明类题目进入多候选并行求解（见阶段 2）。</div>
+    </div>
+  </div>
+
+  <!-- ===== 阶段 2：求解 ===== -->
+  <div class="phase"><span class="idx">2</span>并行求解（多策略 × 多候选）</div>
+
+  <div class="node" style="animation-delay:.25s">
+    <div class="title">初始求解 <span class="agent-tag">SolverAgent._generate_initial</span></div>
+    <div class="desc">并行生成 <b>3 个候选解</b>，各候选使用：<b>蓝图分解</b>（先规划证明框架再填充）+ <b>领域提示</b>（30+ 领域针对性模板）+ <b>LemmaRepo 引理注入</b>（复用已沉淀结论）。</div>
+    <div class="sub"><span>蓝图分解</span><span>领域提示词 ×30+</span><span>LemmaRepo 引理注入</span><span>3 候选并行</span></div>
+  </div>
+
+  <div class="branch">
+    <div class="node half side" style="animation-delay:.3s">
+      <div class="title">证明题专用 <span class="agent-tag">_generate_proof</span></div>
+      <div class="desc">prefill 抑制 CoT 输出，直接生成严格证明文本；可选接入 <b>LeanBridge</b> 形式化验证（侧链）。</div>
+    </div>
+    <div class="node half side" style="animation-delay:.32s">
+      <div class="title">截断续写 <span class="agent-tag">complete_truncated</span></div>
+      <div class="desc">输出被截断（token 上限）的候选自动续写补齐，避免浪费。</div>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="node side" style="animation-delay:.35s">
+    <div class="title">子目标补充 <span class="agent-tag">SubGoalSolverAgent</span></div>
+    <div class="desc">候选不足或证明题时启用：<b>plan → step → merge</b> 子目标分解；新增<b>轻量 AND-OR 蓝图</b>（直接失败→分解子目标→LLM Reviewer 过滤无前景分支→递归求解→回溯），深度受预算限制。</div>
+    <div class="sub"><span>plan→step→merge</span><span>AND-OR 蓝图（默认关）</span><span>LLM Reviewer 过滤</span></div>
+  </div>
+
+  <!-- ===== 阶段 3：验证 ===== -->
+  <div class="phase"><span class="idx">3</span>验证与聚簇</div>
+
+  <div class="node" style="animation-delay:.4s">
+    <div class="title">多票验证 <span class="agent-tag">VerifierAgent._vote_one</span></div>
+    <div class="desc">每个候选独立 <b>A/B 双路投票</b>（prefill "VERDICT: " 抑制 CoT 防偏），综合置信度；投票数随时间档位收紧（3→2→1）。</div>
+    <div class="sub"><span>A/B 双路</span><span>prefill 抑制 CoT</span><span>置信度综合</span></div>
+  </div>
+
+  <div class="branch">
+    <div class="node half" style="animation-delay:.45s">
+      <div class="title">等价聚类 <span class="agent-tag">_cluster_candidates</span></div>
+      <div class="desc">文本归一化 + SymPy 符号等价判断 → <b>AnswerCluster</b> 答案簇，多候选命中同一答案即聚簇提权。</div>
+    </div>
+    <div class="node half side" style="animation-delay:.47s">
+      <div class="title">证明逐步骤验证 <span class="agent-tag">_verify_proof_step</span></div>
+      <div class="desc">证明题按步骤审查，产出 <b>BugReport</b>（Critical / Gap + severity + <span class="warn">repairable 可修复性</span> + suggestion 修正建议）。</div>
+    </div>
+  </div>
+
+  <!-- ===== 阶段 4：精炼闭环 ===== -->
+  <div class="phase"><span class="idx">4</span>验证-精炼闭环（AcceptGate）</div>
+
+  <div class="loop-box" style="animation-delay:.5s">
+    <div class="title">🔄 精炼闭环 &nbsp;|&nbsp; IMO2025 验证-精炼流水线思想</div>
+    <div class="desc">
+      门控条件（<b>RoundState</b> 计数）：<br>
+      ▸ <span class="ok">ACCEPT</span>：验证连续通过 ≥ 5 次 或 置信度 ≥ 接受阈值 → 进入格式化<br>
+      ▸ <span class="err">REJECT</span>：连续重大缺陷 ≥ 10 次 → 放弃该候选<br>
+      ▸ <span class="warn">HOLD</span>：提取 <b>revise_feedback</b>（优先结构化 BugReport 建议）→ 回 <b>SolverAgent._generate_revise</b> 纠错重解 → 重新验证
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="node" style="animation-delay:.55s">
+    <div class="title">修订重解 <span class="agent-tag">SolverAgent._generate_revise</span></div>
+    <div class="desc">携带上一轮反馈重新求解（修正推导/补充 gap/重写证明），进入下一轮验证。预算耗尽或全部 REJECT 时退出循环。</div>
+    <div class="sub"><span>revise_feedback 驱动</span><span>≤ 预算约束</span></div>
+  </div>
+
+  <!-- ===== 阶段 5：沉淀与兜底 ===== -->
+  <div class="phase"><span class="idx">5</span>引理沉淀 · 兜底 · 输出</div>
+
+  <div class="branch">
+    <div class="node half side" style="animation-delay:.6s">
+      <div class="title">引理沉淀 <span class="agent-tag">SummarizerAgent</span></div>
+      <div class="desc">从成功解答提取可复用中间结论 → 写入 <b>LemmaRepo</b>（线程安全），后续题目求解时注入复用。<span class="ok">✓ 跨题知识积累</span></div>
+    </div>
+    <div class="node half" style="animation-delay:.62s">
+      <div class="title">兜底直答 <span class="agent-tag">direct_solve</span></div>
+      <div class="desc">全部候选 <b>0 正确票</b> 时，用内置后端直接作答，保证"每题必有输出"。</div>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="node" style="animation-delay:.65s">
+    <div class="title">共识格式化 <span class="agent-tag">FormatterAgent</span></div>
+    <div class="desc">取<b>最高票答案簇</b> → 标准化输出格式（答案 + 解析过程）→ 返回 <code>final_response + trace + candidates + verdicts + clusters</code> 完整审计链路。</div>
+  </div>
+
+  <!-- ===== Lean 侧链 ===== -->
+  <div class="phase"><span class="idx">S</span>Lean 形式化验证侧链（LEAP 思想）</div>
+
+  <div class="node lean" style="animation-delay:.7s">
+    <div class="title">LeanBridge <span class="agent-tag">agent/lean_bridge.py</span></div>
+    <div class="desc">
+      将 NL 推理翻译为 Lean 4 形式化证明并交给编译器验证，四阶段流水线：<br>
+      <b>convert</b>（NL→Lean）→ <b>compile</b>（lean 编译器，60s 超时）→ <b>analyze</b>（错误归类）→ <b>fix</b>（可自动修复）；结果映射为 BugReport 反馈驱动精炼闭环。
+    </div>
+    <div class="sub"><span>convert→compile→analyze→fix</span><span>开关 enable_lean_verify（默认关）</span><span>Lean 缺失→降级 unknown</span><span>计入 Budget</span></div>
+  </div>
+
+  <!-- ===== 数据流 ===== -->
+  <div class="phase dataflow" style="margin-top:40px"><span class="idx">D</span>共享数据（TaskContext 黑板）</div>
+
+  <div class="dataflow">
+    <span class="chip"><b>TaskContext</b> 共享黑板</span>
+    <span class="chip"><b>Budget</b> LLM 预算</span>
+    <span class="chip"><b>Candidate</b> 候选解</span>
+    <span class="chip"><b>Verdict</b> 验证结果</span>
+    <span class="chip"><b>AnswerCluster</b> 等价簇</span>
+    <span class="chip"><b>BugReport/Finding</b> 证明缺陷</span>
+    <span class="chip"><b>RoundState</b> 门控计数</span>
+    <span class="chip"><b>LemmaRepo</b> 引理库</span>
+    <span class="chip"><b>revise_feedback</b> 修订反馈</span>
+    <span class="chip"><b>RunConfig/RunState</b> 配置/运行态</span>
+  </div>
+
+  <div class="footer">
+    MathPilot · 多智能体数学解题系统 · 架构梳理 @ 2026-08-19<br>
+    核心思想：验证-精炼闭环（IMO 2025）+ AND-OR 蓝图规划 / Lean 编译器驱动（LEAP）
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+ "backend": "intern",
+ "model": "Intern-S2-Preview-397B",
+ "results": [
+  {
+   "problem_id": "PB-Basic-001",
+   "elapsed_s": 459.5,
+   "llm_hint_lean": "import Mathlib\n\n/-\nDetermine all functions $f: \\mathbb{Z} \\rightarrow \\mathbb{Z}$ such that, for all $x, y \\in \\mathbb{Z",
+   "steps": {
+    "preverify": {
+     "verdict": "ok",
+     "formal_spec": "已知函数 $f: \\mathbb{Z} \\rightarrow \\mathbb{Z}$ 满足：对所有整数 $x, y$，有 $f(2x) + 2f(y) = f(f(x+y))$。求证：$f$ 要么恒等于零，要么存在常数 $c \\in \\mathbb{Z}$ 使得 $f(x) = 2x + c$ 对所有 $x \\in \\mathbb{Z}$ 成立。",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  },
+  {
+   "problem_id": "PB-Basic-002",
+   "elapsed_s": 380.2,
+   "llm_hint_lean": "import Mathlib\n\n/-\nShow that $x^2 + y^2 + z^2 + t^2 \\ge xyzt$ for any positive real numbers $x, y, z, t$ that satisfy $2",
+   "steps": {
+    "preverify": {
+     "verdict": "ok",
+     "formal_spec": "Given positive real numbers x, y, z, t satisfying the constraint 2(x + y + z + t) ≥ xyzt, prove that x² + y² + z² + t² ≥ xyzt.",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  },
+  {
+   "problem_id": "PB-Basic-003",
+   "elapsed_s": 479.4,
+   "llm_hint_lean": "import Mathlib\n\n/-\nFind all functions $f\\colon \\mathbb{R} \\rightarrow \\mathbb{R}$ such that for all $a,b \\in \\mathbb{R}$",
+   "steps": {
+    "preverify": {
+     "verdict": "ok",
+     "formal_spec": "Find all functions f: ℝ → ℝ such that for all real numbers a and b, the equation (b - a) * f(f(a)) = a * f(a + f(b)) holds. The theorem should characterize all such functions.",
+     "sketch_audit": "unknown"
+    },
+    "blueprint": {
+     "ok": false,
+     "nodes": 0,
+     "root": "",
+     "valid": false
+    }
+   }
+  }
+ ]
+}

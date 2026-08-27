@@ -1,0 +1,32 @@
+[
+  {
+    "id": "imo-bench-algebra-068",
+    "question": "Find all positive integers $n$ satisfying the following condition.\n\n[Condition] For any positive integer $d \\le n$ and a polynomial $Q(x)$ with integer coefficients and of degree less than $d$, there exists a positive integer $k \\le n$, and $k + 1$ distinct integers $a_1, \\ldots, a_{k+1}$ such that\n\\[\n    Q(a_{k+1}) - \\sum_{i=1}^k Q(a_i) = a_{k+1}^d - \\sum_{i=1}^k a_i^d.\n\\]",
+    "domain": "Algebra",
+    "reference_answer": "2"
+  },
+  {
+    "id": "imo-bench-algebra-075",
+    "question": "Find the largest possible positive integer $n$ such that there exist $n$ distinct positive real numbers $a_1, a_2, \\dots, a_n$ satisfying\n\\[\n3(a_i^2 + a_j^2) + 15a_i^2 a_j^2 \\ge (4a_ia_j + 1)^2\n\\]\nfor any $1 \\le i, j \\le n$.",
+    "domain": "Algebra",
+    "reference_answer": "3"
+  },
+  {
+    "id": "imo-bench-combinatorics-058",
+    "question": "Consider an $n \\times n$ chessboard consisting of $n^2$ unit squares, where $n \\geqslant 2$ is an integer. A configuration of $n$ rooks on this board is called balanced if each row and each column contains exactly one rook. Find the largest positive integer $k$ such that for any balanced configuration of rooks, there exists a $k \\times k$ square with no rook in any of its $k^2$ unit squares. Additionally, consider a $2n \\times 2n$ go board, where we put go pieces on that board.",
+    "domain": "Combinatorics",
+    "reference_answer": "$\\lfloor\\sqrt{n-1}\\rfloor$"
+  },
+  {
+    "id": "imo-bench-geometry-008",
+    "question": "Let $C, I$ be the circumcenter and the incenter of a right-angled triangle; $R, r$ be the radii of respective circles; $K$ be the reflection of the vertex of the right angle in $I$. Find $CK$ in terms of $R$ and $r$.",
+    "domain": "Geometry",
+    "reference_answer": "$R-2r$"
+  },
+  {
+    "id": "imo-bench-number_theory-077",
+    "question": "Given a positive integer n, perform the following operation:\n\n(i) Remove the last digit of n.\n\n(ii) Add 3 times the removed digit to the remaining number.\n\nFor example, if $n = 1013$, the operation yields $101 + 9 = 110$. If $n = 2$, the operation yields $0 + 6 = 6$.\n\nStarting with $260^{135}$, repeatedly apply this operation $2025$ times. What is the final resulting number?",
+    "domain": "Number theory",
+    "reference_answer": "8"
+  }
+]

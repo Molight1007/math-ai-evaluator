@@ -1,0 +1,32 @@
+[
+  {
+    "id": "imo-bench-number_theory-008",
+    "question": "Does there exist a positive integer $n$ satisfying the following condition? If so, find the smallest such $n$.\n\n(Condition) There exist infinitely many ordered $n$-tuples of positive rational numbers $(x_1, \\dots, x_n)$ such that both $\\sum_{i=1}^n i \\cdot x_i$ and $\\frac{1}{x_1 + \\dots + x_n} + \\frac{1}{x_2 + \\dots + x_n} + \\dots + \\frac{1}{x_n}$ are positive integers.",
+    "domain": "Number theory",
+    "reference_answer": "3"
+  },
+  {
+    "id": "imo-bench-number_theory-037",
+    "question": "Let $A$ be the set of odd integers $a$ such that $|a|$ is not a perfect square.\n\nFind all numbers that can be expressed as $x+y+z$ for $x, y, z \\in A$ such that $xyz$ is a perfect square.",
+    "domain": "Number theory",
+    "reference_answer": "All numbers of the form $4k+3$"
+  },
+  {
+    "id": "imo-bench-number_theory-057",
+    "question": "Let $b_m b_{m-1}\\cdots b_0$ be the base-7 representation of a positive integer $n$ for some positive integer $m$. Let $a_i$ be the number obtained by removing the digit $b_i$ from the base-7 representation of $m$ (read in base 7). Find the number of $n$ that satisfy $n=\\sum_{i=0}^{m-1}a_i$.",
+    "domain": "Number theory",
+    "reference_answer": "42"
+  },
+  {
+    "id": "imo-bench-number_theory-062",
+    "question": "Let $g: \\mathbb{Z}_{>0} \\to \\mathbb{Z}$ be a function satisfying the following conditions:\n\n(i) $g(p) = p + 1$ for all prime numbers $p$,\n\n(ii) $g(nm) + nm = ng(m) + mg(n)$  for all positive integers $n, m$.\n\nFind all integers $1 \\le n \\le 4000$ satisfying $g(n) = 2n$.",
+    "domain": "Number theory",
+    "reference_answer": "4, 27, 3125"
+  },
+  {
+    "id": "imo-bench-number_theory-096",
+    "question": "Let $a$ be a positive integer greater than or equal to $3$. A finite set $X$ of positive integers is said to be 'clustered' if for any three elements $x, y, z$ chosen from $X$, at least one of $\\gcd(x,y)$, $\\gcd(y,z)$, or $\\gcd(z,x)$ is not equal to $1$. Find the maximum possible value of $|X|$ for a clustered set $X \\subset \\mathbb{N}$ where the difference between the maximum and minimum elements of $X$ are less than or equal to $a$.",
+    "domain": "Number theory",
+    "reference_answer": "$\\lfloor \\frac{a+2}{2}\\rfloor +\\lfloor \\frac{a+2}{3}\\rfloor -\\lfloor \\frac{a+2}{6}\\rfloor $"
+  }
+]

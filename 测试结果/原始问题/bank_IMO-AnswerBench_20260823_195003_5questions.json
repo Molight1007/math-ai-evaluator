@@ -1,0 +1,32 @@
+[
+  {
+    "id": "imo-bench-algebra-053",
+    "question": "Let $x, y, z$ be real numbers such that\n\\[\n    |x^2 + 2yz + 2(x + y + z) + 3|, |y^2 + 2zx + 2(x + y + z) + 3|, |z^2 + 2xy + 2(x + y + z) + 3|\n\\]\nare three heights of a (non-degenerate) triangle. Find all possible values of $xy + yz + zx + 2(x + y + z)$.",
+    "domain": "Algebra",
+    "reference_answer": "$(-\\infty, -3) \\cup (-3, \\infty)$"
+  },
+  {
+    "id": "imo-bench-algebra-060",
+    "question": "Let $n, p, q$ be positive integers such that\n\\[\n    S = \\frac{12 + n}{p} + \\frac{13 - n}{q} < 1, \\quad 1 \\le n \\le 12.\n\\]\nFind the maximum possible value of $S$.",
+    "domain": "Algebra",
+    "reference_answer": "$\\frac{2617}{2618}$"
+  },
+  {
+    "id": "imo-bench-algebra-084",
+    "question": "Find all complex-coefficient polynomials $Q(x)$ that satisfy\n\\[\n    (x^2 + x - 2)Q(x - 3) = (x^2 - 11x + 28)Q(x)\n\\]\nfor all real numbers $x \\in \\mathbb{R}$.",
+    "domain": "Algebra",
+    "reference_answer": "$Q(x)=c(x-1)^2(x-4)(x+2)$"
+  },
+  {
+    "id": "imo-bench-combinatorics-022",
+    "question": "Consider a regular hexagon with side length $100$ that is divided into equilateral triangles with side length $1$ by lines parallel to its sides. Find the number of regular hexagons all of whose vertices are among the vertices of those equilateral triangles.",
+    "domain": "Combinatorics",
+    "reference_answer": "25502500"
+  },
+  {
+    "id": "imo-bench-combinatorics-024",
+    "question": "Let $S$ denote the set of all permutations of the numbers $1,2,\\dots,2024.$ For $\\pi\\in S,$ let $\\sigma(\\pi)=1$ if $\\pi$ is an even permutation and $\\sigma(\\pi)=-1$ if $\\pi$ is an odd permutation. Also, let $v(\\pi)$ denote the number of fixed points of $\\pi.$  Let $f(x)$ be an arbitrary polynomial such that $f(0)=1$. Compute the sum\n\\[ \\sum_{\\pi\\in S}\\frac{\\sigma(\\pi)}{v(\\pi)+1}.  \\]",
+    "domain": "Combinatorics",
+    "reference_answer": "$-\\frac{2024}{2025}$"
+  }
+]

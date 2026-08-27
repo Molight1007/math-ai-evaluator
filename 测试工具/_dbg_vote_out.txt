@@ -1,0 +1,7 @@
+winner.answer = '$\\frac{1}{2}$'
+winner.sample_index = 0
+winner.vote_info = {'vote_counts': {'NUM:0.5': 3}, 'num_samples': 3, 'sampled_answers': ['\\boxed{\\frac{1}{2}}', '0.5', '$\\frac{1}{2}$'], 'winner_temperature': 0.9, 'tie_broken': False, 'fallback_used': False}
+winner.tokens_used = 303 (expected 303)
+winner.latency_seconds = 6.0
+vote_counts keys = ['NUM:0.5']
+[PASS] run_inference_multi_vote aggregate

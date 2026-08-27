@@ -307,6 +307,20 @@ class TaskContext:
     subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
     subgoal_merge_plan: str = ""                    # 最终整合方案
 
+    # ---- 骨架(sketch) 阶段 Lean 审核字段（#28）----
+    sketch: str = ""                                 # 书生生成的题目骨架/Proof Body Outline（LeanPreVerifier 写入）
+    sketch_audit: dict = field(default_factory=dict) # 骨架 Lean 语法审核结果（verdict/gaps/lean_code/formal_spec）
+
+    # ---- Blueprint DAG（LEAP Stage 1，#27）----
+    blueprint: dict = field(default_factory=dict)    # AND-OR DAG 序列化（BlueprintPlannerAgent 写入）
+    blueprint_plan: dict = field(default_factory=dict)  # DAG 转出的子目标规划（兼容 SubGoalSolver）
+
+    # ---- 整树 Lean 搭桥（LEAP Stage 2，#26/#28）----
+    sketch_tree: dict = field(default_factory=dict)  # DAG 叶子→Lean 声明+sorry 的整树审核结果（LeanTranslatorAgent 写入）
+
+    # ---- Stage 3 迭代精炼（#29/#30/#32/#33）----
+    refine_result: dict = field(default_factory=dict)  # sorry 补全+回溯结果（LeanRefinerAgent 写入）
+
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
     tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）

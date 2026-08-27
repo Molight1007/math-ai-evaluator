@@ -1,0 +1,23 @@
+# 本地测试输出目录
+sample_outputs/
+outputs/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时文件
+*.tmp
+_check.py
+_tmp_*.py
+
+# IDE
+.vscode/
+.idea/
+
+# Lean 离线缓存与二进制（部署产物，不提交）
+deploy/lean-cache/
+deploy/*.tar.gz
+deploy/*.zip
+deploy/lean-env.sh

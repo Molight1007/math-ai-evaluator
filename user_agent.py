@@ -148,6 +148,14 @@ class AgentConfig:
     preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
     preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
+    # ---- 骨架 Lean 语法审核 + leansearch 试用（#28 / #31）----
+    enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
+    use_leansearch: bool = False            # 子目标规划时试用 leansearch 检索 Mathlib 定理（#31，默认关闭先试）
+    # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
+    use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
+    # ---- Stage 3 迭代精炼 + lemma 记忆（#29/#30/#32/#33）----
+    lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
+    use_refiner: bool = False               # 整树搭桥后执行 Stage 3 sorry 迭代精炼（#32，默认关闭先试）
 
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
@@ -288,7 +296,7 @@ class ReasoningAgent:
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
-            "use_blueprint", "use_sub_goal",
+            "use_blueprint", "use_blueprint_dag", "use_sub_goal",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
             "tier_sample_times", "tier_temperatures", "tier_voting_times",
@@ -298,6 +306,7 @@ class ReasoningAgent:
             "enable_collaborative_deep", "collab_max_rounds",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
+            "enable_sketch_audit", "use_leansearch",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

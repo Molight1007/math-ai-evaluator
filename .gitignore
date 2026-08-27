@@ -37,6 +37,11 @@ lean_*.log
 .git_backup_*/
 .workbuddy/
 .codebuddy/
+
+# 超大本地产物（不上传：Lean 离线工具链打包 GB 级）
+lean下载版.zip
+lean-toolchain.zip
+*.tar.zst
 .cw_skill/
 backup/
 deps/
