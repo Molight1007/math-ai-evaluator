@@ -67,6 +67,7 @@ class AgentConfig:
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
     use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
+    use_sketch: bool = False           # #26：先出轻量解题大纲（sketch）再求解
 
     # 验证模型（评判）
     verifier_voting_times: int = 1     # 每个候选只投 1 票（避免无效重复投票）
@@ -277,6 +278,8 @@ class ReasoningAgent:
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
             "use_blueprint", "use_sub_goal",
+            # #26 sketch 大纲
+            "use_sketch",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
             "tier_sample_times", "tier_temperatures", "tier_voting_times",

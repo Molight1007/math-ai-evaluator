@@ -267,7 +267,13 @@ class SolverAgent(BaseAgent):
         # lemma 上下文注入
         lemma_ctx = self._collect_lemma_context(ctx)
 
-        if self.config.use_blueprint:
+        if getattr(self.config, 'use_sketch', False):
+            # #26：先出轻量解题大纲（sketch）再求解——引导组织思路但不占思维流
+            system_prompt = get_policy_system(use_sketch=True)
+            user_content = ctx.problem
+            if ctx.domain:
+                user_content = get_domain_hint(ctx.domain) + "\n" + ctx.problem
+        elif self.config.use_blueprint:
             system_prompt = get_policy_system(use_blueprint=True)
             domain_hint = get_domain_hint(ctx.domain) if ctx.domain else ""
             user_content = build_blueprint_user_message(ctx.problem, domain_hint)
