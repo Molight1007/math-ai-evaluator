@@ -67,7 +67,7 @@ class AgentConfig:
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
     use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
-    use_sketch: bool = False           # #26：先出轻量解题大纲（sketch）再求解
+    use_sketch: bool = True            # #26：先出轻量解题大纲（sketch）再求解（A/B 50%→62% 零负向，默认开）
 
     # 验证模型（评判）
     verifier_voting_times: int = 1     # 每个候选只投 1 票（避免无效重复投票）

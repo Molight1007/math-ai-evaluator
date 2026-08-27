@@ -109,7 +109,7 @@ class AgentConfig:
     use_summarizer: bool = False         # P5：Summarizer 压缩中间结论写入 LemmaRepo
     use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
     lemma_store_path: str = ""          # #30：lemma 记忆持久化路径（跨进程复用；空=不持久化）
-    use_sketch: bool = False            # #26：先出轻量解题大纲（sketch）再求解
+    use_sketch: bool = True             # #26：先出轻量解题大纲（sketch）再求解（A/B 50%→62% 零负向，默认开）
 
     # ---- v3 升级：P1/P2/P3（设计文档 docs/MathPilot智能体升级架构设计）----
     judger_friendly: bool = True       # P1: Formatter 黑盒 Judger 友好输出（纯规则，0 预算）
