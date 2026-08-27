@@ -48,6 +48,9 @@ _LEAN_DETECT_TIMEOUT = 10              # Lean 环境检测超时（秒）
 _MAX_ERROR_CHARS = 5000                # 编译错误输出截断上限（防 token 爆炸）
 _MAX_LEAN_CONVERT_TRIES = 2            # NL→Lean 转化最大尝试次数（编译失败反馈重试）
 
+# Mathlib 源码目录（离线定理检索索引源；不存在时检索自动降级为空）
+_MATHLIB_SOURCE_DIR = "E:/mathlib4-last_bump_for_v4.31.0"
+
 # =====================================================================
 # LLM 提示词模板（Lean 转化 / 错误分析）
 # =====================================================================
@@ -335,11 +338,15 @@ class LeanBridge:
                          prev_error: str = "") -> str:
         """把自然语言推理转化为 Lean 4 代码（依赖注入的 client）。
 
-        prev_error 非空时作为「编译失败反馈」附带，让 LLM 修正代码
-        （对应论文方法主线：搜定理→informal 推理→翻译 Lean→审核闭环）。
+        - 先检索 Mathlib 可用定理（离线索引，leansearch 轻量版），注入提示词，
+          让模型写对 import 与定理名（对应老师要求 #31）；
+        - prev_error 非空时作为「编译失败反馈」附带，让 LLM 修正代码。
         """
         user_content = LEAN_CONVERT_USER.format(
             problem=problem, reasoning=reasoning)
+        hints = self._retrieve_mathlib_hints(problem + "\n" + reasoning)
+        if hints:
+            user_content += "\n\n" + hints
         if prev_error:
             user_content += (
                 "\n\n你上一版代码编译失败，错误如下：\n%s\n"
@@ -350,6 +357,16 @@ class LeanBridge:
         ]
         raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
         return _strip_code_fence(raw)
+
+    def _retrieve_mathlib_hints(self, query: str, k: int = 6) -> str:
+        """检索 Mathlib 相关定理并格式化为提示词。任何异常静默降级为空。"""
+        try:
+            from .mathlib_retriever import MathlibRetriever
+            retriever = MathlibRetriever(_MATHLIB_SOURCE_DIR)
+            hits = retriever.search(query, k=k)
+            return retriever.format_results(hits)
+        except Exception:  # noqa: BLE001 检索失败不影响主流程
+            return ""
 
     # ------------------------------------------------------------------
     # 阶段二：编译验证（纯编译路径）
