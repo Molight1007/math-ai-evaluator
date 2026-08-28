@@ -499,6 +499,12 @@ class EvalEngine:
                 self.domain_stats[domain]["total"] += 1
                 if row.get("correct"):
                     self.domain_stats[domain]["correct"] += 1
+                # 增量落盘（2026-08-28 新增）：每题完成立即追加写盘。
+                # 此前全部跑完才写一次文件，中途 Ctrl-C / 杀进程 / 超时
+                # 会丢掉所有已完成题目的结果。增量写 + --resume 断点续跑，
+                # 保证任何时刻中断都能保留进度。
+                with open(output_file, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
         results.sort(key=lambda r: str(r.get("id", "")))
         with open(output_file, "w", encoding="utf-8") as f:
             for row in results:
