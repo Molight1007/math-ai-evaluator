@@ -63,12 +63,39 @@ def main() -> int:
                                                     "phase0_baseline.jsonl"))
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 题（冒烟用）")
     ap.add_argument("--resume", action="store_true", help="断点续跑")
+    ap.add_argument("--override", action="append", default=[],
+                    metavar="KEY=VALUE",
+                    help="覆盖 AgentConfig 任意字段（可重复传）。"
+                         "例：--override use_lemma_accumulation=True "
+                         "--override verifier_voting_times=3（D6 三把钥匙 A/B 用）")
     args = ap.parse_args()
 
     load_env()
     for k in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL"):
         v = os.environ.get(k)
         print(f"  {k:<18} {'已设置 (%d 字符)' % len(v) if v else '缺失'}")
+
+    # 解析 --override 成 AgentConfig 覆盖（D6 三把钥匙 A/B 用）
+    overrides: dict = {}
+    for kv in args.override:
+        if "=" not in kv:
+            print(f"[warn] 忽略无效 override: {kv}", file=sys.stderr)
+            continue
+        k, _, v = kv.partition("=")
+        k = k.strip()
+        v = v.strip()
+        if v.lower() in ("true", "false"):
+            overrides[k] = v.lower() == "true"
+        else:
+            try:
+                overrides[k] = int(v)
+            except ValueError:
+                try:
+                    overrides[k] = float(v)
+                except ValueError:
+                    overrides[k] = v
+    if overrides:
+        print(f"  [override] {overrides}")
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
 
@@ -90,7 +117,8 @@ def main() -> int:
 
     from run_eval import EvalEngine
 
-    engine = EvalEngine(concurrency=args.concurrency, resume=args.resume)
+    engine = EvalEngine(concurrency=args.concurrency, resume=args.resume,
+                        agent_overrides=overrides or None)
     tests = engine.load_tests(test_file)
     print(f"  加载 {len(tests)} 道题，输出 → {args.output}")
     summary = engine.run(test_file, args.output)
