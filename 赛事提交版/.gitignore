@@ -24,6 +24,13 @@ deploy/lean-env.sh
 # Mathlib 依赖闭包：110MB 打包产物，由 tools/package_mathlib.py 按需生成，不提交
 deploy/mathlib-olean/
 
+# gitcode 镜像同步目录：整份代码副本，独立推送到 gitcode 远端，不进主仓库
+gitcode_sync/
+# 评测/验证临时产物
+eval_bp/
+eval_out/
+eval_out_*/
+
 # 本地 Lean 离线工具链（含 lean4-toolchain，体积 GB 级，按需本地准备，不提交）
 lean下载版/
 

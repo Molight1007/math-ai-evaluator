@@ -324,6 +324,8 @@ class ReasoningAgent:
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
             "enable_sketch_audit", "use_leansearch",
+            # 前置形式化验证（rounds 影响预算消耗：每次编译 ~21s）
+            "preverify_max_rounds", "preverify_timeout",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

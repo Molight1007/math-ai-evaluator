@@ -373,10 +373,17 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "use_proof_channel": False,
     "use_lemma_accumulation": False,
     "by_enable_fast_path": True,
-    # ---- 全卷调度：本地 45 题小卷，不套用平台的 112 题/18000s ----
-    # 45 题 / 并发 3 → 平均 360s/题 才不超时
+    # ---- 全卷调度：本地 45 题小卷，按 112 题全卷的题均配额折算 ----
+    # 平台：112 题 / 18000s（5h 墙钟，并发 3）
+    # 45 题应得 45/112 × 18000 ≈ 7232s；再给 20% 余量 ≈ 8680s
+    # （2026-08-28 修正：5400s 会让 paper_cap 只有 360s/题，而 Lean 前置
+    #   验证在本地真编译 mathlib（每次 ~21s）+ 子目标求解就超过预算，
+    #   表现为「剩余时间不足，跳过 LLM」→ 全部输出 [子目标求解失败]）
     "paper_total_questions": 45,
-    "paper_target_time": 5400,
+    "paper_target_time": 8680,
+    # 前置验证最多 2 次尝试（原默认 2 轮 = 3 次，每次 21s 编译 + LLM 调用，
+    # 单题可烧掉 3-5 分钟；preverify 是「检查理解」不是「写论文」，1 轮足够）
+    "preverify_max_rounds": 1,
 }
 
 
