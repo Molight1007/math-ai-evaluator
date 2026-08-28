@@ -96,6 +96,12 @@ def _try_parse(expr_str: str) -> Tuple[Optional[sp.Expr], str]:
         return None, "SymPy 未安装"
     if not _is_safe_expression(expr_str):
         return None, "表达式包含危险关键词"
+    # P0：拒绝 sympy 无法理解的字符（中文/Unicode 数学符号），
+    # 否则 sympy 静默把未知标识符当符号相乘，产出垃圾结果被 fast path 当答案
+    if re.search(r"[\u4e00-\u9fff"
+                 r"∫∑∏→←⇒⇔≤≥≠²³⁰¹⁴⁵⁶⁷⁸⁹·×÷−±"
+                 r"∣∈⊂⊆∪∩∅∀∃]", expr_str):
+        return None, "含中文/Unicode 数学符号，拒绝解析"
     try:
         processed = _preprocess_latex(expr_str)
         parsed = sp.sympify(processed, evaluate=False)
