@@ -151,6 +151,11 @@ class AgentConfig:
     preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
 
+    # ---- LEAP Stage 2/3 开关（整树搭桥 + 迭代精炼 + 定理检索）----
+    use_refiner: bool = False               # 整树搭桥后执行 sorry 迭代精炼（默认关，可 CLI 覆盖）
+    enable_sketch_audit: bool = True        # 骨架 Lean 审核（默认开）
+    use_leansearch: bool = False            # Mathlib 定理检索（默认关，按需开）
+
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
         if self.tier_sample_times is None:
@@ -290,7 +295,7 @@ class ReasoningAgent:
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "max_answer_tokens", "revise_sample_times",
-            "use_blueprint", "use_sub_goal",
+            "use_blueprint", "use_blueprint_dag", "use_sub_goal",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
             "tier_sample_times", "tier_temperatures", "tier_voting_times",
@@ -298,8 +303,9 @@ class ReasoningAgent:
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             "enable_collaborative_deep", "collab_max_rounds",
-            # Lean 硬验证
+            # Lean 硬验证 + LEAP
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
+            "use_refiner", "enable_sketch_audit", "use_leansearch",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

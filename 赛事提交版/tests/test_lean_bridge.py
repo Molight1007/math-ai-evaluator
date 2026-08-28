@@ -183,7 +183,7 @@ class LeanBridgeVerifyTest(unittest.TestCase):
         # 强制环境可用，但编译用不存在的 binary 使编译必失败 → 走 analyze
         bridge._lean_env_cache = {"available": True, "version": "v4", "error": ""}
         # 覆盖 _compile 为必失败
-        bridge._compile = lambda code, work_dir: {
+        bridge._compile = lambda code, work_dir, **kw: {
             "ok": False, "error": "syntax error at line 1"}
         report = bridge.verify("p", "推理", timeout=5.0)
         self.assertIsNotNone(report)
@@ -205,7 +205,7 @@ class LeanBridgeVerifyTest(unittest.TestCase):
         })
         bridge = LeanBridge(client, config=None)
         bridge._lean_env_cache = {"available": True, "version": "v4", "error": ""}
-        bridge._compile = lambda code, work_dir: {
+        bridge._compile = lambda code, work_dir, **kw: {
             "ok": False, "error": "type mismatch"}
         report = bridge.verify("p", "r", timeout=5.0)
         self.assertEqual(report.verdict, "unknown")
@@ -217,7 +217,7 @@ class LeanBridgeVerifyTest(unittest.TestCase):
         client = MockClient({"待形式化的推理": "theorem x : True := by trivial"})
         bridge = LeanBridge(client, config=None)
         bridge._lean_env_cache = {"available": True, "version": "v4", "error": ""}
-        bridge._compile = lambda code, work_dir: {"ok": True, "error": ""}
+        bridge._compile = lambda code, work_dir, **kw: {"ok": True, "error": ""}
         report = bridge.verify("p", "r", timeout=5.0)
         self.assertEqual(report.verdict, "proof_valid")
         self.assertTrue(report.is_valid())
@@ -228,7 +228,7 @@ class LeanBridgeVerifyTest(unittest.TestCase):
         budget = _Budget(max_calls=10)
         bridge = LeanBridge(client, config=None, budget=budget)
         bridge._lean_env_cache = {"available": True, "version": "v4", "error": ""}
-        bridge._compile = lambda code, work_dir: {"ok": True, "error": ""}
+        bridge._compile = lambda code, work_dir, **kw: {"ok": True, "error": ""}
         bridge.verify("p", "r", timeout=5.0)
         self.assertGreaterEqual(budget.used, 1)
 

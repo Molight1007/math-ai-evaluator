@@ -52,3 +52,6 @@ deps/
 # 本地配置/密钥（含 API 设置与用户名单，不提交）
 deploy/users.json
 deploy/user_api_settings.json
+
+# test_mathlib 依赖包（.lake gitlink 损坏，仅本地构建用，不提交）
+与lean相关的插件/test_mathlib/.lake/

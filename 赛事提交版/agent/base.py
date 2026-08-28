@@ -308,6 +308,14 @@ class TaskContext:
 
     # ---- Blueprint DAG（LEAP Stage 1，#27）----
     blueprint: dict = field(default_factory=dict)   # AND-OR DAG 序列化（BlueprintPlannerAgent 写入）
+    blueprint_plan: dict = field(default_factory=dict)  # DAG 转子目标规划（SubGoalSolver 写入）
+
+    # ---- 整树搭桥 + 迭代精炼（LEAP Stage 2/3）----
+    sketch: str = ""                            # 整树 Lean 骨架代码（LeanTranslator 写入）
+    sketch_tree: dict = field(default_factory=dict)   # 翻译结果树（verdict/sorries/gaps）
+    sketch_audit: dict = field(default_factory=dict)  # 骨架审核结果
+    formal_gaps: list = field(default_factory=list)   # 形式化缺口清单（Stage2 定位）
+    refine_result: dict = field(default_factory=dict) # Stage3 精炼结果
 
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
