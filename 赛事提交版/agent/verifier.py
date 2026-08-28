@@ -24,6 +24,8 @@ from prompts.verifier import (
     VERIFIER_SCORING_TEMPLATE,
     VERIFIER_FEEDBACK_SYSTEM,
     VERIFIER_FEEDBACK_TEMPLATE,
+    VERIFIER_BUGREPORT_SYSTEM,
+    VERIFIER_BUGREPORT_TEMPLATE,
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
 from utils.extract import smart_fallback_answer
@@ -335,6 +337,126 @@ class VerifierAgent(BaseAgent):
             logger.error(f"Feedback extraction failed: {e}")
             return "无法提取失败原因。"
 
+    # ------------------------------------------------------------------
+    # 结构化 Bug Report（依据 IMO 2025 验证-精炼流水线论文）
+    # ------------------------------------------------------------------
+    def _extract_bug_report(self, ctx, problem: str, candidate) -> dict:
+        """让验证器产出结构化 bug report（分类 + 精确定位），而非一句话错因。
+
+        论文依据：Huang & Yang (2025) 用「验证 + 精炼」流水线把 IMO 2025
+        从 best-of-32 的 21.4%~38.1% 提到 85.7%。关键不在于多采样，而在于
+        验证器给出**可执行的错因**（哪一步、什么类型、为什么），
+        修正步骤才能有的放矢。
+
+        返回 dict：{verdict, findings:[{location, type, explanation}]}
+        解析失败时返回 {"verdict": "unknown", "findings": []}。
+        """
+        text = self._candidate_text(candidate)
+        messages = [
+            {"role": "system", "content": VERIFIER_BUGREPORT_SYSTEM},
+            {"role": "user", "content": VERIFIER_BUGREPORT_TEMPLATE.format(
+                problem=problem, candidate_answer=text
+            )},
+        ]
+        empty = {"verdict": "unknown", "findings": []}
+        try:
+            # prefill 锚定到 JSON 开头：Intern 无短种子会先吐思维块吃满预算
+            raw = self.llm(ctx, prefill_messages(messages, "{"), 0.0, 2048)
+            if not raw:
+                return empty
+            raw = stitch("{", raw)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"BugReport extraction failed: {e}")
+            return empty
+
+        data = self._parse_json_loose(raw)
+        if not isinstance(data, dict):
+            return empty
+        findings = []
+        for f in (data.get("findings") or []):
+            if not isinstance(f, dict):
+                continue
+            loc = str(f.get("location") or "").strip()
+            expl = str(f.get("explanation") or "").strip()
+            ftype = str(f.get("type") or "").strip().lower()
+            if ftype not in ("critical_error", "justification_gap"):
+                ftype = "justification_gap"
+            if not (loc or expl):
+                continue
+            findings.append({"location": loc, "type": ftype,
+                             "explanation": expl})
+        verdict = str(data.get("verdict") or "").strip().lower()
+        if verdict not in ("correct", "critical_error", "justification_gap"):
+            # 以 findings 反推，比信任模型的自陈更可靠
+            verdict = ("critical_error"
+                       if any(f["type"] == "critical_error" for f in findings)
+                       else "justification_gap" if findings else "unknown")
+        return {"verdict": verdict, "findings": findings}
+
+    @staticmethod
+    def _parse_json_loose(raw: str):
+        """从 LLM 输出里尽力抠出 JSON 对象（去围栏、平衡括号）。"""
+        if not raw:
+            return None
+        import json as _json
+        text = raw.strip()
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+        if m:
+            text = m.group(1).strip()
+        try:
+            return _json.loads(text)
+        except (_json.JSONDecodeError, ValueError):
+            pass
+        # 平衡括号：取第一个能完整解析的对象
+        depth = 0
+        start = -1
+        in_str = esc = False
+        for i, ch in enumerate(text):
+            if esc:
+                esc = False
+            elif in_str and ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = not in_str
+            elif not in_str:
+                if ch == "{":
+                    if depth == 0:
+                        start = i
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0 and start >= 0:
+                        try:
+                            return _json.loads(text[start:i + 1])
+                        except (_json.JSONDecodeError, ValueError):
+                            start = -1
+        return None
+
+    @staticmethod
+    def _format_bug_report(report: dict) -> str:
+        """把结构化 bug report 渲染成注入 solver 的反馈文本。
+
+        按「关键错误优先」排序：修正步骤应当先修断链的错误，
+        论证漏洞其次（否则会先去补一处无关紧要的严谨性，浪费修正预算）。
+        """
+        findings = report.get("findings") or []
+        if not findings:
+            return ""
+        crit = [f for f in findings if f["type"] == "critical_error"]
+        gaps = [f for f in findings if f["type"] == "justification_gap"]
+        lines = []
+        if crit:
+            lines.append("【关键错误（必须修正，否则整条推理链作废）】")
+            for i, f in enumerate(crit, 1):
+                lines.append(f"{i}. 位置：“{f['location']}”")
+                lines.append(f"   问题：{f['explanation']}")
+        if gaps:
+            lines.append("【论证漏洞（需补充论证，结论可能仍成立）】")
+            for i, f in enumerate(gaps, 1):
+                lines.append(f"{i}. 位置：“{f['location']}”")
+                lines.append(f"   问题：{f['explanation']}")
+        return "\n".join(lines)
+
     def _extract_revise_feedback(self, ctx, problem: str,
                                  candidates: list, best_cluster) -> str:
         """恢复 Reflexion 反馈：仅在需要 revise 时提取错因（受预算约束）。
@@ -365,8 +487,18 @@ class VerifierAgent(BaseAgent):
 
         parts = []
         # 1) LLM 错因提取（消耗 1 次预算）
-        llm_feedback = self._extract_feedback(ctx, problem, rep_candidate)
-        if llm_feedback and llm_feedback != "无法提取失败原因。":
+        #    优先用结构化 bug report（分类 + 原文定位，修正时有的放矢）；
+        #    解析不出 findings 时回退到原来的一句话错因。二者都只花 1 次调用，
+        #    所以这是替换不是叠加。
+        llm_feedback = ""
+        if getattr(self.config, "use_bug_report_feedback", True):
+            report = self._extract_bug_report(ctx, problem, rep_candidate)
+            llm_feedback = self._format_bug_report(report)
+        if not llm_feedback:
+            llm_feedback = self._extract_feedback(ctx, problem, rep_candidate)
+            if llm_feedback == "无法提取失败原因。":
+                llm_feedback = ""
+        if llm_feedback:
             parts.append(llm_feedback)
         # 2) AnswerOracle 客观 sanity check（纯本地，不消耗预算）
         oracle_fb = self._oracle_sanity_feedback(rep_candidate)

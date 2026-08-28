@@ -12,10 +12,17 @@
 #
 # 策略（双保险）：
 #   1) 在线：优先用 elan（Lean 版本管理器）安装 lean-toolchain 指定版本（v4.31.0）；
-#   2) 离线：若无法联网，则从预打包目录 deploy/lean-cache/ 解压预编译 lake/lean，
+#   2) 离线：若无法联网，则从 deploy/lean-4.31.0-linux.zip 解压预编译 lake/lean
+#      （历史上海存在 deploy/lean-cache/ 这份**内容完全重复**的解压副本，
+#       占 3.0GB 且未被 git 跟踪，已删除，改由本脚本按需解压 zip），
 #      并把其 bin 加入 PATH（生成 lean-env.sh 供 shell 加载）。
 #
-# 幂等：已检测到可用 lake（--version 成功）则直接退出 0，不做任何破坏性操作。
+# Mathlib：deploy/mathlib-olean/ 是 `import Mathlib.Tactic` 的**依赖闭包**
+#   （337 个 olean / 110MB，由 tools/package_mathlib.py 按文件清单生成）。
+#   本脚本把它加入 LEAN_PATH，让 lean_gate 的硬验证真正能用上
+#   norm_num / ring / linarith / nlinarith / positivity / omega。
+#
+# 幂等：已检测到可用 lake（--version 成功）则跳过安装，仅校准 LEAN_PATH 与自验。
 #
 # 用法：
 #   bash deploy/setup_lean.sh            # 在线优先
@@ -34,6 +41,9 @@ LEAN_VERSION="$(echo "$LEAN_TOOLCHAIN" | sed -n 's#.*lean4:v\([0-9][0-9.]*\).*#\
 
 ELAN_INSTALL_DIR="${ELAN_HOME:-$HOME/.elan}"
 CACHE_DIR="$ROOT_DIR/deploy/lean-cache"
+ZIP_FILE="$ROOT_DIR/deploy/lean-4.31.0-linux.zip"
+# Mathlib 依赖闭包（由 tools/package_mathlib.py 按文件清单生成，约 110MB）
+MATHLIB_DIR="$ROOT_DIR/deploy/mathlib-olean"
 ENV_FILE="$ROOT_DIR/deploy/lean-env.sh"
 MODE="${1:-online}"
 LOG_PREFIX="[setup_lean]"
@@ -41,10 +51,11 @@ LOG_PREFIX="[setup_lean]"
 log()  { echo "$LOG_PREFIX $*"; }
 die()  { log "ERROR: $*"; exit 1; }
 
-# ---- 0) 已安装则直接退出 ------------------------------------------------
+# ---- 0) 已安装则跳过安装（但仍需校准 LEAN_PATH 并自验）------------------
+SKIP_INSTALL=0
 if command -v lake >/dev/null 2>&1 && lake --version >/dev/null 2>&1; then
-    log "检测到已可用的 lake: $(lake --version 2>&1 | head -1)，无需安装。"
-    exit 0
+    log "检测到已可用的 lake: $(lake --version 2>&1 | head -1)，跳过安装。"
+    SKIP_INSTALL=1
 fi
 
 # ---- 1) 工具链版本一致性校验（可选） -------------------------------------
@@ -76,12 +87,33 @@ install_with_elan() {
     command -v lake >/dev/null 2>&1
 }
 
-install_from_cache() {
-    log "尝试从离线缓存目录加载 lake/lean: $CACHE_DIR"
-    if [ ! -d "$CACHE_DIR" ]; then
-        log "缓存目录不存在，离线安装不可用。"
+install_from_zip() {
+    # 离线首选：从 zip 解压。历史上依赖的 deploy/lean-cache/ 与 zip 内容重复
+    # 且占 3.0GB，已删除；改为按需解压，省磁盘也省传输体积。
+    log "尝试从压缩包解压 lake/lean: $ZIP_FILE"
+    if [ ! -f "$ZIP_FILE" ]; then
+        log "压缩包不存在，离线安装不可用。"
         return 1
     fi
+    if ! command -v unzip >/dev/null 2>&1; then
+        log "未找到 unzip，无法解压离线工具链。"
+        return 1
+    fi
+    local target="$ROOT_DIR/deploy"
+    if [ ! -x "$CACHE_DIR/lean-4.31.0-linux/bin/lake" ]; then
+        log "解压中（约 832MB，可能需要 1-2 分钟）..."
+        unzip -q -o "$ZIP_FILE" -d "$target" || { log "解压失败"; return 1; }
+    fi
+    [ -d "$CACHE_DIR" ] || { log "解压后未找到 $CACHE_DIR"; return 1; }
+    return 0
+}
+
+install_from_cache() {
+    # 优先：已有解压好的缓存目录；否则先尝试用 zip 解压出该目录。
+    if [ ! -d "$CACHE_DIR" ]; then
+        install_from_zip || return 1
+    fi
+    log "从离线缓存目录加载 lake/lean: $CACHE_DIR"
 
     # 兼容两种缓存布局：
     #   1) 官方 release 解压原样:  $CACHE_DIR/lean-4.31.0-linux/bin/lake
@@ -126,18 +158,57 @@ install_from_cache() {
 }
 
 # ---- 3) 按模式执行 ------------------------------------------------------
-case "$MODE" in
-    --offline)
-        install_from_cache || die "离线安装失败（可检查 $CACHE_DIR 是否含预编译 lake）"
-        ;;
-    *)
-        install_with_elan || { log "在线安装失败，回退离线..."; install_from_cache || die "Lean 安装失败，评测将降级 unknown"; }
-        ;;
-esac
+if [ "$SKIP_INSTALL" -eq 0 ]; then
+    case "$MODE" in
+        --offline)
+            install_from_cache || die "离线安装失败（可检查 $ZIP_FILE 是否存在）"
+            ;;
+        *)
+            install_with_elan || { log "在线安装失败，回退离线..."; install_from_cache || die "Lean 安装失败，评测将降级 unknown"; }
+            ;;
+    esac
+fi
 
-# ---- 4) 最终校验 --------------------------------------------------------
-if command -v lake >/dev/null 2>&1 && lake --version >/dev/null 2>&1; then
-    log "✓ Lean 工具链就绪: $(lake --version 2>&1 | head -1)"
+if ! (command -v lake >/dev/null 2>&1 && lake --version >/dev/null 2>&1); then
+    die "lake 仍不可用，评测将降级 unknown（不影响主流程）"
+fi
+log "✓ Lean 工具链就绪: $(lake --version 2>&1 | head -1)"
+
+# ---- 4) 挂载 Mathlib 依赖闭包 --------------------------------------------
+# 110MB 的 olean 闭包使 `import Mathlib.Tactic` 可用（norm_num/ring/linarith/
+# nlinarith/positivity/omega）。没有它，lean_gate 只能做纯核心 Lean 验证。
+if [ -d "$MATHLIB_DIR" ]; then
+    export LEAN_PATH="$MATHLIB_DIR${LEAN_PATH:+:$LEAN_PATH}"
+    {
+        echo "# 由 deploy/setup_lean.sh 生成：Mathlib 依赖闭包（337 olean / 110MB）"
+        echo "export LEAN_PATH=\"$MATHLIB_DIR:\$LEAN_PATH\""
+    } >> "$ENV_FILE" 2>/dev/null || true
+    log "✓ 已挂载 Mathlib 闭包: $MATHLIB_DIR"
+else
+    log "WARN: 未找到 Mathlib 闭包 $MATHLIB_DIR，验证将降级为核心 Lean（unknown）"
+fi
+
+# ---- 5) 自检：证明 Mathlib 真的可用，而不是"装上了但用不了"---------------
+# 失败时 exit 1，让 lean_bridge 走 unknown 降级路径，绝不硬崩。
+PROBE_FILE="$(mktemp "${TMPDIR:-/tmp}/lean_probe_XXXXXX.lean" 2>/dev/null || echo "$ROOT_DIR/deploy/_lean_probe.lean")"
+cat > "$PROBE_FILE" <<'PROBE_EOF'
+import Mathlib.Tactic
+
+example : (1:ℕ) + 1 = 2 := by norm_num
+example (x : ℚ) : x + x = 2*x := by ring
+example (x y : ℚ) (h : x < y) : x + 1 < y + 1 := by linarith
+example (n : ℕ) : n + 3 ≥ 3 := by omega
+PROBE_EOF
+
+if lean "$PROBE_FILE" >/dev/null 2>&1; then
+    log "✓ 自检通过：import Mathlib.Tactic + norm_num/ring/linarith/omega 均可用"
+    rm -f "$PROBE_FILE"
     exit 0
 fi
-die "lake 仍不可用，评测将降级 unknown（不影响主流程）"
+
+log "WARN: Mathlib 自检未通过（norm_num/ring/linarith/omega 不可用）"
+log "      评测将降级为 unknown 放行，不影响主流程得分。"
+rm -f "$PROBE_FILE"
+# 注意：这里**不** exit 1——工具链本身已就绪，只是 Mathlib 不可用，
+# 让 lean_bridge 走 unknown 降级即可，硬失败反而会让整条流水线不可用。
+exit 0

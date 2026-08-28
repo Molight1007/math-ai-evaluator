@@ -209,7 +209,10 @@ class LeanRefinerAgent(BaseAgent):
             if new_code == base_code:
                 return {"ok": False, "lean_code": base_code,
                         "attempts": attempt + 1, "error": "无法定位 sorry 块"}
-            comp = self._compile_code(ctx, new_code)
+            # allow_sorry 必须显式传 False：_compile_code 的默认值是 True，
+            # 沿用默认值时模型回一句 `by sorry` 也会被判"编译通过"，
+            # 整个 Stage 3 精炼判定形同虚设（与 leap_eval.py 对照组口径一致）。
+            comp = self._compile_code(ctx, new_code, allow_sorry=False)
             if comp.get("ok"):
                 return {"ok": True, "lean_code": new_code,
                         "attempts": attempt + 1, "error": ""}

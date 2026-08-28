@@ -21,3 +21,39 @@ deploy/lean-cache/
 deploy/*.tar.gz
 deploy/*.zip
 deploy/lean-env.sh
+# Mathlib 依赖闭包：110MB 打包产物，由 tools/package_mathlib.py 按需生成，不提交
+deploy/mathlib-olean/
+
+# 本地 Lean 离线工具链（含 lean4-toolchain，体积 GB 级，按需本地准备，不提交）
+lean下载版/
+
+# 前端依赖
+node_modules/
+
+# 构建/调试日志
+*.log
+lean_*.log
+
+# 本地环境与备份（含密钥、本地快照）
+.env
+.git_backup_*/
+.workbuddy/
+.codebuddy/
+
+# 超大本地产物（不上传：Lean 离线工具链打包 GB 级）
+lean下载版.zip
+lean-toolchain.zip
+*.tar.zst
+.cw_skill/
+backup/
+deps/
+
+# 偶发根目录杂物
+100/
+
+# 本地配置/密钥（含 API 设置与用户名单，不提交）
+deploy/users.json
+deploy/user_api_settings.json
+
+# test_mathlib 依赖包（.lake gitlink 损坏，仅本地构建用，不提交）
+与lean相关的插件/test_mathlib/.lake/

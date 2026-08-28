@@ -302,20 +302,24 @@ class TaskContext:
 
     # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
     formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）
+    formal_gaps: list = field(default_factory=list) # Lean 形式化编译发现的「缺口」（缺失定义/引理/模块/类型），供子目标规划优先拆解
     preverify_trace: dict = field(default_factory=dict)  # 前置验证轨迹（通过/失败/修正轮次/lean声明）
     subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
     subgoal_merge_plan: str = ""                    # 最终整合方案
 
-    # ---- Blueprint DAG（LEAP Stage 1，#27）----
-    blueprint: dict = field(default_factory=dict)   # AND-OR DAG 序列化（BlueprintPlannerAgent 写入）
-    blueprint_plan: dict = field(default_factory=dict)  # DAG 转子目标规划（SubGoalSolver 写入）
+    # ---- 骨架(sketch) 阶段 Lean 审核字段（#28）----
+    sketch: str = ""                                 # 书生生成的题目骨架/Proof Body Outline（LeanPreVerifier 写入）
+    sketch_audit: dict = field(default_factory=dict) # 骨架 Lean 语法审核结果（verdict/gaps/lean_code/formal_spec）
 
-    # ---- 整树搭桥 + 迭代精炼（LEAP Stage 2/3）----
-    sketch: str = ""                            # 整树 Lean 骨架代码（LeanTranslator 写入）
-    sketch_tree: dict = field(default_factory=dict)   # 翻译结果树（verdict/sorries/gaps）
-    sketch_audit: dict = field(default_factory=dict)  # 骨架审核结果
-    formal_gaps: list = field(default_factory=list)   # 形式化缺口清单（Stage2 定位）
-    refine_result: dict = field(default_factory=dict) # Stage3 精炼结果
+    # ---- Blueprint DAG（LEAP Stage 1，#27）----
+    blueprint: dict = field(default_factory=dict)    # AND-OR DAG 序列化（BlueprintPlannerAgent 写入）
+    blueprint_plan: dict = field(default_factory=dict)  # DAG 转出的子目标规划（兼容 SubGoalSolver）
+
+    # ---- 整树 Lean 搭桥（LEAP Stage 2，#26/#28）----
+    sketch_tree: dict = field(default_factory=dict)  # DAG 叶子→Lean 声明+sorry 的整树审核结果（LeanTranslatorAgent 写入）
+
+    # ---- Stage 3 迭代精炼（#29/#30/#32/#33）----
+    refine_result: dict = field(default_factory=dict)  # sorry 补全+回溯结果（LeanRefinerAgent 写入）
 
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
@@ -328,6 +332,11 @@ class TaskContext:
     deadline: float = 0.0                      # 单题绝对截止时间戳
     total_start_time: float = 0.0              # Agent总启动时间
     total_deadline: float = 0.0                # Agent总截止时间戳
+    # 进入"时间紧急"的尾部阈值（秒）：剩余不足该值则跳过可选步骤。
+    # 2026-08-28：原先硬编码 300s，对 deep 档（1200s 预算）意味着最后 25%
+    # 的时间直接放弃协作验证/ revise / Lean，"难题用满 20 分钟"根本做不到。
+    # 改为可配置，默认 120s（由 orchestrator 按档位从 config 写入）。
+    critical_tail_seconds: float = 120.0
 
     def verified_ids(self) -> set:
         """已验证过的候选 id 集合（避免重复验证）"""
@@ -342,8 +351,13 @@ class TaskContext:
         return self.deadline - time.time()
 
     def is_time_critical(self) -> bool:
-        """距当前题目超时不足5分钟 → 跳过所有可选步骤（P1 修复：阈值 120→300）"""
-        return self.time_remaining() < 300.0
+        """距当前题目超时不足 critical_tail_seconds → 跳过所有可选步骤。
+
+        阈值历史：120 → 300（P1 修复）→ 改为可配置（默认 120）。
+        硬编码 300 会让 deep 档（1200s）最后 1/4 时间白白放弃协作验证与
+        自纠错，与"难题用满 20 分钟"的策略直接冲突。
+        """
+        return self.time_remaining() < self.critical_tail_seconds
 
     def is_timed_out(self) -> bool:
         """当前题目是否已超时"""

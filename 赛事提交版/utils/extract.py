@@ -77,6 +77,42 @@ def _is_incomplete_answer(text: str) -> bool:
     return False
 
 
+# 只由定界符 / 装饰符号 / 标题标记构成的"空壳"
+# （实测失败样本：`$$`、`\[`、`## 最终答案`——模型答案区没写出内容）
+_SHELL_ONLY = re.compile(
+    r"^[\s\$\\!\[\]\(\)\{\}\.,;：:、，。\*\-\—_#`\"'<>|/+=~^]*$")
+# 标题标记（Markdown 标题、"最终答案"字样等）本身不是答案
+_TITLE_ONLY = re.compile(r"^#*\s*(最终答案|答案|解答|解|Answer|ANSWER)[：:#\s]*$", re.I)
+# 可构成答案的实质内容：数字、字母、希腊字母、或常见数学/LaTeX 记号
+_ANSWER_CONTENT = re.compile(
+    r"[\d]|[A-Za-z]|[α-ωΑ-Ω]|[+\-*/^√∫∑∏∈⊂∪∩≠≤≥±∞→⇒⇔]")
+
+
+def _has_answer_content(text: str) -> bool:
+    r"""判断候选文本是否真的含有答案内容。
+
+    用于拦截"空壳"输出：模型答案区只写了定界符（`$$`、`\[`）或标题
+    （`## 最终答案`）时，此前会被兜底策略原样返回，最终作为答案提交给
+    判分器——历史 45 条里有 4 条属于此类，是纯工程可修的丢分。
+    """
+    if not text:
+        return False
+    s = text.strip()
+    if not s:
+        return False
+    if _SHELL_ONLY.match(s):
+        return False
+    # 去掉 Markdown 标题记号后若什么都不剩 → 空壳
+    if _TITLE_ONLY.match(s):
+        return False
+    stripped_title = re.sub(r"^#+\s*", "", s)
+    stripped_title = re.sub(r"^(最终答案|答案|解答|解|Answer|ANSWER)\s*[：:]?\s*",
+                            "", stripped_title, flags=re.I).strip()
+    if not stripped_title or _SHELL_ONLY.match(stripped_title):
+        return False
+    return bool(_ANSWER_CONTENT.search(s))
+
+
 def _extract_last_valid_answer(text: str) -> str:
     """从文本尾部向前找第一个非元语句的有效行"""
     lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
@@ -104,6 +140,21 @@ def _extract_last_valid_answer(text: str) -> str:
 
 
 def extract_final_answer(text: str) -> str:
+    r"""从模型输出中提取最终答案（对外入口）。
+
+    在内部多级策略的结果之上加一道出口校验：若抽出的是"空壳"
+    （`$$` / `\[` / `## 最终答案` 等不含实质答案内容的字符串），返回空串，
+    让调用方（solver.py:200、formatter 的 fallback）有机会换用其它候选，
+    而不是把定界符当答案提交给判分器。
+    历史 45 条里 4 条属于此类，是纯工程可修的丢分。
+    """
+    ans = _extract_final_answer_impl(text)
+    if ans and not _has_answer_content(ans):
+        return ""
+    return ans
+
+
+def _extract_final_answer_impl(text: str) -> str:
     """
     从模型输出中提取最终答案。
 
@@ -189,12 +240,21 @@ def extract_final_answer(text: str) -> str:
 
     # 策略 6：尝试忽略元语句后重新取倒数几行
     if lines := [l.strip() for l in text.strip().split("\n") if l.strip()]:
-        clean_lines = [l for l in lines if not _is_meta_line(l) and not _is_incomplete_answer(l)]
+        clean_lines = [
+            l for l in lines
+            if not _is_meta_line(l)
+            and not _is_incomplete_answer(l)
+            and _has_answer_content(l)   # 过滤 `$$` / `\[` / `## 最终答案` 这类空壳
+        ]
         if clean_lines:
             return clean_answer(clean_lines[-1])
 
     # 兜底：返回全文（确保验证器有内容可评估）
-    return text.strip()
+    # 但若全文本身不含任何答案内容（纯定界符 / 只有标题），返回空串——
+    # 让调用方（solver.py:200、formatter 的 fallback）有机会换用其它候选，
+    # 而不是把 `$$` 这种垃圾当成答案直接提交给判分器。
+    stripped_all = text.strip()
+    return stripped_all if _has_answer_content(stripped_all) else ""
 
 
 def clean_answer(text: str) -> str:

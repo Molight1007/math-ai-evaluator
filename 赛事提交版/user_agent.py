@@ -66,10 +66,7 @@ class AgentConfig:
     policy_max_tokens: int = 24576     # 策略最大 token（上限，模型实际用 3-7K）
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
-    use_blueprint: bool = False        # 旧式一次性蓝图提示词（保持关闭）
-
-    # LEAP Stage 1：Blueprint DAG 依赖驱动分解（#27，接入子目标规划，失败自动回退）
-    use_blueprint_dag: bool = True
+    use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
 
     # 验证模型（评判）
     verifier_voting_times: int = 1     # 每个候选只投 1 票（避免无效重复投票）
@@ -135,6 +132,18 @@ class AgentConfig:
     enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
     accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
+    # 结构化 bug report 驱动的修正（论文依据：IMO 2025 验证-精炼流水线）
+    # 验证器改为产出「分类 + 原文定位」的结构化错因，注入 revise 步骤。
+    # 论文实测：best-of-32 仅 21.4%~38.1%，加验证-精炼后 85.7%，
+    # 说明杠杆在错因质量而非候选数量。
+    use_bug_report_feedback: bool = True
+
+    # ---- 时间预算真正生效（2026-08-28 修复）----
+    # 此前 base.is_time_critical() 硬编码 300s，且 PaperPacer 算出的
+    # ctx.soft_budget 只打日志、无人消费 —— 动态预算形同虚设。
+    critical_tail_seconds: float = 120.0      # 剩余不足该值则跳过可选步骤（原硬编码 300）
+    deep_critical_tail_seconds: float = 60.0  # deep 档再收紧，把时间用得更尽
+    deep_quota_ratio: float = 0.25            # deep 档全卷占比上限（>25% 会导致全卷超时）
 
     # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
     # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
@@ -144,17 +153,21 @@ class AgentConfig:
     lean_gate_all_proofs: bool = True       # v2.8：扩展到全部证明题（含 standard 档）；False=仅 deep 档
     lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
     lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
-    lean_executable: str = ""               # Lean 可执行文件名（默认 "lake"）
+    lean_executable: str = ""               # Lean 可执行文件名（默认自动探测本地工具链）
+    lean_project_dir: str = ""              # 带 Mathlib 依赖的 Lean 工程目录（默认自动探测 <root>/lean下载版/test_mathlib）
     # ---- Lean 前置形式化验证 + 子目标主路径（v2.9）----
     enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
     preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
     preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
-
-    # ---- LEAP Stage 2/3 开关（整树搭桥 + 迭代精炼 + 定理检索）----
-    use_refiner: bool = False               # 整树搭桥后执行 sorry 迭代精炼（默认关，可 CLI 覆盖）
-    enable_sketch_audit: bool = True        # 骨架 Lean 审核（默认开）
-    use_leansearch: bool = False            # Mathlib 定理检索（默认关，按需开）
+    # ---- 骨架 Lean 语法审核 + leansearch 试用（#28 / #31）----
+    enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
+    use_leansearch: bool = False            # 子目标规划时试用 leansearch 检索 Mathlib 定理（#31，默认关闭先试）
+    # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
+    use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
+    # ---- Stage 3 迭代精炼 + lemma 记忆（#29/#30/#32/#33）----
+    lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
+    use_refiner: bool = False               # 整树搭桥后执行 Stage 3 sorry 迭代精炼（#32，默认关闭先试）
 
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
@@ -303,9 +316,14 @@ class ReasoningAgent:
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             "enable_collaborative_deep", "collab_max_rounds",
-            # Lean 硬验证 + LEAP
+            # 时间预算（2026-08-28 新增：让动态预算真正生效）
+            "critical_tail_seconds", "deep_critical_tail_seconds",
+            "deep_quota_ratio",
+            # 结构化 bug report 反馈
+            "use_bug_report_feedback",
+            # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
-            "use_refiner", "enable_sketch_audit", "use_leansearch",
+            "enable_sketch_audit", "use_leansearch",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

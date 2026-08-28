@@ -72,8 +72,19 @@ class LeanGateFilterTest(unittest.TestCase):
         self.assertEqual(len(kept), 3)
         self.assertEqual(fb, [])
 
-    def test_non_deep_tier_noop(self):
+    def test_standard_tier_gated(self):
+        # v2.8：门禁扩展到全部证明题档位（含 standard），非 deep 档同样门禁
         g = LeanGate(MockClient(), make_cfg())
+        g._bridge = FakeBridge()
+        ctx = mk_ctx(candidates=mk_cands())
+        kept, fb = g.apply(ctx, "standard", ctx.candidates)
+        self.assertEqual([c.id for c in kept], [0, 2])  # proof_valid + unknown(lenient)
+        self.assertEqual(len(fb), 1)
+        self.assertIn("Lean 硬验证", fb[0])
+
+    def test_standard_tier_noop_when_all_proofs_false(self):
+        # 旧行为（仅 deep 档门禁）由 lean_gate_all_proofs=False 保留
+        g = LeanGate(MockClient(), make_cfg(lean_gate_all_proofs=False))
         g._bridge = FakeBridge()
         ctx = mk_ctx(candidates=mk_cands())
         kept, fb = g.apply(ctx, "standard", ctx.candidates)

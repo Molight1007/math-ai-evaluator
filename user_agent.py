@@ -132,6 +132,18 @@ class AgentConfig:
     enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
     accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
+    # 结构化 bug report 驱动的修正（论文依据：IMO 2025 验证-精炼流水线）
+    # 验证器改为产出「分类 + 原文定位」的结构化错因，注入 revise 步骤。
+    # 论文实测：best-of-32 仅 21.4%~38.1%，加验证-精炼后 85.7%，
+    # 说明杠杆在错因质量而非候选数量。
+    use_bug_report_feedback: bool = True
+
+    # ---- 时间预算真正生效（2026-08-28 修复）----
+    # 此前 base.is_time_critical() 硬编码 300s，且 PaperPacer 算出的
+    # ctx.soft_budget 只打日志、无人消费 —— 动态预算形同虚设。
+    critical_tail_seconds: float = 120.0      # 剩余不足该值则跳过可选步骤（原硬编码 300）
+    deep_critical_tail_seconds: float = 60.0  # deep 档再收紧，把时间用得更尽
+    deep_quota_ratio: float = 0.25            # deep 档全卷占比上限（>25% 会导致全卷超时）
 
     # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
     # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
@@ -304,6 +316,11 @@ class ReasoningAgent:
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             "enable_collaborative_deep", "collab_max_rounds",
+            # 时间预算（2026-08-28 新增：让动态预算真正生效）
+            "critical_tail_seconds", "deep_critical_tail_seconds",
+            "deep_quota_ratio",
+            # 结构化 bug report 反馈
+            "use_bug_report_feedback",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
             "enable_sketch_audit", "use_leansearch",

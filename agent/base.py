@@ -332,6 +332,11 @@ class TaskContext:
     deadline: float = 0.0                      # 单题绝对截止时间戳
     total_start_time: float = 0.0              # Agent总启动时间
     total_deadline: float = 0.0                # Agent总截止时间戳
+    # 进入"时间紧急"的尾部阈值（秒）：剩余不足该值则跳过可选步骤。
+    # 2026-08-28：原先硬编码 300s，对 deep 档（1200s 预算）意味着最后 25%
+    # 的时间直接放弃协作验证/ revise / Lean，"难题用满 20 分钟"根本做不到。
+    # 改为可配置，默认 120s（由 orchestrator 按档位从 config 写入）。
+    critical_tail_seconds: float = 120.0
 
     def verified_ids(self) -> set:
         """已验证过的候选 id 集合（避免重复验证）"""
@@ -346,8 +351,13 @@ class TaskContext:
         return self.deadline - time.time()
 
     def is_time_critical(self) -> bool:
-        """距当前题目超时不足5分钟 → 跳过所有可选步骤（P1 修复：阈值 120→300）"""
-        return self.time_remaining() < 300.0
+        """距当前题目超时不足 critical_tail_seconds → 跳过所有可选步骤。
+
+        阈值历史：120 → 300（P1 修复）→ 改为可配置（默认 120）。
+        硬编码 300 会让 deep 档（1200s）最后 1/4 时间白白放弃协作验证与
+        自纠错，与"难题用满 20 分钟"的策略直接冲突。
+        """
+        return self.time_remaining() < self.critical_tail_seconds
 
     def is_timed_out(self) -> bool:
         """当前题目是否已超时"""

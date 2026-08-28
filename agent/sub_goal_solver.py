@@ -413,6 +413,23 @@ class SubGoalSolverAgent(BaseAgent):
                         f"Blueprint 整树审核: verdict={result.get('verdict')}; "
                         f"叶子={result.get('leaf_count')}, "
                         f"sorry={result.get('sorry_count')}")
+            # 整树审核未通过 → 把缺口并入 formal_gaps，供下一轮子目标规划消费。
+            # 此前 sketch_tree 只在 use_refiner=True 时被读（默认关），
+            # 审核结论等于丢弃；并入 formal_gaps 可复用既有消费通路。
+            if result.get("verdict") == "fail":
+                gaps = [g for g in (result.get("gaps") or [])
+                        if isinstance(g, dict) and g.get("detail")]
+                if gaps:
+                    existing = {g.get("detail") for g in ctx.formal_gaps}
+                    added = 0
+                    for g in gaps:
+                        if g["detail"] not in existing:
+                            ctx.formal_gaps.append(g)
+                            existing.add(g["detail"])
+                            added += 1
+                    if added:
+                        self.record(ctx, "blueprint_audit_reinject",
+                                    f"整树审核未通过，{added} 条缺口并入 formal_gaps")
             # #32 Stage 3：sorry 迭代补全（可选开启）
             if getattr(self.config, "use_refiner", False):
                 from .lean_refiner import LeanRefinerAgent

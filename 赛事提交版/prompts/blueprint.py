@@ -37,13 +37,13 @@ BLUEPRINT_DAG_SYSTEM = """你是一位精通高等数学与形式化证明的 AI
 输出格式（必须严格遵循，只输出 JSON）
 ============================================================
 
+**字段顺序很重要**：必须先输出 `root_id` 与 `nodes`，
+补充说明字段（`merge_strategy`、`problem_analysis`）一律放在最后。
+实测若把嵌套的说明块放在开头，模型容易把它摊平并提前闭合花括号，
+导致 `root_id` / `nodes` 落到主对象之外而被解析器丢弃。
+
 ```json
 {
-  "problem_analysis": {
-    "domain": "数学领域",
-    "core_objective": "核心目标的一句话描述",
-    "key_constraints": ["约束1", "约束2"]
-  },
   "root_id": "g",
   "nodes": [
     {
@@ -75,11 +75,17 @@ BLUEPRINT_DAG_SYSTEM = """你是一位精通高等数学与形式化证明的 AI
       "rationale": "叶子节点"
     }
   ],
-  "merge_strategy": "如何把各叶子子目标的结果组装为最终答案"
+  "merge_strategy": "如何把各叶子子目标的结果组装为最终答案",
+  "problem_analysis": {
+    "domain": "数学领域",
+    "core_objective": "核心目标的一句话描述",
+    "key_constraints": ["约束1", "约束2"]
+  }
 }
 ```
 
 注意事项：
+- **第一个顶层字段必须是 `root_id`**，紧接着是 `nodes`（顺序写错会直接导致解析失败）
 - id 必须唯一且简短（字母数字下划线）
 - children 里的 id 必须真实存在（不允许悬空引用）
 - 叶子节点（children 为空）的 statement 必须足够精确，可独立求解

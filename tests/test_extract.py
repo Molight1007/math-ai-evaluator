@@ -49,6 +49,23 @@ class ExtractFinalAnswerTest(unittest.TestCase):
         # 中文结论句无强模式命中时，兜底返回整行（含答案）
         self.assertIn("42", ans)
 
+    def test_shell_output_rejected(self) -> None:
+        """回归：纯定界符 / 纯标题的"空壳"输出必须返回空串。
+
+        历史失败样本（本地评测 45 条里 4 条）：模型答案区只写出 `$$`、`\[`
+        或 `## 最终答案`，此前会被尾部兜底策略原样返回并当作答案提交，
+        判分器必然判错。返回空串才能让调用方换用其它候选或重试。
+        """
+        for shell in ("$$", r"\[", "## 最终答案", "#### Answer", "$", "## 最终答案\n"):
+            self.assertEqual(extract_final_answer(shell), "",
+                             f"空壳输出 {shell!r} 应被判为无答案内容")
+
+    def test_real_answer_not_rejected(self) -> None:
+        """反例：含实质内容的答案不得被空壳过滤误杀。"""
+        for real in ("42", "$42$", r"\boxed{42}", "3", "x = 2", "A", "1,3,5"):
+            self.assertNotEqual(extract_final_answer(real), "",
+                                f"正常答案 {real!r} 不应被过滤")
+
 
 class NormalizeAnswerTest(unittest.TestCase):
     def test_latex_fraction_to_decimal(self) -> None:

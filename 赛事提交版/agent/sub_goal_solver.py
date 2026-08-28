@@ -54,27 +54,6 @@ class SubGoalSolverAgent(BaseAgent):
 
     name = "SubGoalSolver"
 
-    # ---------- Blueprint DAG 规划（#27，LEAP Stage 1）----------
-    def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
-        """用 BlueprintPlanner 生成 AND-OR DAG 并转为子目标规划。"""
-        try:
-            from .blueprint_planner import BlueprintPlannerAgent
-        except Exception as e:  # noqa: BLE001
-            logger.warning("BlueprintPlanner 导入失败: %s", e)
-            return None
-        planner = BlueprintPlannerAgent(self.client, self.config)
-        dag = planner.generate_blueprint(ctx)
-        if dag is None:
-            return None
-        plan = dag.to_subgoal_plan()
-        if not plan.get("subgoals"):
-            logger.warning("Blueprint DAG 无可用叶子子目标")
-            return None
-        self.record(ctx, "blueprint",
-                    f"Blueprint DAG → {len(plan['subgoals'])} 个子目标 "
-                    f"(根={dag.root_id}, 节点={len(dag.nodes)})")
-        return plan
-
     # ---------- JSON 提取 ----------
     @staticmethod
     def _extract_json(text: str) -> dict | None:
@@ -213,6 +192,11 @@ class SubGoalSolverAgent(BaseAgent):
     # ---------- 主流程 ----------
     def run(self, ctx: TaskContext) -> TaskContext:
         """执行子目标规划 → 逐步求解 → 结论合并 全流程，结果追加到 ctx.candidates"""
+        # 预算闸门：连规划所需的 1 次 LLM 调用都负担不起时，整体跳过、不追加候选
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
+            return ctx
+
         # 阶段一：子目标规划
         plan_data = self._plan_subgoals(ctx)
         if plan_data is None:
@@ -288,10 +272,12 @@ class SubGoalSolverAgent(BaseAgent):
         # #27 Blueprint DAG（LEAP Stage 1）：use_blueprint_dag 开启时先由
         # BlueprintPlanner 生成 AND-OR DAG（依赖驱动分解），再转子目标序列；
         # 生成失败回退到原有 LLM 规划（不损失候选来源）。
-        if getattr(self.config, "use_blueprint_dag", False):
+        if getattr(self.config, "use_blueprint_dag", False) or \
+                getattr(self.config, "use_blueprint", False):
             blueprint_plan = self._plan_from_blueprint(ctx)
             if blueprint_plan is not None:
                 return blueprint_plan
+            self.record(ctx, "blueprint", "Blueprint DAG 规划失败，回退到 LLM 子目标规划")
         domain = ctx.domain or ""
         domain_hint = get_domain_hint(domain) if domain else ""
         # v2.9：前置形式化验证通过后，把题目的形式化描述注入规划提示，
@@ -300,6 +286,32 @@ class SubGoalSolverAgent(BaseAgent):
         if getattr(ctx, "formal_spec", ""):
             problem_text = (ctx.problem + "\n\n[题目的形式化理解（已知条件→结论）]\n"
                             + ctx.formal_spec)
+        # v2.9+：把 Lean 形式化编译发现的「缺口」注入规划提示，
+        # 让 AI 优先把"缺失的定义/引理/模块/类型问题"拆成子目标
+        # （即"根据 Lean 编译的逻辑，看缺哪些" → 帮助构建子目标）。
+        gaps = getattr(ctx, "formal_gaps", [])
+        if gaps:
+            gap_lines = "\n".join(
+                "  - [%s] %s: %s" % (g.get("kind", "other"), g.get("detail", ""),
+                                     g.get("suggestion", ""))
+                for g in gaps)
+            problem_text = (problem_text
+                            + "\n\n[Lean 形式化验证发现的缺口（建议优先作为子目标拆解）]\n"
+                            + gap_lines)
+
+        # #31 leansearch 试用：把与题目相关的 Mathlib 定理检索后注入规划提示，
+        # 供书生在分解/证明子目标时参考（默认关闭，由 use_leansearch 启用）。
+        if getattr(self.config, "use_leansearch", False):
+            sr = self._search_mathlib_theorems(ctx, problem_text)
+            if sr and sr.get("status") == "ok" and sr.get("results"):
+                th_lines = "\n".join(
+                    "  - %s (%s): %s" % (r["name"], r.get("kind", "?"),
+                                         (r.get("snippet", "") or "")[:120])
+                    for r in sr["results"])
+                problem_text = (problem_text
+                                + "\n\n[检索到的相关 Mathlib 定理（leansearch 试用，"
+                                  "供子目标分解/证明参考）]\n" + th_lines)
+
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
             problem=problem_text,
@@ -358,6 +370,101 @@ class SubGoalSolverAgent(BaseAgent):
             }],
             "merge_strategy": "直接给出最终答案",
         }
+
+    # ---------- Blueprint DAG 规划（#27）----------
+    def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
+        """用 BlueprintPlanner 生成 AND-OR DAG 并转为子目标规划。"""
+        try:
+            from .blueprint_planner import BlueprintPlannerAgent
+        except Exception as e:  # noqa: BLE001
+            logger.warning("BlueprintPlanner 导入失败: %s", e)
+            return None
+        planner = BlueprintPlannerAgent(self.client, self.config)
+        dag = planner.generate_blueprint(ctx)
+        if dag is None:
+            return None
+        plan = dag.to_subgoal_plan()
+        if not plan.get("subgoals"):
+            logger.warning("Blueprint DAG 无可用叶子子目标")
+            return None
+        # LEAP Stage 2（#26/#28）：生成 DAG 后做整树 Lean 搭桥审核（写 ctx.sketch_tree，
+        # 供后续阶段消费；失败不阻断主流程）。仅当 Lean 前置验证启用时触发。
+        if getattr(self.config, "enable_sketch_audit", True):
+            self._audit_blueprint_tree(ctx, dag)
+        self.record(ctx, "blueprint",
+                    f"Blueprint DAG → {len(plan['subgoals'])} 个子目标 "
+                    f"(根={dag.root_id}, 节点={len(dag.nodes)})")
+        return plan
+
+    def _audit_blueprint_tree(self, ctx: TaskContext, dag) -> None:
+        """用 LeanTranslatorAgent 对 DAG 做整树翻译+审核（安全降级）。
+
+        #32 迭代精炼：config.use_refiner 开启时，整树审核后再执行
+        Stage 3 sorry 补全循环（含 OR 回溯 + lemma 记忆），结果写 ctx.refine_result。
+        """
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            return
+        try:
+            from .lean_translator import LeanTranslatorAgent
+            translator = LeanTranslatorAgent(self.client, self.config)
+            result = translator.translate_and_audit(ctx, dag)
+            ctx.sketch_tree = result
+            self.record(ctx, "lean_translator",
+                        f"Blueprint 整树审核: verdict={result.get('verdict')}; "
+                        f"叶子={result.get('leaf_count')}, "
+                        f"sorry={result.get('sorry_count')}")
+            # 整树审核未通过 → 把缺口并入 formal_gaps，供下一轮子目标规划消费。
+            # 此前 sketch_tree 只在 use_refiner=True 时被读（默认关），
+            # 审核结论等于丢弃；并入 formal_gaps 可复用既有消费通路。
+            if result.get("verdict") == "fail":
+                gaps = [g for g in (result.get("gaps") or [])
+                        if isinstance(g, dict) and g.get("detail")]
+                if gaps:
+                    existing = {g.get("detail") for g in ctx.formal_gaps}
+                    added = 0
+                    for g in gaps:
+                        if g["detail"] not in existing:
+                            ctx.formal_gaps.append(g)
+                            existing.add(g["detail"])
+                            added += 1
+                    if added:
+                        self.record(ctx, "blueprint_audit_reinject",
+                                    f"整树审核未通过，{added} 条缺口并入 formal_gaps")
+            # #32 Stage 3：sorry 迭代补全（可选开启）
+            if getattr(self.config, "use_refiner", False):
+                from .lean_refiner import LeanRefinerAgent
+                refiner = LeanRefinerAgent(self.client, self.config)
+                ctx.refine_result = refiner.refine_tree(ctx, dag, result)
+                self.record(ctx, "lean_refiner",
+                            f"Stage3 精炼: verdict={ctx.refine_result.get('verdict')}; "
+                            f"done={ctx.refine_result.get('done')}, "
+                            f"failed={ctx.refine_result.get('failed')}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Blueprint 整树审核失败（降级）: %s", e)
+            ctx.sketch_tree = {"verdict": "unknown", "error": str(e)[:200]}
+
+    # ---------- leansearch 试用（#31）----------
+    def _get_mathlib_searcher(self):
+        """懒加载 MathlibTheoremSearcher（缓存于实例，避免重复扫描源码）。"""
+        if getattr(self, "_mathlib_searcher", None) is None:
+            try:
+                from .lean_search import MathlibTheoremSearcher
+                self._mathlib_searcher = MathlibTheoremSearcher()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("MathlibTheoremSearcher 初始化失败: %s", e)
+                self._mathlib_searcher = False  # 标记失败，避免重复尝试
+        return self._mathlib_searcher or None
+
+    def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 5):
+        """试用 leansearch：检索与查询相关的 Mathlib 定理（安全降级返回 None）。"""
+        searcher = self._get_mathlib_searcher()
+        if searcher is None:
+            return None
+        try:
+            return searcher.search(query, limit=limit)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Mathlib 定理检索失败: %s", e)
+            return None
 
     # ---------- 阶段二：逐步求解 ----------
     def _solve_subgoal(self, ctx: TaskContext, sg: dict,

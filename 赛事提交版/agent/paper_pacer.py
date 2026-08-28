@@ -50,11 +50,26 @@ class PaperPacer:
             config, 'tier_budget',
             {"fast": 120.0, "standard": 480.0, "deep": 1200.0},
         ))
+        # ---- deep 档全卷配额（2026-08-28 新增）----
+        # 时间账：平台并发 3、Agent 总 ≤6h → 总"题·秒"预算 = 3 × 21600 = 64800。
+        # deep 占 30% 需 70080 题·秒，超 5280 → 全卷必爆；25% 封顶才安全。
+        # 不封顶的话"难题用满 20 分钟"会把简单题的时间全部吃掉。
+        # 注意：必须用 `is not None` 判断，不能用 `or 0.25` ——
+        # 0.0 是合法取值（表示完全禁用 deep 档），但 `0.0 or 0.25` 会得到 0.25。
+        _ratio = getattr(config, 'deep_quota_ratio', None)
+        self.deep_quota_ratio = 0.25 if _ratio is None else float(_ratio)
+        # 并发=3 时最多 3 题在途，进度按"已开始 - 在途"计更贴近真实剩余
+        _inflight = getattr(config, 'paper_inflight', None)
+        self._inflight_window = 3 if _inflight is None else int(_inflight)
+        # 平台并发度（决定单题时长预算的换算，见 budget_for）
+        _conc = getattr(config, 'max_workers', None)
+        self.concurrency = 3 if _conc is None else max(1, int(_conc))
 
         self.start_time = time.time()
         self._lock = threading.Lock()
         self.started = 0      # 已开始处理的题数
         self.done = 0         # 已完成的题数
+        self.deep_used = 0    # 已占用 deep 档的题数
         self.history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -81,16 +96,55 @@ class PaperPacer:
         """返回某档位的当前软预算帽（秒）。
 
         soft_budget = min(tier_cap, max(paper_cap, MIN_SOFT))
+
+        两处 2026-08-28 修复：
+
+        1) **漏乘并发数（关键）**：target_seconds 是**墙钟**预算（全卷 5h），
+           而 soft_budget 是**单题时长**。并发=3 时 3 道题同时跑，
+           全卷墙钟 = 总时长 / 3，即可用总时长 = 并发 × 剩余墙钟。
+           原式 paper_cap = 剩余墙钟 / 剩余题数，把墙钟当成了单题时长预算，
+           导致单题预算被压到真实可用值的 1/3 —— 全卷只用了 39% 的时间，
+           "难题用满 20 分钟" 根本拿不到时间。正确式需乘并发数。
+
+        2) 剩余题数改用 max(done, started - 并发数)：并发=3 时 done 最多滞后
+           3 题，用 done 会高估剩余题数、把预算放得过松。
         """
         elapsed = time.time() - self.start_time
         remaining_target = max(1.0, self.target_seconds - elapsed)
         with self._lock:
-            done = self.done
-        remaining_q = max(1, self.total_questions - done)
-        paper_cap = remaining_target / remaining_q
+            answered = max(self.done, self.started - self._inflight_window)
+        remaining_q = max(1, self.total_questions - answered)
+        # 并发换算：墙钟预算 → 单题时长预算
+        paper_cap = self.concurrency * remaining_target / remaining_q
         tier_cap = float(self.tier_caps.get(tier, 480.0))
         soft = min(tier_cap, max(paper_cap, self.min_soft))
         return soft
+
+    # ------------------------------------------------------------------
+    # deep 档配额（防止全卷超时）
+    # ------------------------------------------------------------------
+    def allow_deep(self) -> bool:
+        """是否还允许本题进入 deep 档。
+
+        渐进释放：随卷面推进逐步放开配额，避免开局把名额烧光
+        （前几题就放满的话，后面的真难题反而分不到时间）。
+        """
+        with self._lock:
+            total = max(1, self.total_questions)
+            hard_cap = total * self.deep_quota_ratio
+            # 按进度等比例释放 + 开局初始额度。
+            # 初始额度取 hard_cap 的 25%（而非固定 2），否则卷面前几题出现的
+            # 真难题会被误拒——难题在卷面上的位置是随机的，不该惩罚靠前的。
+            initial = max(2, int(hard_cap * 0.25))
+            progress = min(1.0, self.started / total)
+            released = initial + int(progress * hard_cap)
+            cap = min(hard_cap, released)
+            return self.deep_used < cap
+
+    def note_deep(self) -> None:
+        """记录一次 deep 档占用（判定通过时调用）。"""
+        with self._lock:
+            self.deep_used += 1
 
     def hard_remaining(self) -> float:
         """目标预算剩余（秒）。"""
@@ -111,4 +165,8 @@ class PaperPacer:
             "done": self.done,
             "total": self.total_questions,
             "started": self.started,
+            # deep 配额诊断：验收时用 deep_used ≤ total × ratio 校验
+            "deep_used": self.deep_used,
+            "deep_quota_cap": round(
+                self.total_questions * self.deep_quota_ratio, 1),
         }

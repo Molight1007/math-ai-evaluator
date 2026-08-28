@@ -142,8 +142,33 @@ class Orchestrator(BaseAgent):
                 ctx.tier = 'fast'
                 tier = 'fast'
                 self.record(ctx, "paper_pacer", "应急模式：强制降档到 fast")
-            # 全卷时间池动态预算帽（写入 ctx 供 trace/诊断）
+            # deep 档配额闸（2026-08-28 新增）：deep 占比封顶 25%。
+            # 时间账：并发 3 × 6h = 64800 题·秒；deep 占 30% 需 70080，超 5280
+            # → 全卷必爆。超配额时降级到 standard，保证全卷能做完。
+            if tier == 'deep' and not self.pacer.allow_deep():
+                ctx.tier = 'standard'
+                tier = 'standard'
+                self.record(ctx, "paper_pacer",
+                            f"deep 配额用尽（{self.pacer.deep_used}/"
+                            f"{self.pacer.total_questions}×"
+                            f"{self.pacer.deep_quota_ratio:.0%}），降级到 standard")
+            elif tier == 'deep':
+                self.pacer.note_deep()
+            # 全卷时间池动态预算帽
             ctx.soft_budget = self.pacer.budget_for(tier)
+            # 让动态预算**真正生效**：把单题 deadline 收紧到软预算帽。
+            # 2026-08-28 修复：此前 soft_budget 算完只用于打日志，全流水线
+            # 无第二处读取 —— PaperPacer 的动态收紧是装饰品，
+            # "难题用满 20 分钟"实际上从未生效（一直吃 1200s 硬限）。
+            if ctx.soft_budget > 0:
+                ctx.deadline = min(ctx.deadline,
+                                   ctx.start_time + ctx.soft_budget)
+            # 尾部阈值：默认 120s；deep 档再收紧到 60s，把时间用得更尽
+            ctx.critical_tail_seconds = float(
+                getattr(self.config, 'critical_tail_seconds', 120.0))
+            if tier == 'deep':
+                ctx.critical_tail_seconds = float(
+                    getattr(self.config, 'deep_critical_tail_seconds', 60.0))
             # 按档位调整 LLM 调用预算（deep 档需要更多调用次数）
             max_calls = self.config.tier_max_calls.get(
                 tier, self.config.max_total_calls)
@@ -159,6 +184,22 @@ class Orchestrator(BaseAgent):
             if (getattr(self.config, 'enable_lean_preverify', True)
                     and not ctx.state.emergency):
                 self.lean_pre_verifier.run(ctx)
+
+            # 2.6.1) 骨架审核结果回灌（#26/#28）
+            # 2026-08-28：骨架审核的 gaps 已经由 lean_pre_verifier.py:197-204
+            # 并入 ctx.formal_gaps（下游 blueprint_planner / sub_goal_solver 消费），
+            # 但 **revise_feedback 这条通路是空的** —— 自纠错回环看不到
+            # "骨架哪一步不严谨"。这里只补这一条，避免重复注入 formal_gaps。
+            audit = getattr(ctx, "sketch_audit", None) or {}
+            if audit.get("verdict") == "fail":
+                gaps = [g for g in (audit.get("gaps") or [])
+                        if isinstance(g, dict) and g.get("detail")]
+                if gaps:
+                    ctx.revise_feedback = list(ctx.revise_feedback) + [
+                        f"[骨架严谨性缺口] {g['detail']}" for g in gaps
+                    ]
+                    self.record(ctx, "sketch_audit_reinject",
+                                f"骨架审核未通过，{len(gaps)} 条缺口注入自纠错回环")
 
             # 2.7) 子目标细化主路径（v2.9）：全部档位统一先跑一次子目标分解逐步求解
             if (getattr(self.config, 'enable_subgoal_main_path', True)

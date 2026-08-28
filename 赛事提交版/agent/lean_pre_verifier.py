@@ -22,7 +22,7 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 import logging
 
 from .base import BaseAgent, TaskContext
-from .lean_bridge import LeanBridge
+from .lean_bridge import LeanBridge, _parse_analysis_json, _strip_code_fence
 
 logger = logging.getLogger("MathPilot")
 
@@ -61,7 +61,8 @@ class LeanPreVerifier(BaseAgent):
     # 主流程
     # ------------------------------------------------------------------
     def run(self, ctx: TaskContext) -> TaskContext:
-        """前置形式化验证 + 失败修正循环，写 ctx.formal_spec / ctx.preverify_trace。"""
+        """前置形式化验证 + 骨架 Lean 审核 + 失败修正循环，写
+        ctx.formal_spec / ctx.preverify_trace / ctx.sketch_audit。"""
         cfg = self.config
         if not getattr(cfg, "enable_lean_preverify", True):
             ctx.preverify_trace = {"enabled": False}
@@ -98,14 +99,16 @@ class LeanPreVerifier(BaseAgent):
             final["lean_code"] = result["lean_code"]
             final["formal_spec"] = result["formal_spec"]
             final["error"] = result["error"]
+            # 缺口（缺失定义/引理/模块/类型）：供子目标规划优先拆解
+            final["gaps"] = result.get("gaps", [])
+            ctx.formal_gaps = result.get("gaps", [])
 
             if result["verdict"] == "ok":
                 ctx.formal_spec = result["formal_spec"]
-                ctx.preverify_trace = final
                 self.record(ctx, "lean_preverify",
                             f"题目前置形式化通过（第 {r + 1} 轮）: "
                             f"{result['formal_spec'][:80]}")
-                return ctx
+                break  # 通过理解，进入骨架审核阶段
 
             if result["verdict"] == "fail":
                 # 声明编译失败 → 带错误反馈重试修正
@@ -118,8 +121,88 @@ class LeanPreVerifier(BaseAgent):
             # unknown（环境缺失/转化失败/超时）→ 不重试，直接降级
             break
 
-        # 未通过：降级跳过（formal_spec 留空），不阻断主流程
+        # ---- 骨架阶段 Lean 语法审核（#28，默认启用，安全降级）----
+        if getattr(cfg, "enable_sketch_audit", True):
+            if (ctx.budget is None or ctx.budget.can_spend(1)) and not ctx.is_time_critical():
+                self.generate_and_audit_sketch(ctx)
+
+        # 未通过/降级：formal_spec 可能留空，但不阻断主流程
         ctx.preverify_trace = final
         self.record(ctx, "lean_preverify",
-                    f"前置形式化未通过/降级: {final.get('error', '')[:120]}")
+                    f"前置形式化结束: verdict={final.get('verdict')}；"
+                    f"{final.get('error', '')[:120]}")
+        return ctx
+
+    # ------------------------------------------------------------------
+    # 骨架生成 + Lean 语法审核（#28）
+    # ------------------------------------------------------------------
+    def _generate_sketch(self, ctx: TaskContext) -> str:
+        """让书生(Intern-S1)生成题目骨架/Proof Body Outline（Informal Blueprint）。
+
+        返回自然语言骨架（编号子目标列表）；生成失败返回空串（调用方降级）。
+        """
+        try:
+            from prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
+        except ImportError:
+            from submit.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
+        formal_spec_block = ""
+        if ctx.formal_spec:
+            formal_spec_block = ("## 题目的形式化理解（已知条件→结论）\n"
+                                + ctx.formal_spec + "\n\n")
+        user_msg = LEAN_SKETCH_USER.format(
+            problem=ctx.problem, domain=ctx.domain or "未知",
+            formal_spec=formal_spec_block)
+        raw = self.llm(
+            ctx,
+            [
+                {"role": "system", "content": LEAN_SKETCH_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            0.2, 1500,
+        )
+        if not raw:
+            return ""
+        parsed = _parse_analysis_json(raw)
+        outline = (parsed or {}).get("outline") or raw
+        return _strip_code_fence(str(outline)).strip()
+
+    def generate_and_audit_sketch(self, ctx: TaskContext, sketch_text: str = "") -> TaskContext:
+        """生成（若未提供）并用 Lean 审核题目骨架，写 ctx.sketch / ctx.sketch_audit。
+
+        审核发现的缺口并入 ctx.formal_gaps，供子目标规划优先拆解
+        （即"骨架哪一步不严谨"→ 成为要先解决/拆解的子目标）。
+        """
+        bridge = self._build_bridge(ctx)
+        if bridge is None:
+            ctx.sketch_audit = {"verdict": "unknown", "error": "LeanBridge 初始化失败", "gaps": []}
+            return ctx
+
+        timeout = float(getattr(self.config, "preverify_timeout", 60.0) or 60.0)
+
+        # 1) 生成骨架（若未提供）
+        if not sketch_text:
+            if ctx.budget is not None and not ctx.budget.can_spend(1):
+                ctx.sketch_audit = {"verdict": "unknown", "error": "预算不足，跳过骨架生成", "gaps": []}
+                return ctx
+            sketch_text = self._generate_sketch(ctx)
+        ctx.sketch = sketch_text or ""
+        if not ctx.sketch:
+            ctx.sketch_audit = {"verdict": "unknown", "error": "骨架生成失败", "gaps": []}
+            return ctx
+
+        # 2) 用 Lean 审核骨架（语法/类型严谨性）
+        result = bridge.audit_sketch(ctx.sketch, ctx.problem, ctx.domain or "", timeout=timeout)
+        ctx.sketch_audit = result
+
+        # 3) 骨架缺口并入 formal_gaps（去重），供子目标规划优先拆解
+        sg = result.get("gaps", []) or []
+        if sg:
+            existing = {g.get("detail") for g in ctx.formal_gaps}
+            for g in sg:
+                if g.get("detail") and g.get("detail") not in existing:
+                    ctx.formal_gaps.append(g)
+                    existing.add(g.get("detail"))
+
+        self.record(ctx, "lean_sketch_audit",
+                    f"骨架 Lean 审核: verdict={result.get('verdict')}; 缺口 {len(sg)} 个")
         return ctx

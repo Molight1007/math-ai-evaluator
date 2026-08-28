@@ -182,7 +182,7 @@ class LeanBridgeVerifyTest(unittest.TestCase):
         bridge = LeanBridge(client, config=None)
         # 强制环境可用，但编译用不存在的 binary 使编译必失败 → 走 analyze
         bridge._lean_env_cache = {"available": True, "version": "v4", "error": ""}
-        # 覆盖 _compile 为必失败
+        # 覆盖 _compile 为必失败（兼容 project_dir 分支的 lean_filename 参数）
         bridge._compile = lambda code, work_dir, **kw: {
             "ok": False, "error": "syntax error at line 1"}
         report = bridge.verify("p", "推理", timeout=5.0)

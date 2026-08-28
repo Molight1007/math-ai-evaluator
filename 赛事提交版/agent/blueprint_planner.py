@@ -35,11 +35,13 @@ try:
         BLUEPRINT_DAG_SYSTEM,
         BLUEPRINT_DAG_USER_TEMPLATE,
     )
+    from utils.prefill import prefill_messages, stitch
 except ImportError:  # 提交包（submit/）路径兜底
     from submit.prompts.blueprint import (
         BLUEPRINT_DAG_SYSTEM,
         BLUEPRINT_DAG_USER_TEMPLATE,
     )
+    from submit.utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -286,6 +288,14 @@ def extract_json(text: str) -> Optional[dict]:
                 return None
 
     best, best_len = None, 0
+    # 关键改动（2026-08-28）：不再「命中第一个平衡片段就返回」。
+    # 实测 Intern 会输出形如
+    #   {"domain": "...", "key_constraints": [...]}, "root_id": "g", "nodes": [...]
+    # 这种把嵌套字段摊平、并提前闭合花括号的内容——此时第一个平衡片段
+    # 只是前面那段元数据碎片，root_id / nodes 全被丢掉，
+    # 表现为「Blueprint: DAG 结构非法」。改为收集全部候选并取最长者：
+    # 完整 DAG 的长度远大于任何前言碎片，这样能把正确主体捞回来。
+    best_parsed, best_parsed_len = None, 0
     for i, c in enumerate(text):
         if c != '{':
             continue
@@ -305,13 +315,15 @@ def extract_json(text: str) -> Optional[dict]:
                     depth -= 1
                     if depth == 0:
                         parsed = _try_parse(text[i:j + 1])
-                        if parsed is not None:
-                            return parsed
-                        # 解析失败也记录最长候选（兜底用）
-                        if j - i > best_len:
+                        if parsed is not None and (j - i) > best_parsed_len:
+                            best_parsed, best_parsed_len = parsed, j - i
+                        elif parsed is None and (j - i) > best_len:
+                            # 解析失败也记录最长候选（兜底用）
                             best, best_len = text[i:j + 1], j - i
                         break
             j += 1
+    if best_parsed is not None:
+        return best_parsed
     # 兜底：最长候选 + 容错（去注释/去多余逗号后重试）
     if best:
         cleaned = re.sub(r"//[^\n]*", "", best)
@@ -445,16 +457,32 @@ class BlueprintPlannerAgent(BaseAgent):
 
         user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
         last_resp = None
+        # prefill 种子前缀必须**锚定到顶层包装**，不能只用 '{"'。
+        # 实测两种失败形态：
+        #   1) 无 prefill：Intern 先吐长思维块吃满 token，JSON 被腰斩
+        #      → 「Blueprint: JSON 解析失败」（eval_A 0/3 的原始根因）
+        #   2) 仅用 '{"'：模型认为已进入对象内部，直接吐 nodes 数组的元素，
+        #      丢掉 root_id / nodes 外层包装 → 「Blueprint: DAG 结构非法」
+        # 锚定到 `{"root_id": "g", "nodes": [` 后，模型会接着写节点数组，
+        # 结构完整（实测 13 节点、validate 零错误）。
+        _PREFILL = '{"root_id": "g", "nodes": ['
         for attempt in range(max_attempts):
+            # 必须用 prefill：Intern 系列无短种子时会先输出长思维块，
+            # 把 token 预算吃满后 JSON 被腰斩（finish_reason=length），
+            # 表现为「Blueprint: JSON 解析失败」重试 3 次全败——这是 eval_A 0/3 的根因。
             resp = self.llm(
                 ctx,
-                [
-                    {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
-                    {"role": "user", "content": user_msg},
-                ],
-                0.2, 4096,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    _PREFILL,
+                ),
+                0.2, 6144,
             )
             if resp:
+                resp = stitch(_PREFILL, resp)
                 last_resp = resp
             if not resp:
                 continue
