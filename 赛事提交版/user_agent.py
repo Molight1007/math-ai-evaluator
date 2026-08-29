@@ -171,6 +171,12 @@ class AgentConfig:
     # （Solver 225 次被跳过）；而其"理解提示"收益未在数据体现。
     # 默认只 deep 档保留（难题 Lean 价值最大），fast/standard 跳过省时间给求解。
     lean_preverify_tiers: list = field(default_factory=lambda: ["deep"])
+    # 跨题定理记忆（2026-08-29 新增）
+    # 记录 lean_gate"编译验证通过"的定理按域持久化，同域新题注入复用，
+    # 跳过重复检索+翻译试错。应对"定理调用复用性高、反复检索浪费"。
+    theorem_memory_enable: bool = True
+    theorem_memory_path: str = ""      # 空 = 默认 data/theorem_memory.json
+    theorem_memory_top_k: int = 5      # 每题注入的高频定理数
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
     # ---- 骨架 Lean 语法审核 + leansearch 试用（#28 / #31）----
     enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
@@ -343,6 +349,9 @@ class ReasoningAgent:
             "preverify_max_rounds", "preverify_timeout",
             # 前置形式化按档位开关
             "lean_preverify_tiers",
+            # 跨题定理记忆
+            "theorem_memory_enable", "theorem_memory_path",
+            "theorem_memory_top_k",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

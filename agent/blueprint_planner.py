@@ -455,6 +455,16 @@ class BlueprintPlannerAgent(BaseAgent):
                                 + "\n\n[检索到的相关 Mathlib 定理（供 DAG 节点证明参考）]\n"
                                 + th_lines)
 
+        # 跨题定理记忆注入（2026-08-29）：本域"编译验证通过"的高频定理，
+        # 跳过重复检索/翻译试错——复用性高的定理直接可用。
+        if getattr(self.config, "theorem_memory_enable", True):
+            known = self._known_domain_theorems(ctx)
+            if known:
+                problem_text = (problem_text
+                                + "\n\n[本域已验证可用的 Mathlib 定理"
+                                  "（可直接引用，勿重复检索）]\n"
+                                + "\n".join(f"  - {t}" for t in known))
+
         user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
         last_resp = None
         # prefill 种子前缀必须**锚定到顶层包装**，不能只用 '{"'。
@@ -524,6 +534,17 @@ class BlueprintPlannerAgent(BaseAgent):
                 logger.warning("MathlibTheoremSearcher 初始化失败: %s", e)
                 self._mathlib_searcher = False
         return self._mathlib_searcher or None
+
+    def _known_domain_theorems(self, ctx: TaskContext) -> list[str]:
+        """读取本域高频"已验证可用"定理（跨题定理记忆，供 DAG 生成复用）。"""
+        try:
+            from .theorem_memory import TheoremMemory
+            mem = TheoremMemory(
+                str(getattr(self.config, "theorem_memory_path", "")))
+            top_k = int(getattr(self.config, "theorem_memory_top_k", 5))
+            return mem.top_theorems(ctx.domain or "", k=top_k)
+        except Exception:  # noqa: BLE001
+            return []
 
     def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 5):
         searcher = self._get_mathlib_searcher()

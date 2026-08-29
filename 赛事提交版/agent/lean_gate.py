@@ -146,6 +146,7 @@ class LeanGate:
                 )
                 # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
                 # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
+                used_names: list[str] = []
                 if report is not None:
                     code = getattr(report, "lean_code", "") or ""
                     if code:
@@ -154,7 +155,8 @@ class LeanGate:
                         thms = re.findall(
                             r"^\s*(?:theorem|lemma|example)\s+(\w+)",
                             code, re.MULTILINE)
-                        self.add_used_theorems(ctx, mods + thms)
+                        used_names = mods + thms
+                        self.add_used_theorems(ctx, used_names)
                 if report is None:
                     entry["degraded"] = "no_report"
                     kept.append(cand)          # 无报告 → 降级放行
@@ -162,6 +164,8 @@ class LeanGate:
                     entry["verdict"] = "proof_valid"
                     entry["lean_valid"] = True
                     self.note_compile_valid(ctx)  # 真正的形式化验证成功
+                    # 跨题定理记忆：验证通过的定理 → 按域持久化，供同域新题复用
+                    self._record_to_memory(ctx, domain, used_names)
                     kept.append(cand)
                 elif report.verdict == "proof_invalid":
                     entry["verdict"] = "proof_invalid"
@@ -220,3 +224,19 @@ class LeanGate:
             ctx.lean_gate.append(data)
         except Exception:  # noqa: BLE001
             ctx.lean_gate = [data]
+
+    def _record_to_memory(self, ctx: TaskContext, domain: str,
+                          names: list) -> None:
+        """跨题定理记忆：验证通过的定理按域持久化（供同域新题复用）。"""
+        try:
+            if not names:
+                return
+            if not getattr(self.config, "theorem_memory_enable", True):
+                return
+            from .theorem_memory import TheoremMemory
+            mem = TheoremMemory(
+                str(getattr(self.config, "theorem_memory_path", "")))
+            for n in names:
+                mem.record_hit(domain, n)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[lean_gate] 定理记忆写入失败（不阻断）: %s", exc)
