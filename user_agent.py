@@ -166,6 +166,11 @@ class AgentConfig:
     enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
     preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
     preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
+    # 前置形式化只在哪些档位执行（2026-08-29 新增）
+    # D5 实测：preverify 每次 21s 编译 + 多次 LLM 调用，挤占求解预算
+    # （Solver 225 次被跳过）；而其"理解提示"收益未在数据体现。
+    # 默认只 deep 档保留（难题 Lean 价值最大），fast/standard 跳过省时间给求解。
+    lean_preverify_tiers: list = field(default_factory=lambda: ["deep"])
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
     # ---- 骨架 Lean 语法审核 + leansearch 试用（#28 / #31）----
     enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
@@ -336,6 +341,8 @@ class ReasoningAgent:
             "enable_sketch_audit", "use_leansearch",
             # 前置形式化验证（rounds 影响预算消耗：每次编译 ~21s）
             "preverify_max_rounds", "preverify_timeout",
+            # 前置形式化按档位开关
+            "lean_preverify_tiers",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

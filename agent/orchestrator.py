@@ -181,7 +181,13 @@ class Orchestrator(BaseAgent):
 
             # 2.6) Lean 前置形式化验证（v2.9）：解题前把题目转 Lean 声明校验理解，
             # 通过后 ctx.formal_spec 会注入后续子目标规划；失败/降级不阻断主流程。
+            # 2026-08-29：按档位执行（默认只 deep）——preverify 每次 21s 编译 +
+            # 多次 LLM 调用挤占求解预算（D5 实测 Solver 225 次被跳过），而其
+            # "理解提示"收益未在数据体现；fast/standard 跳过省时间给真正求解。
+            preverify_tiers = list(getattr(self.config,
+                                           'lean_preverify_tiers', ["deep"]))
             if (getattr(self.config, 'enable_lean_preverify', True)
+                    and tier in preverify_tiers
                     and not ctx.state.emergency):
                 self.lean_pre_verifier.run(ctx)
 
