@@ -239,6 +239,20 @@ class Orchestrator(BaseAgent):
                         self.record(ctx, "control",
                                     f"截断续写完成 {n_completed} 个候选")
 
+            # 3.3) Step 2 无条件自改进（IMO2025 论文流水线）：
+            #      生成后、验证前，对候选先 review+improve 一遍（注入第二段推理
+            #      预算）。论文实测初始解质量低、此步显著改进。
+            #      仅 deep/standard 档执行；fast 档与应急模式跳过（控成本）。
+            if (getattr(self.config, 'enable_self_improve', True)
+                    and tier != 'fast'
+                    and not ctx.state.emergency
+                    and ctx.candidates):
+                if ctx.budget is None or ctx.budget.can_spend(1):
+                    n_imp = self.solver.improve_candidates(ctx)
+                    if n_imp > 0:
+                        self.record(ctx, "control",
+                                    f"Step2 自改进完成 {n_imp} 个候选")
+
             # 3.4) deep 档难题：三Agent协作（解题→审查→整合→反复验证）
             #      只要时间未到且未验证通过，CollaborativeSolver 内部反复循环，
             #      保证难题高正确率。

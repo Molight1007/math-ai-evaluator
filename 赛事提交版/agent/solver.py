@@ -29,6 +29,7 @@ from .base import (
 )
 from prompts.policy import (
     POLICY_SYSTEM,
+    SELF_IMPROVE_USER,
     get_policy_system,
     get_domain_hint,
     build_blueprint_user_message,
@@ -527,6 +528,67 @@ class SolverAgent(BaseAgent):
             f"纠错重解 第{ctx.revise_round}轮：生成 {count} 个修正候选",
             round=ctx.revise_round,
         )
+
+    # ----------------------------------------------------------
+    # Step 2 无条件自改进（IMO2025 验证-精炼论文，2026-08-29）
+    # ----------------------------------------------------------
+    def improve_candidates(self, ctx: TaskContext) -> int:
+        """对已有候选做一遍 review+improve（论文流水线 Step 2）。
+
+        论文（Huang & Yang 2025）观测：初始解质量普遍低，Step 2 给模型
+        注入第二段推理预算后输出显著改进。与 revise 的关键区别：
+        revise 是**验证失败才修正**（有条件），自改进是**无条件先做一遍**。
+
+        成本：每候选 1 次 LLM 调用，默认最多 self_improve_max=3 个候选
+        （fast 档与应急模式由调用方跳过）。改进成功返回候选数。
+        """
+        cands = [c for c in ctx.candidates
+                 if getattr(c, "reasoning", "") and not c.reasoning.startswith("[")]
+        limit = int(getattr(self.config, "self_improve_max", 3))
+        targets = cands[:limit]
+        if not targets:
+            return 0
+
+        n_ok = 0
+        for cand in targets:
+            if ctx.budget is not None and not ctx.budget.can_spend(1):
+                break
+            user_content = SELF_IMPROVE_USER.format(
+                problem=ctx.problem,
+                candidate_solution=cand.reasoning,
+            )
+            resp = self._compressed_solve(
+                ctx,
+                get_policy_system(use_blueprint=getattr(self.config, "use_blueprint", True)),
+                user_content,
+                temperature=0.1,
+                max_tokens=min(
+                    self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
+                    16384,
+                ),
+            )
+            if not resp or not resp.strip():
+                continue
+            if _is_refusal(resp):
+                continue
+            # 改进版比原版还差（明显更短/空壳）则丢弃
+            if len(resp.strip()) < max(40, len(cand.reasoning) // 3):
+                continue
+            answer = extract_final_answer(resp)
+            if not answer or len(answer) > 300:
+                answer = rescue_final_answer(resp)[0]
+            if not answer:
+                answer = smart_fallback_answer(resp)
+            cand.reasoning = resp
+            if answer:
+                cand.answer = answer
+            n_ok += 1
+            time.sleep(0.3)  # 速率限制
+
+        if n_ok:
+            self.record(ctx, "self_improve",
+                        f"Step2 自改进 {n_ok}/{len(targets)} 个候选")
+        return n_ok
 
     # ----------------------------------------------------------
     # 兜底直接求解（所有候选都失败时的 last-resort）

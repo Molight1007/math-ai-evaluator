@@ -112,6 +112,12 @@ class AgentConfig:
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
     use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
     use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
+    # Step 2 无条件自改进（2026-08-29 新增，依据 IMO2025 验证-精炼论文）
+    # 论文流水线六步中的 Step 2：初始解生成后**无条件**先 review+improve 一次
+    # （注入第二段推理预算），再进入验证。论文实测：初始解质量低，此步显著改进。
+    # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
+    enable_self_improve: bool = True
+    self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
 
     # ---- 难题深度求解通道（v2.5）----
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
@@ -321,6 +327,8 @@ class ReasoningAgent:
             "deep_quota_ratio",
             # 结构化 bug report 反馈
             "use_bug_report_feedback",
+            # Step 2 无条件自改进（IMO2025 论文）
+            "enable_self_improve", "self_improve_max",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
             "enable_sketch_audit", "use_leansearch",
