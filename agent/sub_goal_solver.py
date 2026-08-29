@@ -468,6 +468,7 @@ class SubGoalSolverAgent(BaseAgent):
         searcher = self._get_mathlib_searcher()
         if searcher is None:
             return None
+        self.note_mathlib_search(ctx)
         try:
             sr = searcher.search(query, limit=limit)
             # 记录命中的定理名（#1/#2 证据链）

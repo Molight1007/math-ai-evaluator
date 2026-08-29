@@ -399,6 +399,11 @@ class Orchestrator(BaseAgent):
                 "cluster": cluster_out,
                 # AI 实际检索/引用过的 Mathlib 定理（#1/#2 证据链）
                 "used_theorems": list(ctx.used_theorems or []),
+                # 检索/命中/编译通过统计（回应"调用频繁但定理不多"）
+                "mathlib_usage_stats": {
+                    **(ctx.mathlib_usage_stats or {}),
+                    "distinct_theorems": len(ctx.used_theorems or []),
+                },
             })
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)

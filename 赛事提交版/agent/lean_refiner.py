@@ -325,6 +325,7 @@ class LeanRefinerAgent(BaseAgent):
             from .lean_search import MathlibTheoremSearcher
             if getattr(self, "_searcher", None) is None:
                 self._searcher = MathlibTheoremSearcher()
+            self.note_mathlib_search(ctx)
             sr = self._searcher.search(query, limit=limit)
             # 记录命中的定理名（#1/#2 证据链）
             if sr and sr.get("results"):

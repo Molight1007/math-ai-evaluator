@@ -161,6 +161,7 @@ class LeanGate:
                 elif report.verdict == "proof_valid":
                     entry["verdict"] = "proof_valid"
                     entry["lean_valid"] = True
+                    self.note_compile_valid(ctx)  # 真正的形式化验证成功
                     kept.append(cand)
                 elif report.verdict == "proof_invalid":
                     entry["verdict"] = "proof_invalid"

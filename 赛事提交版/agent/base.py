@@ -307,6 +307,13 @@ class TaskContext:
     # 老师 #1/#2 的证据链：AI 解答 → Lean 形式化验证，用了哪些定理要有记录。
     # leansearch 检索命中、lean_gate 编译、lean_refiner 补全都追加到这里（去重）。
     used_theorems: list = field(default_factory=list)
+    # Mathlib 使用统计（2026-08-29 新增，回应"调用频繁但定理不多"的观察）
+    # search_calls: leansearch 调用次数；search_hits: 检索命中的定理条数（未去重）；
+    # compile_valid: lean_gate 编译通过的候选数；distinct_theorems 由 used_theorems 推出。
+    # 三者的关系 = "检索了 N 次 → 命中 M 条 → 实际编译通过 K 个候选"，
+    # 让"检索多但有效定理少"这个现象有数据可查。
+    mathlib_usage_stats: dict = field(default_factory=lambda: {
+        "search_calls": 0, "search_hits": 0, "compile_valid": 0})
     preverify_trace: dict = field(default_factory=dict)  # 前置验证轨迹（通过/失败/修正轮次/lean声明）
     subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
     subgoal_merge_plan: str = ""                    # 最终整合方案
@@ -388,6 +395,20 @@ class BaseAgent(ABC):
     name: str = "base"
 
     @staticmethod
+    def note_mathlib_search(ctx: "TaskContext") -> None:
+        """记录一次 leansearch 调用（区分"检索频繁"与"定理少"）。"""
+        stats = ctx.mathlib_usage_stats or {}
+        stats["search_calls"] = stats.get("search_calls", 0) + 1
+        ctx.mathlib_usage_stats = stats
+
+    @staticmethod
+    def note_compile_valid(ctx: "TaskContext") -> None:
+        """记录一次 lean_gate 编译通过（真正的形式化验证成功）。"""
+        stats = ctx.mathlib_usage_stats or {}
+        stats["compile_valid"] = stats.get("compile_valid", 0) + 1
+        ctx.mathlib_usage_stats = stats
+
+    @staticmethod
     def add_used_theorems(ctx: "TaskContext", names: list) -> None:
         """记录 AI 实际检索/引用过的 Mathlib 定理名（去重追加）。
 
@@ -405,6 +426,11 @@ class BaseAgent(ABC):
                 repo.append(n)
                 seen.add(n)
         ctx.used_theorems = repo
+        # 命中计数（未去重）：回应"调用频繁但定理不多"——检索命中条数
+        # 可能远大于去重后的定理种类数
+        stats = ctx.mathlib_usage_stats or {}
+        stats["search_hits"] = stats.get("search_hits", 0) + len(names)
+        ctx.mathlib_usage_stats = stats
 
     def __init__(self, client, config):
         self.client = client
