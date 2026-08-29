@@ -97,6 +97,10 @@ class CollaborativeSolver(BaseAgent):
         review = ""
         final = solution
         max_rounds = getattr(self.config, 'collab_max_rounds', 4)
+        # 停滞检测（2026-08-29）：连续 2 轮答案无变化 → 确认"不会了"，
+        # 提前放弃协作，避免硬耗到时间结束（用户要求：确定不会才跳下一题）。
+        last_answer = ""
+        stagnant = 0
 
         for rnd in range(1, max_rounds + 1):
             # 时间/预算耗尽 → 用当前 best 兜底返回
@@ -129,6 +133,21 @@ class CollaborativeSolver(BaseAgent):
                 self.record(ctx, "collab", f"第{rnd}轮验证通过，协作成功")
                 break
             self.record(ctx, "collab", f"第{rnd}轮验证未通过，继续审查修正")
+
+            # 停滞检测：答案连续 2 轮不变 → 协作无进展，提前放弃
+            cur_answer = extract_final_answer(final)
+            if not cur_answer or len(cur_answer) > 300:
+                cur_answer = smart_fallback_answer(final)
+            if cur_answer and cur_answer == last_answer:
+                stagnant += 1
+                if stagnant >= 2:
+                    self.record(ctx, "collab",
+                                f"第{rnd}轮答案连续 {stagnant} 轮无变化，"
+                                f"确认无进展，提前放弃协作")
+                    break
+            else:
+                last_answer = cur_answer
+                stagnant = 0
 
         answer = extract_final_answer(final)
         if not answer or len(answer) > 300:

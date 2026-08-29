@@ -95,30 +95,35 @@ class PaperPacer:
     def budget_for(self, tier: str) -> float:
         """返回某档位的当前软预算帽（秒）。
 
-        soft_budget = min(tier_cap, max(paper_cap, MIN_SOFT))
+        2026-08-29 改为「进度正常 → 给满档位预算；落后 → 收紧到平均」：
 
-        两处 2026-08-28 修复：
+        旧逻辑 soft = min(tier_cap, max(paper_cap, MIN_SOFT)) 永远按"平均剩余
+        预算"封顶：deep 档设计 1200s 却常年只拿到 ~578s（平均线），难题求解
+        必然被截断（D5 基线实测 815 次"剩余时间不足"、Solver 被跳过 225 次、
+        expr_wrong 69% 里大量是"没时间算完"而非真算错）。
 
-        1) **漏乘并发数（关键）**：target_seconds 是**墙钟**预算（全卷 5h），
-           而 soft_budget 是**单题时长**。并发=3 时 3 道题同时跑，
-           全卷墙钟 = 总时长 / 3，即可用总时长 = 并发 × 剩余墙钟。
-           原式 paper_cap = 剩余墙钟 / 剩余题数，把墙钟当成了单题时长预算，
-           导致单题预算被压到真实可用值的 1/3 —— 全卷只用了 39% 的时间，
-           "难题用满 20 分钟" 根本拿不到时间。正确式需乘并发数。
-
-        2) 剩余题数改用 max(done, started - 并发数)：并发=3 时 done 最多滞后
-           3 题，用 done 会高估剩余题数、把预算放得过松。
+        新逻辑：只要卷面进度正常（已用时间比例 ≤ 已答题数比例），单题就给满
+        档位预算（fast 120 / standard 480 / deep 1200），**保证每题做完或确认
+        不会**；只有卷面真正落后时才按剩余预算收紧（并保底 MIN_SOFT=120s，
+        绝不压到无法完成一次求解）。卷面一旦因难题吃满而落后，后续题自动收紧，
+        全卷总时间仍收敛在 target 附近。
         """
         elapsed = time.time() - self.start_time
-        remaining_target = max(1.0, self.target_seconds - elapsed)
         with self._lock:
             answered = max(self.done, self.started - self._inflight_window)
-        remaining_q = max(1, self.total_questions - answered)
-        # 并发换算：墙钟预算 → 单题时长预算
-        paper_cap = self.concurrency * remaining_target / remaining_q
         tier_cap = float(self.tier_caps.get(tier, 480.0))
-        soft = min(tier_cap, max(paper_cap, self.min_soft))
-        return soft
+
+        # 进度判定：时间消耗比例 ≤ 完成比例 → 正常/超前，给满档位预算
+        budget_frac = answered / max(1, self.total_questions)
+        time_frac = elapsed / max(1.0, self.target_seconds)
+        if time_frac <= budget_frac:
+            return tier_cap
+
+        # 落后 → 收紧到平均（剩余墙钟 × 并发 / 剩余题数），保底 min_soft
+        remaining_target = max(1.0, self.target_seconds - elapsed)
+        remaining_q = max(1, self.total_questions - answered)
+        paper_cap = self.concurrency * remaining_target / remaining_q
+        return min(tier_cap, max(paper_cap, self.min_soft))
 
     # ------------------------------------------------------------------
     # deep 档配额（防止全卷超时）
