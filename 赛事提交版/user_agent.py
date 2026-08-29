@@ -119,6 +119,11 @@ class AgentConfig:
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
     self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
+    # Step 4 bug report 复核（2026-08-29 晚新增，论文流水线 Step 4）
+    # 验证器给出缺陷反馈后，让模型先复核反馈是否属实、可驳回误报——
+    # 论文：模型可驳回验证器的错误反馈，避免好答案被误报引导改坏。
+    # 仅 deep 档 revise 回环触发（每次 +1 次 LLM 调用，预算可承受）。
+    enable_feedback_review: bool = True
 
     # ---- 难题深度求解通道（v2.5）----
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
@@ -342,6 +347,8 @@ class ReasoningAgent:
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
             "enable_self_improve", "self_improve_max",
+            # Step 4 bug report 复核
+            "enable_feedback_review",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
             "enable_sketch_audit", "use_leansearch",

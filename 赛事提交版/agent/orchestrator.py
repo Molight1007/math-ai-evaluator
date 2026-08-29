@@ -493,6 +493,46 @@ class Orchestrator(BaseAgent):
             pass
         return None
 
+    def _review_bug_feedback(self, ctx: TaskContext, feedback: str) -> str:
+        """Step 4：让模型复核验证器的缺陷反馈，可驳回误报（论文流水线）。
+
+        论文（Huang & Yang 2025）：验证器产出的 bug report 不一定全对，
+        模型复核后可驳回误报——避免好答案被错误反馈引导改坏。
+        返回复核后的 feedback；复核失败/无实质缺陷时返回精简反馈。
+        """
+        if not feedback or len(feedback) < 10:
+            return feedback
+        if not getattr(self.config, 'enable_feedback_review', True):
+            return feedback
+        # 候选：用最佳候选的 reasoning 作复核依据
+        cand_text = ""
+        bc = getattr(ctx, '_best_cluster', None)
+        if bc is not None and getattr(bc, 'rep_candidate', None) is not None:
+            cand_text = str(getattr(bc.rep_candidate, 'reasoning', ''))[:900]
+        if not cand_text and ctx.candidates:
+            cand_text = str(getattr(ctx.candidates[0], 'reasoning', ''))[:900]
+        user_msg = (
+            f"【题目】\n{ctx.problem}\n\n"
+            f"【当前解答（节选）】\n{cand_text}\n\n"
+            f"【验证器给出的缺陷反馈】\n{feedback}\n\n"
+            "请逐条复核上述缺陷反馈是否属实：\n"
+            "- 属实（真实存在且影响正确性）→ 保留该条\n"
+            "- 误报（与解答不符或判断错误）→ 驳回该条\n"
+            "只输出复核后保留的缺陷清单，若全部误报则输出：无实质缺陷")
+        raw = self.llm(ctx, [
+            {"role": "system",
+             "content": "你是严谨的数学复核员，只客观判断缺陷反馈是否属实。"},
+            {"role": "user", "content": user_msg},
+        ], temperature=0.0, max_tokens=512)
+        if not raw or not raw.strip():
+            return feedback
+        reviewed = raw.strip()
+        self.record(ctx, "review",
+                    f"反馈复核完成: {reviewed[:60]}")
+        if "无实质缺陷" in reviewed:
+            return "解答已较完整，请重新审题核对计算细节后给出最终答案。"
+        return reviewed
+
     def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
                           tier_votes: int) -> bool:
         """deep 档 0 正确票时的 revise 自纠错回环。
@@ -507,6 +547,11 @@ class Orchestrator(BaseAgent):
         feedback = ver_result.get("feedback", "")
         if not feedback:
             feedback = "所有候选均未获验证通过，请重新审题并纠正推理错误。"
+        # Step 4：复核验证器反馈（可驳回误报），避免被错误反馈误导修正。
+        # 仅当反馈非空且预算允许时做（deep 档 +1 次调用，回环前只做一次）。
+        if (ctx.budget is not None and ctx.budget.can_spend(1)
+                and len(feedback) > 10):
+            feedback = self._review_bug_feedback(ctx, feedback)
         # deep 档证明题：注入 Lean 硬验证淘汰反馈，驱动定向修正
         lean_fb = getattr(ctx, "lean_reject_feedback", None)
         if lean_fb:
