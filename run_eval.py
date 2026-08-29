@@ -463,12 +463,22 @@ class EvalEngine:
         error_class = ""
         if is_correct is False:
             error_class = _classify_error(pred_answer, gold)
+        # Mathlib 使用证据（2026-08-29）：AI 检索/验证用到的定理 + 使用统计
+        used_theorems = []
+        if isinstance(result, dict):
+            used_theorems = list(result.get("used_theorems") or [])
+        usage_stats = {}
+        if isinstance(result, dict):
+            usage_stats = result.get("mathlib_usage_stats") or {}
         return {
             "id": pid, "domain": domain,
             "question": question, "gold": gold,
             "predicted": pred_answer, "response": response[:2000],
             "correct": is_correct, "elapsed_sec": round(elapsed, 2),
             "error_class": error_class,
+            # #1/#2 证据链：实际用到的 Mathlib 定理（leansearch 命中/编译通过）
+            "used_theorems": used_theorems,
+            "mathlib_usage_stats": usage_stats,
         }
 
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:
