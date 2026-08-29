@@ -235,6 +235,13 @@ class SubGoalSolverAgent(BaseAgent):
                 "result": step_result,
             })
 
+            # 引理积累（D6）：子目标求解成功后把结论写入 ctx.lemma_repo，
+            # 供后续子目标与最终求解复用。
+            # 2026-08-29 修复：此前 lemma_repo **全流水线无人写入**，
+            # use_lemma_accumulation=True 等于读空列表（假钥匙，开了也是空转）。
+            if getattr(self.config, 'use_lemma_accumulation', False):
+                self._accumulate_lemma(ctx, sg, step_result)
+
             self.record(ctx, "subgoal_step",
                        f"子目标 #{sg['id']}「{sg['title']}」求解完成: {step_result[:80]}")
             time.sleep(0.2)  # 速率限制间隔
@@ -474,6 +481,10 @@ class SubGoalSolverAgent(BaseAgent):
         v2.7：计算类子目标（compute/derive）求解后用 AnswerOracle 做客观
         sanity check，若结果明显非法（不可解析为数学表达式），带反馈重解一次，
         实现"每步 oracle 校验"（Plan-and-Execute + oracle-in-the-loop）。
+
+        v2.10（2026-08-29）：use_lemma_accumulation 开启时，把已求得的
+        引理列表注入子目标提示词（"已建立的结论"），让后续子目标直接复用，
+        避免重复推导（D6 引理积累钥匙的真正落地点）。
         """
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=ctx.problem,
@@ -485,6 +496,14 @@ class SubGoalSolverAgent(BaseAgent):
             subgoal_description=sg["description"],
             subgoal_expected_output=sg["expected_output"],
         )
+
+        # 引理注入：已求得的子目标结论作为"前置引理"提供
+        if getattr(self.config, 'use_lemma_accumulation', False):
+            lemmas = list(getattr(ctx, "lemma_repo", []) or [])
+            if lemmas:
+                lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
+                user_msg += (
+                    f"\n\n【已建立的结论（可直接引用，无需重新推导）】\n{lemma_block}")
 
         step_result = self._call_step(ctx, user_msg)
 
@@ -503,6 +522,22 @@ class SubGoalSolverAgent(BaseAgent):
                 if retry_result and not retry_result.startswith("[子目标"):
                     return retry_result
         return step_result
+
+    def _accumulate_lemma(self, ctx: TaskContext, sg: dict, result: str) -> None:
+        """把已求得的子目标结论存入 ctx.lemma_repo（去重，单题内存）。
+
+        只收有效结果（剔除占位符/失败标记），按「标题: 结论」存储，
+        后续子目标与最终求解步骤通过提示词注入复用。
+        """
+        if not result or result.startswith("[子目标"):
+            return
+        title = (sg.get("title") or "").strip()
+        text = str(result).strip()
+        if not title or not text:
+            return
+        entry = f"{title}: {text}"
+        if entry not in ctx.lemma_repo:
+            ctx.lemma_repo.append(entry)
 
     def _call_step(self, ctx: TaskContext, user_msg: str) -> str:
         """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。"""
