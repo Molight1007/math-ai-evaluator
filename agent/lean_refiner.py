@@ -325,7 +325,12 @@ class LeanRefinerAgent(BaseAgent):
             from .lean_search import MathlibTheoremSearcher
             if getattr(self, "_searcher", None) is None:
                 self._searcher = MathlibTheoremSearcher()
-            return self._searcher.search(query, limit=limit)
+            sr = self._searcher.search(query, limit=limit)
+            # 记录命中的定理名（#1/#2 证据链）
+            if sr and sr.get("results"):
+                self.add_used_theorems(
+                    ctx, [r["name"] for r in sr["results"]])
+            return sr
         except Exception as e:  # noqa: BLE001
             logger.warning("Mathlib 定理检索失败: %s", e)
             return None

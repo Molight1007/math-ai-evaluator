@@ -303,6 +303,10 @@ class TaskContext:
     # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
     formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）
     formal_gaps: list = field(default_factory=list) # Lean 形式化编译发现的「缺口」（缺失定义/引理/模块/类型），供子目标规划优先拆解
+    # AI 实际检索/引用过的 Mathlib 定理名（2026-08-29 新增）
+    # 老师 #1/#2 的证据链：AI 解答 → Lean 形式化验证，用了哪些定理要有记录。
+    # leansearch 检索命中、lean_gate 编译、lean_refiner 补全都追加到这里（去重）。
+    used_theorems: list = field(default_factory=list)
     preverify_trace: dict = field(default_factory=dict)  # 前置验证轨迹（通过/失败/修正轮次/lean声明）
     subgoal_trace: list = field(default_factory=list)    # 每步子目标过程与中间结果（结构化输出）
     subgoal_merge_plan: str = ""                    # 最终整合方案
@@ -382,6 +386,25 @@ class BaseAgent(ABC):
     """所有智能体的基类"""
 
     name: str = "base"
+
+    @staticmethod
+    def add_used_theorems(ctx: "TaskContext", names: list) -> None:
+        """记录 AI 实际检索/引用过的 Mathlib 定理名（去重追加）。
+
+        老师 #1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理，
+        要有可回填的记录。leansearch 命中、lean_gate 编译、refiner
+        补全都会调用本方法写入 ctx.used_theorems，最终随 solve() 返回。
+        """
+        if not names:
+            return
+        repo = ctx.used_theorems if isinstance(ctx.used_theorems, list) else []
+        seen = set(repo)
+        for n in names:
+            n = str(n).strip()
+            if n and n not in seen:
+                repo.append(n)
+                seen.add(n)
+        ctx.used_theorems = repo
 
     def __init__(self, client, config):
         self.client = client

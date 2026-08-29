@@ -530,7 +530,12 @@ class BlueprintPlannerAgent(BaseAgent):
         if searcher is None:
             return None
         try:
-            return searcher.search(query, limit=limit)
+            sr = searcher.search(query, limit=limit)
+            # 记录实际命中的定理名（#1/#2 证据链：AI 用了哪些 Mathlib 定理）
+            if sr and sr.get("results"):
+                self.add_used_theorems(
+                    ctx, [r["name"] for r in sr["results"]])
+            return sr
         except Exception as e:  # noqa: BLE001
             logger.warning("Mathlib 定理检索失败: %s", e)
             return None

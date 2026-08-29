@@ -31,6 +31,7 @@ v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调�
 from __future__ import annotations
 
 import logging
+import re
 
 from .base import Budget, TaskContext
 from .lean_bridge import LeanBridge
@@ -143,6 +144,17 @@ class LeanGate:
                     domain=domain,
                     timeout=float(getattr(self.config, "lean_timeout", 60.0)),
                 )
+                # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
+                # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
+                if report is not None:
+                    code = getattr(report, "lean_code", "") or ""
+                    if code:
+                        mods = re.findall(r"^\s*import\s+(Mathlib\.\S+)",
+                                          code, re.MULTILINE)
+                        thms = re.findall(
+                            r"^\s*(?:theorem|lemma|example)\s+(\w+)",
+                            code, re.MULTILINE)
+                        self.add_used_theorems(ctx, mods + thms)
                 if report is None:
                     entry["degraded"] = "no_report"
                     kept.append(cand)          # 无报告 → 降级放行
