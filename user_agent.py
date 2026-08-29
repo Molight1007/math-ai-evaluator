@@ -32,7 +32,7 @@ MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体�
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,8 @@ class AgentConfig:
     enable_deterministic: bool = True  # 确定性硬否决（v2.8）：SymPy 代入回验 fail 淘汰候选、unknown 放行
     by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
-    use_lemma_accumulation: bool = False  # 关闭引理积累（省 token）
+    use_lemma_accumulation: bool = True  # 引理积累（2026-08-29 起默认开，按领域路由）
+    lemma_domains: list = field(default_factory=lambda: ["Number theory", "数论"])  # 领域路由：A/B 实测数论 +23pp、代数/组合被拖累
     use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
     # Step 2 无条件自改进（2026-08-29 新增，依据 IMO2025 验证-精炼论文）
     # 论文流水线六步中的 Step 2：初始解生成后**无条件**先 review+improve 一次
@@ -313,6 +314,7 @@ class ReasoningAgent:
             "by_enable_fast_path", "use_scoring",
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
+            "lemma_domains",
             "max_answer_tokens", "revise_sample_times",
             "use_blueprint", "use_blueprint_dag", "use_sub_goal",
             # 难题深度求解通道

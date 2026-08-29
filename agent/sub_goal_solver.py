@@ -239,7 +239,8 @@ class SubGoalSolverAgent(BaseAgent):
             # 供后续子目标与最终求解复用。
             # 2026-08-29 修复：此前 lemma_repo **全流水线无人写入**，
             # use_lemma_accumulation=True 等于读空列表（假钥匙，开了也是空转）。
-            if getattr(self.config, 'use_lemma_accumulation', False):
+            # 2026-08-29 二次修复：按领域路由（_use_lemma），数论开、其他关。
+            if self._use_lemma(ctx):
                 self._accumulate_lemma(ctx, sg, step_result)
 
             self.record(ctx, "subgoal_step",
@@ -491,7 +492,7 @@ class SubGoalSolverAgent(BaseAgent):
         # 2026-08-29 A/B 实测：追加在末尾会改变提示词收尾结构，使模型
         # 进入"续写模式"，答案泄漏 `[续写]` 占位符（algebra-075 因此从对变错）。
         lemma_context = ""
-        if getattr(self.config, 'use_lemma_accumulation', False):
+        if self._use_lemma(ctx):
             lemmas = list(getattr(ctx, "lemma_repo", []) or [])
             if lemmas:
                 lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
@@ -528,6 +529,19 @@ class SubGoalSolverAgent(BaseAgent):
                 if retry_result and not retry_result.startswith("[子目标"):
                     return retry_result
         return step_result
+
+    def _use_lemma(self, ctx: TaskContext) -> bool:
+        """按领域路由 lemma 累积（与 SolverAgent 同规则，2026-08-29）。
+
+        A/B 实测 lemma 全开净 0.0pp、数论 +23pp → 数论域开、其他关。
+        """
+        if not getattr(self.config, 'use_lemma_accumulation', False):
+            return False
+        domains = list(getattr(self.config, 'lemma_domains', []) or [])
+        if not domains:
+            return True
+        d = str(getattr(ctx, 'domain', '') or '')
+        return any(k in d for k in domains)
 
     def _accumulate_lemma(self, ctx: TaskContext, sg: dict, result: str) -> None:
         """把已求得的子目标结论存入 ctx.lemma_repo（去重，单题内存）。

@@ -43,6 +43,71 @@ _DECL_TERMINATORS = re.compile(
 
 _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_'.]*")
 
+# ----------------------------------------------------------------------
+# 查询规范化（2026-08-29 修复"中文/LaTeX 查询返回空"）
+# ----------------------------------------------------------------------
+# 关键词打分器只认 mathlib 风格的英文标识符；子目标求解传进来的却是
+# 中文/LaTeX 自然语言 → tokenize 后要么为空要么全是无关词，命中率为 0。
+# 这里做规则映射（零 LLM 成本）：把常见 LaTeX 指令与中文数学术语替换为
+# 英文关键词，让打分器真正有机会命中。注意分词器要求 token ≥3 字符，
+# 所以关键词一律 >=3（如 nonneg/less/greater 而非 ge/le）。
+_QUERY_REWRITES = [
+    # --- LaTeX 指令 ---
+    (r"\\geq\b", " nonneg greater "), (r"\s>=\s*", " greater "),
+    (r"\\leq\b|\\le\b", " less "), (r"\s<=\s*", " less "),
+    (r"\\neq\b", " not_eq "), (r"\\ne\b", " not_eq "),
+    (r"\\sum\b", " sum "), (r"\\prod\b", " product "),
+    (r"\\int\b", " integral "), (r"\\frac\b", " div "),
+    (r"\\sqrt\b", " sqrt "), (r"\\cdot\b|\\times\b", " mul "),
+    (r"\\in\b", " mem "), (r"\\infty\b", " infinity "),
+    (r"(\w)\^2\b", r"\1 sq "), (r"(\w)\^\{?(\d+)\}?", r"\1 pow \2 "),
+    # --- 中文数学术语（映射到 mathlib 常见标识符片段）---
+    ("整除", " divides dvd "), ("素数", " prime "), ("质数", " prime "),
+    ("奇数", " odd "), ("偶数", " even "),
+    ("不等式", " inequality "), ("证明", " prove "),
+    ("求和", " sum "), ("积分", " integral "), ("极限", " limit "),
+    ("导数", " derivative "), ("多项式", " polynomial "),
+    ("矩阵", " matrix "), ("集合", " set "), ("子集", " subset "),
+    ("实数", " real "), ("整数", " integer "), ("自然数", " nat "),
+    ("复数", " complex "), ("有理数", " rational "),
+    ("函数", " function "), ("方程", " equation "), ("三角", " trig "),
+    ("对数", " log "), ("指数", " exp "), ("模", " mod "),
+    ("同余", " congruent "), ("最大公约", " gcd "), ("最小公倍", " lcm "),
+    ("平方", " sq "), ("非负", " nonneg "), ("正数", " positive "),
+    ("负数", " negative "), ("严格", " strict "),
+]
+
+# 过泛词：命中它们不代表相关（real/integer 会命中一堆无关定理）
+_WEAK_KEYWORDS = frozenset({
+    "real", "integer", "int", "nat", "complex", "rational",
+    "set", "subset", "function", "equation", "matrix",
+    "mem", "div", "log", "exp", "mod", "sum", "product", "limit",
+})
+
+
+def normalize_query(query: str) -> tuple[str, list[str]]:
+    """把中文/LaTeX 查询规范化为 mathlib 风格英文关键词串（纯规则，零成本）。
+
+    返回 (augmented_query, strong_tokens)：
+    - augmented_query：可送入 tokenizer 的增强串
+    - strong_tokens：映射产生的**强信号词**（prime/sq/gcd 等），
+      检索方只保留命中这些词的结果，把"real/integer"这类泛词造成的
+      噪声命中直接滤掉（2026-08-29 实测：无过滤时 real 命中一堆无关定理）。
+    """
+    if not query:
+        return "", []
+    out = " " + query + " "
+    strong: list[str] = []
+    for pat, repl in _QUERY_REWRITES:
+        hit = re.sub(pat, repl, out, flags=re.IGNORECASE)
+        if hit != out:
+            out = hit
+            # 提取替换词里的"强信号"（剔除过泛词）
+            for w in re.findall(r"[A-Za-z]{3,}", repl):
+                if w not in _WEAK_KEYWORDS:
+                    strong.append(w)
+    return out, sorted(set(strong))
+
 
 class MathlibTheoremSearcher:
     """从本地 mathlib 源码检索与查询相关的定理/引理/定义（试用版）。"""
@@ -86,15 +151,24 @@ class MathlibTheoremSearcher:
             logger.warning("[lean_search] 加载 mathlib 声明失败: %s", exc)
             return {"status": "unavailable", "reason": str(exc)[:200], "results": []}
 
-        tokens = self._tokenize(query)
+        aug, strong = normalize_query(query)
+        tokens = self._tokenize(aug)
         if not tokens:
             return {"status": "ok", "root": self._root_used, "results": []}
 
+        # 强信号过滤（2026-08-29）：映射词（prime/sq/gcd 等）存在时，
+        # 只保留名称/摘要命中强词的结果——噪声命中（real/integer 泛词）直接滤掉。
         scored: list[tuple[int, dict]] = []
         for d in decls:
             score = self._score(d, tokens)
-            if score > 0:
-                scored.append((score, d))
+            if score <= 0:
+                continue
+            if strong:
+                name_low = d["name"].lower()
+                snip_low = d["snippet"].lower()
+                if not any(w in name_low or w in snip_low for w in strong):
+                    continue
+            scored.append((score, d))
         scored.sort(key=lambda x: x[0], reverse=True)
 
         results = [
