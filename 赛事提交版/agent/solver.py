@@ -223,6 +223,21 @@ class SolverAgent(BaseAgent):
             resp = self.llm(ctx, msgs, temperature, max_tokens)
             if resp:
                 return stitch("## 问题分析\n", resp)
+            # 空响应 → 简化直答重试（2026-08-30，对弱模型鲁棒）：
+            # 复杂四章节 prompt 在弱模型/部分后端下偶发空响应（=必 0 分），
+            # 换成"直接求解输出答案"的极简提示重试一次，能救回大量空分题。
+            logger.warning("[Solver] 压缩求解空响应，简化直答重试")
+            try:
+                simple_msgs = [
+                    {"role": "system",
+                     "content": "你是一个数学解题助手。请求解题目并直接输出最终答案（可含简要步骤）。"},
+                    {"role": "user", "content": user},
+                ]
+                resp2 = self.llm(ctx, simple_msgs, max(temperature, 0.2), max_tokens)
+                if resp2 and resp2.strip():
+                    return resp2.strip()
+            except Exception as e2:  # noqa: BLE001
+                logger.warning("[Solver] 简化直答重试失败: %s", str(e2)[:120])
             return None
         except Exception as e:  # noqa: BLE001
             logger.warning("Compressed solve failed: %s", e)
