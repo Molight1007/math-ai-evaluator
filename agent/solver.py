@@ -33,6 +33,7 @@ from prompts.policy import (
     get_policy_system,
     get_domain_hint,
     build_blueprint_user_message,
+    FEWSHOT_SECTION,
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
@@ -350,6 +351,9 @@ class SolverAgent(BaseAgent):
             "确保【最终答案】章节给出明确、简洁的最终结论。"
         )
         user_content = user_content + _ANSWER_GUIDE
+        # Few-Shot 输出示例（2026-08-30）：注入"题目→解答→最终答案"示例，
+        # 改善 Intern-S2 格式服从（空响应/漏问/形式差），只教格式不教方法
+        user_content = user_content + FEWSHOT_SECTION
 
         base_cid = len(ctx.candidates)
         _STRATIFIED_TEMPS = [0.1, 0.3, 0.5]
