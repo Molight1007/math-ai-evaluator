@@ -257,9 +257,31 @@ def _extract_final_answer_impl(text: str) -> str:
     return stripped_all if _has_answer_content(stripped_all) else ""
 
 
+# 模型自产"续写占位符"：Intern 系列在收尾时会回显 `[续写]` / `--- 请继续 ---`
+# 之类的交接标记（2026-08-29 lemma A/B 实测：algebra-075 答案
+# `3\n\n[续写]\n--- 请继续 ---` 因混入该标记被严格判分器判错）。
+_CONTINUATION_MARKERS = [
+    r"\[\s*续写\s*\]", r"-{2,}\s*请继续\s*-{2,}",
+    r"请继续(?:完成|推理)?", r"\[TBC\]", r"to\s*be\s*continued",
+]
+
+
+def _strip_continuation_markers(text: str) -> str:
+    """剔除答案文本里的续写占位符（纯防御，不改变正常内容）。"""
+    if not text:
+        return text
+    out = text
+    for pat in _CONTINUATION_MARKERS:
+        out = re.sub(pat, "", out, flags=re.IGNORECASE)
+    # 剔除后收拢多余空白（`x = 2 [续写] y = 3` → `x = 2  y = 3` → 单空格）
+    out = re.sub(r" {2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out
+
+
 def clean_answer(text: str) -> str:
     """清理答案文本，去除多余符号"""
-    text = text.strip()
+    text = _strip_continuation_markers(text).strip()
     # 去除编号前缀
     text = re.sub(r"^[\d]+[\.\、\)）]\s*", "", text)
     # 去除 markdown 格式
@@ -283,7 +305,7 @@ def smart_fallback_answer(text: str) -> str:
     """
     if not text or not text.strip():
         return ""
-    text = text.strip()
+    text = _strip_continuation_markers(text).strip()
 
     # 先试 extract_final_answer，有时它内部的多级策略能命中
     ans = extract_final_answer(text)
@@ -391,9 +413,15 @@ def normalize_answer(raw: str) -> str:
 
     返回归一化后的字符串。
     """
-    if not raw:
+    if raw is None:
         return ""
-    s = raw.strip()
+    # 第 0 步（2026-08-29）：剔除模型自产的续写占位符（[续写]/请继续/TBC 等）。
+    # 判分器主路径走本函数而非 clean_answer，漏加会导致 `3[续写]---请继续---`
+    # 这类答案对不上 gold=3（algebra-075 实测假阴性）。
+    text = _strip_continuation_markers(str(raw))
+    if not text:
+        return ""
+    s = text.strip()
 
     # 步骤 1: LaTeX 归一化
     # \frac{a}{b} → a/b

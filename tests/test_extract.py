@@ -124,5 +124,29 @@ class RescueFinalAnswerTest(unittest.TestCase):
         self.assertEqual(rescue_final_answer(None), ("", ""))
 
 
+class StripContinuationMarkersTest(unittest.TestCase):
+    """2026-08-29 回归：Intern 会回显 `[续写]` 占位符污染最终答案。"""
+
+    def test_marker_in_answer(self) -> None:
+        from utils.extract import clean_answer
+        # 真实失败样本：algebra-075 答案 `3\n\n[续写]\n--- 请继续 ---`
+        self.assertEqual(clean_answer("3\n\n[续写]\n--- 请继续 ---"), "3")
+
+    def test_marker_mid_answer(self) -> None:
+        from utils.extract import clean_answer
+        self.assertEqual(
+            clean_answer("x = 2 [续写] --- 请继续 --- 因此 y = 3"), "x = 2 因此 y = 3")
+
+    def test_marker_variants(self) -> None:
+        from utils.extract import _strip_continuation_markers
+        for bad in ("[续写]", "--- 请继续 ---", "请继续完成", "[TBC]"):
+            self.assertNotIn(bad, _strip_continuation_markers(f"答案{bad}"))
+
+    def test_normal_answer_untouched(self) -> None:
+        from utils.extract import clean_answer
+        self.assertEqual(clean_answer("\\boxed{3}"), "\\boxed{3}")
+        self.assertEqual(clean_answer("1307674368000"), "1307674368000")
+
+
 if __name__ == "__main__":
     unittest.main()

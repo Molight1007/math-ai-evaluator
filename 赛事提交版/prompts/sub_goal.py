@@ -119,7 +119,7 @@ SUBGOAL_STEP_USER_TEMPLATE = """请求解以下子目标。
 
 【前面步骤的结果】
 {previous_results}
-
+{lemma_context}
 【当前子目标 #{subgoal_id}】
 标题：{subgoal_title}
 类型：{subgoal_type}

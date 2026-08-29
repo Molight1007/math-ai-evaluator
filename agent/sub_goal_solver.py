@@ -486,24 +486,30 @@ class SubGoalSolverAgent(BaseAgent):
         引理列表注入子目标提示词（"已建立的结论"），让后续子目标直接复用，
         避免重复推导（D6 引理积累钥匙的真正落地点）。
         """
+        # 引理注入：已求得的子目标结论作为"前置引理"提供。
+        # **必须放在提示词中部（最终指令之前），不能追加在末尾**——
+        # 2026-08-29 A/B 实测：追加在末尾会改变提示词收尾结构，使模型
+        # 进入"续写模式"，答案泄漏 `[续写]` 占位符（algebra-075 因此从对变错）。
+        lemma_context = ""
+        if getattr(self.config, 'use_lemma_accumulation', False):
+            lemmas = list(getattr(ctx, "lemma_repo", []) or [])
+            if lemmas:
+                lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
+                lemma_context = (
+                    f"\n【已建立的结论（可直接引用，无需重新推导）】\n"
+                    f"{lemma_block}\n")
+
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=ctx.problem,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
+            lemma_context=lemma_context,
             subgoal_id=sg["id"],
             subgoal_title=sg["title"],
             subgoal_type=sg["type"],
             subgoal_description=sg["description"],
             subgoal_expected_output=sg["expected_output"],
         )
-
-        # 引理注入：已求得的子目标结论作为"前置引理"提供
-        if getattr(self.config, 'use_lemma_accumulation', False):
-            lemmas = list(getattr(ctx, "lemma_repo", []) or [])
-            if lemmas:
-                lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
-                user_msg += (
-                    f"\n\n【已建立的结论（可直接引用，无需重新推导）】\n{lemma_block}")
 
         step_result = self._call_step(ctx, user_msg)
 

@@ -110,7 +110,10 @@ _LAYOUT_CMDS = ("\\left", "\\right", "\\displaystyle", "\\!",
 def _clean_answer(text: str) -> str:
     if not text:
         return ""
-    text = text.strip()
+    # 2026-08-29：剔除模型自产续写占位符（[续写]/请继续/TBC），
+    # 否则 `3[续写]---请继续---` 对不上 gold=3（algebra-075 实测假阴性）。
+    from utils.extract import _strip_continuation_markers
+    text = _strip_continuation_markers(text).strip()
     # \boxed{X} → X（先于其它处理，避免外壳干扰后续匹配）
     boxed = _extract_boxed(text)
     if boxed is not None:
