@@ -112,11 +112,69 @@ def normalize_query(query: str) -> tuple[str, list[str]]:
 class MathlibTheoremSearcher:
     """从本地 mathlib 源码检索与查询相关的定理/引理/定义（试用版）。"""
 
-    def __init__(self, roots: list[str] | None = None, max_files: int = 4000):
+    def __init__(self, roots: list[str] | None = None, max_files: int = 4000,
+                 use_official: bool = True,
+                 api_url: str = "https://leansearch.net/search"):
         self._roots = [r for r in (roots or _CANDIDATE_ROOTS) if r and os.path.isdir(r)]
         self._max_files = max(30, int(max_files))
         self._cache: list[dict] | None = None  # (name, kind, snippet, file, line)
         self._root_used: str = self._roots[0] if self._roots else ""
+        # 官方语义搜索（2026-08-29）：优先官方 API，失败一次即降级本地（本次进程内）
+        self._use_official = bool(use_official)
+        self._api_url = api_url
+
+    # ------------------------------------------------------------------
+    # 官方 LeanSearch API（语义检索，论文《A Semantic Search Engine for Mathlib4》）
+    # ------------------------------------------------------------------
+    def _official_search(self, query: str, limit: int = 5) -> dict | None:
+        """调用官方语义搜索 API；成功返回归一化结果，失败/不可达返回 None。
+
+        失败一次后 self._use_official=False（本次进程不再尝试，避免无外网
+        平台每次检索白等 10s 超时）。
+        """
+        import json as _json
+        import urllib.request as _ur
+        try:
+            payload = _json.dumps({"query": [query], "n_results": limit}).encode("utf-8")
+            # 必须带浏览器 UA：服务器对默认 urllib UA 返回 403
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                               "AppleWebKit/537.36 Chrome/126.0 Safari/537.36"),
+            }
+            req = _ur.Request(self._api_url, data=payload,
+                              headers=headers, method="POST")
+            with _ur.urlopen(req, timeout=10) as resp:
+                raw = _json.loads(resp.read().decode("utf-8"))
+            # 官方返回: [[{result: {module_name, kind, name, signature, ...}}]]
+            items = raw[0] if raw and isinstance(raw, list) else []
+            results = []
+            for it in items:
+                r = it.get("result") if isinstance(it, dict) else None
+                if not r:
+                    continue
+                name_parts = r.get("name") or []
+                mod_parts = r.get("module_name") or []
+                short = name_parts[-1] if name_parts else ""
+                full = ".".join([*mod_parts, *name_parts]) if mod_parts else short
+                results.append({
+                    "name": full or short,
+                    "kind": r.get("kind", "theorem"),
+                    "file": ".".join(mod_parts) if mod_parts else "",
+                    "line": 0,
+                    "snippet": (r.get("signature") or
+                                r.get("informal_description") or "")[:200],
+                })
+            if results:
+                return {"status": "ok", "query": query, "root": self._api_url,
+                        "results": results[:limit], "official": True}
+            return {"status": "ok", "query": query, "root": self._api_url,
+                    "results": [], "official": True}
+        except Exception as exc:  # noqa: BLE001
+            logger.info("[lean_search] 官方 API 不可用，降级本地检索: %s", str(exc)[:120])
+            self._use_official = False  # 本次进程不再重试
+            return None
 
     # ------------------------------------------------------------------
     # 后端状态
@@ -136,12 +194,22 @@ class MathlibTheoremSearcher:
     def search(self, query: str, limit: int = 5) -> dict:
         """检索与 query 相关的 Mathlib 定理/引理/定义。
 
+        2026-08-29 升级：**官方 LeanSearch API 优先、本地关键词降级**。
+        - 官方服务（leansearch.net，语义检索，论文《A Semantic Search Engine
+          for Mathlib4》）质量远高于本地关键词打分器（实测 "gcd divides" →
+          EuclideanDomain.gcd_dvd，带 signature/证明）。
+        - 平台无外网/超时/异常 → 自动降级本地关键词（现状逻辑），不影响可用性。
+
         返回::
             {"status": "ok"|"unavailable", "query": str, "root": str,
              "results": [{"name","kind","file","line","snippet"}]}
-
-        - 后端不可用 / 异常 → status="unavailable"，results=[]（安全降级）。
         """
+        if getattr(self, "_use_official", True):
+            sr = self._official_search(query, limit=limit)
+            if sr is not None:
+                return sr
+            # 官方不可达 → 本次降级本地（不反复尝试，见 _official_search 内部标记）
+
         if not self._roots:
             return {"status": "unavailable",
                     "reason": "未找到本地 mathlib 源码目录", "results": []}
