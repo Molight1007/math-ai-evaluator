@@ -194,6 +194,12 @@ class DifficultyRouter(BaseAgent):
             score += 1.0
             evidence.append("deep:long_text")
 
+        # 2026-08-30 Algebra 专项：代数题正确率历史最低（1/11=9%），
+        # 强制提升到 deep 档以用更多候选/时间（依赖 config.algebra_force_deep）
+        if getattr(self.config, "algebra_force_deep", False) and d == "algebra":
+            score += 1.5
+            evidence.append("deep:algebra_force")
+
         score = min(5.0, max(1.0, score))
         tier = self._score_to_tier(score)
         return tier, score, evidence

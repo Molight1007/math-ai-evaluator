@@ -129,6 +129,9 @@ class AgentConfig:
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
     enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
     enable_llm_difficulty: bool = True      # 难题识别第二层：LLM 自评难度（1 次小调用）
+    # 2026-08-30 Algebra 专项：代数题路由时强制 +1.5 分（升 deep 档）
+    # 依据：45 题评测代数 1/11=9%（最大失分点），用更多候选/更长时间
+    algebra_force_deep: bool = True
     tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:4}
     tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
     tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
@@ -171,10 +174,10 @@ class AgentConfig:
     enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
     preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
     preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
-    # 前置形式化只在哪些档位执行（2026-08-29 新增）
-    # D5 实测：preverify 每次 21s 编译 + 多次 LLM 调用，挤占求解预算
-    # （Solver 225 次被跳过）；而其"理解提示"收益未在数据体现。
-    # 默认只 deep 档保留（难题 Lean 价值最大），fast/standard 跳过省时间给求解。
+    # 前置形式化只在哪些档位执行（2026-08-29 新增，08-30 二次修正）
+    # D5 实测 preverify 挤占求解预算；08-30 debug15 实测：**全档位反而更差**
+    # （21% vs 按档位 36% vs Step2 50%）——standard 加 formal_spec 提示干扰
+    # 求解。**回滚到只 deep 档**（难题 Lean 价值最大）。
     lean_preverify_tiers: list = field(default_factory=lambda: ["deep"])
     # 跨题定理记忆（2026-08-29 新增）
     # 记录 lean_gate"编译验证通过"的定理按域持久化，同域新题注入复用，
@@ -335,6 +338,8 @@ class ReasoningAgent:
             "use_blueprint", "use_blueprint_dag", "use_sub_goal",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
+            # Algebra 专项
+            "algebra_force_deep",
             "tier_sample_times", "tier_temperatures", "tier_voting_times",
             "tier_max_completions", "tier_max_calls", "tier_budget",
             "paper_target_time", "paper_min_soft", "paper_total_questions",
