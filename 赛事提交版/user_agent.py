@@ -137,8 +137,11 @@ class AgentConfig:
     tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
     tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
     tier_max_calls: dict = None             # 每档 LLM 调用预算上限
-    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:480, deep:1200}
-    paper_target_time: int = 18000          # 全卷墙钟目标（秒，5 小时=18000）
+    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:540, deep:1320}
+    # 2026-08-30 平台实测：112 题 4.65h 完成（6h 限时 78% 利用率），有 1.35h
+    # 空余 → 预算小幅上调换正确率：standard 480→540、deep 1200→1320。
+    # 保留防超时双防线（deep 配额闸 ≤25% + 动态收紧），硬上限 max_total_time 兜底。
+    paper_target_time: int = 19500          # 全卷墙钟目标（秒，5.42 小时；原 18000）
     paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
     paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
     deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
@@ -222,7 +225,8 @@ class AgentConfig:
             # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
             self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 100}
         if self.tier_budget is None:
-            self.tier_budget = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
+            # 08-30：standard 480→540、deep 1200→1320（平台时间有 1.35h 空余）
+            self.tier_budget = {"fast": 120.0, "standard": 540.0, "deep": 1320.0}
 
 
 # ============================================================
