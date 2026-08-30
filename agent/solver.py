@@ -371,9 +371,11 @@ class SolverAgent(BaseAgent):
                 # 温度分层：按索引轮转取值（count>=3 时生效）
                 base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
             # 候选 2+ 追加微扰动提示，引导不同解题思路
+            # 2026-08-30：候选 1 改为"代入验证"（借鉴 AIMO 方案 verify 模式，
+            # 针对计算错——如环流量符号/数值，提示模型自检修正）
             _perturb_hints = [
                 "",  # 候选 0: 无扰动
-                "\n请特别注意计算过程中的每一步细节，确保数值精确。",  # 候选 1
+                "\n求解完成后，请把最终答案代回原题或原条件验证：若代入后不吻合（数值或符号错误），立即修正答案后再输出。",  # 候选 1: verify 模式
                 "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2
             ]
 
