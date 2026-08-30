@@ -129,9 +129,9 @@ class AgentConfig:
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
     enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
     enable_llm_difficulty: bool = True      # 难题识别第二层：LLM 自评难度（1 次小调用）
-    # 2026-08-30 Algebra 专项：代数题路由时强制 +1.5 分（升 deep 档）
-    # 依据：45 题评测代数 1/11=9%（最大失分点），用更多候选/更长时间
-    algebra_force_deep: bool = True
+    # 2026-08-30 Algebra 专项：实测无效已回滚（45 题 Algebra 仍 1/11，
+    # v3 33.3% < ab_review 35.6%），保留开关但默认关闭
+    algebra_force_deep: bool = False
     tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:4}
     tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
     tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
