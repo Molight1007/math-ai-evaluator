@@ -444,6 +444,9 @@ class BlueprintPlannerAgent(BaseAgent):
                             + "\n\n[Lean 形式化验证发现的缺口（建议优先作为 DAG 子目标）]\n"
                             + gap_lines)
         # #31 leansearch：检索定理注入蓝图生成提示
+        # 2026-08-30 空集信号（LeanSearch v2 论文）：检索结果为空/不可用
+        # 时，显式告知"无相关定理，请自行推理"，而非硬塞噪声 top-k——
+        # 论文证明区分"检索到支持"vs"没找到支持"对求解更重要。
         if getattr(self.config, "use_leansearch", False):
             sr = self._search_mathlib_theorems(ctx, problem_text)
             if sr and sr.get("status") == "ok" and sr.get("results"):
@@ -453,7 +456,13 @@ class BlueprintPlannerAgent(BaseAgent):
                     for r in sr["results"])
                 problem_text = (problem_text
                                 + "\n\n[检索到的相关 Mathlib 定理（供 DAG 节点证明参考）]\n"
-                                + th_lines)
+                                + th_lines
+                                + "\n（如上述定理与本步无关，请忽略并自行推理）")
+            else:
+                # 空集信号：显式告知无可检索定理，不要编造
+                problem_text = (problem_text
+                                + "\n\n[Mathlib 定理检索：未检索到与本题相关的定理，"
+                                  "请完全依靠自身推理能力解题]")
 
         # 跨题定理记忆注入（2026-08-29）：本域"编译验证通过"的高频定理，
         # 跳过重复检索/翻译试错——复用性高的定理直接可用。

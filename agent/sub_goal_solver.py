@@ -309,6 +309,7 @@ class SubGoalSolverAgent(BaseAgent):
 
         # #31 leansearch 试用：把与题目相关的 Mathlib 定理检索后注入规划提示，
         # 供书生在分解/证明子目标时参考（默认关闭，由 use_leansearch 启用）。
+        # 2026-08-30 空集信号（LeanSearch v2 论文）：无可用定理时显式告知。
         if getattr(self.config, "use_leansearch", False):
             sr = self._search_mathlib_theorems(ctx, problem_text)
             if sr and sr.get("status") == "ok" and sr.get("results"):
@@ -318,7 +319,12 @@ class SubGoalSolverAgent(BaseAgent):
                     for r in sr["results"])
                 problem_text = (problem_text
                                 + "\n\n[检索到的相关 Mathlib 定理（leansearch 试用，"
-                                  "供子目标分解/证明参考）]\n" + th_lines)
+                                  "供子目标分解/证明参考）]\n" + th_lines
+                                + "\n（如与本步无关请忽略，自行推理）")
+            else:
+                problem_text = (problem_text
+                                + "\n\n[Mathlib 定理检索：未检索到相关定理，"
+                                  "请完全依靠自身推理能力]")
 
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
@@ -506,11 +512,30 @@ class SubGoalSolverAgent(BaseAgent):
                     f"\n【已建立的结论（可直接引用，无需重新推导）】\n"
                     f"{lemma_block}\n")
 
+        # ② 子目标级独立检索（2026-08-30，LeanSearch v2 论文）：
+        # 用当前子目标的描述作为查询（而非整题），提高检索精度。
+        # 供证明类子目标找定理；计算类子目标通常不需要。
+        sg_retrieval = ""
+        if (getattr(self.config, "use_leansearch", False)
+                and sg.get("type") in ("proof", "prove", "derive", "lemma")):
+            sg_q = f"{sg.get('title','')} {sg.get('description','')}"
+            sg_q = sg_q.strip() or ctx.problem
+            sr = self._search_mathlib_theorems(ctx, sg_q, limit=4)
+            if sr and sr.get("status") == "ok" and sr.get("results"):
+                lines = "\n".join(
+                    f"  - {r['name']} ({r.get('kind','?')}): {(r.get('snippet','') or '')[:100]}"
+                    for r in sr["results"])
+                sg_retrieval = (f"\n【当前子目标相关 Mathlib 定理】\n{lines}"
+                                "\n（如与本子目标无关请忽略，自行推理）")
+            else:
+                sg_retrieval = ("\n【当前子目标相关 Mathlib 定理检索：未检索到，"
+                                "请完全依靠自身推理能力】")
+
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=ctx.problem,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
-            lemma_context=lemma_context,
+            lemma_context=lemma_context + sg_retrieval,
             subgoal_id=sg["id"],
             subgoal_title=sg["title"],
             subgoal_type=sg["type"],

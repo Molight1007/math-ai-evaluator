@@ -142,7 +142,7 @@ class AgentConfig:
     paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
     paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
     deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
-    deep_revise_rounds: int = 1             # deep 档 0 票时 revise 自纠错轮数
+    deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
     enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
@@ -186,9 +186,11 @@ class AgentConfig:
     theorem_memory_path: str = ""      # 空 = 默认 data/theorem_memory.json
     theorem_memory_top_k: int = 5      # 每题注入的高频定理数
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
-    # ---- 骨架 Lean 语法审核 + leansearch 试用（#28 / #31）----
+    # ---- 骨架 Lean 语法审核 + leansearch（#28 / #31）----
     enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
-    use_leansearch: bool = False            # 子目标规划时试用 leansearch 检索 Mathlib 定理（#31，默认关闭先试）
+    # 2026-08-30：默认开启。官方语义 API（leansearch.net）质量高 + 空集信号
+    # + 子目标级查询后，证明类题目真实受益；计算题检索无害（如无结果显式告知）
+    use_leansearch: bool = True
     # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
     use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
     # ---- Stage 3 迭代精炼 + lemma 记忆（#29/#30/#32/#33）----
