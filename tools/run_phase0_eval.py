@@ -16,6 +16,7 @@ OPENAI_BASE_URL / LLM_MODEL，而项目 .env 里存的是 INTERN_* 系列，
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -86,6 +87,11 @@ def main() -> int:
         v = v.strip()
         if v.lower() in ("true", "false"):
             overrides[k] = v.lower() == "true"
+        elif v.startswith("[") or v.startswith("{"):
+            try:
+                overrides[k] = json.loads(v)   # 支持 list/dict 覆盖
+            except ValueError:
+                overrides[k] = v
         else:
             try:
                 overrides[k] = int(v)
