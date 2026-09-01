@@ -23,6 +23,10 @@ deploy/*.zip
 deploy/lean-env.sh
 # Mathlib 依赖闭包：110MB 打包产物，由 tools/package_mathlib.py 按需生成，不提交
 deploy/mathlib-olean/
+# 本地运行时闭包（铺平 full 2.3GB + core 695MB + 实验版），不进仓；
+# git 里 0c7b69d 的 338 旧布局缺伴随文件实测不可用（missing data file），已移除跟踪
+data/mathlib-closure/
+data/mathlib-closure-*/
 
 # gitcode 镜像同步目录：整份代码副本，独立推送到 gitcode 远端，不进主仓库
 gitcode_sync/
