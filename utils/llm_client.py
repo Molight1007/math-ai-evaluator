@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from typing import Optional
 
@@ -30,6 +31,55 @@ logger = logging.getLogger("MathPilot.LLMClient")
 _DEFAULT_TIMEOUT = 120  # 秒
 _MAX_RETRIES = 2
 _RETRY_BACKOFF = 2.0
+
+# ============================================================
+# 真实截断信号（2026-09-01 SU-01 优化 0）
+# ------------------------------------------------------------
+# agent/base.py 已有启发式「疑似截断」埋点（resp_len >= max_tokens*0.95），
+# 但服务端明确返回 finish_reason=length 才算**真实截断**。这里在
+# 流式/非流式两条路径捕获真实 finish_reason，模块级统计 + listener 回调，
+# 由调用方（agent/base.py）合并进截断日志，支撑截断率 <5% 健康阈值。
+# 修改影响：chat() 返回值不变，纯增量。
+# ============================================================
+_TRUNCATION_STATS = {"calls": 0, "truncated": 0}
+_TRUNCATION_STATS_LOCK = threading.Lock()
+_TRUNCATION_LISTENER = None
+
+
+def set_truncation_listener(fn) -> None:
+    """注册截断回调 fn(model: str, max_tokens: Optional[int], finish_reason: str)。
+
+    在每次响应结束且 finish_reason=="length" 时被调用；异常被吞掉，零行为影响。
+    """
+    global _TRUNCATION_LISTENER
+    _TRUNCATION_LISTENER = fn
+
+
+def get_truncation_stats() -> dict:
+    """返回 {"calls": N, "truncated": M}（真实 finish_reason 口径，跨所有调用方累计）。"""
+    with _TRUNCATION_STATS_LOCK:
+        return dict(_TRUNCATION_STATS)
+
+
+def _mark_response(model: str, finish_reason: Optional[str],
+                   max_tokens: Optional[int]) -> None:
+    """每次 LLM 响应结束计数一次；finish_reason=='length' 时计截断并通知 listener。"""
+    with _TRUNCATION_STATS_LOCK:
+        _TRUNCATION_STATS["calls"] += 1
+    if finish_reason != "length":
+        return
+    with _TRUNCATION_STATS_LOCK:
+        _TRUNCATION_STATS["truncated"] += 1
+    logger.warning(
+        "LLM response truncated (finish_reason=length, model=%s, max_tokens=%s)",
+        model, max_tokens,
+    )
+    fn = _TRUNCATION_LISTENER
+    if fn is not None:
+        try:
+            fn(model, max_tokens, finish_reason)
+        except Exception:  # noqa: BLE001  listener 异常绝不外泄
+            pass
 
 
 class LLMError(Exception):
@@ -107,10 +157,19 @@ class LLMClient:
                 )
                 if resp.status_code == 200:
                     if stream:
-                        content = _consume_stream(resp, logger, self.model)
+                        content = _consume_stream(resp, logger, self.model, max_tokens)
                         return content
                     data = resp.json()
                     content = _extract_content(data)
+                    # 真实截断信号：非流式响应的 finish_reason（部分代理可能缺失）
+                    fr = None
+                    try:
+                        choices = data.get("choices") or []
+                        if choices and isinstance(choices[0], dict):
+                            fr = choices[0].get("finish_reason")
+                    except Exception:  # noqa: BLE001
+                        fr = None
+                    _mark_response(self.model, fr, max_tokens)
                     logger.debug(
                         "LLM chat OK [model=%s, tokens=%s, len=%d]",
                         self.model,
@@ -149,12 +208,14 @@ class LLMClient:
         return f"LLMClient(model={self.model}, base_url={self.base_url})"
 
 
-def _consume_stream(resp, logger, model: str) -> str:
+def _consume_stream(resp, logger, model: str, max_tokens: Optional[int] = None) -> str:
     """消费 SSE 流式响应，累积 content + reasoning_content 直到 [DONE] 或结束。
 
     返回与 chat() 一致的纯文本：优先拼接 content；若 content 为空（纯推理模型
     如 DeepSeek-R1/Intern-S1 的推理全部在 reasoning_content），则回退拼接
     reasoning_content。这样调用方无需区分两种通道。
+
+    结束时上报真实 finish_reason（截断信号）。
     """
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
@@ -193,6 +254,8 @@ def _consume_stream(resp, logger, model: str) -> str:
         text_out = content
     else:
         text_out = "".join(reasoning_parts)
+    # 真实截断信号：流式路径的 finish_reason
+    _mark_response(model, finish_reason, max_tokens)
     logger.debug(
         "LLM stream OK [model=%s, chunks=%d, finish=%s, content=%d, reasoning=%d]",
         model, chunk_count, finish_reason, len(content), len("".join(reasoning_parts)),

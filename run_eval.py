@@ -645,6 +645,7 @@ def main():
     parser.add_argument("--revise_rounds", type=int, default=None, help="max_revise_rounds（自纠错回环轮数）")
     parser.add_argument("--use_proof", type=str, default=None, choices=["true", "false"], help="use_proof_channel（证明题专用通道）")
     parser.add_argument("--use_blueprint", type=str, default=None, choices=["true", "false"], help="use_blueprint（蓝图分解）")
+    parser.add_argument("--enable_dag_replan", type=str, default=None, choices=["true", "false"], help="enable_dag_replan（DAG 动态评审+重生成闭环）")
     parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     args = parser.parse_args()
@@ -685,6 +686,8 @@ def main():
         overrides["use_proof_channel"] = args.use_proof == "true"
     if args.use_blueprint is not None:
         overrides["use_blueprint"] = args.use_blueprint == "true"
+    if args.enable_dag_replan is not None:
+        overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
     if args.use_fast_path is not None:
         overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:

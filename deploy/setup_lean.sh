@@ -17,9 +17,10 @@
 #       占 3.0GB 且未被 git 跟踪，已删除，改由本脚本按需解压 zip），
 #      并把其 bin 加入 PATH（生成 lean-env.sh 供 shell 加载）。
 #
-# Mathlib：deploy/mathlib-olean/ 是 `import Mathlib.Tactic` 的**依赖闭包**
-#   （337 个 olean / 110MB，由 tools/package_mathlib.py 按文件清单生成）。
-#   本脚本把它加入 LEAN_PATH，让 lean_gate 的硬验证真正能用上
+# Mathlib：deploy/mathlib-olean/ 是核心战术模块的**依赖闭包**
+#   （920 个 olean / 约 695MB，由 tools/package_mathlib.py 从 5 个具体入口
+#   NormNum/Ring/Linarith/Positivity/Omega BFS 构建，缺 Mathlib/Tactic.olean
+#   聚合入口）。本脚本把它加入 LEAN_PATH，让 lean_gate 的硬验证真正能用上
 #   norm_num / ring / linarith / nlinarith / positivity / omega。
 #
 # 幂等：已检测到可用 lake（--version 成功）则跳过安装，仅校准 LEAN_PATH 与自验。
@@ -175,38 +176,62 @@ fi
 log "✓ Lean 工具链就绪: $(lake --version 2>&1 | head -1)"
 
 # ---- 4) 挂载 Mathlib 依赖闭包 --------------------------------------------
-# 110MB 的 olean 闭包使 `import Mathlib.Tactic` 可用（norm_num/ring/linarith/
-# nlinarith/positivity/omega）。没有它，lean_gate 只能做纯核心 Lean 验证。
+# core 依赖闭包（BFS 收集的 5 具体入口传递闭包，含 Batteries/Aesop/Qq 等外部
+# 包）使 norm_num/ring/linarith/nlinarith/positivity/omega 可用。注意该闭包
+# **缺 Mathlib/Tactic.olean 聚合入口**（它 import 337 个子模块，core 只覆盖
+# 194 个），因此代码侧 import 归一化（agent/lean_bridge.py）与下方自检探针都
+# 按「聚合入口可用则用，否则用 4 个具体模块导入」自适应。
 if [ -d "$MATHLIB_DIR" ]; then
     export LEAN_PATH="$MATHLIB_DIR${LEAN_PATH:+:$LEAN_PATH}"
-    {
-        echo "# 由 deploy/setup_lean.sh 生成：Mathlib 依赖闭包（337 olean / 110MB）"
-        echo "export LEAN_PATH=\"$MATHLIB_DIR:\$LEAN_PATH\""
-    } >> "$ENV_FILE" 2>/dev/null || true
-    log "✓ 已挂载 Mathlib 闭包: $MATHLIB_DIR"
+    # 幂等写入：历史版本每次运行都 >> 追加，曾累积 60+ 行重复。已写入则跳过。
+    if [ -f "$ENV_FILE" ] && grep -q "$MATHLIB_DIR" "$ENV_FILE" 2>/dev/null; then
+        log "LEAN_PATH 已在 $ENV_FILE 中，跳过写入（幂等）"
+    else
+        {
+            echo "# 由 deploy/setup_lean.sh 生成：Mathlib 依赖闭包"
+            echo "export LEAN_PATH=\"$MATHLIB_DIR:\$LEAN_PATH\""
+        } >> "$ENV_FILE" 2>/dev/null || true
+        log "✓ 已挂载 Mathlib 闭包: $MATHLIB_DIR"
+    fi
 else
     log "WARN: 未找到 Mathlib 闭包 $MATHLIB_DIR，验证将降级为核心 Lean（unknown）"
 fi
 
 # ---- 5) 自检：证明 Mathlib 真的可用，而不是"装上了但用不了"---------------
 # 失败时 exit 1，让 lean_bridge 走 unknown 降级路径，绝不硬崩。
+# 探针覆盖全部 6 种核心 tactic（与 tools/package_mathlib.py 的 PROBE_SOURCE 对齐）。
+# core 闭包（deploy/mathlib-olean）缺 Mathlib/Tactic.olean 聚合入口 →
+# 探针按环境自适应：聚合入口存在用 import Mathlib.Tactic，否则用 4 个
+# 具体模块导入（同样提供全部 6 种 tactic，探针实测可编译通过）。
 PROBE_FILE="$(mktemp "${TMPDIR:-/tmp}/lean_probe_XXXXXX.lean" 2>/dev/null || echo "$ROOT_DIR/deploy/_lean_probe.lean")"
-cat > "$PROBE_FILE" <<'PROBE_EOF'
-import Mathlib.Tactic
+if [ -f "$MATHLIB_DIR/Mathlib/Tactic.olean" ]; then
+    PROBE_IMPORT="import Mathlib.Tactic"
+    PROBE_LABEL="import Mathlib.Tactic"
+else
+    PROBE_IMPORT="import Mathlib.Tactic.NormNum
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Positivity"
+    PROBE_LABEL="import Mathlib.Tactic.NormNum/Ring/Linarith/Positivity (core 闭包)"
+fi
+cat > "$PROBE_FILE" <<PROBE_EOF
+$PROBE_IMPORT
 
 example : (1:ℕ) + 1 = 2 := by norm_num
 example (x : ℚ) : x + x = 2*x := by ring
 example (x y : ℚ) (h : x < y) : x + 1 < y + 1 := by linarith
+example (x : ℚ) (h : x^2 ≤ 4) (h2 : x ≥ 0) : x ≤ 2 := by nlinarith
+example (x : ℚ) (h : x > 0) : x^2 > 0 := by positivity
 example (n : ℕ) : n + 3 ≥ 3 := by omega
 PROBE_EOF
 
 if lean "$PROBE_FILE" >/dev/null 2>&1; then
-    log "✓ 自检通过：import Mathlib.Tactic + norm_num/ring/linarith/omega 均可用"
+    log "✓ 自检通过：$PROBE_LABEL + norm_num/ring/linarith/nlinarith/positivity/omega 均可用"
     rm -f "$PROBE_FILE"
     exit 0
 fi
 
-log "WARN: Mathlib 自检未通过（norm_num/ring/linarith/omega 不可用）"
+log "WARN: Mathlib 自检未通过（norm_num/ring/linarith/nlinarith/positivity/omega 不可用）"
 log "      评测将降级为 unknown 放行，不影响主流程得分。"
 rm -f "$PROBE_FILE"
 # 注意：这里**不** exit 1——工具链本身已就绪，只是 Mathlib 不可用，

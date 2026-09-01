@@ -200,7 +200,7 @@ class TranslateAndAuditTest(unittest.TestCase):
         self.assertEqual(result["verdict"], "ok")
         self.assertEqual(result["leaf_count"], 3)
         self.assertEqual(result["sorry_count"], 3)  # 每叶子一个 sorry
-        self.assertIn("import Mathlib.Tactic", result["lean_code"])
+        self.assertIn("import Mathlib", result["lean_code"])  # 兼容 core 闭包（具体模块导入）
 
     def test_compile_fail_verdict_fail(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
