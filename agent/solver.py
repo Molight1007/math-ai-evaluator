@@ -429,7 +429,10 @@ class SolverAgent(BaseAgent):
             _CALC_GUIDE = (
                 "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
                 "<calc>1/2+1/3</calc>、<calc>3*7-1</calc>），系统会自动精确求值并回填结果。"
-                "涉及数值计算时务必使用该标记，不要心算。"
+                "涉及数值计算时务必使用该标记，不要心算。\n"
+                "**<calc> 与 </calc> 之间必须且只能是纯数学表达式**"
+                "（数字、+ - * / ** % //、括号、函数 comb/perm/fact/gcd/lcm/abs），"
+                "禁止出现任何中文、文字解释、句号或换行——出现非表达式字符会直接导致计算失败。"
             )
             user_content = user_content + _CALC_GUIDE
 
