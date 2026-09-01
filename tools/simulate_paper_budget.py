@@ -2,11 +2,11 @@
 """全卷时间预算仿真：验证「难题用满 20 分钟」不会把全卷拖爆。
 
 背景（计划 §4.1）：
-    平台并发 3、单题 ≤1200s、Agent 总 ≤6h=21600s
-    → 总「题·秒」预算 = 3 × 21600 = 64800
+    平台并发 3、单题 ≤1200s（平台硬限）、Agent 总 ≤6.5h=23400s
+    → 总「题·秒」预算 = 3 × 23400 = 70200
 
-deep 档放开到 1200s 后，若不封顶，全卷必然超时。本脚本用仿真验证两道防线
-（deeq 配额闸 + PaperPacer 动态收紧）是否足够。
+deep 档放开到 1320s 后，若不封顶，全卷必然超时。本脚本用仿真验证两道防线
+（deep 配额闸 + PaperPacer 动态收紧）是否足够。
 
 模型：
 - 112 题按并发 3 分批推进，每批的墙钟 = 该批 3 题中最慢的那题
@@ -33,8 +33,12 @@ from agent.paper_pacer import PaperPacer
 
 TOTAL_QUESTIONS = 112
 CONCURRENCY = 3
-AGENT_TOTAL_SECONDS = 21600.0     # 6 小时硬限
-TIER_CAPS = {"fast": 120.0, "standard": 480.0, "deep": 1200.0}
+AGENT_TOTAL_SECONDS = 23400.0    # 6.5 小时硬限（2026-08-30 #49：原 6h=21600）
+# 2026-08-30 #49 同步：必须与 user_agent.py:243 的 tier_budget 一致，
+# 否则仿真会低估 10%（standard 480→540 / deep 1200→1320）。
+TIER_CAPS = {"fast": 120.0, "standard": 540.0, "deep": 1200.0}
+# PaperPacer 的瞄准点（user_agent.py:paper_target_time）
+TARGET_SECONDS = 21000.0
 
 
 def simulate(deep_ratio: float, std_ratio: float, quota: float,
@@ -44,7 +48,7 @@ def simulate(deep_ratio: float, std_ratio: float, quota: float,
              enable_tighten: bool = True) -> dict:
     """跑一遍全卷仿真，返回统计结果。"""
     cfg = SimpleNamespace(
-        paper_target_time=18000,
+        paper_target_time=TARGET_SECONDS,
         paper_min_soft=120.0,
         paper_total_questions=total,
         tier_budget=dict(TIER_CAPS),
@@ -115,7 +119,8 @@ def main() -> int:
     args = ap.parse_args()
 
     print(f"仿真条件：{TOTAL_QUESTIONS} 题、并发 {CONCURRENCY}、"
-          f"Agent 总限 {AGENT_TOTAL_SECONDS / 3600:.0f}h、"
+          f"Agent 总限 {AGENT_TOTAL_SECONDS / 3600:.1f}h、"
+          f"pacer 瞄准点 {TARGET_SECONDS / 3600:.2f}h、"
           f"deep 期望占比 {args.deep_ratio:.0%}、配额 {args.quota:.0%}")
     print()
 
@@ -131,7 +136,8 @@ def main() -> int:
         print(f"--- {label} ---")
         print(f"  全卷墙钟 {r['wall_clock_sec']:>8.0f}s "
               f"({r['wall_clock_sec'] / 3600:.2f}h)  "
-              f"占用 {r['agent_utilization']:.0%} of 6h  {flag}")
+              f"占 6.5h 限的 {r['agent_utilization']:.0%}；"
+              f"占瞄准点的 {r['wall_clock_sec'] / TARGET_SECONDS:.0%}  {flag}")
         print(f"  档位分布 {r['tier_count']}  "
               f"deep 实际占用 {r['deep_used']}/{r['deep_quota_cap']}")
         if r["over_hard_1200"]:

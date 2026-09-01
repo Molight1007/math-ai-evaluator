@@ -91,8 +91,14 @@ class AgentConfig:
     # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
     #   此前 300s 对完整 CoT 求解（ICMA 实测中档 77-116s、奥赛 500-552s）是死限，
     #   导致主求解调用被读超时/预算跳过 → 45 error。总时长由 PaperPacer 动态收紧控制。）
+    # 2026-08-30 #49 预算对齐：竞赛端限时 **6.5h = 23400s**（此前按 6h 配置）。
+    # 三档关系必须满足：paper_target_time < max_total_time_seconds < 平台限时。
+    #   target 21000（5.83h）→ 动态收紧的瞄准点；
+    #   hard   22500（6.25h）→ 硬熔断，给平台留 15min 提交/IO 余量。
+    # 沿用原 6h 配置下的安全比例（target 19500 / 6h = 81%），
+    # 6.5h 下等比为 21060 ≈ 21000，故取 21000。
     max_time_per_question: int = 1200  # 单题壁钟时间上限（秒，平台允许 20 分钟）
-    max_total_time_seconds: int = 21000  # Agent总运行时间上限
+    max_total_time_seconds: int = 22500  # Agent总运行时间上限（6.25h，平台限 6.5h）
 
     # ---- 智能体补充部件配置 ----
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
@@ -125,6 +131,20 @@ class AgentConfig:
     # 仅 deep 档 revise 回环触发（每次 +1 次 LLM 调用，预算可承受）。
     enable_feedback_review: bool = True
 
+    # ---- 对抗式验证（#16，2026-08-30）----
+    # 正向验证**通过**后主动证伪：假设答案错误，反向找反例 / 第一个错误步骤。
+    # 基线依据：两层复核一致性仅 51%、反向案例 0 条（第二层只是加严不是独立），
+    # 且正向验证存在漏检。正向验证问"这对吗"（确认偏误），
+    # 对抗式验证问"假设它是错的，错在哪"（证伪 → 反例法）。
+    # 与 enable_feedback_review 互补：那个治误杀，这个治漏检。
+    enable_adversarial_verify: bool = True
+    # 生效档位：fast 是简单题快速通道，跳过以省调用
+    adversarial_tiers: list = field(default_factory=lambda: ["deep", "standard"])
+    # 低于此置信度的"检出"不采信：宁可漏掉，不可误伤（治误杀优先于治漏检）
+    adversarial_min_confidence: float = 0.5
+    adversarial_max_tokens: int = 640
+    adversarial_max_reasoning: int = 2400
+
     # ---- 难题深度求解通道（v2.5）----
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
     enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
@@ -141,7 +161,18 @@ class AgentConfig:
     # 2026-08-30 平台实测：112 题 4.65h 完成（6h 限时 78% 利用率），有 1.35h
     # 空余 → 预算小幅上调换正确率：standard 480→540、deep 1200→1320。
     # 保留防超时双防线（deep 配额闸 ≤25% + 动态收紧），硬上限 max_total_time 兜底。
-    paper_target_time: int = 19500          # 全卷墙钟目标（秒，5.42 小时；原 18000）
+    # 2026-08-30 #49：19500（按 6h 限）→ 21000（按 6.5h 限，占 6.5h 的 81%，
+    # 与 6h 时代的安全比例一致）。必须与 max_total_time_seconds(22500) 保持
+    # 大小关系：target < hard < 平台限时，否则动态收紧会失效被硬熔断抢先。
+    paper_target_time: int = 21000      # 全卷墙钟目标（秒，5.83 小时；原 19500/5.42h）
+    # L1 验证优先（2026-08-31）：剩余时间不足该值时进入 verify_only，
+    # 不再生成新候选（solver/续写/自改进/协作/子目标/Lean 门禁全跳过），
+    # 把最后的时间留给验证投票 → 治 A_base 30 题里 117 次「验证 None 判错」。
+    # ⚠ D 组对照实测（30 题）：7/30 = 23.3% vs A_base 8/30 = 26.7%，
+    # 净 −1、McNemar p=1.0 → **噪声内，无收益** → 默认关闭（=0 不触发）。
+    # 机制与测试保留（tests/test_verify_only.py）；若将来再试，
+    # 先补「预算跳过/None 投票计数器」量化验证假设，再调阈值。
+    verify_only_seconds: int = 0
     paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
     paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
     deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
@@ -169,6 +200,8 @@ class AgentConfig:
     # unknown（Lean 环境缺失/超时/翻译错误）→ 按 lean_gate_strict 决定降级放行或保守拒绝。
     enable_lean_verify: bool = True         # 总开关：证明题启用 Lean 硬验证（v2.8 扩展到全部档位）
     lean_gate_all_proofs: bool = True       # v2.8：扩展到全部证明题（含 standard 档）；False=仅 deep 档
+    lean_gate_nonproof_deep_only: bool = False  # 2026-09-01：非证明题（解答题）是否仅 deep 档走 Lean；
+                                                # False=全档启用（用户要求所有题过 Lean）
     lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
     lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
     lean_executable: str = ""               # Lean 可执行文件名（默认自动探测本地工具链）
@@ -181,7 +214,11 @@ class AgentConfig:
     # D5 实测 preverify 挤占求解预算；08-30 debug15 实测：**全档位反而更差**
     # （21% vs 按档位 36% vs Step2 50%）——standard 加 formal_spec 提示干扰
     # 求解。**回滚到只 deep 档**（难题 Lean 价值最大）。
-    lean_preverify_tiers: list = field(default_factory=lambda: ["deep"])
+    # 2026-09-01 用户明确：比赛几乎只有证明题+解答题，两者都要走 Lean 两阶段
+    # （阶段一 preverify 题目理解→Lean 编译→失败带错误重新理解；阶段二
+    #  lean_gate 答案审核→失败定位修正）。故选档 deep+standard 全档执行
+    # （fast 快车道跳过）；如 A/B 数据证明 standard 干扰求解再回退。
+    lean_preverify_tiers: list = field(default_factory=lambda: ["deep", "standard"])
     # 跨题定理记忆（2026-08-29 新增）
     # 记录 lean_gate"编译验证通过"的定理按域持久化，同域新题注入复用，
     # 跳过重复检索+翻译试错。应对"定理调用复用性高、反复检索浪费"。
@@ -225,8 +262,15 @@ class AgentConfig:
             # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
             self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 100}
         if self.tier_budget is None:
-            # 08-30：standard 480→540、deep 1200→1320（平台时间有 1.35h 空余）
-            self.tier_budget = {"fast": 120.0, "standard": 540.0, "deep": 1320.0}
+            # 08-30：standard 480→540（平台时间有空余）。
+            # 2026-08-30 修正：deep **必须 = 1200，不能超过
+            # max_time_per_question（平台单题硬限 20min = 1200s）**。
+            # a2a2871 曾把 deep 抬到 1320，但 orchestrator 的 deadline 用的是
+            # max_time_per_question=1200，1320 那 120s 永远拿不到，
+            # 反而让 PaperPacer 高估可用预算、收紧不足（最坏情况有超时风险）。
+            # 想给难题更多时间应调 deep_quota_ratio（让更多题进 deep），
+            # 而不是抬高单题帽——单题帽受平台规则封顶。
+            self.tier_budget = {"fast": 120.0, "standard": 540.0, "deep": 1200.0}
 
 
 # ============================================================
@@ -329,6 +373,13 @@ class ReasoningAgent:
         self.client = client
         self.config = AgentConfig()
 
+        # 平台 Lean 环境探测（2026-08-31，零重量）：仅当仓库存在 deploy/.probe
+        # 标记时执行 deploy/probe_lean.sh，输出 PROBE| 前缀日志（进评测日志）。
+        # 目的：用下一次正式提分提交顺带回答"平台能否跑 Lean/Mathlib"——
+        #   关0 预装？关1 GitHub/tuna 网络？关2 自带二进制能否执行？
+        # 任何异常都吞掉，绝不阻塞主流程（评测成绩不受影响）。
+        self._maybe_run_lean_probe()
+
         # 允许通过 kwargs 覆盖配置（向后兼容 run_eval.py 的传参）
         for key in (
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
@@ -354,12 +405,18 @@ class ReasoningAgent:
             # 时间预算（2026-08-28 新增：让动态预算真正生效）
             "critical_tail_seconds", "deep_critical_tail_seconds",
             "deep_quota_ratio",
+            # L1 验证优先（2026-08-31）
+            "verify_only_seconds",
             # 结构化 bug report 反馈
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
             "enable_self_improve", "self_improve_max",
             # Step 4 bug report 复核
             "enable_feedback_review",
+            # 对抗式验证（#16）
+            "enable_adversarial_verify", "adversarial_tiers",
+            "adversarial_min_confidence", "adversarial_max_tokens",
+            "adversarial_max_reasoning",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
             "enable_sketch_audit", "use_leansearch",
@@ -398,6 +455,39 @@ class ReasoningAgent:
         )
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 平台 Lean 环境探测（零重量，2026-08-31）
+    # ------------------------------------------------------------------
+    def _maybe_run_lean_probe(self) -> None:
+        """deploy/.probe 标记存在时跑探测脚本，输出 PROBE| 日志。
+
+        探测结果只进 stderr（评测日志会捕获），**不改任何求解行为**：
+        - 平台无 lean → 探测打印 not_found，主流程照常走 AI 判分降级
+        - 平台有 lean → 探测打印预装版本，后续提交可接入 lean_gate
+        全程 try/except + 30s 超时，任何失败静默。
+        """
+        try:
+            marker = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "deploy", ".probe")
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "deploy", "probe_lean.sh")
+            if not (os.path.exists(marker) and os.path.exists(script)):
+                return
+            import subprocess
+            proc = subprocess.run(
+                ["bash", script],
+                capture_output=True, text=True, timeout=30,
+            )
+            out = (proc.stdout or "").strip()
+            if out:
+                # 打印到 stderr 走评测日志；同时进 logger 便于本地排查
+                sys.stderr.write(out + "\n")
+                for line in out.splitlines():
+                    if line.startswith("PROBE|"):
+                        logger.info("[lean-probe] %s", line)
+        except Exception as exc:  # noqa: BLE001 - 探测失败绝不影响主流程
+            logger.warning("[lean-probe] 探测跳过（异常）: %s", str(exc)[:120])
+
     # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出
     # ------------------------------------------------------------------
     def _fallback_solve(self, problem: str) -> str:

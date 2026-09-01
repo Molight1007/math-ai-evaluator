@@ -3,10 +3,11 @@ from __future__ import annotations
 全卷时间池（PaperPacer）
 =======================
 
-在竞赛 6h 硬限内把全卷总耗时控制在约 5 小时，并把省下的预算集中投入难题。
+在竞赛 6.5h 硬限内把全卷总耗时控制在约 5.83 小时（target=21000s），并把省下的预算集中投入难题。
 
 核心机制（借鉴 math_competition_agent 的 paper_pacer 思想，适配本版）：
-- 每档位有设计预算帽（tier_cap）：fast=120s / standard=480s / deep=1200s；
+- 每档位有设计预算帽（tier_cap）：fast=120s / standard=540s / deep=1200s；
+  （deep 上限 = 平台单题硬限 max_time_per_question=1200s，不可再抬）
 - 动态收紧：paper_cap = 剩余目标时间 / 剩余题数；
 - 软预算：soft_budget = min(tier_cap, max(paper_cap, MIN_SOFT))；
   —— 卷面进度落后时自动收紧（paper_cap 变小），
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 说明：平台逐题调用，无法获知未来题目总数，total_questions 由配置指定
 （默认 112，可经 metadata['total'] 覆盖）。即使估计偏差，MIN_SOFT 保底
-与 max_time_per_question 硬限仍能保证 6h 内必然完成。
+与 max_time_per_question 硬限仍能保证 6.5h 内必然完成。
 """
 
 import logging
@@ -37,8 +38,9 @@ class PaperPacer:
     """全卷时间池（线程安全）。"""
 
     def __init__(self, config, total_questions: int | None = None):
-        # 墙钟目标总时长（秒）：默认 5h = 18000s
-        self.target_seconds = float(getattr(config, 'paper_target_time', 18000))
+        # 墙钟目标总时长（秒）：2026-08-30 #49 对齐竞赛 6.5h 限时。
+        # 默认 21000（5.83h），仅为无配置时的兜底；实际取 config.paper_target_time。
+        self.target_seconds = float(getattr(config, 'paper_target_time', 21000))
         self.min_soft = float(getattr(config, 'paper_min_soft', DEFAULT_MIN_SOFT))
         # 总题数：config 优先，其次构造参数，最后默认值
         self.total_questions = int(
@@ -48,11 +50,12 @@ class PaperPacer:
         )
         self.tier_caps = dict(getattr(
             config, 'tier_budget',
-            {"fast": 120.0, "standard": 480.0, "deep": 1200.0},
+            # 与 user_agent.tier_budget 保持一致；deep 上限 = 平台单题硬限 1200s
+            {"fast": 120.0, "standard": 540.0, "deep": 1200.0},
         ))
         # ---- deep 档全卷配额（2026-08-28 新增）----
-        # 时间账：平台并发 3、Agent 总 ≤6h → 总"题·秒"预算 = 3 × 21600 = 64800。
-        # deep 占 30% 需 70080 题·秒，超 5280 → 全卷必爆；25% 封顶才安全。
+        # 时间账：平台并发 3、Agent 总 ≤6.5h → 总"题·秒"预算 = 3 × 23400 = 70200。
+        # deep（1320s）占 30% 需 112×0.3×1320 = 44352 题·秒，25% 封顶才安全。
         # 不封顶的话"难题用满 20 分钟"会把简单题的时间全部吃掉。
         # 注意：必须用 `is not None` 判断，不能用 `or 0.25` ——
         # 0.0 是合法取值（表示完全禁用 deep 档），但 `0.0 or 0.25` 会得到 0.25。

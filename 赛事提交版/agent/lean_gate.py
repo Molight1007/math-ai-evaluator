@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .base import Budget, TaskContext
+from .base import BaseAgent, Budget, TaskContext
 from .lean_bridge import LeanBridge
 
 logger = logging.getLogger("MathPilot")
@@ -53,15 +53,51 @@ class LeanGate:
     # ------------------------------------------------------------------
     # 开关与适用性判定
     # ------------------------------------------------------------------
-    def _enabled(self, tier: str, domain: str) -> bool:
+    def _enabled(self, tier: str, domain: str, question_type: str = "") -> bool:
+        """判断 Lean 门禁是否对本题启用。
+
+        2026-08-30（#45 移除题型分流）：原逻辑第 60 行为
+        ``if domain not in ("证明", "证明题"): return False``，把**计算题整体挡在
+        Lean 之外**。老师指出：计算题同样含证明成分、且主要依赖依赖链，
+        不该被排除在 Lean / 定理检索之外。故移除题型硬过滤，改为
+        **「题型 × 档位」两级控制**：
+
+        ==========  ===================================================
+        题型        条件
+        ==========  ===================================================
+        证明题      全档启用（沿用 ``lean_gate_all_proofs``，False 时退回仅 deep）
+        非证明题    仅 deep 档，且受 ``lean_gate_nonproof`` 总开关控制
+        ==========  ===================================================
+
+        非证明题限制在 deep 档的原因：Lean 编译约 21s/次（#43 归因），
+        而 deep 档有 25% 配额闸封顶，不会让计算题的编译拖垮全卷时间预算。
+        若实测超时，把 ``lean_gate_nonproof`` 置 False 即可一键回退。
+
+        2026-09-01 用户要求「所有题目都要用到 Lean」：
+        - 证明题判定从「仅 domain」扩展为「domain 或 question_type == 证明题」。
+          此前题库 PB 题 domain 是 Algebra（元数据），is_proof 恒 False →
+          Lean 门禁 0 触发（A_base/G 组 17 题 compile_valid 全 0 的根因之一）。
+        - 非证明题（计算/解答）也启用 Lean，但走轻量路径：只验证最终答案
+          （norm_num/ring 结果验证，约 5-21s），不整题形式化，控制时间开销。
+        """
         cfg = self.config
         if not getattr(cfg, "enable_lean_verify", True):
             return False
-        if domain not in ("证明", "证明题"):   # 仅证明题
+
+        is_proof = (domain in ("证明", "证明题")
+                    or question_type == "证明题")
+        if is_proof:
+            # v2.8：扩展到全部证明题（含 standard 档）；旧行为（仅 deep）由
+            # lean_gate_all_proofs=False 保留。
+            if not getattr(cfg, "lean_gate_all_proofs", True) and tier != "deep":
+                return False
+            return True
+
+        # 非证明题（计算/解答等）：2026-09-01 起全档启用（用户要求所有题过 Lean）。
+        # 旧行为（仅 deep 档）由 lean_gate_nonproof_deep_only=True 保留。
+        if not getattr(cfg, "lean_gate_nonproof", True):
             return False
-        # v2.8：扩展到全部证明题（含 standard 档）；旧行为（仅 deep）由
-        # lean_gate_all_proofs=False 保留。
-        if not getattr(cfg, "lean_gate_all_proofs", True) and tier != "deep":
+        if getattr(cfg, "lean_gate_nonproof_deep_only", False) and tier != "deep":
             return False
         return True
 
@@ -98,9 +134,11 @@ class LeanGate:
             return kept, feedbacks
 
         domain = getattr(ctx, "domain", "")
-        if not self._enabled(tier, domain):
+        qtype = getattr(ctx, "question_type", "")
+        if not self._enabled(tier, domain, qtype):
             self._record_ctx(ctx, {"enabled": False, "tier": tier,
-                                   "domain": domain, "candidates": len(candidates)})
+                                   "domain": domain, "question_type": qtype,
+                                   "candidates": len(candidates)})
             return kept, feedbacks
 
         # v2.8 时间/预算护栏：应急/时间紧张/预算不足时降级放行，
@@ -129,6 +167,7 @@ class LeanGate:
             return kept, feedbacks
 
         kept = []
+        is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
         for cand in candidates:
             entry = {
                 "id": cand.id,
@@ -138,12 +177,25 @@ class LeanGate:
                 "error": None,
             }
             try:
-                report = bridge.verify(
-                    problem=ctx.problem or "",
-                    reasoning=cand.reasoning or "",
-                    domain=domain,
-                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                )
+                # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
+                # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
+                # 非证明题（解答/计算）走轻量 verify_answer（norm_num/ring
+                # 验证最终答案与关键计算，5-21s，避免整题形式化拖垮时间预算）。
+                if is_proof:
+                    report = bridge.verify(
+                        problem=ctx.problem or "",
+                        reasoning=cand.reasoning or "",
+                        domain=domain,
+                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                    )
+                else:
+                    report = bridge.verify_answer(
+                        problem=ctx.problem or "",
+                        reasoning=cand.reasoning or "",
+                        answer=cand.answer or "",
+                        domain=domain,
+                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                    )
                 # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
                 # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
                 used_names: list[str] = []
@@ -156,16 +208,28 @@ class LeanGate:
                             r"^\s*(?:theorem|lemma|example)\s+(\w+)",
                             code, re.MULTILINE)
                         used_names = mods + thms
-                        self.add_used_theorems(ctx, used_names)
+                        # 2026-08-30 修 bug：add_used_theorems / note_compile_valid
+                        # 是 TaskContext 的静态方法，原代码误用 self.（LeanGate 无此方法）
+                        # 调用，每次都抛 AttributeError 被下方 except 吞掉 →
+                        # proof_valid 候选被当成"验证异常"降级放行，导致
+                        # used_theorems / compile_valid / 跨题定理记忆全部从未写入。
+                        BaseAgent.add_used_theorems(ctx, used_names)
                 if report is None:
                     entry["degraded"] = "no_report"
                     kept.append(cand)          # 无报告 → 降级放行
-                elif report.verdict == "proof_valid":
-                    entry["verdict"] = "proof_valid"
+                elif report.verdict in ("proof_valid", "answer_valid"):
+                    entry["verdict"] = report.verdict
                     entry["lean_valid"] = True
-                    self.note_compile_valid(ctx)  # 真正的形式化验证成功
-                    # 跨题定理记忆：验证通过的定理 → 按域持久化，供同域新题复用
-                    self._record_to_memory(ctx, domain, used_names)
+                    BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
+                    # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
+                    # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
+                    # 检索侧无法判断定理是否真的进了证明，只有这里能确认。
+                    # 注：仅证明题整题形式化（is_proof）有"定理采用"语义；
+                    # 非证明题的 example 答案验证无定理名，跳过避免污染统计/记忆。
+                    if is_proof:
+                        self._note_theorems_adopted(used_names)
+                        # 跨题定理记忆：验证通过的定理 → 按域持久化，供同域新题复用
+                        self._record_to_memory(ctx, domain, used_names)
                     kept.append(cand)
                 elif report.verdict == "proof_invalid":
                     entry["verdict"] = "proof_invalid"
@@ -224,6 +288,21 @@ class LeanGate:
             ctx.lean_gate.append(data)
         except Exception:  # noqa: BLE001
             ctx.lean_gate = [data]
+
+    def _note_theorems_adopted(self, names: list) -> None:
+        """#44 埋点：回记「最终被采用」的定理（Lean 编译通过＝真采用）。
+
+        与 `_record_to_memory` 的区别：那是跨题持久记忆（#13），
+        这是单题内的埋点统计（#44），两者数据来源相同但用途不同。
+        失败一律吞掉——统计不可靠也好过主流程中断。
+        """
+        try:
+            if not names:
+                return
+            from .lean_search import get_stats
+            get_stats().note_adopted(names)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[lean_gate] 采用埋点回记失败（已忽略）: %s", exc)
 
     def _record_to_memory(self, ctx: TaskContext, domain: str,
                           names: list) -> None:

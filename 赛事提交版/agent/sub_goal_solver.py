@@ -470,7 +470,11 @@ class SubGoalSolverAgent(BaseAgent):
         return self._mathlib_searcher or None
 
     def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 5):
-        """试用 leansearch：检索与查询相关的 Mathlib 定理（安全降级返回 None）。"""
+        """试用 leansearch：检索与查询相关的 Mathlib 定理（安全降级返回 None）。
+
+        2026-08-31 老师建议 top-k=50 对照：临时把默认从 5 改 50。
+        F_topk50 跑完改回 5（git diff 留痕）。line 524 的 limit=4 调用点保持 4 不变。
+        """
         searcher = self._get_mathlib_searcher()
         if searcher is None:
             return None

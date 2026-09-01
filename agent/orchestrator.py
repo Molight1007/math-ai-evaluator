@@ -30,6 +30,7 @@ from .paper_pacer import PaperPacer
 from .lean_gate import LeanGate
 from .collaborative_solver import CollaborativeSolver
 from .lean_pre_verifier import LeanPreVerifier
+from .adversarial_verifier import AdversarialVerifier
 from utils.extract import safe_json_serialize
 
 try:
@@ -63,6 +64,11 @@ class Orchestrator(BaseAgent):
         self.collab = CollaborativeSolver(client, config)
         # Lean 前置形式化验证（v2.9）：解题前把题目转 Lean 声明校验理解
         self.lean_pre_verifier = LeanPreVerifier(client, config)
+        # 对抗式验证器（#16，2026-08-30）：正向验证**通过后**主动证伪，治漏检。
+        # 与 Step 4（_review_bug_feedback，治误杀）互补：
+        #   正向不过 → Step 4 复核是否误报
+        #   正向通过 → 本模块去找漏掉的错误
+        self.adv_verifier = AdversarialVerifier(client, config)
 
     # ----------------------------------------------------------
     # 主入口（简化版流水线）
@@ -114,7 +120,20 @@ class Orchestrator(BaseAgent):
                 ctx.state.emergency = False
                 ctx.state.playoff_enabled = True
 
-            # 1) 题型识别（元数据已知时跳过 LLM）
+            # 1) 题型识别（零 LLM 关键词分类，供 Lean 门禁区分证明题/解答题、
+            #    及题型差异化策略使用）。
+            # 2026-09-01 补漏：原逻辑仅在「元数据 domain 未知」时才跑 classifier.run，
+            # 若 metadata.domain ∈ _KNOWN_DOMAINS（如 "代数"）则跳过 → ctx.question_type
+            # 永不赋值 → lean_gate 拿不到 question_type，该 domain 下的证明题会被误判
+            # 为非证明题走轻量答案验证而非整题 verify。这里无条件先做题型识别。
+            if self.config.enable_question_type:
+                from .question_type import classify_question_type
+                ctx.question_type = classify_question_type(ctx.problem)
+                self.record(ctx, "classify_type",
+                            f"题型识别结果: {ctx.question_type}",
+                            question_type=ctx.question_type)
+
+            # 1.5) 领域（元数据已知时跳过 LLM）
             pre_known_domain = (metadata or {}).get("domain", "")
             if pre_known_domain and pre_known_domain in _KNOWN_DOMAINS:
                 ctx.domain = pre_known_domain
@@ -228,7 +247,25 @@ class Orchestrator(BaseAgent):
                 self.sub_goal_solver.run(ctx)
 
             # Solver 多路采样（候选数/温度分层按档位，solver 内部读取 ctx.tier）
-            self.solver.run(ctx)
+            # L1 验证优先（2026-08-31）：剩余时间不足 verify_only_seconds 时
+            # 停止生成新候选，把最后的时间留给验证投票。
+            # 依据：A_base 30 题日志 170 次"剩余时间不足"跳过调用、
+            # 117 次"验证拿到 None 默认判错" —— 生成阶段把时间烧光，
+            # 验证投票被饿死（误杀正确候选）。verify_only 治的就是这个。
+            # ⚠ D 组对照实测净 −1、p=1.0 → 默认关闭（verify_only_seconds=0），
+            # 触发条件必须显式 > 0，避免 deadline 已过（remaining<0）时误触发。
+            _remaining_before_solve = (
+                ctx.deadline - time.time() if ctx.deadline else float("inf"))
+            _verify_only_seconds = getattr(self.config, 'verify_only_seconds', 0)
+            if _verify_only_seconds > 0 and _remaining_before_solve < _verify_only_seconds:
+                ctx.state.verify_only = True
+                self.record(ctx, "paper_pacer",
+                            f"L1 验证优先：剩余 {_remaining_before_solve:.0f}s"
+                            f" < {_verify_only_seconds}s，"
+                            f"停止生成新候选，只保留验证",
+                            verify_only=True)
+            if not ctx.state.verify_only:
+                self.solver.run(ctx)
             if not ctx.candidates:
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
                 self.pacer.end(tier=tier)
@@ -236,7 +273,8 @@ class Orchestrator(BaseAgent):
 
             # 3.2) 截断候选续写：每档 max_completions 个（fast=0 跳过），应急模式跳过
             if (getattr(ctx, 'candidates', None)
-                    and not ctx.state.emergency):
+                    and not ctx.state.emergency
+                    and not ctx.state.verify_only):
                 max_comp = self.config.tier_max_completions.get(tier, 1)
                 if max_comp > 0:
                     n_completed = self.solver.complete_truncated_candidates(
@@ -252,6 +290,7 @@ class Orchestrator(BaseAgent):
             if (getattr(self.config, 'enable_self_improve', True)
                     and tier != 'fast'
                     and not ctx.state.emergency
+                    and not ctx.state.verify_only
                     and ctx.candidates):
                 if ctx.budget is None or ctx.budget.can_spend(1):
                     n_imp = self.solver.improve_candidates(ctx)
@@ -264,43 +303,63 @@ class Orchestrator(BaseAgent):
             #      保证难题高正确率。
             if (tier == 'deep'
                     and getattr(self.config, 'enable_collaborative_deep', True)
-                    and not ctx.state.emergency):
+                    and not ctx.state.emergency
+                    and not ctx.state.verify_only):
                 self.record(ctx, "control", "deep 档启用三Agent协作验证机制")
                 self.collab.run(ctx)
 
             # 3.5) 子目标分解补充候选：仅非 deep 档（deep 档已作为主路径提前执行）
-            is_proof = getattr(ctx, 'question_type', '') == '证明题' or \
-                getattr(ctx, 'domain', '') in ('证明', '证明题')
+            # 2026-08-30（#45 移除题型分流）：原逻辑带 `or is_proof`，即证明题
+            # **无条件**触发子目标分解。但 IMO 基本全是证明题，该分支等于让
+            # 全部题目都多跑一轮子目标规划 —— 而 #43 归因已证明：错题主因是
+            # 时间分配错误（规划抢走了真正写题的预算）。故去掉题型条件，
+            # 只保留与题型无关的统一触发条件：候选不足时才补。
             use_sub = getattr(self.config, 'use_sub_goal', False)
             if (tier != 'deep'
                     and use_sub
                     and not getattr(ctx, '_subgoal_main_done', False)
+                    and not ctx.state.verify_only
                     and ctx.budget.can_spend(3)
-                    and (len(ctx.candidates) < 2 or is_proof)):
+                    and len(ctx.candidates) < 2):
                 self.record(ctx, "control",
                             "触发子目标分解补充候选",
-                            sub_goal_trigger=f"tier={tier}, candidates={len(ctx.candidates)}, is_proof={is_proof}")
+                            sub_goal_trigger=f"tier={tier}, "
+                                             f"candidates={len(ctx.candidates)}")
                 self.sub_goal_solver.run(ctx)
 
             # 3.6) deep 档证明题：Lean 硬验证门禁（v2.5+LeanBridge）
             # 仅当 lean 门禁实际生效（deep+证明+环境可用）才过滤候选；
             # proof_valid 候选进入后续验证，proof_invalid 淘汰并收集 revise 反馈。
             # 若全部候选被 Lean 淘汰，则降级保留原候选（保证有输出，不损失分数）。
-            _lean_total = len(ctx.candidates)
-            lean_kept, lean_feedbacks = self.lean_gate.apply(
-                ctx, tier, ctx.candidates)
-            if lean_kept:
-                ctx.candidates = lean_kept
+            # L1：verify_only 时跳过（每次编译 ~21s，时间不够花在 Lean 上）。
+            if ctx.state.verify_only:
                 self.record(ctx, "lean_gate",
-                            f"Lean 硬验证通过 {len(lean_kept)}/{_lean_total} 候选")
-            if lean_feedbacks:
-                ctx.lean_reject_feedback = lean_feedbacks
-                self.record(ctx, "lean_gate",
-                            f"Lean 硬验证淘汰 {len(lean_feedbacks)} 候选，"
-                            f"revise 将注入 Lean 反馈")
+                            "L1 验证优先：跳过 Lean 硬验证门禁（时间不足）")
+            else:
+                _lean_total = len(ctx.candidates)
+                lean_kept, lean_feedbacks = self.lean_gate.apply(
+                    ctx, tier, ctx.candidates)
+                if lean_kept:
+                    ctx.candidates = lean_kept
+                    self.record(ctx, "lean_gate",
+                                f"Lean 硬验证通过 {len(lean_kept)}/{_lean_total} 候选")
+                if lean_feedbacks:
+                    ctx.lean_reject_feedback = lean_feedbacks
+                    self.record(ctx, "lean_gate",
+                                f"Lean 硬验证淘汰 {len(lean_feedbacks)} 候选，"
+                                f"revise 将注入 Lean 反馈")
 
             # 4) 验证（投票数按档位：fast=1/standard=1/deep=3）
             # P0-4 修复：playoff 复算按时间宽裕度开关，deep 档且时间宽裕时启用
+            #
+            # 2026-08-31 修复 NameError：#45 移除题型分流时把 3.5 步的
+            # `is_proof = ...` 赋值一起删了，但这里的 verifier.run 仍在用它 →
+            # 每题抛 `name 'is_proof' is not defined`，整条流水线走异常兜底。
+            # 说明：#45 要移除的是「**子目标触发** / **Lean 门禁**看题型」，
+            # 验证器的 is_proof 是另一回事（verifier.py 用它决定单候选时的
+            # 严格度），属于正当用途，必须保留。
+            is_proof = (getattr(ctx, 'question_type', '') == '证明题'
+                        or getattr(ctx, 'domain', '') in ('证明', '证明题'))
             tier_votes = self.config.tier_voting_times.get(tier, 1)
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
@@ -321,6 +380,14 @@ class Orchestrator(BaseAgent):
             # 4.5) deep 档：AnswerOracle 客观复核 best_cluster（区别于投票同源自评）
             if tier == 'deep' and getattr(ctx, '_best_cluster', None) is not None:
                 self._oracle_review_best(ctx, ver_result, tier_votes)
+
+            # 4.6) 对抗式验证（#16）：正向通过后主动证伪，抓漏检。
+            #      仅当"确有候选被正向判对"时才跑——正向全错的会走 revise，
+            #      再证伪一次是纯浪费（每轮调用都吃预算，见 #43 归因）。
+            _any_correct = any(
+                getattr(v, 'correct_votes', 0) > 0 for v in (ctx.verdicts or []))
+            if _any_correct:
+                self._adversarial_probe(ctx, tier)
 
             # 5) 全部 0 正确票：
             #    - deep 档：先 revise 自纠错回环（最多 deep_revise_rounds 轮）
@@ -615,21 +682,94 @@ class Orchestrator(BaseAgent):
         )
         return decision
 
+    def _lean_verdict_final(self, ctx: TaskContext, cand) -> bool:
+        """该候选是否已被 Lean 门禁给出**确定结论**（valid / invalid）。
+
+        2026-08-30（#45）新增，用于替代 `_oracle_review_best` 里按题型跳过的判断。
+        """
+        for e in getattr(ctx, "lean_gate", None) or []:
+            if e.get("id") == getattr(cand, "id", None):
+                return e.get("verdict") in ("proof_valid", "proof_invalid")
+        return False
+
+    def _adversarial_probe(self, ctx: TaskContext, tier: str) -> bool:
+        """对抗式验证（#16）：正向通过后主动证伪，抓正向漏检的错误。
+
+        为什么只在"正向通过"后跑
+        --------------------------
+        - 正向**不过**的候选会直接进 revise / Step 4 复核是否误报，
+          再证伪一次纯属浪费调用。
+        - 正向**通过**的候选才是漏检风险区：验证器顺着作者思路走
+          （确认偏误），错误没被审出来，这类答案会直接提交。
+
+        返回 True 表示检出错误并已注入 revise 通道。
+        任何异常都被吞掉返回 False——验证器的问题绝不能阻断主流程。
+        """
+        try:
+            if not getattr(self.config, 'enable_adversarial_verify', True):
+                return False
+            bc = getattr(ctx, '_best_cluster', None)
+            rep = getattr(bc, 'rep_candidate', None) if bc is not None else None
+            if rep is None:
+                rep = ctx.candidates[0] if ctx.candidates else None
+            if rep is None:
+                return False
+            # 预算护栏：时间紧张时不跑，避免抢走写题时间（#43 归因）
+            if ctx.budget is not None and not ctx.budget.can_spend(1):
+                self.record(ctx, "adversarial", "预算不足，跳过对抗式审查")
+                return False
+            if getattr(ctx.state, 'emergency', False) or ctx.is_time_critical():
+                self.record(ctx, "adversarial", "时间紧张，跳过对抗式审查")
+                return False
+
+            result = self.adv_verifier.probe(ctx, rep, tier=tier)
+            if result.skipped:
+                self.record(ctx, "adversarial", f"跳过：{result.skipped}")
+                return False
+
+            if not result.is_actionable:
+                # 正向通过 + 尽力证伪仍无反例 → 高置信接受。
+                # 这比"第二层再判一遍"更可信，也正是治误杀的关键：
+                # 不再被一个单纯更严的第二层无脑否掉。
+                self.record(ctx, "adversarial",
+                            f"对抗式审查未找到错误（置信 {result.confidence:.2f}），"
+                            f"高置信接受",
+                            adv_found=False,
+                            adv_confidence=result.confidence)
+                ctx.adversarial_result = result
+                return False
+
+            # 检出错误 → 注入 revise 通道（复用 lean_reject_feedback 字段）
+            if not getattr(ctx, 'lean_reject_feedback', None):
+                ctx.lean_reject_feedback = []
+            ctx.lean_reject_feedback.append(result.to_feedback())
+            ctx.adversarial_result = result
+            self.record(ctx, "adversarial",
+                        f"对抗式审查检出「{result.error_type or '未知类型'}」，"
+                        f"注入 revise（置信 {result.confidence:.2f}）",
+                        adv_found=True,
+                        adv_error_type=result.error_type,
+                        adv_confidence=result.confidence)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[orchestrator] 对抗式审查异常（已忽略）: %s", str(exc)[:120])
+            return False
+
     def _oracle_review_best(self, ctx: TaskContext, ver_result: dict,
                             tier_votes: int) -> None:
         """deep 档：对 best_cluster 代表候选做 AnswerOracle 客观复核。
 
         投票是"验证器与解题器同源"的自评，会一起错；这里用 AnswerOracle
-        （证明题 Lean / 计算题 SymPy）做独立客观验证。incorrect 时把客观反馈
+        （Lean / SymPy）做独立客观验证。incorrect 时把客观反馈
         注入 revise 通道并触发一次定向修正。
 
-        证明题已由 lean_gate 硬验证覆盖，此处仅对计算/解答题做 SymPy 客观复核，
-        避免重复 Lean 编译。
+        2026-08-30（#45 移除题型分流）：原逻辑是「证明题直接 return」，
+        理由是"已由 lean_gate 覆盖、避免重复编译"。但该理由只在 lean_gate
+        **真的跑出确定结论**时成立 —— 门禁未启用 / 降级 / unknown 放行时，
+        证明题会完全没有客观复核。
+        改为按**该候选是否已有 Lean 确定结论**判断，与题型无关：
+        有确定结论 → 跳过（避免重复编译）；unknown / 未记录 → 照常复核。
         """
-        qt = getattr(ctx, 'question_type', '') or ''
-        domain = getattr(ctx, 'domain', '') or ''
-        if qt == '证明题' or any(k in domain for k in ('证明', '证明题')):
-            return
         try:
             from .answer_oracle import AnswerOracle
         except Exception:  # noqa: BLE001
@@ -640,6 +780,10 @@ class Orchestrator(BaseAgent):
         cids = getattr(bc, 'candidate_ids', []) or []
         idx = cids[0] if cids and cids[0] < len(ctx.candidates) else 0
         rep = ctx.candidates[idx]
+        if self._lean_verdict_final(ctx, rep):
+            self.record(ctx, "oracle_review",
+                        "该候选已有 Lean 确定结论，跳过客观复核（避免重复编译）")
+            return
         oracle = AnswerOracle(self.client, self.config, ctx.budget)
         try:
             result = oracle.verify(ctx, rep, candidates=ctx.candidates)

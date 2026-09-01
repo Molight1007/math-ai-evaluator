@@ -34,11 +34,26 @@ class FakeBridge:
                 suggestion="请补全步骤")
         return BugReport(verdict="unknown", findings=[])
 
+    def verify_answer(self, problem, reasoning, answer, domain="", timeout=60.0):
+        # 轻量答案验证：按同一关键字返回 answer_valid / proof_invalid / unknown
+        if "PROOF_VALID" in reasoning:
+            return BugReport(verdict="answer_valid", findings=[])
+        if "PROOF_INVALID" in reasoning:
+            return BugReport(
+                verdict="proof_invalid",
+                findings=[Finding(location="step1", kind="Critical",
+                                  severity=5, desc="gap")],
+                suggestion="请补全步骤")
+        return BugReport(verdict="unknown", findings=[])
+
 
 class BoomBridge:
     lean_available = True
 
     def verify(self, *a, **k):
+        raise RuntimeError("boom")
+
+    def verify_answer(self, *a, **k):
         raise RuntimeError("boom")
 
 
@@ -91,8 +106,47 @@ class LeanGateFilterTest(unittest.TestCase):
         self.assertEqual(len(kept), 3)
         self.assertEqual(fb, [])
 
-    def test_non_proof_domain_noop(self):
+    def test_non_proof_domain_deep_gated(self):
+        """#45（2026-08-30）行为变更：非证明题不再被整体排除在 Lean 之外。
+
+        原逻辑 ``_enabled`` 里有 ``domain not in ("证明","证明题") → False``，
+        把计算题挡在门外。老师指出计算题同样含证明成分、主要依赖依赖链，
+        不该被排除。现改为：非证明题在 **deep 档** 照常门禁
+        （限制在 deep 是因为 deep 有 25% 配额闸封顶，避免 21s/次 的编译
+        拖垮全卷 —— 见 #43 时间分配归因）。
+        """
         g = LeanGate(MockClient(), make_cfg())
+        g._bridge = FakeBridge()
+        ctx = mk_ctx(domain="代数", candidates=mk_cands())
+        kept, fb = g.apply(ctx, "deep", ctx.candidates)
+        self.assertEqual([c.id for c in kept], [0, 2])  # valid + unknown(lenient)
+        self.assertEqual(len(fb), 1)
+        self.assertIn("Lean 硬验证", fb[0])
+
+    def test_non_proof_domain_standard_gated(self):
+        """2026-09-01 行为变更：用户要求「所有题目都要用到 Lean」，
+        非证明题默认全档启用（含 standard），走轻量 verify_answer。
+        旧行为（非证明题仅 deep 档）由 lean_gate_nonproof_deep_only=True 保留。"""
+        g = LeanGate(MockClient(), make_cfg())
+        g._bridge = FakeBridge()
+        ctx = mk_ctx(domain="代数", candidates=mk_cands())
+        kept, fb = g.apply(ctx, "standard", ctx.candidates)
+        self.assertEqual([c.id for c in kept], [0, 2])  # answer_valid + unknown(lenient)
+        self.assertEqual(len(fb), 1)
+        self.assertIn("Lean 硬验证", fb[0])
+
+    def test_non_proof_domain_standard_noop_when_deep_only(self):
+        """回退开关 lean_gate_nonproof_deep_only=True：非证明题恢复仅 deep 档。"""
+        g = LeanGate(MockClient(), make_cfg(lean_gate_nonproof_deep_only=True))
+        g._bridge = FakeBridge()
+        ctx = mk_ctx(domain="代数", candidates=mk_cands())
+        kept, fb = g.apply(ctx, "standard", ctx.candidates)
+        self.assertEqual(len(kept), 3)
+        self.assertEqual(fb, [])
+
+    def test_non_proof_gate_can_be_disabled(self):
+        """回退开关：lean_gate_nonproof=False 时恢复"仅证明题"旧行为。"""
+        g = LeanGate(MockClient(), make_cfg(lean_gate_nonproof=False))
         g._bridge = FakeBridge()
         ctx = mk_ctx(domain="代数", candidates=mk_cands())
         kept, fb = g.apply(ctx, "deep", ctx.candidates)

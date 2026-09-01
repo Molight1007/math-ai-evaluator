@@ -24,6 +24,58 @@ logger = logging.getLogger("MathPilot")
 
 
 # ============================================================
+# 截断埋点（2026-08-31 L2.1 任务卡）
+# ------------------------------------------------------------
+# 平台日志显示 14.2% 调用被截断（truncated_count=434 / 3061），
+# 但本地的 llm_client 丢弃了 finish_reason → 无法定位集中在哪些调用点。
+# 这里加一层「疑似截断」检测（resp 长度 ≥ max_tokens × 0.95），
+# 按 self.name（agent 名）计数。零行为变化，run 结束后通过
+# `base.get_truncation_log()` 拿到分布，决定下一步改哪里。
+# ============================================================
+_TRUNCATION_LOG: list = []        # 全局追加列表（跨 question / 跨线程）
+_TRUNCATION_LOCK = threading.Lock()
+_TRUNCATION_ENABLED = True
+# 阈值：响应长度达到 max_tokens 的 95% 即视为「疑似截断」
+_TRUNCATION_RATIO = 0.95
+
+
+def get_truncation_log() -> list:
+    """返回当前所有疑似截断事件（按时间顺序）。"""
+    with _TRUNCATION_LOCK:
+        return list(_TRUNCATION_LOG)
+
+
+def reset_truncation_log() -> None:
+    """重置埋点。run 起点调用，避免上一次 run 残留。"""
+    global _TRUNCATION_LOG
+    with _TRUNCATION_LOCK:
+        _TRUNCATION_LOG = []
+
+
+def set_truncation_enabled(enabled: bool) -> None:
+    """关闭埋点（默认开；性能/压力测试时可关）。"""
+    global _TRUNCATION_ENABLED
+    _TRUNCATION_ENABLED = bool(enabled)
+
+
+def _record_truncation_suspect(agent_name: str, resp_len: int, max_tokens: int) -> None:
+    """由 llm() 在响应长度接近 max_tokens 时调用，**零行为影响**。"""
+    if not _TRUNCATION_ENABLED:
+        return
+    if not max_tokens:
+        return
+    if resp_len < max_tokens * _TRUNCATION_RATIO:
+        return
+    with _TRUNCATION_LOCK:
+        _TRUNCATION_LOG.append({
+            "ts": time.time(),
+            "agent": agent_name,
+            "resp_len": resp_len,
+            "max_tokens": max_tokens,
+        })
+
+
+# ============================================================
 # 响应归一化（P0-1 契约防线）
 # ============================================================
 def _normalize_chat_response(resp) -> Optional[str]:
@@ -241,6 +293,7 @@ class RunState:
     playoff_enabled: bool = False        # 是否启用 playoff 确定性复算
     voting_times: Optional[int] = None   # 生效投票数（None=用 config 默认）
     sample_times: Optional[int] = None   # 生效采样数（None=用 config 默认）
+    verify_only: bool = False            # L1：剩余时间不足时只验证、不再生成新候选
 
 
 @dataclass
@@ -503,6 +556,10 @@ class BaseAgent(ABC):
                 max_tokens=max_tokens,
             )
             resp = _normalize_chat_response(resp)
+            # 截断埋点：响应长度接近 max_tokens 即视为疑似截断
+            # 2026-08-31 L2.1 任务卡：定位 14.2% 截断集中在哪些 agent
+            if resp is not None:
+                _record_truncation_suspect(self.name, len(resp), max_tokens)
             # 诊断：返回空值时记录
             if not resp or not resp.strip():
                 logger.warning("[%s] LLM 返回空响应 (len=%d, type=%s)",

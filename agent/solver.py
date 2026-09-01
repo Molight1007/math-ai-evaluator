@@ -194,6 +194,98 @@ class SolverAgent(BaseAgent):
     # ----------------------------------------------------------
     # 证明题专用通道
     # ----------------------------------------------------------
+    # ----------------------------------------------------------
+    # #51 答案定型：疑似推理文本的定向重问
+    # ----------------------------------------------------------
+    # 判定阈值取 60：基线 45 题中，答案长度 >60 的 5 条经人工核对均为
+    # "整段计算步骤"或"结论句"，而非答案本身。
+    _SUSPICIOUS_ANSWER_LEN = 60
+
+    # 叙述性措辞：出现在答案里说明抽到的是句子而非结论。
+    # 刻意不含"是/为"等通用系动词，避免误伤 "x = 2" 这类合法答案。
+    _NARRATIVE_PAT = (
+        r"因此|所以|由于|于是|综上|可得|由此|进而|注意到|显然",
+        r"步骤\s*\d", r"^第\s*[一二三四五六七八九十\d]+\s*[步点、]",
+        r"其中|其[中次]|这里|我们|可以[看得]出|答案[是为]|故[，,]",
+        r"\\sum|\\int|\\lim|\\prod|\\oint",
+    )
+
+    def _reask_final_answer(self, ctx: TaskContext, reasoning: str,
+                            answer: str) -> str:
+        """答案疑似推理文本时，向模型定向重问一次"仅输出最终答案"。
+
+        只在**抽取结果不可信**时触发（空 / 超长 / 含多步推导痕迹），
+        正常答案直接原样返回，不增加任何开销。
+
+        失败一律返回原答案——兜底动作不能让情况变得更糟。
+        """
+        if not self._answer_looks_suspicious(answer):
+            return answer
+        try:
+            # 只喂推理尾部，避免长上下文拖慢这次短调用
+            tail = reasoning[-1200:] if len(reasoning) > 1200 else reasoning
+            system = (
+                "你是数学答案格式化助手。只输出最终答案，不要解释、不要推导、"
+                "不要任何多余文字。"
+            )
+            user = (
+                "下面是某题的解答过程（可能不完整）。\n\n"
+                f"{tail}\n\n"
+                "请只输出这道题的最终答案，满足：\n"
+                "1) 用 \\boxed{...} 包裹，例如 \\boxed{42}\n"
+                "2) 下一行给出不含公式标记的最简形式，例如：最简形式：42\n"
+                "3) 不要输出推导过程、单位说明或任何解释性文字\n"
+                "4) 若答案是多个值，用逗号分隔放在同一个 \\boxed{} 内"
+            )
+            raw = self._compressed_solve(
+                ctx, system, user,
+                temperature=0.0,
+                max_tokens=int(getattr(self.config, 'answer_reask_max_tokens', 256)),
+            )
+            if not raw:
+                return answer
+            new_ans = extract_final_answer(raw)
+            if not new_ans:
+                return answer
+            # 重问结果必须"比原来更像答案"才采纳
+            if self._answer_looks_suspicious(new_ans):
+                return answer
+            self.record(ctx, "answer_reask",
+                        f"答案疑似推理文本（{len(answer)} 字符），定向重问后收敛为 "
+                        f"{len(new_ans)} 字符")
+            return new_ans
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[solver] 答案定向重问失败，保留原答案: %s", str(exc)[:120])
+            return answer
+
+    @classmethod
+    def _answer_looks_suspicious(cls, answer: str) -> bool:
+        """判断抽取出的答案是否"疑似推理文本"而非答案本身。
+
+        判定按「长度 → 句式 → 结构」三级，且刻意保守：
+        **误判的代价是一次短调用**，但把合法答案判成可疑会导致重问，
+        所以 `{1, 3, 5}`、`x = 2, y = 3` 这类列表/多值答案必须放过。
+        """
+        a = (answer or "").strip()
+        if not a:
+            return True
+        # 1) 过长：答案是短语，不是段落
+        if len(a) > cls._SUSPICIOUS_ANSWER_LEN:
+            return True
+        # 2) 成句：出现句号或推理连接词，说明抽到的是叙述而非结论
+        if "。" in a or "．" in a:
+            return True
+        for pat in cls._NARRATIVE_PAT:
+            if re.search(pat, a):
+                return True
+        # 3) 推导链：**链式等号** `a = b = c`（两个等号之间没有被逗号分隔）。
+        #    用"中间无逗号"把推导链与并列赋值区分开：
+        #      - "S = 1 + 2 + 3 = 6"  → 链式，是计算过程
+        #      - "x = 2, y = 3"       → 并列，是合法的多值答案
+        if re.search(r"=[^,，]*=", a):
+            return True
+        return False
+
     def _generate_proof(self, ctx: TaskContext) -> Candidate | None:
         """使用证明题专用提示词生成分步编号的完整证明。"""
         from .base import Candidate
@@ -302,23 +394,45 @@ class SolverAgent(BaseAgent):
 
         # ICMA 对齐（v2.4.0）：末尾追加章节输出引导。系统 prompt 已要求四章节
         # 结构化输出并禁止思考过程，这里仅强调【最终答案】章节必须明确，不引导自由 CoT。
+        #
+        # 2026-08-30（#51 答案定型）：基线 45 题实测——**仅 7/45（15.6%）的推理里
+        # 出现 \boxed{}**，5 题抽出的答案超过 60 字符（明显抽到了推理文本），
+        # 且 `reference_matched` 精确匹配 45/45 全 False。本地宽松 LLM 判分能"看懂"，
+        # 平台判分看不懂——这是「本地 46.7% vs 平台 20%」落差里可控性最高的一块。
+        # 模型本身具备给出简洁答案的能力（#21 材料结论：模型可到 90 分），
+        # 缺的是**强制定界**，故在提示词侧要求 \boxed{}，而非让抽取器去猜。
         _ANSWER_GUIDE = (
             "\n\n请严格按系统提示的四章节格式输出完整解答，"
             "确保【最终答案】章节给出明确、简洁的最终结论。"
         )
+        if getattr(self.config, 'enable_answer_boxed', True):
+            _ANSWER_GUIDE += (
+                "\n【最终答案】章节中，最终结论必须且只能用 \\boxed{...} 包裹，"
+                "并在其后另起一行给出不含任何公式标记的最简形式"
+                "（例如：\\boxed{42}；最简形式：42）。"
+                "\\boxed{} 内只放答案本身，不要放推导过程、单位说明或多余文字。"
+            )
         user_content = user_content + _ANSWER_GUIDE
 
         # 题型差异化策略注入（v2.6）：
         #   选择题→选项逆推验证；判断题→不确定时合理猜测；
         #   证明题→逐步反复校验；解答题→附带答案结果检测；填空题→只输出结果。
-        if getattr(self.config, 'enable_question_type', True) and getattr(ctx, 'question_type', ''):
+        #
+        # 2026-08-30（#45）：老师要求移除按题型分流、让 AI 按自身流程作答
+        # （IMO 基本全为证明题，题型分支实测反而拉低证明题正确率）。
+        # 此处改为 `enable_question_type_hint` 控制，**默认关闭**；需要 A/B
+        # 对比或回归旧行为时置 True 即可，无需改代码。
+        # 注：选择题的选项格式化属"输入信息补全"而非策略分流，故始终保留。
+        if getattr(ctx, 'question_type', ''):
             from .question_type import get_question_type_hint, format_options
-            qtype_hint = get_question_type_hint(ctx.question_type)
             if ctx.question_type == "选择题":
                 opts = format_options(ctx.problem)
                 if opts:
-                    qtype_hint += opts
-            user_content = user_content + qtype_hint
+                    user_content = user_content + opts
+            if getattr(self.config, 'enable_question_type_hint', False):
+                qtype_hint = get_question_type_hint(ctx.question_type)
+                if qtype_hint:
+                    user_content = user_content + qtype_hint
 
         base_cid = len(ctx.candidates)
         if temperatures is None:
@@ -454,6 +568,14 @@ class SolverAgent(BaseAgent):
                     fallback = smart_fallback_answer(resp)
                     if fallback and (not answer or len(fallback) < len(answer)):
                         answer = fallback
+            # 2026-08-30（#51）：上述兜底仍拿到"疑似推理文本"时，做一次**定向重问**，
+            # 而不是把长文本当答案交给判分器。
+            # 依据：基线 45 题有 5 题抽出的答案 >60 字符（含整段计算步骤与结论句），
+            # 本地宽松判分能看懂、平台判分看不懂。模型具备给出简洁答案的能力，
+            # 缺的是一次明确要求——成本仅一次短调用，收益是消除平台侧的格式性丢分。
+            if (getattr(self.config, 'enable_answer_reask', True)
+                    and ctx.budget is not None and ctx.budget.can_spend(1)):
+                answer = self._reask_final_answer(ctx, resp, answer)
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,

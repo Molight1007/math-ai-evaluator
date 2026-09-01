@@ -146,6 +146,51 @@ LEAN_CONVERT_USER = """## 原题
 
 请输出对应的 Lean 4 代码。"""
 
+# 答案审核阶段（2026-09-01，用户要求"所有题目都要用到 Lean"）：非证明题
+# （解答题/计算题）的轻量答案验证 —— 只把最终答案与推理中的关键计算转成
+# example + norm_num/ring 等轻量 tactic 证明，不整题形式化，控制编译开销。
+LEAN_ANSWER_VERIFY_SYSTEM = """你是一位 Lean 4 形式化专家。你的任务是把"数学解答的最终答案与关键计算"转化为一段轻量 Lean 4 验证代码，用 norm_num / ring / nlinarith / omega / positivity / simp 等轻量 tactic 自动判定解答中的计算是否正确。
+
+============================================================
+要求
+============================================================
+1. 输出 Lean 4 代码：用 ``example : <命题> := by <轻量tactic>`` 形式表达"解答声称的计算/答案"，并让轻量 tactic 完成证明。
+   - 数值计算题：example : (3 : ℚ) = 1 + 2 := by norm_num
+   - 化简题：    example : (x + 1) ^ 2 = x ^ 2 + 2 * x + 1 := by ring
+   - 不等式题：  example : (2 : ℚ) ≤ 3 := by norm_num
+2. 只能形式化**解答中明确声称**的计算与答案，禁止自行补充解答未给出的结论。
+3. **禁止 sorry / axiom / admit**，证明必须完全由轻量 tactic 完成。
+4. **关键**：等号/命题右侧必须是推理文本中实际出现的计算表达式或中间步骤
+   （如 1 + 2、3 * 4 - 1、x ^ 2 + 2 * x + 1），**禁止**把最终答案自身写成恒等式
+   （如 example : (a : ℚ) = a，这验证不了任何计算）。若右侧只能写答案自身，
+   说明无法验证，请按第 5 条输出 error。
+5. 若最终答案无法合理形式化（纯文字答案、答案依赖未给出的量、选项字母等），
+   输出 JSON：{"error": "无法形式化原因"}，不要硬编。
+6. 只输出 JSON，不要输出解释或 Markdown 代码块。
+
+============================================================
+输出格式（严格 JSON）
+============================================================
+```json
+{
+  "lean_code": "example : (3 : ℚ) = 1 + 2 := by\\n  norm_num",
+  "answer_expr": "3",
+  "note": "可选说明"
+}
+```
+"""
+
+LEAN_ANSWER_VERIFY_USER = """## 原题
+{problem}
+
+## 解答推理（含计算过程）
+{reasoning}
+
+## 解答给出的最终答案
+{answer}
+
+请把最终答案与推理中的关键计算转化为轻量 Lean 验证代码（严格按系统提示输出 JSON）。"""
+
 # 分析阶段：把编译错误映射为可修复/致命缺陷
 LEAN_ANALYZE_SYSTEM = """你是一位 Lean 4 与数学推理专家。下面是"自然语言推理"转化出的 Lean 4 代码及其编译错误，请判断错误的根因。
 
@@ -612,6 +657,108 @@ class LeanBridge:
                 comp.get("error", "编译失败（无详细输出）") if comp else "编译失败（无详细输出）")
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
+            return BugReport(verdict="unknown", findings=[])
+
+    # ------------------------------------------------------------------
+    # 答案审核（轻量路径）：最终答案 norm_num/ring 结果验证（2026-09-01）
+    # ------------------------------------------------------------------
+    def _convert_answer_to_lean(self, problem: str, reasoning: str,
+                                answer: str) -> Optional[str]:
+        """把最终答案 + 推理关键计算转成轻量 Lean example 验证代码。
+
+        用依赖注入的 client 调用书生：输出 ``example : <命题> := by <tactic>``
+        形式的验证代码。无法形式化（LLM 返回 error / 解析失败 / 无代码）返回 None，
+        由调用方降级 unknown。
+        """
+        messages = [
+            {"role": "system", "content": LEAN_ANSWER_VERIFY_SYSTEM},
+            {"role": "user", "content": LEAN_ANSWER_VERIFY_USER.format(
+                problem=problem, reasoning=reasoning, answer=answer)},
+        ]
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        parsed = _parse_analysis_json(raw)
+        if not parsed:
+            return None
+        if parsed.get("error"):
+            logger.info("[LeanBridge] 答案无法形式化: %s",
+                        str(parsed["error"])[:120])
+            return None
+        lean_code = _strip_code_fence(str(parsed.get("lean_code", "") or ""))
+        return lean_code or None
+
+    def verify_answer(self, problem: str, reasoning: str, answer: str,
+                      domain: str = "", timeout: float = 60.0) -> Optional[BugReport]:
+        """答案审核（轻量路径，非证明题）：最终答案 + 关键计算用 norm_num/ring 验证。
+
+        与 ``verify()``（整题形式化，证明题）的区别：这里只验证解答**声称的计算与
+        最终答案**，编译 5-21s 内，不整题形式化，满足用户「证明题+解答题都要过
+        Lean」但控制时间开销的要求。
+
+        - 编译通过 → BugReport(verdict='answer_valid')（计算/答案经 Lean 判定正确）
+        - 逻辑错误（norm_num 证不出 / 计算与推理矛盾）→ verdict='proof_invalid'
+        - 翻译问题 / 答案无法形式化 / 环境缺失 / 超时 → verdict='unknown' 降级放行
+
+        返回的 BugReport 附加 ``lean_code`` 属性（供上层埋点提取 import/example）。
+        """
+        deadline = time.monotonic() + max(1.0, timeout)
+        try:
+            # 1) Lean 环境缺失 → 降级 unknown
+            if not self.lean_available:
+                logger.warning("[LeanBridge] Lean 环境不可用，答案验证降级 unknown")
+                return BugReport(verdict="unknown", findings=[])
+
+            # 2) 无答案 / 选项字母答案（选择题）→ 无法 norm_num 验证，降级放行
+            answer = (answer or "").strip()
+            if not answer:
+                return BugReport(verdict="unknown", findings=[])
+            if re.fullmatch(r"[A-Da-d][.、)]?|第[一二三四]个|（[A-Da-d]）", answer):
+                return BugReport(verdict="unknown", findings=[])
+
+            # 3) 阶段一：答案 + 关键计算 → 轻量 Lean example
+            if time.monotonic() > deadline:
+                return BugReport(verdict="unknown", findings=[])
+            lean_code = self._convert_answer_to_lean(problem, reasoning, answer)
+            if not lean_code:
+                return BugReport(verdict="unknown", findings=[])
+
+            # 4) 阶段二：编译验证（不允许 sorry —— 答案必须被 tactic 证出）
+            if time.monotonic() > deadline:
+                return BugReport(verdict="unknown", findings=[])
+            project_dir = self._lean_project_dir
+            use_mathlib = self._mathlib_ready()
+            code_to_compile = (_prepend_mathlib_import(lean_code)
+                               if use_mathlib else lean_code)
+            if project_dir:
+                lean_file = "ansverify_%d_%d.lean" % (
+                    os.getpid(), int(time.monotonic() * 1e6))
+                comp = self._compile(code_to_compile, project_dir,
+                                     lean_filename=lean_file, allow_sorry=False)
+                try:
+                    os.remove(os.path.join(project_dir, lean_file))
+                except OSError:
+                    pass
+            else:
+                with tempfile.TemporaryDirectory(prefix="lean_ansverify_") as work_dir:
+                    comp = self._compile(code_to_compile, work_dir,
+                                         allow_sorry=False)
+
+            if comp and comp.get("ok"):
+                report = BugReport(verdict="answer_valid", findings=[])
+                # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
+                setattr(report, "lean_code", lean_code)
+                return report
+
+            # 5) 阶段三：错误分析（把最终答案并入 reasoning 上下文，定位更准）
+            if time.monotonic() > deadline:
+                return BugReport(verdict="unknown", findings=[])
+            return self._analyze_error(
+                problem,
+                reasoning + "\n## 最终答案\n" + answer,
+                lean_code,
+                comp.get("error", "答案验证编译失败（无详细输出）")
+                if comp else "答案验证编译失败（无详细输出）")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[LeanBridge] verify_answer 异常（降级 unknown）: %s", exc)
             return BugReport(verdict="unknown", findings=[])
 
     # ------------------------------------------------------------------

@@ -27,10 +27,45 @@ _QUESTION_TYPES = (QT_PROOF, QT_CHOICE, QT_JUDGE, QT_FILL, QT_SOLUTION)
 # 关键词信号表
 # ---------------------------------------------------------------------------
 # 选项标记：A. / (A) / A、/ A） / 【A】 等（选择题强信号）
+# 2026-09-01 修复（系统根因）：原正则含 [\s:：]|$ 分隔符，把数学正文里的
+# (b - a)、(a, b)、 a 、(a) 误判成选项 → PB 证明题 39/60 被判选择题，
+# 模型被误导只输出选项字母，且 Lean 门禁（is_proof）被挡在门外。
+# 新规则：① 字母必须紧跟标点（. 、 ) 】 等），空格不算分隔符；
+#         ② 命中标记数 ≥2 才算选择题（杜绝孤立 (a) / (b-a) 误判）；
+#         ③ 选项关键词（选择/选项/选出…）仍为强信号，1 个即判选择题。
 _OPTION_MARK_RE = re.compile(
-    r"(?:^|[\s(（\[【])[A-Da-d](?:[\.、\)）\]】]|[\s:：]|$)",
+    r"(?:^|[\s(（\[【])([A-Da-d])(?:[\.、\)）\]】]|[：:])",
     re.MULTILINE,
 )
+
+# 数学正文信号：标记后紧跟这些字符 → 是数学表达式不是选项
+_MATH_AFTER = ("\\", "$", ",", "，", "-", "=", "\\in", "\\neq", "\\leq", "\\geq")
+
+
+def _count_option_marks(text: str) -> int:
+    """统计真实选项标记数（排除数学正文误判）。
+
+    数学正文里的 (b - a) / (a, b) / (a)f / \\item[(a)] / K (\\neq D) 等
+    会被过滤：标记后紧跟数学符号、或前导是 \\item 分点列表 → 不算选项。
+    """
+    n = 0
+    for m in _OPTION_MARK_RE.finditer(text):
+        # 1) 前导 \\item[(a)] 分点列表（LaTeX enumerate）
+        pre = text[max(0, m.start() - 12):m.start()]
+        if "item[" in pre or "\\item" in pre:
+            continue
+        # 2) 标记后紧跟数学符号/公式起始 → 数学正文
+        after = text[m.end():m.end() + 4].lstrip()
+        if after.startswith(_MATH_AFTER):
+            continue
+        # 3) 括号式标记 (a) 后紧跟字母/数字/括号/右括号（如 f(a))、(b-a)f(f(a))）
+        #    → 数学调用/嵌套，不是选项
+        if m.group(0).strip().endswith((")", "）", "]", "】")):
+            nxt = text[m.end():m.end() + 1]
+            if nxt and (nxt.isalnum() or nxt in "([{（)"):
+                continue
+        n += 1
+    return n
 
 # 填空题空白占位：___ / ＿ / 【空】 / ()
 _UNDERSCORE_BLANK_RE = re.compile(r"_{2,}|＿{2,}|\[空\]|【空】")
@@ -45,8 +80,10 @@ def classify_question_type(problem: str) -> str:
     text = problem or ""
     low = text.lower()
 
-    # 1) 选择题：选项标记 / 选项关键词（信号最专一）
-    if _OPTION_MARK_RE.search(text) or any(
+    # 1) 选择题：选项标记 ≥2 个 / 选项关键词（信号最专一）
+    # 2026-09-01：标记数 ≥2 才判选择题。数学正文里的 (b-a) / (a, b) / (a)f /
+    # \item[(a)] 均被排除（见 _is_option_mark），杜绝 PB 证明题 39/60 误判。
+    if (_count_option_marks(text) >= 2) or any(
         k in low for k in ("选择", "选项", "选出", "单选", "多选", "下列选项中", "正确的选项")
     ):
         return QT_CHOICE

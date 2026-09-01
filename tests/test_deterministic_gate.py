@@ -91,17 +91,24 @@ def test_leangate_enabled_all_proofs():
     class _CfgDeepOnly:
         enable_lean_verify = True
         lean_gate_all_proofs = False
+        lean_gate_nonproof_deep_only = True
 
     g1 = LeanGate.__new__(LeanGate)
     g1.config = _CfgAll()
     assert g1._enabled("standard", "证明") is True
     assert g1._enabled("deep", "证明") is True
-    assert g1._enabled("standard", "计算") is False
+    # 2026-09-01 用户要求「所有题目都要用到 Lean」：非证明题默认全档启用
+    # （走轻量 verify_answer）。旧行为由 lean_gate_nonproof_deep_only=True 保留。
+    assert g1._enabled("standard", "计算") is True
+    assert g1._enabled("standard", "计算", "解答题") is True
 
     g2 = LeanGate.__new__(LeanGate)
     g2.config = _CfgDeepOnly()
     assert g2._enabled("standard", "证明") is False
     assert g2._enabled("deep", "证明") is True
+    # 非证明题仅 deep 档（旧行为回退开关）
+    assert g2._enabled("standard", "计算") is False
+    assert g2._enabled("deep", "计算") is True
 
 
 if __name__ == "__main__":
