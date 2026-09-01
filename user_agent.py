@@ -76,6 +76,9 @@ class AgentConfig:
     enable_domain_hint: bool = True    # 是否启用领域提示增强
     enable_question_type: bool = True  # 是否启用题型识别（证明/选择/判断/填空/解答）+ 差异化策略
 
+    # ---- calc_tool 确定性计算（2026-09-01，治 value_wrong）----
+    enable_calc_tool: bool = True      # 提示词引导 <calc> 标记 + 输出精确求值回填
+
     # 解析
     extraction_mode: str = "auto"      # auto | last_line | regex
 
@@ -385,6 +388,7 @@ class ReasoningAgent:
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
             "verifier_voting_times", "verifier_temperature",
             "enable_domain_hint", "enable_question_type", "extraction_mode",
+            "enable_calc_tool",  # 2026-09-01 calc_tool 确定性计算
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
             "by_enable_fast_path", "use_scoring",
@@ -419,6 +423,7 @@ class ReasoningAgent:
             "adversarial_max_reasoning",
             # Lean 硬验证
             "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
+            "lean_gate_nonproof", "lean_gate_nonproof_deep_only",
             "enable_sketch_audit", "use_leansearch",
             # 前置形式化验证（rounds 影响预算消耗：每次编译 ~21s）
             "preverify_max_rounds", "preverify_timeout",

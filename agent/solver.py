@@ -36,6 +36,14 @@ from prompts.policy import (
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
+
+try:
+    from .calc_tool import resolve_all_calcs
+except ImportError:  # 提交包（submit/）路径兜底
+    try:
+        from calc_tool import resolve_all_calcs
+    except ImportError:
+        resolve_all_calcs = None
 from utils.extract import (
     extract_final_answer,
     smart_fallback_answer,
@@ -414,6 +422,17 @@ class SolverAgent(BaseAgent):
             )
         user_content = user_content + _ANSWER_GUIDE
 
+        # 2026-09-01 calc_tool 集成（治 value_wrong）：告知模型计算环节可用
+        # <calc>表达式</calc> 标记（精确分数算术，白名单安全求值），系统会把
+        # 标记替换为精确结果，避免模型算术错误污染推理与最终答案。
+        if getattr(self.config, 'enable_calc_tool', True):
+            _CALC_GUIDE = (
+                "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
+                "<calc>1/2+1/3</calc>、<calc>3*7-1</calc>），系统会自动精确求值并回填结果。"
+                "涉及数值计算时务必使用该标记，不要心算。"
+            )
+            user_content = user_content + _CALC_GUIDE
+
         # 题型差异化策略注入（v2.6）：
         #   选择题→选项逆推验证；判断题→不确定时合理猜测；
         #   证明题→逐步反复校验；解答题→附带答案结果检测；填空题→只输出结果。
@@ -557,6 +576,11 @@ class SolverAgent(BaseAgent):
                     id=cid, answer="", reasoning="[生成失败] 调用受限或模型拒绝回答"))
                 logger.warning("Candidate %d generation failed/skipped", cid)
                 continue
+            # 2026-09-01 calc_tool 回填：<calc>表达式</calc> → 精确值
+            # （在答案抽取之前，让精确结果参与 answer 提取）
+            if resolve_all_calcs is not None and getattr(
+                    self.config, 'enable_calc_tool', True):
+                resp = resolve_all_calcs(resp)[0]
             answer = extract_final_answer(resp)
             # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），
             # 先试 rescue 兜底（嵌套 boxed / 中段强模式结论），再取尾部
@@ -648,6 +672,10 @@ class SolverAgent(BaseAgent):
                     id=cid, answer="", reasoning="[重解失败] 调用受限"))
                 logger.warning("Revise candidate %d failed/skipped", cid)
                 continue
+            # 2026-09-01 calc_tool 回填（与 _generate_initial 一致）
+            if resolve_all_calcs is not None and getattr(
+                    self.config, 'enable_calc_tool', True):
+                resp = resolve_all_calcs(resp)[0]
             answer = extract_final_answer(resp)
             if not answer or len(answer) > 300:
                 answer = rescue_final_answer(resp)[0]
