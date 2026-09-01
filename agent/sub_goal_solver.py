@@ -272,7 +272,80 @@ class SubGoalSolverAgent(BaseAgent):
         )
         ctx.candidates.append(candidate)
         self.record(ctx, "subgoal", "子目标求解完成，已生成候选解答")
+        # -------- #34 阶段四：DAG 评审 + 整树重生成 --------
+        # 老师要求："dag 框架错了要重新构建"。判定标准（DagReviewer）：
+        # - reject >= 3 个（绝对阈值）
+        # - reject 比例 >= 40%（相对阈值）
+        # 满足任一 → 注入失败反馈让 BlueprintPlanner.regenerate_with_feedback 重写 DAG。
+        # 硬上限 MAX_REPLAN_ROUNDS 防死循环；预算耗尽或 DAG 不可改进即停。
+        if getattr(self.config, "enable_dag_replan", True):
+            self._review_and_maybe_replan(ctx, dag=ctx.blueprint)
         return ctx
+
+    def _review_and_maybe_replan(self, ctx, dag=None, max_replan_rounds: int = 2) -> bool:
+        """评审 DAG + 必要时整树重生成；返回是否触发了重生成。"""
+        from .dag_reviewer import DagReviewerAgent
+        from .blueprint_planner import BlueprintDAG
+        reviewer = DagReviewerAgent(self.client, self.config)
+        # 1) 评审当前 DAG：兼容 BlueprintDAG 与 dict 两种入参
+        if dag is None and ctx.blueprint:
+            dag = ctx.blueprint
+        if dag is None:
+            return False
+        if isinstance(dag, dict):
+            try:
+                dag = BlueprintDAG.from_dict(dag)
+            except Exception as exc:  # noqa: BLE001
+                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
+                return False
+        if not dag.nodes:
+            return False
+        results_map = {sg["id"]: sg.get("result", "")
+                       for sg in getattr(ctx, "subgoal_trace", []) or []}
+        report = reviewer.review(ctx, dag, results_map=results_map)
+        if not report.should_replan():
+            return False
+        # 2) 应重生成：聚合 hint，加 budget 闸 + 硬上限
+        from .blueprint_planner import (
+            BlueprintPlannerAgent, BlueprintDAG)
+        planner = BlueprintPlannerAgent(self.client, self.config)
+        feedback_lines = report.merge_from_hints().split("\n") if report.merge_from_hints() else []
+        if not feedback_lines:
+            feedback_lines.append(
+                "请提供粒度更细、子目标间无循环、可独立证明的 DAG")
+        # 3) 硬上限 + budget 闸
+        replan_rounds = int(getattr(self.config, "dag_replan_max_rounds",
+                                    max_replan_rounds) or max_replan_rounds)
+        replan_rounds = max(1, replan_rounds)
+        for round_idx in range(replan_rounds):
+            if not ctx.budget or not ctx.budget.can_spend(2):
+                self.record(ctx, "dag_replan",
+                            f"DAG 重生成预算不足，提前停止 (round={round_idx + 1})")
+                return False
+            new_dag = planner.regenerate_with_feedback(
+                ctx, prior_dag=dag, feedback_lines=feedback_lines)
+            if new_dag is None:
+                self.record(ctx, "dag_replan", f"第 {round_idx + 1} 轮重生成失败，停止")
+                return True  # 已尝试过，标记触发
+            dag = new_dag
+            self.record(ctx, "dag_replan",
+                        f"DAG 第 {round_idx + 1}/{replan_rounds} 轮重生成: "
+                        f"{len(new_dag.nodes)} 节点, root={new_dag.root_id}")
+            # 重生成后再评审一次，避免死循环（重写还拒 → 停）
+            new_plan = new_dag.to_subgoal_plan()
+            subgoals = new_plan.get("subgoals", [])
+            if subgoals:
+                # 用 placeholder 结果集触发下一轮评审（即用新 DAG 但旧求解结果视作未知）
+                report2 = reviewer.review(ctx, new_dag, results_map={})
+                if not report2.should_replan():
+                    self.record(ctx, "dag_replan",
+                                "重生成 DAG 通过评审，停止整树重构")
+                    return True
+                feedback_lines = report2.merge_from_hints().split("\n") \
+                    if report2.merge_from_hints() else feedback_lines
+        self.record(ctx, "dag_replan",
+                    f"达到重生成硬上限 {replan_rounds} 轮，停止")
+        return True
 
     # ---------- 阶段一：规划 ----------
     def _plan_subgoals(self, ctx: TaskContext) -> dict | None:

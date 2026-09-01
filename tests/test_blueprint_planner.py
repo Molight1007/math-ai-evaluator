@@ -334,5 +334,131 @@ class SubGoalIntegrationTest(unittest.TestCase):
                             for r in ctx.trace) or True)  # trace 存在即可
 
 
+# ============================================================
+# DAG 整树重生成（#34，老师要求："dag 错了要重新生成"）
+# ============================================================
+
+REPLAN_DAG_JSON = json.dumps({
+    "root_id": "g2",
+    "nodes": [
+        {"id": "g2", "type": "and",
+         "statement": "证明 x^2 非负改写版（更细）",
+         "children": ["n2a", "n2b"]},
+        {"id": "n2a", "type": "and",
+         "statement": "由 a^2 >= 0 直接得（分情形）",
+         "children": []},
+        {"id": "n2b", "type": "and",
+         "statement": "若实数 x 平方 = (-x)^2，结论亦然",
+         "children": []},
+    ],
+    "merge_strategy": "任一分支成立即可",
+})
+
+
+class ReplanTest(unittest.TestCase):
+
+    def test_regenerate_with_feedback_success(self):
+        """重生成成功路径：mock LLM 输出新 DAG，校验通过、回写 ctx.blueprint。"""
+        from agent.blueprint_planner import (
+            BlueprintPlannerAgent, BlueprintDAG, BlueprintNode)
+
+        client = MockClient(response="```json\n" + REPLAN_DAG_JSON + "\n```")
+        config = SimpleNamespace(
+            use_leansearch=False,
+            theorem_memory_enable=False,
+            theorem_memory_path="",
+            theorem_memory_top_k=5,
+        )
+        planner = BlueprintPlannerAgent(client, config)
+        ctx = make_ctx()
+        ctx.problem = "证明 f(x)=x^2 在实数上非负"
+
+        prior = BlueprintDAG(
+            nodes={"g": BlueprintNode("g", "and", "证明 f(x)=x^2 非负 x^2", [])},
+            root_id="g",
+        )
+        new_dag = planner.regenerate_with_feedback(
+            ctx, prior_dag=prior,
+            feedback_lines=["n1a 与父目标循环相似", "粒度过粗"])
+        self.assertIsNotNone(new_dag)
+        self.assertEqual(new_dag.root_id, "g2")
+        self.assertEqual(len(new_dag.nodes), 3)
+        # ctx.blueprint 应被新 DAG 覆盖
+        self.assertEqual(ctx.blueprint["root_id"], "g2")
+        # trace 应包含 "blueprint_replan" 标记
+        trace_steps = [t.get("step") for t in ctx.trace]
+        self.assertIn("blueprint_replan", trace_steps)
+
+    def test_regenerate_with_feedback_budget_guard(self):
+        """预算=0 直接返回 None，不调 LLM。"""
+        from agent.blueprint_planner import (
+            BlueprintPlannerAgent, BlueprintDAG, BlueprintNode)
+
+        client = MockClient(response="anything")
+        config = SimpleNamespace(
+            use_leansearch=False,
+            theorem_memory_enable=False,
+        )
+        planner = BlueprintPlannerAgent(client, config)
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        prior = BlueprintDAG(
+            nodes={"g": BlueprintNode("g", "and", "题目目标", [])},
+            root_id="g",
+        )
+        result = planner.regenerate_with_feedback(ctx, prior_dag=prior, feedback_lines=[])
+        self.assertIsNone(result)
+
+
+# ============================================================
+# SubGoalSolver 阶段四：Reviewer + Replan 集成测试
+# ============================================================
+
+class SubGoalReviewReplanTest(unittest.TestCase):
+    """SubGoalSolver.run 末尾应触发 DagReviewer + 必要时整树重生成。"""
+
+    def _make_sub_goal_mock_llm_response(self):
+        """构造 SubGoalSolver 需要的多步 LLM 输出：plan + step 结果。
+
+        走通三个 LLM 调用：
+          1) planner.generate_blueprint() → 用现有 DAG_JSON 即可
+          2) plan_subgoals 走 DAG 路径，但 generate_blueprint 已被前面 mock 替换
+          3) _call_step 每子目标调用一次（结果占位）
+        """
+        step_ok = json.dumps({"result": "ok"})
+        return ["```json\n" + DAG_JSON + "\n```", "```json\n" + step_ok + "\n```"]
+
+    def test_subgoal_solver_runs_review_at_end(self):
+        """子目标完成后跑 Reviewer，不触发重生成（评审通过 → False）。"""
+        from agent.sub_goal_solver import SubGoalSolverAgent
+        # 准备第一段响应 = DAG JSON；第二段 = 每子目标 step 结果（多次返回）
+        idx = {"i": 0}
+
+        class MyClient:
+            def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
+                idx["i"] += 1
+                # 第一次（generate_blueprint）→ DAG_JSON；其他 → step result
+                if idx["i"] == 1:
+                    return "```json\n" + DAG_JSON + "\n```"
+                return "```\n【本步结果】\n已求解\n```"
+
+        config = SimpleNamespace(
+            use_blueprint_dag=True,
+            use_leansearch=False,
+            theorem_memory_enable=False,
+            enable_dag_replan=True,    # 开启评审+replan
+            dag_replan_max_rounds=2,
+        )
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=50)
+        solver = SubGoalSolverAgent(MyClient(), config)
+        solver.run(ctx)
+        # dag_review_report 应被写入
+        self.assertTrue(ctx.dag_review_report)
+        # trace 应有 dag_review 步骤
+        trace_steps = [t.get("step") for t in ctx.trace]
+        self.assertIn("dag_review", trace_steps)
+
+
 if __name__ == "__main__":
     unittest.main()
