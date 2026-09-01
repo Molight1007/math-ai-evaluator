@@ -144,5 +144,72 @@ class RunFlowTest(unittest.TestCase):
         self.assertEqual(len(ctx.candidates), 2)
 
 
+class ReplanDispatchTest(unittest.TestCase):
+    """_review_and_maybe_replan 分流逻辑（9/1 优化 B：LCA=根 跳过子树直接整树）。"""
+
+    @staticmethod
+    def _make_dag(n1_children: list) -> "BlueprintDAG":
+        from agent.blueprint_planner import BlueprintDAG, BlueprintNode
+        nodes = {
+            "g": BlueprintNode("g", "compute", "Solve the whole problem",
+                               ["n1", "n2"]),
+            "n1": BlueprintNode("n1", "compute", "First branch", n1_children),
+            "n2": BlueprintNode("n2", "compute", "Second branch", []),
+        }
+        for c in n1_children:
+            nodes[c] = BlueprintNode(c, "compute", f"Leaf {c}", [])
+        return BlueprintDAG(nodes=nodes, root_id="g")
+
+    def test_lca_root_skips_subtree(self) -> None:
+        # reject 横跨两个顶层分支（n1、n2）→ LCA=g=根 → 跳过子树，直接整树
+        from unittest.mock import patch
+
+        from agent.dag_reviewer import DagReviewReport, DagReviewResult
+        dag = self._make_dag([])
+        reject_r = DagReviewReport(results={
+            "n1": DagReviewResult("n1", "reject", 0.2, ["粒度不当"], "改细"),
+            "n2": DagReviewResult("n2", "reject", 0.2, ["循环"], "改"),
+        })
+        accept_r = DagReviewReport(results={})
+        with patch("agent.dag_reviewer.DagReviewerAgent") as m_rev_cls, \
+                patch("agent.blueprint_planner.BlueprintPlannerAgent") as m_pl_cls:
+            m_rev = m_rev_cls.return_value
+            m_rev.review.side_effect = [reject_r, accept_r]
+            m_pl = m_pl_cls.return_value
+            m_pl.regenerate_with_feedback.return_value = dag
+            ctx = make_ctx()
+            ok = make_agent()._review_and_maybe_replan(ctx, dag=dag,
+                                                       max_replan_rounds=1)
+            self.assertTrue(ok)
+            # 关键断言：子树重写未被调用（LCA=根 快速分流）
+            m_pl.regenerate_subtree.assert_not_called()
+            m_pl.regenerate_with_feedback.assert_called_once()
+
+    def test_lca_nonroot_uses_subtree_first(self) -> None:
+        # reject 集中在 n1 分支（n1a、n1b）→ LCA=n1 ≠ 根 → 先子树重写
+        from unittest.mock import patch
+
+        from agent.dag_reviewer import DagReviewReport, DagReviewResult
+        dag = self._make_dag(["n1a", "n1b"])
+        reject_r = DagReviewReport(results={
+            "n1a": DagReviewResult("n1a", "reject", 0.2, ["粒度不当"], "改细"),
+            "n1b": DagReviewResult("n1b", "reject", 0.2, ["循环"], "改"),
+        })
+        accept_r = DagReviewReport(results={})
+        with patch("agent.dag_reviewer.DagReviewerAgent") as m_rev_cls, \
+                patch("agent.blueprint_planner.BlueprintPlannerAgent") as m_pl_cls:
+            m_rev = m_rev_cls.return_value
+            m_rev.review.side_effect = [reject_r, accept_r]
+            m_pl = m_pl_cls.return_value
+            m_pl.regenerate_subtree.return_value = dag
+            ctx = make_ctx()
+            ok = make_agent()._review_and_maybe_replan(ctx, dag=dag,
+                                                       max_replan_rounds=1)
+            self.assertTrue(ok)
+            # 关键断言：先走子树重写，未升级整树
+            m_pl.regenerate_subtree.assert_called_once()
+            m_pl.regenerate_with_feedback.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
