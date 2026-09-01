@@ -28,6 +28,9 @@ from typing import Optional
 
 from .base import BaseAgent, TaskContext
 from .blueprint_planner import BlueprintDAG, extract_json
+# 复用 lean_bridge 的 import 归一化（full 聚合入口 / core 具体模块导入自适应，
+# 2026-09-01：core 闭包缺 Mathlib/Tactic.olean 聚合入口，硬编码会导致验证全降级）
+from .lean_bridge import _mathlib_import_block, _prepend_mathlib_import
 
 logger = logging.getLogger("MathPilot")
 
@@ -193,7 +196,7 @@ class LeanTranslatorAgent(BaseAgent):
             result["error"] = "所有叶子节点翻译失败"
             return result
 
-        lean_code = "import Mathlib.Tactic\n\n" + "\n\n".join(declarations) + "\n"
+        lean_code = _mathlib_import_block() + "\n\n" + "\n\n".join(declarations) + "\n"
         result["lean_code"] = lean_code
         result["sorry_count"] = count_sorries(lean_code)
 
@@ -281,19 +284,3 @@ def _strip_fence(text: str) -> str:
         return ""
     m = re.search(r"```(?:lean)?\s*([\s\S]*?)```", text)
     return (m.group(1).strip() if m else text.strip())
-
-
-def _prepend_mathlib_import(code: str) -> str:
-    """归一化代码的 Mathlib import（兼容本地部分编译布局）。
-
-    全量 Mathlib 因 517 个冷门模块（代数几何/拓扑/层论）v4.31.0 兼容问题无法
-    构建，改用已编译完成的 Mathlib.Tactic（含 norm_num/ring/omega/linarith/
-    positivity/aesop/simp，跑分证明够用）。
-    """
-    if not code:
-        return "import Mathlib.Tactic\n"
-    if re.search(r"^\s*import\s+Mathlib\.", code, re.MULTILINE):
-        return code  # 已有具体模块导入
-    if re.search(r"^\s*import\s+Mathlib\b", code, re.MULTILINE):
-        return re.sub(r"(?m)^\s*import\s+Mathlib\b.*$", "import Mathlib.Tactic", code)
-    return "import Mathlib.Tactic\n\n" + code

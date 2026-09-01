@@ -65,14 +65,19 @@ def _detect_lean_executable() -> str:
       3) Linux:   <root>/deploy/lean-cache/lean-4.31.0-linux/bin/lean
     返回空串表示未探测到（调用方回退 "lake"）。
     """
-    # elan 工具链（与实际 lake env 使用的版本一致）
+    # elan 工具链（与实际 lake env 使用的版本一致；Windows 带 .exe，Linux 不带）
     elan_toolchains = os.path.expanduser(
         r"~\.elan\toolchains\leanprover--lean4---v4.31.0\bin\lean.exe")
+    elan_toolchains_linux = os.path.expanduser(
+        "~/.elan/toolchains/leanprover--lean4---v4.31.0/bin/lean")
     candidates = [
         elan_toolchains,
+        elan_toolchains_linux,
         os.path.join(_project_root(), "lean下载版", "lean-toolchain", "bin", "lean.exe"),
         os.path.join(_project_root(), "deploy", "lean-cache",
                      "lean-4.31.0-linux", "bin", "lean"),
+        # setup_lean.sh 的 zip 解压路径（deploy/lean-4.31.0-linux/bin/lean）
+        os.path.join(_project_root(), "deploy", "lean-4.31.0-linux", "bin", "lean"),
     ]
     for c in candidates:
         if os.path.isfile(c):
@@ -99,6 +104,51 @@ def _detect_lean_project_dir() -> str:
     return ""
 
 
+def _mathlib_tactic_entry_available() -> bool:
+    """聚合入口 Mathlib/Tactic.olean 是否可用（full 闭包/本地完整工程为 True）。
+
+    core 闭包（deploy/mathlib-olean，5 具体入口 BFS 构建）**没有**
+    Mathlib/Tactic.olean 聚合入口（它 import 337 个子模块，core 只覆盖
+    194 个），`import Mathlib.Tactic` 会编译失败。判断当前环境应该用聚合
+    入口还是具体模块导入。
+
+    优先级：LEAN_PATH 环境变量显式设置时（比赛环境 deploy/setup_lean.sh
+    挂载闭包后 lean 直编只用 LEAN_PATH 搜索）**以它为准**，避免被本机残留
+    的 full 闭包目录（data/mathlib-closure）误导；LEAN_PATH 未设置时
+    （本地 lake 工程场景）fallback 到默认部署目录探测。
+    """
+    roots: list[str] = [
+        d for d in os.environ.get("LEAN_PATH", "").split(os.pathsep) if d
+    ]
+    if roots:
+        return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
+                   for r in roots)
+    proj = _project_root()
+    roots = [
+        os.path.join(proj, "deploy", "mathlib-olean"),
+        os.path.join(proj, "data", "mathlib-closure-core"),
+        os.path.join(proj, "data", "mathlib-closure"),
+    ]
+    return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
+               for r in roots)
+
+
+# core 闭包模式下的替代导入集：覆盖 lean_gate 硬验证实际用到的 6 种 tactic
+# （norm_num/ring/linarith/nlinarith/positivity/omega），探针实测可编译通过。
+CORE_MATHLIB_IMPORTS = (
+    "import Mathlib.Tactic.NormNum\n"
+    "import Mathlib.Tactic.Ring\n"
+    "import Mathlib.Tactic.Linarith\n"
+    "import Mathlib.Tactic.Positivity\n"
+)
+
+
+def _mathlib_import_block() -> str:
+    """当前环境应使用的 Mathlib import 块（full 用聚合入口，core 用具体模块）。"""
+    return "import Mathlib.Tactic" if _mathlib_tactic_entry_available() \
+        else CORE_MATHLIB_IMPORTS.rstrip("\n")
+
+
 def _prepend_mathlib_import(code: str) -> str:
     """归一化代码的 Mathlib import（兼容本地部分编译布局）。
 
@@ -109,18 +159,26 @@ def _prepend_mathlib_import(code: str) -> str:
 
     规则：
     - 代码有 `import Mathlib.Tactic` 或具体 `import Mathlib.X` → 原样返回
-    - 代码有全量 `import Mathlib`（裸）→ 替换为 `import Mathlib.Tactic`
-    - 无任何 import → 补 `import Mathlib.Tactic`
+    - 代码有全量 `import Mathlib`（裸）→ 替换为可用 import 块
+    - 无任何 import → 补可用 import 块
+    - core 闭包（无 Mathlib.Tactic.olean 聚合入口）→ 用具体模块导入集，
+      避免 `import Mathlib.Tactic` 编译失败导致验证全降级（2026-09-01 修复）
     """
     if not code:
-        return "import Mathlib.Tactic\n"
-    # 已有具体模块导入（含 Mathlib.Tactic）→ 不动
-    if re.search(r"^\s*import Mathlib\.", code, re.MULTILINE):
+        return _mathlib_import_block() + "\n"
+    # 聚合入口 import Mathlib.Tactic（行尾无子模块）→ 替换为可用块
+    if re.search(r"^\s*import\s+Mathlib\.Tactic\s*$", code, re.MULTILINE):
+        return re.sub(r"(?m)^\s*import\s+Mathlib\.Tactic\s*$",
+                      _mathlib_import_block(), code)
+    # 已有具体模块导入（Mathlib.Tactic.NormNum / Mathlib.Data.X）→ 原样返回
+    if re.search(r"^\s*import\s+Mathlib\.", code, re.MULTILINE):
         return code
-    # 全量 import Mathlib → 替换为 Mathlib.Tactic
-    if re.search(r"^\s*import Mathlib\b", code, re.MULTILINE):
-        return re.sub(r"(?m)^\s*import Mathlib\b.*$", "import Mathlib.Tactic", code)
-    return "import Mathlib.Tactic\n\n" + code
+    # 全量 import Mathlib（裸）→ 替换为可用块
+    if re.search(r"^\s*import\s+Mathlib\b", code, re.MULTILINE):
+        return re.sub(r"(?m)^\s*import\s+Mathlib\b.*$",
+                      _mathlib_import_block(), code)
+    # 无任何 import → 补可用块
+    return _mathlib_import_block() + "\n\n" + code
 
 
 # =====================================================================
@@ -451,6 +509,10 @@ class LeanBridge:
         无法生成，但核心模块 Mathlib.Tactic（norm_num/ring/omega/linarith 等）
         已编译完成，跑分证明足够。故就绪判定以 Mathlib.Tactic.olean 为准
         （而非全量 Mathlib.olean）。结果按进程缓存。
+
+        比赛环境（无 lake 工程目录）：LEAN_PATH 挂载了 core/full 闭包
+        （deploy/mathlib-olean，由 deploy/setup_lean.sh 写入）同样视为就绪，
+        否则 lean_gate 硬验证会退回纯核心 Lean 而用不上闭包（2026-09-01 修复）。
         """
         if getattr(self, "_mathlib_ready_cache", None) is not None:
             return self._mathlib_ready_cache
@@ -473,6 +535,23 @@ class LeanBridge:
                     if "Tactic.olean" in files or "Mathlib.olean" in files:
                         ready = True
                         break
+        else:
+            # 无 lake 工程（比赛环境）：LEAN_PATH 或默认部署目录挂载闭包即就绪
+            roots: list[str] = [
+                d for d in os.environ.get("LEAN_PATH", "").split(os.pathsep) if d
+            ]
+            proj = _project_root()
+            roots += [
+                os.path.join(proj, "deploy", "mathlib-olean"),
+                os.path.join(proj, "data", "mathlib-closure"),
+            ]
+            for r in roots:
+                # core 闭包无聚合入口，用具体模块 olean 判定；full 闭包两者皆有
+                if (os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
+                        or os.path.isfile(os.path.join(
+                            r, "Mathlib", "Tactic", "NormNum.olean"))):
+                    ready = True
+                    break
         self._mathlib_ready_cache = ready
         return ready
 
@@ -523,6 +602,10 @@ class LeanBridge:
         # 结果（如 "import Mathlib.Tactic\n" 恰好是合法 Lean 代码 → 假 proof_valid）。
         if seed and stitch is not None and text:
             text = stitch(seed, text)
+        # Anti-hack 预处理（SU-01 §3.3）：格式病理 → safe fallback。
+        # 放在 stitch 之后，检查完整文本（含种子拼接后的产物）。
+        if text:
+            text = _anti_hack_guard(text)
         if self.budget is not None:
             self.budget.spend(1)
         return text
@@ -539,7 +622,7 @@ class LeanBridge:
                 problem=problem, reasoning=reasoning)},
         ]
         raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
-                             prefill="import Mathlib.Tactic\n")
+                             prefill=_mathlib_import_block() + "\n")
         return _strip_code_fence(raw)
 
     # ------------------------------------------------------------------
@@ -569,6 +652,12 @@ class LeanBridge:
             exe = elan_lake if os.path.isfile(elan_lake) else "lake"
         else:
             exe = self._lean_executable
+            # 非 lake 工程（比赛环境临时目录）：优先用探测到的 lean.exe 直编。
+            # 否则 exe 缺省为 "lake"，在无 lakefile 的临时目录跑 `lake env lean`
+            # 会报错（找不到 lakefile），导致硬验证全部失败（2026-09-01 修复）。
+            detected = _detect_lean_executable()
+            if detected:
+                exe = detected
         return _compile_lean(code, work_dir,
                              lean_executable=exe,
                              timeout=self._lean_timeout,
@@ -660,13 +749,16 @@ class LeanBridge:
             if time.monotonic() > deadline:
                 return BugReport(verdict="unknown", findings=[])
             project_dir = self._lean_project_dir
+            # Mathlib 就绪判定提前：比赛环境无 lake 工程（_lean_project_dir 为空），
+            # 但 LEAN_PATH 已挂载 core/full 闭包（deploy/setup_lean.sh）→ 同样
+            # prepend Mathlib import，否则硬验证退回纯核心 Lean 用不上闭包
+            # （2026-09-01 修复，比赛环境关键路径）。
+            use_mathlib = self._mathlib_ready()
+            code_to_compile = (_prepend_mathlib_import(lean_code)
+                               if use_mathlib else lean_code)
             comp = None
             if project_dir:
                 # 走带 Mathlib 依赖的 Lean 工程目录：Mathlib 真正可用。
-                # 仅当 Mathlib 已编译就绪时才 import Mathlib，避免未编译时误判。
-                use_mathlib = self._mathlib_ready()
-                code_to_compile = (_prepend_mathlib_import(lean_code)
-                                   if use_mathlib else lean_code)
                 lean_file = "verify_%d_%d.lean" % (
                     os.getpid(), int(time.monotonic() * 1e6))
                 comp = self._compile(code_to_compile, project_dir,
@@ -676,9 +768,9 @@ class LeanBridge:
                 except OSError:
                     pass
             else:
-                # 回退：单文件临时目录，纯核心 Lean，不依赖 Mathlib
+                # 比赛环境回退：单文件临时目录（lean.exe 直编 + LEAN_PATH 挂载闭包）
                 with tempfile.TemporaryDirectory(prefix="lean_bridge_") as work_dir:
-                    comp = self._compile(lean_code, work_dir)
+                    comp = self._compile(code_to_compile, work_dir)
 
             if comp and comp.get("ok"):
                 # 编译通过且无 sorry（_compile_lean 已拦截 sorry）→ proof_valid。
@@ -1116,6 +1208,58 @@ def _normalize_bridge_response(resp: Any) -> str:
         return s if s and s != "None" else ""
     except Exception:  # noqa: BLE001
         return ""
+
+
+# =====================================================================
+# Anti-hack 预处理（2026-09-01 SU-01 优化 1，论文 §3.3）
+# ---------------------------------------------------------------------
+# SU-01 在 refined RL 把「格式病理」输出替换为安全 fallback，防止模型靠
+# 模板泄漏/重复等骗过验证器。MathPilot 等价物：翻译/分析阶段 LLM 输出
+# 出现 chat-template token 泄漏、thinking 分隔符不平衡、严重重复时，
+# 直接返回 fallback（后续 Lean 编译必失败，但显式失败好过垃圾进编译器）。
+# 只影响 _llm_call 的统一出口，调用方行为可预期（编译失败 → 走错误路径）。
+# =====================================================================
+_SAFE_FALLBACK = "I cannot provide a solution due to generation pathology."
+
+_CHAT_TEMPLATE_LEAK_PATS = [
+    r"<\|im_start\|>", r"<\|im_end\|>", r"<\|im_sep\|>",
+    r"<\|assistant\|>", r"<\|user\|>", r"<\|system\|>",
+    r"<s>", r"</s>", r"<\|endoftext\|>",
+    r"chat_template",
+]
+
+
+def _anti_hack_guard(text: str) -> str:
+    """SU-01 §3.3 三检查：chat-template 泄漏 / thinking 分隔符不平衡 / 严重重复。
+
+    命中任一 → 返回 _SAFE_FALLBACK；正常文本原样返回。
+    """
+    if not text:
+        return text
+    # 1) chat-template token 泄漏（模型吐出了模板而非内容）
+    if any(re.search(p, text) for p in _CHAT_TEMPLATE_LEAK_PATS):
+        logger.warning("[LeanBridge] anti-hack: chat-template 泄漏 → fallback")
+        return _SAFE_FALLBACK
+    # 2) thinking 分隔符不平衡（prefill 已抑制思维块；出现即病理）
+    if text.count("<thinking>") != text.count("</thinking>"):
+        logger.warning(
+            "[LeanBridge] anti-hack: thinking 分隔符不平衡 "
+            "(open=%d close=%d) → fallback",
+            text.count("<thinking>"), text.count("</thinking>"),
+        )
+        return _SAFE_FALLBACK
+    # 3) 严重重复：≥12 行文本中，同一行出现 ≥50% 次数
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if len(lines) >= 12:
+        from collections import Counter
+        top_line, top_cnt = Counter(lines).most_common(1)[0]
+        if top_cnt >= len(lines) * 0.5:
+            logger.warning(
+                "[LeanBridge] anti-hack: 严重重复 (line=%r x%d) → fallback",
+                top_line[:40], top_cnt,
+            )
+            return _SAFE_FALLBACK
+    return text
 
 
 def _strip_code_fence(text: str) -> str:

@@ -709,9 +709,15 @@ class SolverAgent(BaseAgent):
 
         成本：每候选 1 次 LLM 调用，默认最多 self_improve_max=3 个候选
         （fast 档与应急模式由调用方跳过）。改进成功返回候选数。
+
+        2026-09-01（SU-01 优化 2，论文 §3.3 防递归）：
+        跳过已 self_improved=True 的候选（防"对同一候选循环调用 Step2"，
+        论文 SU-01 不递归入队失败精炼，对齐此约束）。
         """
         cands = [c for c in ctx.candidates
-                 if getattr(c, "reasoning", "") and not c.reasoning.startswith("[")]
+                 if getattr(c, "reasoning", "")
+                 and not c.reasoning.startswith("[")
+                 and not getattr(c, "self_improved", False)]
         limit = int(getattr(self.config, "self_improve_max", 3))
         targets = cands[:limit]
         if not targets:
@@ -750,6 +756,8 @@ class SolverAgent(BaseAgent):
             cand.reasoning = resp
             if answer:
                 cand.answer = answer
+            # 2026-09-01（SU-01 优化 2）：标记 self_improved，下次再调 Step2 跳过此候选
+            cand.self_improved = True
             n_ok += 1
             time.sleep(0.3)  # 速率限制
 

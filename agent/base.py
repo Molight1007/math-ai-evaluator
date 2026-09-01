@@ -75,6 +75,38 @@ def _record_truncation_suspect(agent_name: str, resp_len: int, max_tokens: int) 
         })
 
 
+def _record_truncation_confirmed(model: str, max_tokens=None, finish_reason: str = "length") -> None:
+    """真实 finish_reason=length 截断事件（llm_client 上报，2026-09-01 SU-01 优化 0）。
+
+    与启发式「疑似截断」并存：confirmed=True 表示服务端明确截断。
+    agent 名用 model 占位（llm_client 不知道调用点；调用点分布仍由启发式提供）。
+    """
+    if not _TRUNCATION_ENABLED:
+        return
+    with _TRUNCATION_LOCK:
+        _TRUNCATION_LOG.append({
+            "ts": time.time(),
+            "agent": model,
+            "resp_len": -1,                 # 真实信号无长度启发式
+            "max_tokens": max_tokens or 0,
+            "confirmed": True,
+            "finish_reason": finish_reason,
+        })
+
+
+def _register_truncation_listener() -> None:
+    """把 llm_client 的真实 finish_reason 信号接进截断日志（一次性注册，异常吞掉）。"""
+    try:
+        from utils.llm_client import set_truncation_listener
+        set_truncation_listener(_record_truncation_confirmed)
+        logger.debug("已注册 llm_client 真实截断信号 → base._TRUNCATION_LOG")
+    except Exception:  # noqa: BLE001  平台环境无本地 llm_client 时静默跳过
+        pass
+
+
+_register_truncation_listener()
+
+
 # ============================================================
 # 响应归一化（P0-1 契约防线）
 # ============================================================
