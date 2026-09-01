@@ -160,10 +160,16 @@ LEAN_ANSWER_VERIFY_SYSTEM = """你是一位 Lean 4 形式化专家。你的任�
    - 不等式题：  example : (2 : ℚ) ≤ 3 := by norm_num
 2. 只能形式化**解答中明确声称**的计算与答案，禁止自行补充解答未给出的结论。
 3. **禁止 sorry / axiom / admit**，证明必须完全由轻量 tactic 完成。
-4. **关键**：等号/命题右侧必须是推理文本中实际出现的计算表达式或中间步骤
-   （如 1 + 2、3 * 4 - 1、x ^ 2 + 2 * x + 1），**禁止**把最终答案自身写成恒等式
-   （如 example : (a : ℚ) = a，这验证不了任何计算）。若右侧只能写答案自身，
-   说明无法验证，请按第 5 条输出 error。
+4. **关键（答案锚定，最重要）**：验证命题的**结论侧必须逐字包含 USER 给出的
+   最终答案原值**，左侧放推理中算出的关键计算/中间表达式：
+   - 数字答案：example : <关键计算> = <最终答案> := by norm_num
+     （如最终答案=7 → example : (1 + 2 * 3 : ℚ) = 7 := by norm_num）
+   - 表达式答案：右侧写最终答案，左侧写推理中实际出现的中间表达式。
+   - **禁止**把你自己重算的结果当右侧：USER 说最终答案是 4，你就必须写
+     ``= 4``，**禁止**写 ``= 3`` 或你算出的任何其他值——否则等于没验证答案。
+   - **禁止**恒等式作弊（如 example : (a : ℚ) = a，这验证不了任何计算）。
+   - 若最终答案无法逐字嵌入验证命题（纯文字、解集集合、选项字母等），
+     按第 5 条输出 error。
 5. 若最终答案无法合理形式化（纯文字答案、答案依赖未给出的量、选项字母等），
    输出 JSON：{"error": "无法形式化原因"}，不要硬编。
 6. 只输出 JSON，不要输出解释或 Markdown 代码块。
@@ -189,7 +195,10 @@ LEAN_ANSWER_VERIFY_USER = """## 原题
 ## 解答给出的最终答案
 {answer}
 
-请把最终答案与推理中的关键计算转化为轻量 Lean 验证代码（严格按系统提示输出 JSON）。"""
+{answer_hint}请把最终答案与推理中的关键计算转化为轻量 Lean 验证代码（严格按系统提示输出 JSON）。
+⚠ 硬性要求：上面「解答给出的最终答案」的原值必须逐字出现在你生成的验证命题结论侧
+（example : <关键计算> = <最终答案>）。若你的验证代码没有包含该答案原值，
+说明没有验证答案，属于无效输出——请直接输出 error。"""
 
 # 分析阶段：把编译错误映射为可修复/致命缺陷
 LEAN_ANALYZE_SYSTEM = """你是一位 Lean 4 与数学推理专家。下面是"自然语言推理"转化出的 Lean 4 代码及其编译错误，请判断错误的根因。
@@ -478,14 +487,42 @@ class LeanBridge:
     # ------------------------------------------------------------------
 
     def _llm_call(self, messages: list, temperature: float,
-                  max_tokens: int) -> str:
-        """用注入的 client 调用一次 LLM（convert/analyze 阶段），计入 Budget。"""
+                  max_tokens: int, prefill: str = "") -> str:
+        """用注入的 client 调用一次 LLM（convert/analyze 阶段），计入 Budget。
+
+        prefill 非空时走 **assistant-prefill 解码**（Intern 系列铁律）：
+        在消息末尾追加 assistant 种子前缀，让模型进入"续写模式"，
+        抑制 `reasoning_content` 思维块（否则思维块吃满 max_tokens，
+        JSON/代码被腰斩，finish_reason=length）。种子必须锚定顶层结构，
+        如 `'{"lean_code":'` / `'{"formal_spec":'` / `'import Mathlib.Tactic'`。
+        返回前用 ``stitch`` 把种子与续写拼接回完整文本（兼容后端
+        continuation/echo/ignored 三种形态）。
+        """
         if not self._budget_ok(1):
             logger.warning("[LeanBridge] 预算耗尽，跳过 LLM 调用")
             return ""
+        msgs = messages
+        seed = prefill
+        stitch = None
+        if seed:
+            try:
+                from utils.prefill import prefill_messages as _pfm, stitch as _st
+            except ImportError:
+                try:
+                    from submit.utils.prefill import (
+                        prefill_messages as _pfm, stitch as _st)
+                except ImportError:
+                    _pfm = _st = None
+            if _pfm is not None:
+                msgs = _pfm(messages, seed)
+                stitch = _st
         resp = self.client.chat(
-            messages=messages, temperature=temperature, max_tokens=max_tokens)
+            messages=msgs, temperature=temperature, max_tokens=max_tokens)
         text = _normalize_bridge_response(resp)
+        # 响应为空（API 故障/预算耗尽）时不拼接种子——否则种子本身会被当成
+        # 结果（如 "import Mathlib.Tactic\n" 恰好是合法 Lean 代码 → 假 proof_valid）。
+        if seed and stitch is not None and text:
+            text = stitch(seed, text)
         if self.budget is not None:
             self.budget.spend(1)
         return text
@@ -495,13 +532,14 @@ class LeanBridge:
     # ------------------------------------------------------------------
 
     def _convert_to_lean(self, problem: str, reasoning: str) -> str:
-        """把自然语言推理转化为 Lean 4 代码（依赖注入的 client）。"""
+        """把自然语言推理转化为 Lean 4 代码（依赖注入的 client，走 prefill）。"""
         messages = [
             {"role": "system", "content": LEAN_CONVERT_SYSTEM},
             {"role": "user", "content": LEAN_CONVERT_USER.format(
                 problem=problem, reasoning=reasoning)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+                             prefill="import Mathlib.Tactic\n")
         return _strip_code_fence(raw)
 
     # ------------------------------------------------------------------
@@ -554,7 +592,8 @@ class LeanBridge:
                 problem=problem, reasoning=reasoning,
                 lean_code=lean_code, compile_error=compile_error)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=1024)
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=1024,
+                             prefill='{"error_category":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
             return BugReport(verdict="unknown", findings=[])
@@ -663,19 +702,27 @@ class LeanBridge:
     # 答案审核（轻量路径）：最终答案 norm_num/ring 结果验证（2026-09-01）
     # ------------------------------------------------------------------
     def _convert_answer_to_lean(self, problem: str, reasoning: str,
-                                answer: str) -> Optional[str]:
+                                answer: str,
+                                answer_hint: str = "") -> Optional[str]:
         """把最终答案 + 推理关键计算转成轻量 Lean example 验证代码。
 
         用依赖注入的 client 调用书生：输出 ``example : <命题> := by <tactic>``
         形式的验证代码。无法形式化（LLM 返回 error / 解析失败 / 无代码）返回 None，
         由调用方降级 unknown。
+
+        answer_hint 非空时（重试），附加到 USER 提示词强制书生把最终答案
+        逐字锚定到验证命题结论侧（修正「书生自己重算、无视 USER 答案」的缺陷）。
         """
+        hint = ("\n## 上一轮验证代码没有包含最终答案原值（无效输出）\n"
+                + answer_hint.strip() + "\n") if answer_hint else ""
         messages = [
             {"role": "system", "content": LEAN_ANSWER_VERIFY_SYSTEM},
             {"role": "user", "content": LEAN_ANSWER_VERIFY_USER.format(
-                problem=problem, reasoning=reasoning, answer=answer)},
+                problem=problem, reasoning=reasoning, answer=answer,
+                answer_hint=hint)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+                             prefill='{"lean_code":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
             return None
@@ -684,7 +731,33 @@ class LeanBridge:
                         str(parsed["error"])[:120])
             return None
         lean_code = _strip_code_fence(str(parsed.get("lean_code", "") or ""))
-        return lean_code or None
+        if not lean_code:
+            return None
+        # 数字锚定兜底校验：answer 为纯数字时，lean_code 必须包含该数字原值，
+        # 否则视为「没有验证答案」（书生自己重算而非审核 USER 答案），带反馈重试一次。
+        if not _answer_embedded(lean_code, answer):
+            logger.warning(
+                "[LeanBridge] 答案数字 %r 未出现在验证代码（书生自算而非审核答案），重试",
+                (answer or "").strip()[:40])
+            retry_hint = ("\n## 上一轮输出无效：你生成的验证代码没有包含最终答案原值 "
+                          + (answer or "").strip()[:60]
+                          + "。请重新生成，结论侧必须逐字写该答案："
+                            "example : <关键计算> = <该答案> := by <tactic>\n")
+            retry_msgs = [
+                {"role": "system", "content": LEAN_ANSWER_VERIFY_SYSTEM},
+                {"role": "user", "content": LEAN_ANSWER_VERIFY_USER.format(
+                    problem=problem, reasoning=reasoning, answer=answer,
+                    answer_hint=retry_hint)},
+            ]
+            raw2 = self._llm_call(retry_msgs, temperature=0.0, max_tokens=2048,
+                                  prefill='{"lean_code":')
+            parsed2 = _parse_analysis_json(raw2)
+            if not parsed2 or parsed2.get("error"):
+                return None
+            lean_code = _strip_code_fence(str(parsed2.get("lean_code", "") or ""))
+            if not lean_code or not _answer_embedded(lean_code, answer):
+                return None
+        return lean_code
 
     def verify_answer(self, problem: str, reasoning: str, answer: str,
                       domain: str = "", timeout: float = 60.0) -> Optional[BugReport]:
@@ -787,7 +860,8 @@ class LeanBridge:
             {"role": "user", "content": LEAN_FORMALIZE_PROBLEM_USER.format(
                 problem=problem, domain=domain or "未知", feedback=feedback_block)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+                             prefill='{"formal_spec":')
         parsed = _parse_analysis_json(raw)  # 通用 JSON 提取（功能与 analysis 一致）
         if not parsed:
             return None
@@ -911,7 +985,8 @@ class LeanBridge:
                 problem=problem, domain=domain or "未知",
                 sketch=sketch_nl, feedback=feedback_block)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048)
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+                             prefill='{"formal_spec":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
             return None
@@ -1143,3 +1218,29 @@ def _parse_analysis_json(raw: str) -> Optional[dict]:
         except (json.JSONDecodeError, ValueError):
             pass
     return None
+
+
+def _answer_embedded(lean_code: str, answer: str) -> bool:
+    """校验书生生成的验证代码是否真正锚定了 USER 最终答案。
+
+    防止「书生自己重算、无视 USER 最终答案」的假验证（验证自己算的结果
+    而非审核答案）：
+    - 纯数字答案：lean_code 必须包含该数字原值（数字边界，防 3 匹配 13）；
+    - 含字母 token 的答案（如 x=1、3n+1）：lean_code 必须引用至少一个答案 token
+      （否则说明它没在验证这个答案）；
+    - 纯中文/符号答案（无字母）：无法代码侧校验，靠提示词 error 路径兜底。
+    """
+    a = (answer or "").strip()
+    if not a:
+        return False
+    # 纯数字 → 数字锚定（带边界）
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", a):
+        pat = r"(?<![0-9])" + re.escape(a) + r"(?![0-9])"
+        return re.search(pat, lean_code or "") is not None
+    # 含字母 token 的答案 → 代码必须引用至少一个答案 token
+    ans_tokens = set(re.findall(r"[A-Za-z_]\w*", a))
+    if ans_tokens:
+        code_tokens = set(re.findall(r"[A-Za-z_]\w*", lean_code or ""))
+        return bool(ans_tokens & code_tokens)
+    # 纯中文/符号答案 → 无法校验，放行（靠提示词约束）
+    return True

@@ -19,6 +19,7 @@ from agent.lean_bridge import (
     _strip_code_fence,
     _truncate_error_output,
     _parse_analysis_json,
+    _answer_embedded,
 )
 
 
@@ -33,7 +34,11 @@ class MockClient:
 
     def chat(self, messages, temperature=0.0, max_tokens=0):
         self.calls.append(messages)
-        content = messages[-1]["content"] if messages else ""
+        # 只取 user/system 消息做 key 匹配（跳过 prefill 追加的 assistant 种子，
+        # 否则种子消息成为最后一条导致 key 匹配失败返回空）
+        user_msgs = [m for m in messages
+                     if isinstance(m, dict) and m.get("role") != "assistant"]
+        content = "\n".join(m.get("content", "") for m in user_msgs)
         for key, val in self.responses.items():
             if key in content:
                 return val
@@ -116,6 +121,28 @@ class HelperTest(unittest.TestCase):
         self.assertIsNotNone(d)
         self.assertEqual(d["error_category"], "logic_error")
         self.assertIsNone(_parse_analysis_json("no json here"))
+
+    def test_answer_embedded_numeric(self):
+        # 纯数字答案：代码必须包含该数字原值（数字边界）
+        self.assertTrue(_answer_embedded(
+            "example : (1 + 2 : ℕ) = 3 := by norm_num", "3"))
+        self.assertFalse(_answer_embedded(
+            "example : (1 + 2 : ℕ) = 3 := by norm_num", "4"))
+        # 边界：3 不能匹配 13 / 33
+        self.assertFalse(_answer_embedded(
+            "example : (13 : ℕ) = 13 := by norm_num", "3"))
+        self.assertTrue(_answer_embedded(
+            "example : (13 : ℕ) = 13 := by norm_num", "13"))
+
+    def test_answer_embedded_token(self):
+        # 含字母 token 的答案：代码必须引用至少一个答案 token
+        self.assertTrue(_answer_embedded(
+            "example : (x : ℚ) ^ 2 = 1 := by nlinarith", "x=1或x=-1"))
+        self.assertFalse(_answer_embedded(
+            "example : (1 + 2 : ℚ) = 3 := by norm_num", "x=1或x=-1"))
+        # 纯中文/符号答案：无法代码侧校验，放行
+        self.assertTrue(_answer_embedded(
+            "example : (2 : ℚ) ≤ 3 := by norm_num", "无解"))
 
 
 class LeanEnvTest(unittest.TestCase):
