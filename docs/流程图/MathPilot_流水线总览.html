@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MathPilot 求解流水线 · 总览</title><style>
+:root{--dg-bg:#ffffff;--dg-ink:#1f2430;--dg-muted:#8b94a7;--dg-panel:#f7f8fa;--dg-line:#e5e8ee;--dg-accent:#3d7eff;}
+body.dark{--dg-bg:#0e1420;--dg-ink:#e8eefc;--dg-muted:#8a97b4;--dg-panel:#151d2c;--dg-line:#26314a;--dg-accent:#4cc9f0;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--dg-bg);color:var(--dg-ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;transition:background .2s,color .2s}
+#bar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--dg-panel);border-bottom:1px solid var(--dg-line)}
+#bar input,#bar select,#bar button{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--dg-line);background:var(--dg-bg);color:var(--dg-ink);cursor:pointer}
+#bar input{cursor:text;min-width:190px}
+#bar button:hover{border-color:var(--dg-accent)}
+#bar .sp{flex:1}
+#hint{padding:7px 16px;font-size:12.5px;color:var(--dg-muted);border-bottom:1px solid var(--dg-line);background:var(--dg-bg)}
+#wrap{overflow:auto;padding:8px 16px 40px}
+svg{max-width:100%;height:auto;display:block}
+.dg-ink{fill:var(--dg-ink)} .dg-muted{fill:var(--dg-muted)} .nlabel{fill:var(--dg-ink)}
+.elabel{fill:var(--dg-muted)}
+.node{transition:opacity .15s}
+.node .nbox{transition:stroke-width .15s}
+svg.focusing .node{opacity:.18}
+svg.focusing .node.hit{opacity:1}
+svg.focusing .edge{opacity:.12}
+svg.focusing .edge.hit{opacity:1}
+.node.hit .nbox{stroke-width:3;stroke:var(--dg-accent)}
+.node.sel .nbox{stroke-width:3;stroke:#f59e0b}
+.node:focus{outline:none}
+.edge.hit{stroke-width:3}
+#legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 16px;font-size:12px;color:var(--dg-muted);border-top:1px solid var(--dg-line)}
+#legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--dg-line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--dg-muted)}
+</style></head>
+<body>
+<div id="bar">
+  <input id="q" placeholder="搜索节点…（/ 聚焦）">
+  <button id="probe">路径探测</button>
+  <select id="views"><option value="">引导视角…</option></select>
+  <span class="sp"></span>
+  <button id="theme">深浅色 T</button>
+  <button id="exp">导出 SVG E</button>
+</div>
+<div id="hint" data-hint="点击节点看上下游 · <kbd>Shift</kbd>+点击两个节点做路径探测 · <kbd>/</kbd> 搜索 · <kbd>T</kbd> 深浅色 · <kbd>E</kbd> 导出 SVG">点击节点看上下游 · <kbd>Shift</kbd>+点击两个节点做路径探测 · <kbd>/</kbd> 搜索 · <kbd>T</kbd> 深浅色 · <kbd>E</kbd> 导出 SVG</div>
+<div id="wrap"><svg id="dg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2276 626" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,sans-serif" role="img"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f2430"/></marker><marker id="ah-emph" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3d7eff"/></marker><marker id="ah-sec" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker></defs><rect class="dg-bg" width="2276" height="626" fill="#f7f8fa"/><text class="dg-ink" x="28" y="34" font-size="19" font-weight="700">MathPilot 求解流水线 · 总览</text><text class="dg-muted" x="28" y="56" font-size="12.5">来源：agent\orchestrator.py run() 实际执行顺序 · 节点与边均取自代码事实，未推断未声明的链路</text><path class="edge" data-from="pacer" data-to="classify" data-id="e01" d="M142.0,215.0 L142.0,390.0 L382.0,390.0 L382.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="211.0" y="377.0" width="102.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="262.0" y="390.0" font-size="11" text-anchor="middle" fill="#8b94a7">单题 20min 硬限</text><path class="edge" data-from="classify" data-to="out" data-id="e02" d="M382.0,215.0 L382.0,404.0 L2062.0,404.0 L2062.0,215.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)"/><rect x="1186.0" y="391.0" width="72.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1222.0" y="404.0" font-size="11" text-anchor="middle" fill="#8b94a7">确定性直出</text><path class="edge" data-from="classify" data-to="router" data-id="e03" d="M382.0,215.0 L382.0,418.0 L622.0,418.0 L622.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="460.0" y="405.0" width="84.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="502.0" y="418.0" font-size="11" text-anchor="middle" fill="#8b94a7">快车道未命中</text><path class="edge" data-from="router" data-to="solve" data-id="e04" d="M622.0,215.0 L622.0,432.0 L862.0,432.0 L862.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><path class="edge" data-from="solve" data-to="leangate" data-id="e05" d="M862.0,215.0 L862.0,446.0 L1102.0,446.0 L1102.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="958.0" y="433.0" width="48.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="982.0" y="446.0" font-size="11" text-anchor="middle" fill="#8b94a7">候选解</text><path class="edge" data-from="leangate" data-to="verify" data-id="e06" d="M1102.0,215.0 L1102.0,460.0 L1342.0,460.0 L1342.0,215.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)"/><rect x="1204.0" y="447.0" width="36.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1222.0" y="460.0" font-size="11" text-anchor="middle" fill="#8b94a7">kept</text><path class="edge" data-from="leangate" data-to="revise" data-id="e07" d="M1102.0,215.0 L1102.0,474.0 L1582.0,474.0 L1582.0,169.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="1300.0" y="461.0" width="84.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1342.0" y="474.0" font-size="11" text-anchor="middle" fill="#8b94a7">invalid 反馈</text><path class="edge" data-from="verify" data-to="formatter" data-id="e08" d="M1342.0,215.0 L1342.0,488.0 L1582.0,488.0 L1582.0,261.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)"/><rect x="1444.0" y="475.0" width="36.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1462.0" y="488.0" font-size="11" text-anchor="middle" fill="#8b94a7">通过</text><path class="edge" data-from="verify" data-to="revise" data-id="e09" d="M1342.0,215.0 L1342.0,502.0 L1582.0,502.0 L1582.0,169.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="1423.0" y="489.0" width="78.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1462.0" y="502.0" font-size="11" text-anchor="middle" fill="#8b94a7">证伪 / 0 票</text><path class="edge" data-from="revise" data-to="solve" data-id="e10" d="M1668.0,138.0 L1222.0,138.0 L1222.0,184.0 L776.0,184.0" fill="none" stroke="#8b94a7" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" stroke-dasharray="6 5"/><rect x="1192.0" y="148.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1222.0" y="161.0" font-size="11" text-anchor="middle" fill="#8b94a7">回炉重解</text><path class="edge" data-from="revise" data-to="fallback" data-id="e11" d="M1582.0,169.0 L1582.0,516.0 L1822.0,516.0 L1822.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="1672.0" y="503.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1702.0" y="516.0" font-size="11" text-anchor="middle" fill="#8b94a7">轮次耗尽</text><path class="edge" data-from="fallback" data-to="out" data-id="e12" d="M1822.0,215.0 L1822.0,530.0 L2062.0,530.0 L2062.0,215.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)"/><rect x="1924.0" y="517.0" width="36.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92"/><text class="elabel" x="1942.0" y="530.0" font-size="11" text-anchor="middle" fill="#8b94a7">保底</text><path class="edge" data-from="formatter" data-to="out" data-id="e13" d="M1582.0,261.0 L1582.0,544.0 L2062.0,544.0 L2062.0,215.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)"/><g class="node onpath" data-id="pacer" tabindex="0"><rect x="53.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="56.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#fee2e2" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="142.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">PaperPacer 全卷时间池</text><text class="dg-muted" x="142.0" y="207.0" font-size="10.5" text-anchor="middle">5h 动态预算帽 + 三道收紧</text></g><g class="node onpath" data-id="classify" tabindex="0"><rect x="293.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="296.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#dcfce7" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="382.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">题型识别 / 快车道</text><text class="dg-muted" x="382.0" y="207.0" font-size="10.5" text-anchor="middle">关键词优先零调用；SymPy 可解直出</text></g><g class="node onpath" data-id="router" tabindex="0"><rect x="533.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="536.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="622.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">难度路由 三档</text><text class="dg-muted" x="622.0" y="207.0" font-size="10.5" text-anchor="middle">fast / standard / deep + 25% 配额闸</text></g><g class="node onpath" data-id="solve" tabindex="0"><rect x="773.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="776.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="862.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">多路采样 + Step2 自改进</text><text class="dg-muted" x="862.0" y="207.0" font-size="10.5" text-anchor="middle">温度分层 · 截断续写 · 子目标 · 三Agent协作</text></g><g class="node onpath" data-id="leangate" tabindex="0"><rect x="1013.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="1016.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#fee2e2" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="1102.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">LeanGate 形式化硬验证</text><text class="dg-muted" x="1102.0" y="207.0" font-size="10.5" text-anchor="middle">NL→Lean4 编译：valid / invalid / unknown</text></g><g class="node onpath" data-id="verify" tabindex="0"><rect x="1253.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="1256.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#dcfce7" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="1342.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">四重验证投票</text><text class="dg-muted" x="1342.0" y="207.0" font-size="10.5" text-anchor="middle">聚类投票 + 客观复核 + 对抗式证伪 + 确定性校验</text></g><g class="node" data-id="revise" tabindex="0"><rect class="nbox" x="1496.0" y="107.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#e5e8ee" stroke-width="1.4"/><text class="nlabel" x="1582.0" y="142.5" font-size="13" font-weight="600" text-anchor="middle">自纠错回环 revise</text><text class="dg-muted" x="1582.0" y="161.0" font-size="10.5" text-anchor="middle">全 0 票 / 置信&lt;0.5 触发</text></g><g class="node onpath" data-id="formatter" tabindex="0"><rect x="1493.0" y="196.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="1496.0" y="199.0" width="172.0" height="62.0" rx="9" fill="#dcfce7" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="1582.0" y="234.5" font-size="13" font-weight="600" text-anchor="middle">Formatter 答案定型</text><text class="dg-muted" x="1582.0" y="253.0" font-size="10.5" text-anchor="middle">#51 定型强制化</text></g><g class="node" data-id="fallback" tabindex="0"><rect class="nbox" x="1736.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#f1f5f9" stroke="#e5e8ee" stroke-width="1.4"/><text class="nlabel" x="1822.0" y="188.5" font-size="13" font-weight="600" text-anchor="middle">兜底直接求解</text><text class="dg-muted" x="1822.0" y="207.0" font-size="10.5" text-anchor="middle">轮次耗尽保产出</text></g><g class="node onpath" data-id="out" tabindex="0"><rect x="1973.0" y="150.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4"/><rect class="nbox" x="1976.0" y="153.0" width="172.0" height="62.0" rx="9" fill="#fef3c7" stroke="#3d7eff" stroke-width="1.4"/><text class="nlabel" x="2062.0" y="180.0" font-size="13" font-weight="600" text-anchor="middle">答案 + trace + 定理证据</text><text class="nlabel" x="2062.0" y="197.0" font-size="13" font-weight="600" text-anchor="middle">链</text><text class="dg-muted" x="2062.0" y="207.0" font-size="10.5" text-anchor="middle">used_theorems 供材料举证</text></g></svg></div>
+<div id="legend"><span><i style="background:#dbeafe"></i>智能体</span><span><i style="background:#dcfce7"></i>服务/后端</span><span><i style="background:#fef3c7"></i>存储</span><span><i style="background:#f1f5f9"></i>通用</span><span><i style="background:#fee2e2"></i>安全域</span></div>
+<script>window.__VIEWS__=[{"id": "v1", "label": "主链路", "focus": ["pacer", "classify", "router", "solve", "leangate", "verify", "formatter", "out"], "note": "多数题目走这条"}, {"id": "v2", "label": "Lean 形式化证据链", "focus": ["solve", "leangate", "verify", "out"], "note": "老师第 1 号关切"}, {"id": "v3", "label": "失败回炉闭环", "focus": ["leangate", "verify", "revise", "solve", "fallback"], "note": "四重验证不过 → 自纠错 → 兜底"}];</script>
+<script>
+(function(){
+const svg=document.getElementById('dg');
+const nodes=[...svg.querySelectorAll('.node')];
+const edges=[...svg.querySelectorAll('.edge')];
+const byId=new Map(nodes.map(n=>[n.dataset.id,n]));
+const succ=new Map(),pred=new Map();
+nodes.forEach(n=>{succ.set(n.dataset.id,[]);pred.set(n.dataset.id,[])});
+edges.forEach(e=>{const a=e.dataset.from,b=e.dataset.to;
+  if(succ.has(a)&&pred.has(b)){succ.get(a).push(b);pred.get(b).push(a);}});
+const hint=document.getElementById('hint');
+function say(t){hint.innerHTML=t;}
+function clear(){svg.classList.remove('focusing');
+  nodes.forEach(n=>n.classList.remove('hit','sel'));edges.forEach(e=>e.classList.remove('hit'));}
+
+// ── 可达集合
+function reach(id,map){const seen=new Set(),q=[id];
+  while(q.length){const c=q.pop();for(const n of map.get(c)||[])if(!seen.has(n)){seen.add(n);q.push(n);}}
+  return seen;}
+function show(ids,msg){clear();svg.classList.add('focusing');
+  ids.forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));
+  edges.forEach(e=>{if(ids.has(e.dataset.from)&&ids.has(e.dataset.to))e.classList.add('hit');});
+  say(msg);}
+function focusNode(id){const up=reach(id,pred),dn=reach(id,succ);
+  const ids=new Set([id,...up,...dn]);show(ids,
+   `<b>${id}</b> · 上游 ${up.size} 个 / 下游 ${dn.size} 个（沿已写入的有向边，不推断未声明的关系）`);}
+
+// ── Route Probe：只在已写入的边上做 BFS，找不到就明说
+let probeA=null;
+function probe(b){if(!probeA){probeA=b;say(`起点 <b>${b}</b> 已选，再点一个节点求路径`);return;}
+  const a=probeA;probeA=null;
+  if(a===b){say('起点与终点相同，已取消');return;}
+  const prev=new Map([[a,null]]),q=[a];let found=false;
+  while(q.length){const c=q.shift();if(c===b){found=true;break;}
+    for(const n of succ.get(c)||[])if(!prev.has(n)){prev.set(n,c);q.push(n);}}
+  if(!found){clear();say(`<b>${a}</b> → <b>${b}</b>：<span style="color:#dc2626">无可达路径</span>（IR 中未写入这条链路，不临时脑补中间环节）`);
+    byId.get(a)&&byId.get(a).classList.add('sel');byId.get(b)&&byId.get(b).classList.add('sel');svg.classList.add('focusing');
+    [a,b].forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));return;}
+  const path=[];for(let c=b;c!==null;c=prev.get(c))path.unshift(c);
+  clear();svg.classList.add('focusing');
+  path.forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));
+  const ps=new Set(path);
+  edges.forEach(e=>{for(let k=0;k<path.length-1;k++)
+    if(e.dataset.from===path[k]&&e.dataset.to===path[k+1])e.classList.add('hit');});
+  say(`路径 <b>${a} → ${b}</b>：${path.join(' → ')}（${path.length-1} 跳）`);}
+
+nodes.forEach(n=>n.addEventListener('click',ev=>{ev.stopPropagation();
+  if(ev.shiftKey)probe(n.dataset.id);else{focusNode(n.dataset.id);
+    history.replaceState(null,'','?node='+n.dataset.id);}}));
+svg.addEventListener('click',clear);
+
+// ── 搜索
+const q=document.getElementById('q');
+q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();
+  if(!v){clear();say(defHint);return;}
+  const m=nodes.filter(n=>n.dataset.id.toLowerCase().includes(v)||n.textContent.toLowerCase().includes(v));
+  if(!m.length){say('没有匹配的节点');return;}
+  clear();svg.classList.add('focusing');m.forEach(n=>n.classList.add('hit'));
+  say(`匹配 ${m.length} 个节点：${m.slice(0,8).map(n=>n.dataset.id).join('、')}${m.length>8?' …':''}`);});
+document.getElementById('probe').onclick=()=>{probeA=null;say('路径探测：按住 <kbd>Shift</kbd> 依次点击两个节点');};
+
+// ── 引导视图
+const vs=window.__VIEWS__||[];
+const sel=document.getElementById('views');
+vs.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.label;sel.appendChild(o);});
+sel.onchange=()=>{const v=vs[+sel.value];if(!v)return;show(new Set(v.focus),`<b>${v.label}</b> ${v.note||''}`);};
+
+// ── 主题 / 导出
+const T='dg-theme';
+if(localStorage.getItem(T)==='dark')document.body.classList.add('dark');
+document.getElementById('theme').onclick=()=>{document.body.classList.toggle('dark');
+  localStorage.setItem(T,document.body.classList.contains('dark')?'dark':'light');};
+document.getElementById('exp').onclick=()=>{
+  const s=new XMLSerializer().serializeToString(svg);
+  const b=new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+s],{type:'image/svg+xml'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download=(document.title||'diagram')+'.svg';a.click();URL.revokeObjectURL(a.href);};
+const defHint=document.getElementById('hint').dataset.hint;
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'){if(e.key==='Escape'){q.value='';q.dispatchEvent(new Event('input'));}return;}
+  if(e.key==='/'){e.preventDefault();q.focus();}
+  else if(e.key==='t'||e.key==='T')document.getElementById('theme').click();
+  else if(e.key==='e'||e.key==='E')document.getElementById('exp').click();
+  else if(e.key==='Escape')clear();});
+const p=new URLSearchParams(location.search).get('node');
+if(p&&byId.has(p))focusNode(p);
+})();
+</script>
+</body></html>

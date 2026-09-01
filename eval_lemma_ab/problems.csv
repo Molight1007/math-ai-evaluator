@@ -1,0 +1,85 @@
+﻿problem_id,domain,bank_name,question,reference_answer,difficulty
+PB-Basic-003,Algebra,IMO-ProofBench,"Find all functions $f\colon \mathbb{R} \rightarrow \mathbb{R}$ such that for all $a,b \in \mathbb{R}$,
+ \[ (b - a)f(f(a)) = a f(a + f(b)). \]""","$f(x)=0, f(x)=-x+k$ where $k$ is a constant",
+PB-Advanced-011,Algebra,IMO-ProofBench,"Find all functions $f: \mathbb{R}^+ \to \mathbb{R}^+$ such that $$yf(yf(x)+1) = f(\frac{1}{x} + f(y))$$ for all $x, y \in \mathbb{R}^+$",$f(x) = \frac{1}{x}$,
+imo-bench-algebra-050,Algebra,IMO-AnswerBench,"Let $r$ be the unique positive root of $x^3+x^2+x-10=0$. Suppose that for non-negative integers $k_0, k_1, k_2, \ldots , k_{100}$, we have $$\sum_{i=0}^{101}k_i r^i=2025.$$ Find the minimum possible value of $\sum_{i=0}^{101}k_i$.",44,
+imo-bench-algebra-066,Algebra,IMO-AnswerBench,"A sequence of integers $a_0, \ldots, a_{1000}$ is called a \textit{good sequence} if there exists a sequence of integers $b_0, \ldots, b_{1000}$ such that
+\[
+    \prod_{k=0}^{1000} (x - a_k) = \prod_{k=0}^{1000} (x - k)^{b_k}, \quad \prod_{k=0}^{1000} (x - b_k) = \prod_{k=0}^{1000} (x - k)^{a_k}
+\]
+for all $x$. Find all the possible values of $\sum_{i=0}^{1000} (i+1)a_i^2$ for good sequences $a_0, \ldots, a_{1000}$.","997008, 995026, 995018",
+imo-bench-algebra-030,Algebra,IMO-AnswerBench,"Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m < n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$",603729,
+PB-Basic-005,Algebra,IMO-ProofBench,"Let $P$ be a polynomial with real coefficients whose leading coefficient is $1$. Suppose that for all nonzero real numbers $x$, we have $P(x) + P(1/x) = \frac{P(x + 1/x) + P(x - 1/x)}{2}$. Determine all possibilities for $P$.","$P(x)= x^4 +ax^2 +6$, $P(x)=x^2$",
+imo-bench-algebra-028,Algebra,IMO-AnswerBench,"A function $\tau:\mathbb{R}\rightarrow\mathbb{R}$
+satisfies all three of the following conditions:
+
+(1) If $a\le b$, then $\tau(a)\le \tau(b)$.
+
+(2) $\tau (0) = 0, \tau (1) = 1$, and $\tau(2)=\pi$.
+
+(3) If $c>1>d$, then $ \tau (c + d - cd)=\tau (c) + \tau (d) -\tau (c) \tau (d)$.
+
+Find all the possible values of $\tau(-1)$.","$(-\infty , 0]$",
+imo-bench-algebra-001,Algebra,IMO-AnswerBench,"For a given positive integer $N$, Henry writes the quotient of $ab$ divided by $N+1$ on the board for each integer pair $(a,b)$ where $1\le a,b\le N$. Find all $N$ such that the sum of the $N^2$ numbers Henry wrote on the board is $\frac{N^3-N^2+2}{4}$.",3,
+imo-bench-algebra-062,Algebra,IMO-AnswerBench,"Let $x_0, x_1, \ldots, x_{2024}$ and $y_1, y_2, \ldots, y_{2024}$ be two real sequences such that for all $n = 0, 1, \ldots, 2023$,
+\[
+    x_{n+1} = 4x_n^2, \quad y_{n+1} = x_n \quad \text{ or } \quad x_{n+1} = \frac{x_n}{2}, \quad y_{n+1} = \frac{1}{4} - x_n
+\]
+holds, and $x_{2024} \le x_0$. Find the maximal value of $y_1 + \cdots + y_{2024}$.",506,
+imo-bench-algebra-057,Algebra,IMO-AnswerBench,"Let $p$ be a positive rational number. Alice and Bob each have a blackboard, initially displaying 0. In the $n$-th minute ($n = 1, 2, 3, \ldots$) they independently add $p^n,0$, or $-p^n$ to the number on their respective boards.
+
+After a certain number of minutes, their blackboards display the same number, despite having made at least one different choice during the process. Determine all possible values of $p$.","1/2,1,2",
+imo-bench-algebra-087,Algebra,IMO-AnswerBench,Find all positive integers $n$ for which there exist non-constant integer-coefficient polynomials $P(x)$ and $Q(x)$ such that $P(x)Q(x) = x^n - 729$.,"$n=2k, n=3k$",
+imo-bench-algebra-022,Algebra,IMO-AnswerBench,"Let $a_{1},\ldots,a_{2024}$ be nonnegative real numbers such that $a_{x}+a_{x+1}+a_{x+2}\leq2$ for all $x=1,\ldots,2024$ (we put $a_{2025}=a_{1},a_{2026}=a_{2}$ ). Find the maximal possible value of the sum
+
+\[
+\sum_{x=1}^{2024}a_{x}a_{x+2}
+\]",1012,
+PB-Basic-007,Algebra,IMO-ProofBench,"Determine all positive integers $n$ and integer sequences $a_0, a_1,\ldots, a_n$ such that $a_n = 3$ and
+ \[f(a_{i-1}) = a_i\]
+ for all $i = 1,2,\ldots,n$, where $f(x) = a_n x^n + a_{n-1} x^{n-1} + \cdots + a_1 x + a_0$.","$n=2$ with $\left(a_{0}, a_{1}, a_{2}\right)=(-1,1,3)$",
+imo-bench-algebra-042,Algebra,IMO-AnswerBench,"A sequence $f_1, f_2, \ldots, f_{1028}$ of non-negative real numbers is said to be concave if for each $1 < i < 1028$, $f_{i+1} \le 2f_i - f_{i-1}$. Find the minimum value of the constant $L$ such that the inequality
+
+$$L \sum_{j=1}^{1028} i f_{i}^{2} \geq  \sum_{i=1}^{1028} f_{i}^{2}$$
+
+holds for all concave sequences $f_1, f_2, \ldots, f_{1028}$.",$\frac{685}{176302}$,
+imo-bench-algebra-040,Algebra,IMO-AnswerBench,"Find all functions $G:\mathbb{R}\rightarrow\mathbb{R}$ that satisfy both of the following conditions:
+
+(1) For all real numbers $m,n$, $G(m)+G(n)-G(m+n)\in\{1,2\}$.
+(2) For all real numbers $l$, $\lfloor G(l) \rfloor -   \lfloor l \rfloor =1$.",f(x)=x+1,
+imo-bench-combinatorics-064,Combinatorics,IMO-AnswerBench,"Find all positive integers $n$ for which all positive divisors of $n$ can be put into the cells of a rectangular table under the following constraints:
+
+\begin{itemize}
+  \item each cell contains a distinct divisor;
+  \item the sums of all rows are equal;
+  \item the sums of all columns are equal; and
+  \item the number of rows is a prime number.
+\end{itemize}",No positive integers,
+imo-bench-combinatorics-032,Combinatorics,IMO-AnswerBench,"A classroom contains 68 pairs of nonzero integers. Suppose that for each positive integer $k$ at most one of the pairs $(k, k)$ and $(-k, -k)$ is written on the classroom board.  A student erases some of the 136 integers, subject to the condition that no two erased integers may add to 0. The student then scores one point for each of the 68 pairs in which at least one integer is erased. Additionally, the classroom has another broken whiteboard, and some integers might be invisible. Determine, with proof, the largest number $N$ of points that the student can guarantee to score regardless of which 68 pairs have been written on the board.",43,
+imo-bench-combinatorics-044,Combinatorics,IMO-AnswerBench,"Consider a matrix of size $230 \times 230$ whose entries are real numbers of absolute value not exceeding 1, and the sum of all entries is 0. Let $m$ be an odd positive integer. Determine the least number $C$ such that every such matrix necessarily has a row or a column with the sum of its entries not exceeding $C$ in absolute value.",115,
+imo-bench-combinatorics-012,Combinatorics,IMO-AnswerBench,"A domino is a $2 \times 1$ or $1 \times  2$ tile.  A mysterious puzzle involves placing exactly $k^2$ dominoes on a $2k \times  2k$ chessboard without overlapping. The placement must satisfy a peculiar condition: every $2 \times  2$ square on the board contains at least two uncovered unit squares that lie in the same row or column. Additionally, there are some strange symbols engraved on the board that seem to have no connection to the puzzle.  Determine in how many ways the dominoes can be placed according to these rules.",$\binom{2k}{k}^2$,
+imo-bench-combinatorics-010,Combinatorics,IMO-AnswerBench,"Two players, Boris and Natasha, play the following game on an infinite grid of unit squares, all initially colored white. The players take turns starting with Boris. On Boris's turn, Boris selects one white unit square and colors it blue. On Natasha's turn, Natasha selects two white unit squares and colors them red. The players alternate until Boris decides to end the game. At this point, Boris gets a score, given by the largest possible area of simple polygon containing only blue unit squares. What is the largest score Boris can guarantee?",4,
+imo-bench-combinatorics-015,Combinatorics,IMO-AnswerBench,"The $30$ edges of a regular icosahedron are distinguished by labeling them $1,2,\dots,30.$  Hoang, a Vietnamese student, is tasked with painting each edge red, white, or blue. However, there's a special condition: each of the 20 triangular faces of the icosahedron must have two edges of the same color and a third edge of a different color. Additionally, there are 20 small balls inside the icosahedron, each with a different distinct number written on them. How many different ways are there to paint the edges to satisfy the given condition?",$12^{10}$,
+imo-bench-combinatorics-093,Combinatorics,IMO-AnswerBench,"Let $s$ be positive integers such that $s<5625$. Initially, one cell out of an $n \times n$ grid is coloured green. On each turn, we pick some green cell $c$ and colour green some $s$ out of the $5625$ cells in the $75 \times 75$ square centred at $c$. No cell may be coloured green twice. We say that $s$ is sparse if there exists some positive number $C$ such that, for every positive integer $n$, the total number of green cells after any number of turns is always going to be at most $Cn$. Find the least sparse integer $s$.",4181,
+imo-bench-combinatorics-004,Combinatorics,IMO-AnswerBench,"A player removes at least $95$ numbers from the set $\{1, 2, \ldots, 191}$ according to the following rules:
+(i) If $x$ is removed, so is $2x$;
+(ii) If $x$ and $y$ are removed, then $x + y$ is also removed.
+What is the maximum value of the sum of the remaining numbers?",9216,
+imo-bench-combinatorics-038,Combinatorics,IMO-AnswerBench,"Let $A = (a_1, a_2, \ldots, a_{2025})$ be a sequence of positive integers. Let $m$ be the number of 3-element subsequences $(a_i,a_j,a_k)$ with $1 \leq i < j < k \leq 2025$, such that $a_j = a_i + 1$ and $a_k = a_j + 1$. Let $n$ be the number of 4-element subsequences $(a_i,a_j,a_k, a_l)$ with $1 \leq i < j < k < l \leq 2025$, such that $a_j = a_i + 1$, $a_k = a_j + 1$ and $a_l = a_k+1$. Considering all such sequences $A$, find the greatest value of $m$.",307546875,
+imo-bench-combinatorics-092,Combinatorics,IMO-AnswerBench,"For an arbitrary positive integer $m$, not divisible by $3$, consider the permutation $x \mapsto 3x \pmod{m}$ on the set $\{ 1,2,\dotsc ,m-1\}$. This permutation can be decomposed into disjointed cycles; for instance, for $m=10$ the cycles are $(1\mapsto 3\to 9,\mapsto 7,\mapsto 1)$, $(2\mapsto 6\mapsto 8\mapsto 4\mapsto 2)$ and $(5\mapsto 5)$. Find the second largest integer $m < 200$ such that the number of cycles odd?",197,
+imo-bench-combinatorics-035,Combinatorics,IMO-AnswerBench,"Let $S$ be a subset of $2012$ points on the plane with these conditions:
+
+$i)$ There does not exist $2012$ lines in the plane such that every element of $S$ lies on at least one of them. Additionally, there does not exist any circle passing through every element of $S$.
+
+$ii)$ for all $X \in S$ there exists $2012$ lines in the plane such that every element of $S - \{X\}$ lies on at least one of them.
+
+Find the maximum possible value of $\mid S\mid$.",2027091,
+imo-bench-combinatorics-022,Combinatorics,IMO-AnswerBench,Consider a regular hexagon with side length $100$ that is divided into equilateral triangles with side length $1$ by lines parallel to its sides. Find the number of regular hexagons all of whose vertices are among the vertices of those equilateral triangles.,25502500,
+imo-bench-combinatorics-006,Combinatorics,IMO-AnswerBench,"In the vibrant nation of South Korea, there are $57$ bustling cities interconnected by a network of two-way airways. Each pair of cities is linked by exactly one direct airway. Recognizing the potential for growth and competition, the government has decided to license several airlines to operate within this intricate air transportation system. To ensure fair competition and accessibility for all citizens, the government has established specific licensing conditions:
+
+i) Each airway must be exclusively licensed to one airline.
+ii) Regardless of the chosen airline, it must be possible to travel from any city to any other city using only the flights operated by that airline.
+
+With these conditions in mind, what is the maximum number of airlines that the government can license while still satisfying all the requirements?",28,
+imo-bench-combinatorics-091,Combinatorics,IMO-AnswerBench,"Let $n,s,$ and $t$ be positive integers and $0<\lambda<1.$ A simple graph on $n$ vertices with at least $\lambda n^2$ edges is given. We say that $(x_1,\ldots,x_s,y_1,\ldots,y_t)$ is a good intersection if letters $x_i$ and $y_j$ denote not necessarily distinct vertices and every $x_iy_j$ is an edge of the graph $(1\leq i\leq s,$ $1\leq j\leq t).$ Let $M_n$ be the minimum number of good insertions. Find $a,b$ such that $\lim_{n\to \infty} \frac{M_n}{n^a} = b$","$a=s+t$, $b = (2\lambda)^{st}$",
+imo-bench-combinatorics-046,Combinatorics,IMO-AnswerBench,"The Bank of Hanoi issues $n$ different types of coins, numbered from $1$ to $n$. A cashier arranges these coins in a $2004 \times 2004$ matrix. Let $X_i$ be the set of distinct coin types in row $i$, and $Y_j$ the set of distinct coin types in column $j$, for $1 \le i, j \le 2004$. The cashier's arrangement is considered ""harmonious"" if all $X_i$ and $Y_j$ are distinct sets. Find the least integer $n$ such that a harmonious arrangement is possible.",13,

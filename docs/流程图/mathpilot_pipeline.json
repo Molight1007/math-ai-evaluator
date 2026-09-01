@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MathPilot 数学智能体求解流水线",
+    "subtitle": "来源：D:\\挑战杯\\agent\\orchestrator.py  run() 实际执行顺序 · 节点与边均取自代码事实，未推断未声明的链路",
+    "visual_preset": "classic",
+    "hint": "点击节点看上下游 · <kbd>Shift</kbd>+点两个节点做路径探测 · <kbd>/</kbd> 搜索 · <kbd>T</kbd> 深浅色 · <kbd>E</kbd> 导出 SVG（可直接插进报告/PPT）",
+    "views": [
+      {"id": "v1", "label": "主链路（多数题目走这条）", "focus": ["pacer", "classify", "router", "solver", "selfimprove", "leangate", "verifier", "formatter", "out"], "note": "9 个节点"},
+      {"id": "v2", "label": "验证与自纠错层", "focus": ["leangate", "verifier", "oracle", "adversarial", "revise", "fallback"], "note": "四重验证 + 回炉闭环"},
+      {"id": "v3", "label": "Lean 形式化证据链", "focus": ["theomem", "leansearch", "preverify", "leangate"], "note": "老师的第 1 号关切"},
+      {"id": "v4", "label": "预算护栏与降级", "focus": ["pacer", "deepquota", "fastpath", "revise", "fallback"], "note": "三道防线防超时"}
+    ]
+  },
+  "lanes": [
+    {"id": "lc", "label": "① 预算与路由", "members": ["pacer", "classify", "fastpath", "router", "deepquota"]},
+    {"id": "ls", "label": "② 求解", "members": ["preverify", "subgoal", "solver", "cont", "selfimprove", "collab", "subgoal2"]},
+    {"id": "lv", "label": "③ 验证与自纠错", "members": ["leangate", "verifier", "oracle", "adversarial", "revise"]},
+    {"id": "lk", "label": "④ 知识支撑", "members": ["theomem", "leansearch"]},
+    {"id": "lo", "label": "⑤ 输出", "members": ["fallback", "formatter", "out"]}
+  ],
+  "nodes": [
+    {"id": "pacer", "label": "PaperPacer 全卷时间池", "lane": "lc", "type": "security", "note": "5h 动态预算帽 + 应急模式"},
+    {"id": "classify", "label": "题型识别 Classifier", "lane": "lc", "type": "backend", "note": "关键词优先, 命中即零调用"},
+    {"id": "fastpath", "label": "快车道 确定性求解", "lane": "lc", "type": "tool", "note": "SymPy 可解则直接返回"},
+    {"id": "router", "label": "难度路由 三档判定", "lane": "lc", "type": "agent", "note": "静态特征 + LLM 自评"},
+    {"id": "deepquota", "label": "deep 配额闸 25%", "lane": "lc", "type": "security", "note": "超配额降 standard"},
+
+    {"id": "preverify", "label": "Lean 前置形式化", "lane": "ls", "type": "tool", "note": "仅 deep 档, 21s/次"},
+    {"id": "subgoal", "label": "子目标分解主路径", "lane": "ls", "type": "agent", "note": "SubGoalSolver"},
+    {"id": "solver", "label": "Solver 多路采样", "lane": "ls", "type": "agent", "note": "温度分层出候选"},
+    {"id": "cont", "label": "截断候选续写", "lane": "ls", "type": "backend", "note": "治输出截断"},
+    {"id": "selfimprove", "label": "Step2 无条件自改进", "lane": "ls", "type": "agent", "note": "+8.9pp 最大杠杆"},
+    {"id": "collab", "label": "三 Agent 协作", "lane": "ls", "type": "agent", "note": "仅 deep 档"},
+    {"id": "subgoal2", "label": "子目标补候选", "lane": "ls", "type": "agent", "note": "候选 <2 时触发"},
+
+    {"id": "leangate", "label": "LeanGate 硬验证门禁", "lane": "lv", "type": "security", "note": "valid / invalid / unknown"},
+    {"id": "verifier", "label": "Verifier 投票 + 聚类", "lane": "lv", "type": "backend", "note": "1 / 1 / 3 票按档位"},
+    {"id": "oracle", "label": "AnswerOracle 客观复核", "lane": "lv", "type": "backend", "note": "仅 deep 档"},
+    {"id": "adversarial", "label": "对抗式证伪 (#16)", "lane": "lv", "type": "security", "note": "有正确票才跑"},
+    {"id": "revise", "label": "revise 自纠错回环", "lane": "lv", "type": "agent", "note": "全0票 / 置信<0.5"},
+
+    {"id": "theomem", "label": "TheoremMemory", "lane": "lk", "type": "database", "note": "已证定理复用"},
+    {"id": "leansearch", "label": "LeanSearch 官方 API", "lane": "lk", "type": "cloud", "note": "Mathlib 检索"},
+
+    {"id": "fallback", "label": "兜底直接求解", "lane": "lo", "type": "neutral", "note": "轮次耗尽保产出"},
+    {"id": "formatter", "label": "Formatter 格式化", "lane": "lo", "type": "backend", "note": "答案定型"},
+    {"id": "out", "label": "答案 + trace + 定理证据", "lane": "lo", "type": "database", "note": "used_theorems"}
+  ],
+  "edges": [
+    {"id": "e01", "from": "pacer", "to": "classify", "label": "单题 20min 硬限"},
+    {"id": "e02", "from": "classify", "to": "fastpath"},
+    {"id": "e03", "from": "fastpath", "to": "out", "label": "确定性命中", "variant": "emphasis"},
+    {"id": "e04", "from": "fastpath", "to": "router", "label": "未命中"},
+    {"id": "e05", "from": "router", "to": "deepquota", "label": "deep 档"},
+    {"id": "e06", "from": "router", "to": "solver", "label": "fast / standard"},
+    {"id": "e07", "from": "deepquota", "to": "preverify", "label": "配额内"},
+    {"id": "e08", "from": "deepquota", "to": "solver", "label": "降 standard", "variant": "dashed"},
+    {"id": "e09", "from": "preverify", "to": "subgoal", "label": "formal_spec 注入"},
+    {"id": "e10", "from": "subgoal", "to": "solver"},
+    {"id": "e11", "from": "solver", "to": "cont"},
+    {"id": "e12", "from": "cont", "to": "selfimprove", "label": "deep / standard"},
+    {"id": "e13", "from": "selfimprove", "to": "collab", "label": "仅 deep"},
+    {"id": "e14", "from": "collab", "to": "leangate"},
+    {"id": "e15", "from": "selfimprove", "to": "leangate", "label": "非 deep"},
+    {"id": "e16", "from": "solver", "to": "subgoal2", "label": "候选 <2", "variant": "dashed"},
+    {"id": "e17", "from": "subgoal2", "to": "leangate"},
+    {"id": "e18", "from": "theomem", "to": "leansearch", "label": "命中优先"},
+    {"id": "e19", "from": "leansearch", "to": "leangate", "label": "Mathlib 定理"},
+    {"id": "e20", "from": "leangate", "to": "verifier", "label": "kept 候选", "variant": "emphasis"},
+    {"id": "e21", "from": "leangate", "to": "revise", "label": "invalid 反馈"},
+    {"id": "e22", "from": "verifier", "to": "oracle", "label": "deep 档"},
+    {"id": "e23", "from": "oracle", "to": "adversarial", "label": "有正确票"},
+    {"id": "e24", "from": "verifier", "to": "formatter", "label": "通过", "variant": "emphasis"},
+    {"id": "e25", "from": "oracle", "to": "formatter", "label": "通过"},
+    {"id": "e26", "from": "adversarial", "to": "formatter", "label": "证伪未成立"},
+    {"id": "e27", "from": "adversarial", "to": "revise", "label": "抓到缺陷"},
+    {"id": "e28", "from": "verifier", "to": "revise", "label": "全0票 / 置信<0.5"},
+    {"id": "e29", "from": "revise", "to": "solver", "label": "回炉重解", "variant": "dashed"},
+    {"id": "e30", "from": "revise", "to": "fallback", "label": "轮次耗尽"},
+    {"id": "e31", "from": "fallback", "to": "out", "label": "保底产出"},
+    {"id": "e32", "from": "formatter", "to": "out", "variant": "emphasis"}
+  ],
+  "mainPath": ["pacer", "classify", "router", "solver", "selfimprove", "leangate", "verifier", "formatter", "out"]
+}

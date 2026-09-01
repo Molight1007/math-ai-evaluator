@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MathPilot 四重验证与自纠错闭环",
+    "subtitle": "来源：agent\\verifier.py / lean_gate.py / answer_oracle.py / adversarial_verifier.py · 双测机制即在此层降级",
+    "visual_preset": "classic",
+    "views": [
+      {"id": "v1", "label": "Lean 硬验证 → 投票", "focus": ["leangate", "cluster", "playoff", "determin"], "note": "第一道与第二道"},
+      {"id": "v2", "label": "客观复核 + 对抗式证伪", "focus": ["oracle", "adversarial", "pick"], "note": "解决两层复核仅 51% 一致的问题"},
+      {"id": "v3", "label": "回炉闭环", "focus": ["leangate", "revise", "review", "cluster"], "note": "反馈先复核再注入，治误杀"}
+    ]
+  },
+  "nodes": [
+    {"id": "leangate", "label": "① LeanGate 形式化硬验证", "type": "security", "note": "unknown 时按 strict 决定放行/拒绝"},
+    {"id": "cluster", "label": "② 聚类投票 Verifier", "type": "backend", "note": "fast 1 票 / standard 1 票 / deep 3 票"},
+    {"id": "playoff", "label": "playoff 复算", "type": "backend", "note": "deep + 时间宽裕才开"},
+    {"id": "determin", "label": "确定性校验", "type": "tool", "note": "SymPy 已用；calc_tool 已写待集成"},
+    {"id": "oracle", "label": "③ AnswerOracle 客观复核", "type": "backend", "note": "仅 deep，区别于投票同源自评"},
+    {"id": "adversarial", "label": "④ 对抗式证伪 (#16)", "type": "security", "note": "有正确票才跑，主动找反例"},
+    {"id": "pick", "label": "选最优 / 低置信强制复核", "type": "agent", "note": "共识 <0.5 不自信接受"},
+    {"id": "review", "label": "反馈复核 (Step4)", "type": "backend", "note": "治误杀：确认才注入 revise"},
+    {"id": "revise", "label": "自纠错回环 revise", "type": "agent", "note": "最多 deep_revise_rounds 轮"},
+    {"id": "next", "label": "→ Formatter 输出", "type": "database", "note": "带 trace 与 used_theorems"}
+  ],
+  "edges": [
+    {"id": "e01", "from": "leangate", "to": "cluster", "label": "kept 候选", "variant": "emphasis"},
+    {"id": "e02", "from": "leangate", "to": "revise", "label": "invalid 反馈"},
+    {"id": "e03", "from": "cluster", "to": "playoff", "label": "deep + 宽裕"},
+    {"id": "e04", "from": "cluster", "to": "determin", "label": "可判定时"},
+    {"id": "e05", "from": "playoff", "to": "oracle"},
+    {"id": "e06", "from": "cluster", "to": "oracle", "label": "deep 档"},
+    {"id": "e07", "from": "oracle", "to": "adversarial", "label": "有正确票"},
+    {"id": "e08", "from": "determin", "to": "pick"},
+    {"id": "e09", "from": "adversarial", "to": "pick", "label": "证伪未成立", "variant": "emphasis"},
+    {"id": "e10", "from": "adversarial", "to": "revise", "label": "抓到缺陷"},
+    {"id": "e11", "from": "cluster", "to": "revise", "label": "全 0 票"},
+    {"id": "e12", "from": "revise", "to": "review", "label": "生成反馈"},
+    {"id": "e13", "from": "review", "to": "revise", "label": "确认有实质缺陷"},
+    {"id": "e14", "from": "revise", "to": "cluster", "label": "回炉重验", "variant": "dashed"},
+    {"id": "e15", "from": "revise", "to": "pick", "label": "轮次耗尽"},
+    {"id": "e16", "from": "pick", "to": "next", "variant": "emphasis"}
+  ],
+  "mainPath": ["leangate", "cluster", "oracle", "adversarial", "pick", "next"]
+}

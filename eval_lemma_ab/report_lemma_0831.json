@@ -1,0 +1,23 @@
+{
+  "n": 30,
+  "off_correct": 8,
+  "on_correct": 6,
+  "off_accuracy": 0.2667,
+  "on_accuracy": 0.2,
+  "delta_pp": -6.67,
+  "gained": 1,
+  "lost": 3,
+  "net": -2,
+  "both_correct": 5,
+  "both_wrong": 21,
+  "mcnemar_p": 0.625,
+  "verdict": "噪声内（维持现状）",
+  "gained_ids": [
+    "imo-bench-combinatorics-004"
+  ],
+  "lost_ids": [
+    "imo-bench-algebra-022",
+    "imo-bench-combinatorics-015",
+    "imo-bench-combinatorics-092"
+  ]
+}

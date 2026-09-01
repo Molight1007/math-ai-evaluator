@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>老师要求 · 结构化总结与执行计划</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+background:#f6f7f9;color:#1a1d21;line-height:1.6;padding:32px 20px 80px}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:26px;font-weight:700;letter-spacing:-.3px}
+.sub{color:#6b7280;font-size:13px;margin-top:6px}
+section{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px 26px;margin-top:20px}
+h2{font-size:18px;font-weight:650;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+h2::before{content:"";width:3px;height:16px;background:#2563eb;border-radius:2px}
+.h2note{color:#6b7280;font-size:12.5px;margin:0 0 16px 12px}
+h3{font-size:14.5px;font-weight:620;margin:18px 0 8px;color:#374151}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px}
+.kpi{background:#fafbfc;border:1px solid #eef0f2;border-radius:9px;padding:14px 16px}
+.kpi .n{font-size:26px;font-weight:700;line-height:1.1}
+.kpi .l{font-size:12px;color:#6b7280;margin-top:3px}
+.kpi.done .n{color:#15803d} .kpi.doing .n{color:#b45309} .kpi.todo .n{color:#64748b}
+.kpi.warn .n{color:#b91c1c}
+.callout{border-radius:9px;padding:13px 16px;font-size:13.5px;margin-top:14px;border:1px solid}
+.c-warn{background:#fef2f2;border-color:#fecaca;color:#7f1d1d}
+.c-info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}
+.c-ok{background:#f0fdf4;border-color:#bbf7d0;color:#14532d}
+.callout b{font-weight:650}
+.cat-row{display:flex;align-items:center;gap:12px;padding:5px 0;font-size:13px}
+.cat-name{width:110px;color:#374151}
+.bar{display:flex;height:14px;border-radius:3px;overflow:hidden;background:#f1f3f5;min-width:60px}
+.bar i{display:block;height:100%}
+.b-done{background:#22c55e} .b-doing{background:#f59e0b} .b-todo{background:#94a3b8}
+.cat-num{color:#6b7280;font-size:12px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fbtn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:20px;
+padding:5px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}
+.fbtn:hover{border-color:#9ca3af}
+.fbtn.on{background:#2563eb;border-color:#2563eb;color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;font-weight:600;color:#6b7280;font-size:12px;
+border-bottom:1px solid #e5e7eb;padding:8px 10px;background:#fafbfc;position:sticky;top:0;z-index:2}
+tbody td{border-bottom:1px solid #f1f3f5;padding:11px 10px;vertical-align:top}
+tbody tr:hover{background:#fafbfc}
+.c-no{width:46px;color:#9ca3af;font-variant-numeric:tabular-nums;font-size:12.5px}
+.c-cat{width:100px;color:#6b7280;font-size:12px}
+.c-prio{width:46px} .c-st{width:76px}
+.req{font-weight:520;color:#111827}
+.detail{margin-top:7px;display:grid;gap:4px}
+.d-item{font-size:12.2px;color:#4b5563;line-height:1.55}
+.d-k{display:inline-block;min-width:66px;color:#9ca3af;font-size:11.5px;margin-right:7px}
+code{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:1px 5px;
+font-size:11.5px;font-family:"Cascadia Mono",Consolas,monospace;color:#334155;word-break:break-all}
+.badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11.5px;font-weight:600}
+.b-已完成{background:#dcfce7;color:#15803d}
+.b-进行中{background:#fef3c7;color:#b45309}
+.b-待办{background:#e5e7eb;color:#4b5563}
+.prio{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
+border-radius:5px;font-size:11.5px;font-weight:650}
+.p-高{background:#fee2e2;color:#b91c1c}
+.p-中{background:#fef3c7;color:#a16207}
+.p-低{background:#f1f5f9;color:#64748b}
+.sprint{border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-top:12px;background:#fcfcfd}
+.sp-head{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.sp-id{background:#2563eb;color:#fff;border-radius:6px;padding:2px 9px;font-size:12px;font-weight:700}
+.sp-date{color:#6b7280;font-size:12.5px;font-variant-numeric:tabular-nums}
+.sp-theme{font-weight:600;font-size:13.5px}
+.sp-goals{font-size:12.5px;color:#4b5563;margin-top:8px}
+.sp-steps{margin:9px 0 0 20px;font-size:12.8px;color:#374151;display:grid;gap:4px}
+.sp-steps li{padding-left:2px}
+.sp-out{font-size:12.2px;color:#15803d;margin-top:9px;background:#f0fdf4;
+border:1px solid #bbf7d0;border-radius:6px;padding:7px 11px}
+.c-loc{width:34%} .c-imp{width:30%;color:#4b5563;font-size:12.3px}
+.legend{display:flex;gap:16px;font-size:12px;color:#6b7280;margin-top:10px;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block}
+footer{text-align:center;color:#9ca3af;font-size:12px;margin-top:28px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>老师要求 · 结构化总结与执行计划</h1>
+<div class="sub">math-ai-evaluator（XH-202627）　·　数据源：WorkBuddy 资料库「老师要求跟踪」合并本地镜像　·　生成于 2026-08-30</div>
+
+<section>
+<h2>一、总览</h2>
+<div class="kpis">
+<div class="kpi"><div class="n">50</div><div class="l">要求条目（去重合并后）</div></div>
+<div class="kpi done"><div class="n">21</div><div class="l">已完成</div></div>
+<div class="kpi doing"><div class="n">16</div><div class="l">进行中</div></div>
+<div class="kpi todo"><div class="n">13</div><div class="l">未开始</div></div>
+<div class="kpi warn"><div class="n">16</div><div class="l">高优先级未完成</div></div>
+</div>
+
+<div class="callout c-warn">
+<b>⚠ 数据一致性问题（需先修复，否则计划会基于错号执行）</b><br>
+远端资料库现存 <b>38 条</b>（#1–#38），本地镜像 <code>D:\挑战杯\老师要求跟踪-资料库表格.xlsx</code> 有 <b>45 条</b>。二者在 <b>#34–#38 上内容完全不同</b>：
+远端 #34–#38 是 <b>8/27 的 LEAP 复现系列</b>，本地镜像 #34–#38 是 <b>8/28–8/29 的测试基准系列</b>。
+本地镜像在 8/30 追加 12 条时复用了 34 起的编号，导致远端那 5 条在本地被覆盖丢失。<br>
+<b>本看板已按「远端优先、本地补号」合并为 50 条</b>：#1–#38 取远端，原本地 #34–#45 重编号为 <b>#39–#50</b>。
+建议把本地镜像与远端重新对齐（本地 45 行 → 50 行）。
+</div>
+
+<div class="callout c-info">
+<b>ℹ 8/30 当日进展（尚未同步回资料库，本看板已按代码实况订正）</b><br>
+核查代码发现三条实际进度领先于资料库记录：<b>#47 LeanSearch v2</b> 三优化已落地（空集信号 + 子目标级查询 + revise 2 轮，use_leansearch 默认开启，199 测试全绿）→ 状态由「未开始」订正为「进行中」；
+<b>#49 时间预算</b> 已由 18000s 上调至 19500s（user_agent.py:144）→ 距比赛 6.5h 尚余 3900s；
+<b>#44 定理埋点</b> 冒烟时手工观测到 search_calls=1 / hits=5 每题，但代码层仍无持久化计数器 → 维持「未开始」。
+另：本地 45 题基准是<b>计算题集</b>，测不出 LeanSearch 对证明题的价值，S2 已改用 tools/build_proof_bench.py 的 60 题证明基准验证。
+</div>
+
+<div class="callout c-info">
+<b>ℹ 资料库中缺失的信息（无法从资料库得出，需你确认）</b><br>
+「老师要求跟踪」表只有 8 列：<b>序号 / 要求内容 / 类别 / 来源对话日期 / 优先级 / 状态 / 我的进展 / 关联对话</b>。
+资料库中<b>没有</b>「截止时间」「评分标准」「交付物形式」三类字段，个人空间内也只有这一张表（另一篇是产品引导文档）。
+因此本计划的时间安排是<b>基于交付物依赖关系推算的建议排期</b>，不是来自老师的硬性截止日期。<br>
+可从其它已知信息补充的约束：比赛端限时 <b>6.5 小时</b>（#49）、初赛 <b>40% 分数来自材料与演示</b>（#21）。
+<b>请确认真实截止日期与评分权重，我会据此重排 S1–S4。</b>
+</div>
+
+<h3>按类别分布</h3>
+<div class="cat-row"><span class="cat-name">验证/Mathlib</span>
+<span class="bar"><i class="b-done" style="width:98px"></i><i class="b-doing" style="width:70px"></i><i class="b-todo" style="width:28px"></i></span>
+<span class="cat-num">已完成 7 · 进行中 5 · 待办 2</span></div><div class="cat-row"><span class="cat-name">系统架构</span>
+<span class="bar"><i class="b-done" style="width:70px"></i><i class="b-doing" style="width:84px"></i><i class="b-todo" style="width:14px"></i></span>
+<span class="cat-num">已完成 5 · 进行中 6 · 待办 1</span></div><div class="cat-row"><span class="cat-name">测试基准</span>
+<span class="bar"><i class="b-done" style="width:42px"></i><i class="b-doing" style="width:42px"></i><i class="b-todo" style="width:42px"></i></span>
+<span class="cat-num">已完成 3 · 进行中 3 · 待办 3</span></div><div class="cat-row"><span class="cat-name">模型harness</span>
+<span class="bar"><i class="b-done" style="width:28px"></i><i class="b-doing" style="width:14px"></i><i class="b-todo" style="width:14px"></i></span>
+<span class="cat-num">已完成 2 · 进行中 1 · 待办 1</span></div><div class="cat-row"><span class="cat-name">提示词推理</span>
+<span class="bar"><i class="b-done" style="width:28px"></i><i class="b-doing" style="width:14px"></i><i class="b-todo" style="width:0px"></i></span>
+<span class="cat-num">已完成 2 · 进行中 1 · 待办 0</span></div><div class="cat-row"><span class="cat-name">记忆系统</span>
+<span class="bar"><i class="b-done" style="width:14px"></i><i class="b-doing" style="width:0px"></i><i class="b-todo" style="width:28px"></i></span>
+<span class="cat-num">已完成 1 · 进行中 0 · 待办 2</span></div><div class="cat-row"><span class="cat-name">材料产出</span>
+<span class="bar"><i class="b-done" style="width:0px"></i><i class="b-doing" style="width:0px"></i><i class="b-todo" style="width:42px"></i></span>
+<span class="cat-num">已完成 0 · 进行中 0 · 待办 3</span></div><div class="cat-row"><span class="cat-name">管理协作</span>
+<span class="bar"><i class="b-done" style="width:14px"></i><i class="b-doing" style="width:0px"></i><i class="b-todo" style="width:14px"></i></span>
+<span class="cat-num">已完成 1 · 进行中 0 · 待办 1</span></div>
+<div class="legend">
+<span><i class="dot" style="background:#22c55e"></i>已完成</span>
+<span><i class="dot" style="background:#f59e0b"></i>进行中</span>
+<span><i class="dot" style="background:#94a3b8"></i>待办</span>
+</div>
+</section>
+
+<section>
+<h2>二、目标清单（全部 50 项，含验收标准）</h2>
+<p class="h2note">点击筛选按钮查看子集；每条含<b>验收标准</b>，进行中 / 未开始项额外标注<b>进度与卡点</b>、<b>前置依赖</b>。</p>
+<div class="filters" id="f-all">
+<button class="fbtn on" data-f="all">全部 50</button>
+<button class="fbtn" data-f="进行中">进行中 16</button>
+<button class="fbtn" data-f="待办">未开始 13</button>
+<button class="fbtn" data-f="已完成">已完成 21</button>
+<button class="fbtn" data-f="high">高优先级未完成 16</button>
+</div>
+<table>
+<thead><tr><th class="c-no">#</th><th>要求 / 验收标准 / 卡点 / 代码位置</th><th class="c-cat">类别</th><th class="c-prio">优先级</th><th class="c-st">状态</th></tr></thead>
+<tbody id="tb">
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">1</td>
+<td class="c-req"><div class="req">核实项目是否真正用 Lean+Mathlib 对 AI 输出的解答做形式化自动验证</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>AI解答→Lean形式化(mathlib)→自动判定通过/不通过 全链路跑通，硬验证不降级 unknown</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_bridge.py:358,393(_mathlib_ready) :543(verify) :306(LEAN_PATH)；tools/measure_mathlib_closure.py</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">2</td>
+<td class="c-req"><div class="req">比赛环境也带 Mathlib，AB 测试验证正确率差异是否由 mathlib 缺失导致</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>Mathlib 按依赖清单打包 ≤150MB 且自验探针通过，可随比赛包携带</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/package_mathlib.py；tools/measure_mathlib_closure.py</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="提示词推理">
+<td class="c-no">10</td>
+<td class="c-req"><div class="req">提示词具体、阶段化、针对性、隔离性，使输出固定格式</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>各阶段提示词独立，输出结构可被稳定解析（JSON/答案块）</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/prompts/、赛事提交版/prompts/；agent/sub_goal_solver.py:324(prefill 参照)</code></div></div></td>
+<td class="c-cat">提示词推理</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="测试基准">
+<td class="c-no">15</td>
+<td class="c-req"><div class="req">在公开基准（IMO 等）做实验，书生 vs deepseek 对比，发现问题</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>书生推理 + DeepSeek 判分 + 错误类型统计的测试链跑通</div><div class="d-item"><span class="d-k">代码位置</span><code>测试工具/（main.py、intern_s1.py）；imo_bench_eval/</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">26</td>
+<td class="c-req"><div class="req">书生先生成骨架 sketch / Informal Blueprint（Proof Body Outline），再求解</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>解题前先产出证明大纲，且大纲进入后续流程被消费</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_pre_verifier.py:139(_generate_sketch) :169(generate_and_audit_sketch)</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="系统架构">
+<td class="c-no">27</td>
+<td class="c-req"><div class="req">用 Blueprint 工具从骨架提取依赖关系，自动拆出多个子目标</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>依赖驱动（非简单切块）的 DAG 分解，且驱动实际求解顺序</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/blueprint_planner.py:58(节点) :72(DAG) :103(_find_cycle) :134(to_subgoal_plan) :422(generate_blueprint)</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="系统架构">
+<td class="c-no">29</td>
+<td class="c-req"><div class="req">子目标对应子智能体，支持动态创建与回溯（失败回退/重规划）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>非固定静态管线；OR 分支失败可回溯重规划</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/sub_goal_solver.py:283-288(开关+回退) :389(_plan_from_blueprint) :413(_audit_blueprint_tree)</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="记忆系统">
+<td class="c-no">30</td>
+<td class="c-req"><div class="req">求解子目标需 lemma 记忆：累积/复用已证引理</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>子目标结论写入 lemma_repo 并注入提示词；A/B 实测有正向收益</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lemma_memory.py；agent/sub_goal_solver.py:413</code></div></div></td>
+<td class="c-cat">记忆系统</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">32</td>
+<td class="c-req"><div class="req">形成推理闭环：搜定理 → informal 推理 → 翻译 Lean → Lean 审核</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>闭环各步衔接可靠，且实证有效</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_pre_verifier.py、agent/lean_translator.py、agent/lean_refiner.py</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">37</td>
+<td class="c-req"><div class="req">比赛平台环境核查（无 Lean、无外网等约束）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>平台约束结论明确，并有对外咨询模板</div><div class="d-item"><span class="d-k">代码位置</span><code>赛事提交版/docs/平台Lean环境咨询模板.md（主项目 docs/ 下无，路径需订正）</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="系统架构">
+<td class="c-no">38</td>
+<td class="c-req"><div class="req">LEAP 蓝图分解接入双端流程（本地主项目 + 赛事提交版）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>两端代码一致，use_blueprint_dag 默认开启且失败回退</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/blueprint_planner.py ↔ 赛事提交版/agent/blueprint_planner.py；prompts/blueprint.py ↔ 赛事提交版/prompts/；测试工具/leap_panel.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-高" data-st="已完成" data-prio="高" data-cat="测试基准">
+<td class="c-no">43</td>
+<td class="c-req"><div class="req">统计题目没做对的原因：Lean 审核多次不通过，还是其它环节？给出归因分布</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>归因分布有数据支撑</div><div class="d-item"><span class="d-k">代码位置</span><code>docs/Phase0难题能力诊断报告_20260828.md</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="系统架构">
+<td class="c-no">7</td>
+<td class="c-req"><div class="req">子问题/分阶段划分，使上下文隔离、注意力聚焦</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>题目被拆为有序子目标，后续子目标仅注入前序结论</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/sub_goal_solver.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="系统架构">
+<td class="c-no">9</td>
+<td class="c-req"><div class="req">增加可观测性方便发现错误细节</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>全程 trace 可回放，评测报告由 trace 生成</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/base.py(TaskContext/record)；tools/debug_one_trace.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="提示词推理">
+<td class="c-no">12</td>
+<td class="c-req"><div class="req">任务书强调分布式推理，结合子问题划分落实</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>子问题分阶段求解即分布式推理落地</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/sub_goal_solver.py</code></div></div></td>
+<td class="c-cat">提示词推理</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="模型harness">
+<td class="c-no">19</td>
+<td class="c-req"><div class="req">本地部署 deepseek harness 对接书生，评估是否提升解题</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>DeepSeek 评判模块 + multi_agent_runner 把书生接入主框架</div><div class="d-item"><span class="d-k">代码位置</span><code>测试工具/、agent/answer_oracle.py</code></div></div></td>
+<td class="c-cat">模型harness</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="管理协作">
+<td class="c-no">24</td>
+<td class="c-req"><div class="req">从文献获取前人经验，尝试复现论文</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>至少复现 1 篇论文方法并有对照实验</div><div class="d-item"><span class="d-k">代码位置</span><code>LEAP复现优化计划.md；tools/leap_eval.py；eval_A|B|C/leap_eval_*.json</code></div></div></td>
+<td class="c-cat">管理协作</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="验证/Mathlib">
+<td class="c-no">31</td>
+<td class="c-req"><div class="req">评估 leansearch 是否启用（先试试再决定）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>有 A/B 数据支撑启用/关闭决策</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_search.py；tests/test_lean_search.py</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="模型harness">
+<td class="c-no">33</td>
+<td class="c-req"><div class="req">让 AI 直接用 Mathlib 答题（不只做验证）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>模型解答时实际调用 Mathlib 定理/tactic</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_bridge.py；agent/lean_search.py:129(_official_search)</code></div></div></td>
+<td class="c-cat">模型harness</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="验证/Mathlib">
+<td class="c-no">35</td>
+<td class="c-req"><div class="req">Mathlib 本地部分编译落地（核心 Tactic 可用）</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>Mathlib.Tactic 编译可用，校验脚本全过</div><div class="d-item"><span class="d-k">代码位置</span><code>D:/mathlib4-last_bump_for_v4.31.0；agent/lean_bridge.py:393(_mathlib_ready)</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-已完成 pr-中" data-st="已完成" data-prio="中" data-cat="测试基准">
+<td class="c-no">50</td>
+<td class="c-req"><div class="req">验证「增加候选数量的收益 &lt; 重复验证精炼的收益」作为调优方向约束</div><div class="detail"><div class="d-item"><span class="d-k">验收标准</span>有实测数据支撑该约束</div><div class="d-item"><span class="d-k">代码位置</span><code>docs/Phase0难题能力诊断报告_20260828.md</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-已完成">已完成</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="系统架构">
+<td class="c-no">5</td>
+<td class="c-req"><div class="req">系统达 LangGraph+harness 层次；覆盖上下文布局/loop/委派/hook/memory/可观测</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>自研 harness 已覆盖 loop/委派/黑板/可观测/护栏；缺图编排、hook 注册、LangMem 持久记忆</div><div class="d-item"><span class="d-k">前置依赖</span>#13 跨题持久记忆</div><div class="d-item"><span class="d-k">验收标准</span>逐项对照 6 要素出具覆盖矩阵，缺项补齐或给出等价自研方案说明</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/orchestrator.py、agent/base.py、agent/sub_goal_solver.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="系统架构">
+<td class="c-no">6</td>
+<td class="c-req"><div class="req">先找瓶颈再优化：在问题理解/题型识别/分解/长推理链各环节定位瓶颈</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>分阶段处理已实现；系统化瓶颈分析未做。已有工具：tools/offline_error_analysis.py、docs/Phase0难题能力诊断报告_20260828.md</div><div class="d-item"><span class="d-k">前置依赖</span>#44 定理埋点（提供调用侧数据）</div><div class="d-item"><span class="d-k">验收标准</span>产出各环节耗时与失分归因报告，优化方向由数据决定而非直觉</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/offline_error_analysis.py；docs/Phase0难题能力诊断报告_20260828.md</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">28</td>
+<td class="c-req"><div class="req">骨架严谨性需经 Lean 语法与类型审核</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>audit_sketch 已落地且默认启用；卡点：端到端 Lean 编译验证未执行（mathlib 已就绪，缺一次实测）</div><div class="d-item"><span class="d-k">前置依赖</span>#35 Mathlib 构建（已完成）</div><div class="d-item"><span class="d-k">验收标准</span>骨架形式化为 Lean 声明后编译通过；失败抽取 formal_gaps 回灌规划</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_bridge.py:777(audit_sketch)；agent/lean_pre_verifier.py:169</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="系统架构">
+<td class="c-no">34</td>
+<td class="c-req"><div class="req">复现 LEAP 论文三阶段框架（Blueprint DAG → 非形式到形式化搭桥 → Lean 引导迭代精炼）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>代码与对照实验已完成（框架+书生 3/3 vs 裸书生 0/3）；卡点：docs/LEAP复现介绍.docx 未生成（DB 记录的路径在磁盘上不存在）</div><div class="d-item"><span class="d-k">验收标准</span>三阶段代码实现 + 对照实验 + 介绍文档齐全</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/leap_eval.py；eval_A/leap_eval_intern.json、eval_B/、eval_C/leap_eval_deepseek.json；LEAP复现优化计划.md；赛事提交版/docs/LEAP论文复现对照表.md</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="测试基准">
+<td class="c-no">36</td>
+<td class="c-req"><div class="req">对照实验验证框架价值（A/B 开关对比）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>Lean-IMO-Bench Basic 3 题：框架+书生 3/3，裸书生 0/3；题库 4 题开关对比 4/4（开）vs 待补（关）</div><div class="d-item"><span class="d-k">验收标准</span>use_blueprint_dag=true 与 false 两组数据齐全，结论可复现</div><div class="d-item"><span class="d-k">代码位置</span><code>imo_bench_eval/；eval_dag_on.jsonl、eval_dag_off.jsonl</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="测试基准">
+<td class="c-no">39</td>
+<td class="c-req"><div class="req">持续推进测试基准实验，并明确当前存在哪些关键问题（阻塞项）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>单轮 45 题约 2-3h，是迭代速度瓶颈。三个已知 bug：soft_budget 无人消费、lemma_repo 无人写入、leansearch 中文查询全空（前两项已修）</div><div class="d-item"><span class="d-k">前置依赖</span>#44 埋点（提供数据）</div><div class="d-item"><span class="d-k">验收标准</span>阻塞项清单明确且逐项有处理结果</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/run_phase0_eval.py；tools/offline_error_analysis.py</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">40</td>
+<td class="c-req"><div class="req">评估定理检索环节的开销与有效性（老师判断：调用定理时间开销较大）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>已去掉简单题的 Lean 前置（仅 deep 难题保留）；leansearch 单次默认返回 5 条。卡点：无耗时埋点，仍是估算</div><div class="d-item"><span class="d-k">前置依赖</span>#44 定理调用埋点</div><div class="d-item"><span class="d-k">验收标准</span>给出检索环节的耗时占比与收益数据，据此调整默认开关</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_pre_verifier.py；agent/lean_search.py:194</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="系统架构">
+<td class="c-no">41</td>
+<td class="c-req"><div class="req">Mathlib 精简为「仅保留会用到的部分」并随环境上传比赛平台</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>按依赖闭包裁剪 337 olean / 0.11GB 已完成；卡点：平台是否预装 Lean4/Mathlib 未最终确认，上传动作未落地</div><div class="d-item"><span class="d-k">前置依赖</span>#37 平台环境核查结论</div><div class="d-item"><span class="d-k">验收标准</span>裁剪包 ≤150MB、随包上传、平台侧可解压即用</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/package_mathlib.py；tools/measure_mathlib_closure.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="测试基准">
+<td class="c-no">42</td>
+<td class="c-req"><div class="req">先考察本地环境下测试基准的「理想正确率上限」，给出目标值</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>IMO 类引入本套工具后 26%→41%；修完全部已知 bug 预期稳定 40%+。卡点：未做「人工最优/多次采样取优」的上限测定实验</div><div class="d-item"><span class="d-k">前置依赖</span>#39 阻塞项清零、#20 新模型接入</div><div class="d-item"><span class="d-k">验收标准</span>给出可复现的上限值及达成条件</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/build_proof_bench.py（60 题证明基准）；测试工具/</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">46</td>
+<td class="c-req"><div class="req">明确单个子目标应检索几条定理（top-k），并澄清「命中」定义</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>链路已澄清：选相似候选 → 去重 → 验证 → 才有效。当前默认 5 条；实测漏斗 7→3→1。卡点：top-k 未做参数扫描</div><div class="d-item"><span class="d-k">前置依赖</span>#44 埋点（提供漏斗数据）</div><div class="d-item"><span class="d-k">验收标准</span>top-k 取值有实验依据；「命中」定义为「通过 Lean 编译验证」而非检索相似</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_search.py:194(search, limit=5)；agent/blueprint_planner.py:558</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="验证/Mathlib">
+<td class="c-no">47</td>
+<td class="c-req"><div class="req">参考《LeanSearch v2》升级定理检索为语义检索</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>8/30 三优化已落地：①空集信号 ②子目标级独立查询 ③deep_revise_rounds 1→2；use_leansearch 默认开启，199 测试全绿。卡点：v4 完整 45 题验证中；本地 45 题是计算集，测不出证明题价值，需证明题基准验证</div><div class="d-item"><span class="d-k">前置依赖</span>#44 埋点（先量化现状）、#42 证明题基准</div><div class="d-item"><span class="d-k">验收标准</span>中文/LaTeX 查询能返回有效结果；nDCG@10 有基线对比；对证明题正确率有正向实测</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/blueprint_planner.py:447、agent/sub_goal_solver.py:312,519、agent/lean_refiner.py:191、agent/orchestrator.py:544；D:\挑战杯\papers\LeanSearch_v2.pdf</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-高" data-st="进行中" data-prio="高" data-cat="系统架构">
+<td class="c-no">49</td>
+<td class="c-req"><div class="req">保证时间充足、一步步做扎实：时间预算与比赛 6.5 小时上限对齐</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>并发换算已修（paper_cap 乘并发数）+ deep 配额闸 25% + 动态收紧，实测 4.27h。8/30 已上调 user_agent.py:144 至 19500s（5.42h），v4 完整 45 题验证中。缺口：距 6.5h（23400s）尚余 3900s 未利用；paper_pacer 默认仍 18000</div><div class="d-item"><span class="d-k">前置依赖</span>#43 归因数据（已知时间分配错误）</div><div class="d-item"><span class="d-k">验收标准</span>target_seconds 对齐 23400s，且各阶段配额（Lean前置/子目标规划/写题）重新校准并实测不超时</div><div class="d-item"><span class="d-k">代码位置</span><code>user_agent.py:144(paper_target_time=19500)；agent/paper_pacer.py:41(默认18000) :125(paper_cap) :131(allow_deep)；tools/simulate_paper_budget.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-中" data-st="进行中" data-prio="中" data-cat="验证/Mathlib">
+<td class="c-no">3</td>
+<td class="c-req"><div class="req">问题理解阶段：书生先给 Lean 形式化表达，Lean 判定正确后方可求解</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>代码已实现 formalize_problem 并编译校验；卡点：mathlib 已就绪(#35)但端到端复测未跑，实际仍多降级 unknown</div><div class="d-item"><span class="d-k">前置依赖</span>#35 Mathlib 本地构建（已完成）</div><div class="d-item"><span class="d-k">验收标准</span>简单题也走形式化理解且不降级 unknown；形式化失败率 &lt;20%</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_bridge.py:653(formalize_problem)；agent/lean_pre_verifier.py</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-中" data-st="进行中" data-prio="中" data-cat="系统架构">
+<td class="c-no">8</td>
+<td class="c-req"><div class="req">角色设计含引理核验、步骤纠错；角色间上下文冗余度尽量小</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>四角色(解题/审查/整合/验证)与步骤错误分析已实现；卡点：引理核验角色默认关闭(use_lemma_accumulation=False)</div><div class="d-item"><span class="d-k">前置依赖</span>#30 lemma 机制（已完成，数论子域 +23pp，但默认关）</div><div class="d-item"><span class="d-k">验收标准</span>引理核验角色默认开启并参与判定；各角色上下文注入量有量化对比</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/collaborative_solver.py、agent/verifier.py、agent/lemma_memory.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-中" data-st="进行中" data-prio="中" data-cat="提示词推理">
+<td class="c-no">11</td>
+<td class="c-req"><div class="req">错误粗分推理性/非推理性两类，分析占比，聚焦推理错误从提示词解决</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>仅在离线分析脚本做多维分类；卡点：非智能体运行时，且非老师要的二分类</div><div class="d-item"><span class="d-k">前置依赖</span>#16 错误甄别（推理链 vs 理解）</div><div class="d-item"><span class="d-k">验收标准</span>运行时对每条错误回答打二分类标签并统计占比</div><div class="d-item"><span class="d-k">代码位置</span><code>tools/offline_error_analysis.py</code></div></div></td>
+<td class="c-cat">提示词推理</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-进行中 pr-中" data-st="进行中" data-prio="中" data-cat="模型harness">
+<td class="c-no">20</td>
+<td class="c-req"><div class="req">用新书生模型（Intern-S2-Preview-397B）打榜并跑基准，反馈结果</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>配置已就位（.env: INTERN_MODEL=Intern-S2-Preview-397B）；卡点：未产出新旧模型对比评测数据</div><div class="d-item"><span class="d-k">前置依赖</span>#42 本地正确率上限（提供基线）</div><div class="d-item"><span class="d-k">验收标准</span>确认 Intern-S2-Preview-397B 已接入打榜与基准流程，并产出与旧模型的对比数据</div><div class="d-item"><span class="d-k">代码位置</span><code>.env:10；测试工具/intern_s1.py</code></div></div></td>
+<td class="c-cat">模型harness</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-进行中">进行中</span></td>
+</tr>
+<tr class="row st-待办 pr-高" data-st="待办" data-prio="高" data-cat="记忆系统">
+<td class="c-no">13</td>
+<td class="c-req"><div class="req">记忆功能：多轮上下文既保持延续性又保持细节注意力（LangMem/定制模板）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>单题内共享黑板已实现；跨题持久记忆已有 lemma_memory/theorem_memory 磁盘持久化雏形，但未接入主流程</div><div class="d-item"><span class="d-k">前置依赖</span>#30 lemma 机制、#39 埋点</div><div class="d-item"><span class="d-k">验收标准</span>跨题/跨会话持久记忆可用，且长上下文下细节注意力不衰减</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lemma_memory.py:46(LemmaMemory, 磁盘持久化)；agent/theorem_memory.py:46</code></div></div></td>
+<td class="c-cat">记忆系统</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-高" data-st="待办" data-prio="高" data-cat="测试基准">
+<td class="c-no">16</td>
+<td class="c-req"><div class="req">对错误回答甄别：定位是推理链问题还是理解问题</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>无运行时甄别；仅离线判分工具有相近字段</div><div class="d-item"><span class="d-k">前置依赖</span>#11 错误二分类</div><div class="d-item"><span class="d-k">验收标准</span>运行时对错误回答显式标注 推理链 / 理解 两类并给出分布</div><div class="d-item"><span class="d-k">代码位置</span><code>（待实现）</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-高" data-st="待办" data-prio="高" data-cat="材料产出">
+<td class="c-no">21</td>
+<td class="c-req"><div class="req">提交材料需提炼有价值结论，页面内容深度提炼（初赛 40% 来自材料与演示）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>未系统做。已有素材：正确率 26%→41%、判分口径 15.6pp、论文对照证据</div><div class="d-item"><span class="d-k">前置依赖</span>#42 上限数据、#34 LEAP 对照实验</div><div class="d-item"><span class="d-k">验收标准</span>产出含真实数据结论的汇报材料（非占位文本）</div><div class="d-item"><span class="d-k">代码位置</span><code>（待实现，可复用 docs/Phase0难题能力诊断报告_20260828.md）</code></div></div></td>
+<td class="c-cat">材料产出</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-高" data-st="待办" data-prio="高" data-cat="系统架构">
+<td class="c-no">45</td>
+<td class="c-req"><div class="req">移除按题型分流的策略（IMO 全为证明题，分流反而拉低正确率）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>代码确认仍在使用：orchestrator.py:272 与 :629 依据 question_type 分流</div><div class="d-item"><span class="d-k">前置依赖</span>无（代码改动已定位，可立即开工）</div><div class="d-item"><span class="d-k">验收标准</span>题型分流分支删除；老师补充：计算题同样含证明成分，不该排除在 Lean/定理检索外</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/orchestrator.py:272,:629；agent/question_type.py；agent/difficulty_router.py</code></div></div></td>
+<td class="c-cat">系统架构</td>
+<td class="c-prio"><span class="prio p-高">高</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="验证/Mathlib">
+<td class="c-no">4</td>
+<td class="c-req"><div class="req">Mathlib 作为 RAG：按数学细分领域检索定理（leansearch 思路）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>关键词打分器只对英文/mathlib 风格查询有效，中文查询返回空</div><div class="d-item"><span class="d-k">前置依赖</span>#44 定理调用埋点、#47 LeanSearch v2 语义升级</div><div class="d-item"><span class="d-k">验收标准</span>中文/LaTeX 查询能返回非空结果；检索命中定理在子目标证明中被实际采用</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/lean_search.py:112(MathlibTheoremSearcher) :194(search)</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="记忆系统">
+<td class="c-no">14</td>
+<td class="c-req"><div class="req">用 LangGraph checkpoint 维持循环；裸模型无状态需记忆支撑</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>无 checkpoint 持久化，仅 run_eval 文件级断点续跑</div><div class="d-item"><span class="d-k">前置依赖</span>#13 持久记忆</div><div class="d-item"><span class="d-k">验收标准</span>循环状态可持久化并断点恢复</div><div class="d-item"><span class="d-k">代码位置</span><code>run_eval.py（文件级断点）</code></div></div></td>
+<td class="c-cat">记忆系统</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="测试基准">
+<td class="c-no">17</td>
+<td class="c-req"><div class="req">并行接入多个模型，分别判断后综合处理（deepseek 不可完全信任）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>运行时单一模型投票，无并行多模型融合</div><div class="d-item"><span class="d-k">前置依赖</span>#16 错误甄别（提供融合依据）</div><div class="d-item"><span class="d-k">验收标准</span>≥2 个模型并行判定并融合，给出一致性/分歧统计</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/answer_oracle.py（当前仅单模型投票）</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="测试基准">
+<td class="c-no">18</td>
+<td class="c-req"><div class="req">区分长推理中「上下文过大」与「上下文丢失」</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>仅有上下文超长重试与文件断点续跑，未区分</div><div class="d-item"><span class="d-k">前置依赖</span>#13 持久记忆</div><div class="d-item"><span class="d-k">验收标准</span>两种情形被区分识别并走不同处理路径</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/formatter.py:61、agent/solver.py:447（当前仅长度检测）</code></div></div></td>
+<td class="c-cat">测试基准</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="材料产出">
+<td class="c-no">22</td>
+<td class="c-req"><div class="req">将比赛经历外化为专利和论文（眼光放长远）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>未做</div><div class="d-item"><span class="d-k">前置依赖</span>#21 材料结论、#34 LEAP 复现</div><div class="d-item"><span class="d-k">验收标准</span>至少 1 份专利交底书或论文提纲</div><div class="d-item"><span class="d-k">代码位置</span><code>（待实现）</code></div></div></td>
+<td class="c-cat">材料产出</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="材料产出">
+<td class="c-no">23</td>
+<td class="c-req"><div class="req">在 CodeBuddy 中下载优秀框架及规范，遵循规范自动生成合规代码</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>未做。已有内部规范 D:\挑战杯\代码要求.txt</div><div class="d-item"><span class="d-k">验收标准</span>接入 ≥1 个规范/框架并据此生成合规代码</div><div class="d-item"><span class="d-k">代码位置</span><code>D:\挑战杯\代码要求.txt</code></div></div></td>
+<td class="c-cat">材料产出</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="验证/Mathlib">
+<td class="c-no">44</td>
+<td class="c-req"><div class="req">对被调用的定理做埋点，核实是否「调用频繁但定理个数不多」</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>grep 确认 agent/lean_search.py 无任何计数器，代码层未实现；8/30 v4 冒烟时手工观测到 search_calls=1、hits=5/题，但无持久化记录。零依赖，可立即开工</div><div class="d-item"><span class="d-k">前置依赖</span>无（可立即开工，零依赖）</div><div class="d-item"><span class="d-k">验收标准</span>埋点持久化输出：调用次数 / 命中数 / 去重后条数 / 最终被采用条数，且能按题汇总</div><div class="d-item"><span class="d-k">代码位置</span><code>（待实现：agent/lean_search.py 增加计数器）</code></div></div></td>
+<td class="c-cat">验证/Mathlib</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-中" data-st="待办" data-prio="中" data-cat="模型harness">
+<td class="c-no">48</td>
+<td class="c-req"><div class="req">解答中若用到某个定理，书生侧需一并给出该定理的证明</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>已答复老师需要；未落地到提示词</div><div class="d-item"><span class="d-k">前置依赖</span>#45 移除题型分流（同属提示词/流程改动，合并改动更省）</div><div class="d-item"><span class="d-k">验收标准</span>提示词与输出格式落实「引用定理须附带证明/依据」</div><div class="d-item"><span class="d-k">代码位置</span><code>agent/prompts/（待改）</code></div></div></td>
+<td class="c-cat">模型harness</td>
+<td class="c-prio"><span class="prio p-中">中</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+<tr class="row st-待办 pr-低" data-st="待办" data-prio="低" data-cat="管理协作">
+<td class="c-no">25</td>
+<td class="c-req"><div class="req">与刘邵庆合理分工；考虑提前来校（老师安排食宿）</div><div class="detail"><div class="d-item"><span class="d-k">进度 / 卡点</span>管理层面未推进</div><div class="d-item"><span class="d-k">验收标准</span>分工明确，来校时间与老师确认</div><div class="d-item"><span class="d-k">代码位置</span><code>（管理事项）</code></div></div></td>
+<td class="c-cat">管理协作</td>
+<td class="c-prio"><span class="prio p-低">低</span></td>
+<td class="c-st"><span class="badge b-待办">待办</span></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>三、任务分解与时间安排</h2>
+<p class="h2note">四个冲刺，按<b>依赖顺序</b>排列：先量测（S1）→ 再优化（S2）→ 补架构短板（S3）→ 最后产出材料（S4）。
+每轮实验成本约 2–3 小时（45 题），S1 的埋点是后续所有数据驱动决策的前提。</p>
+<div class="sprint">
+<div class="sp-head"><span class="sp-id">S1</span><span class="sp-date">8/31 – 9/2</span><span class="sp-theme">清障与量测：把「已知问题」变成「可测数据」</span></div>
+<div class="sp-goals"><b>收口条目：</b>#44 定理调用埋点、#45 移除题型分流、#49 时间预算对齐 6.5h、#40 检索开销评估</div>
+<ol class="sp-steps"><li>#44 在 agent/lean_search.py 加计数器（调用/命中/去重后/最终采用），输出 JSONL</li><li>#49 paper_pacer.target_seconds 默认改 23400，跑 tools/simulate_paper_budget.py 复验</li><li>#45 删除 orchestrator.py:272/:629 的题型分流，改为统一流程（计算题仍走 Lean，因含证明成分）</li><li>#40 用埋点数据回填「定理检索开销与有效性」结论，决定默认开关</li></ol>
+<div class="sp-out"><b>产出物：</b>agent/lean_search.py（埋点）、agent/orchestrator.py（去分流）、agent/paper_pacer.py（预算）；tools/theorem_call_stats.jsonl（埋点数据）、仿真报告</div>
+</div><div class="sprint">
+<div class="sp-head"><span class="sp-id">S2</span><span class="sp-date">9/3 – 9/6</span><span class="sp-theme">验证闭环收口 + 检索升级收尾</span></div>
+<div class="sp-goals"><b>收口条目：</b>#28 骨架 Lean 端到端验证、#3 问题理解形式化复测、#47 LeanSearch 证明题基准验证、#46 top-k 定参</div>
+<ol class="sp-steps"><li>#28 用 #35 已就绪的 mathlib 跑端到端：骨架→Lean 声明→编译，记录通过率</li><li>#3 复测 formalize_problem 的 unknown 降级率，目标是降到 20% 以下</li><li>#47 v4 的 45 题是计算集，改用 tools/build_proof_bench.py（60 题证明基准）验证 LeanSearch 真实价值；中文/LaTeX 查询单独测</li><li>#46 用埋点数据做 top-k ∈ {3,5,10} 扫描，按「最终被采用条数 / 耗时」定参</li></ol>
+<div class="sp-out"><b>产出物：</b>agent/lean_bridge.py（audit_sketch 实测）、agent/lean_search.py（语义升级）；端到端验证报告、top-k 参数扫描结论</div>
+</div><div class="sprint">
+<div class="sp-head"><span class="sp-id">S3</span><span class="sp-date">9/7 – 9/10</span><span class="sp-theme">记忆与多模型：补齐老师点名的架构短板</span></div>
+<div class="sp-goals"><b>收口条目：</b>#13 跨题持久记忆、#16 错误甄别、#17 多模型并行、#18 上下文过大/丢失、#11 错误二分类</div>
+<ol class="sp-steps"><li>#13 把 LemmaMemory 接入主流程（当前有类未接线），做跨题复用实验</li><li>#16+#11 在运行时对错误回答打「推理链 / 理解」二分类标签并统计占比</li><li>#17 接入第二个判定模型并行投票，输出一致性/分歧统计（DeepSeek 不可完全信任）</li><li>#18 区分「上下文过大」（压缩）与「上下文丢失」（从持久记忆恢复）两条路径</li></ol>
+<div class="sp-out"><b>产出物：</b>agent/lemma_memory.py（接线）、agent/verifier.py（二分类）、agent/answer_oracle.py（多模型）；记忆复用实验报告、错误类型分布、多模型一致性报告</div>
+</div><div class="sprint">
+<div class="sp-head"><span class="sp-id">S4</span><span class="sp-date">9/11 – 9/14</span><span class="sp-theme">材料与外化：把技术成果变成得分</span></div>
+<div class="sp-goals"><b>收口条目：</b>#21 材料结论提炼、#34 LEAP 介绍文档补齐、#22 专利/论文、#42 上限目标值、#36 A/B 补齐</div>
+<ol class="sp-steps"><li>#34 补生成 docs/LEAP复现介绍.docx（DB 记录路径在磁盘不存在，属缺口）</li><li>#36 补跑 use_blueprint_dag=false 对照组，让 A/B 可复现</li><li>#42 做「多次采样取优 / 人工最优」上限测定，给出目标值</li><li>#21 输出含真实数据的汇报材料（26%→41%、判分口径 15.6pp、LEAP 对照 3/3 vs 0/3）</li><li>#22 从 LEAP 复现 + 验证精炼闭环提炼专利交底书</li></ol>
+<div class="sp-out"><b>产出物：</b>docs/LEAP复现介绍.docx、docs/正确率上限测定报告.md；汇报材料（HTML/PPT）、专利交底书提纲</div>
+</div>
+<div class="callout c-ok">
+<b>排序依据</b>：S1 的 #44 埋点是零依赖、低成本、高信息量的动作，却能同时解锁 #40（检索开销）、#46（top-k 定参）、#6（瓶颈定位）三项——这是全表唯一的「一个动作解锁多条」的杠杆点，必须排在最前。
+#45 移除题型分流是老师明确点名的改动，且代码位置已定位（orchestrator.py:272/:629），同属低风险高确定性，并入 S1。
+</div>
+</section>
+
+<section>
+<h2>四、已完成的成果展示（21 项）</h2>
+<p class="h2note">「代码位置」列均经本次实际核查（grep / 文件存在性验证），<b>不是照抄资料库文字</b>。核查中发现 2 处记录与磁盘不符，已在第八节列出。</p>
+<table>
+<thead><tr><th class="c-no">#</th><th>老师的原始要求</th><th class="c-loc">落地位置（文件 / 代码）</th><th class="c-imp">如何满足要求</th></tr></thead>
+<tbody>
+<tr>
+<td class="c-no">1</td>
+<td class="c-req"><div class="req">核实项目是否真正用 Lean+Mathlib 对 AI 输出的解答做形式化自动验证</div></td>
+<td class="c-loc"><code>agent/lean_bridge.py:358,393(_mathlib_ready) :543(verify) :306(LEAN_PATH)；tools/measure_mathlib_closure.py</code></td>
+<td class="c-imp">从「mathlib 在磁盘但没接到验证目录」→ 硬验证真实生效，unknown 不再降级放行</td>
+</tr><tr>
+<td class="c-no">2</td>
+<td class="c-req"><div class="req">比赛环境也带 Mathlib，AB 测试验证正确率差异是否由 mathlib 缺失导致</div></td>
+<td class="c-loc"><code>tools/package_mathlib.py；tools/measure_mathlib_closure.py</code></td>
+<td class="c-imp">纠正 1.5-3GB 的错误估算，使「比赛端带 Mathlib」从不可能变可行</td>
+</tr><tr>
+<td class="c-no">7</td>
+<td class="c-req"><div class="req">子问题/分阶段划分，使上下文隔离、注意力聚焦</div></td>
+<td class="c-loc"><code>agent/sub_goal_solver.py</code></td>
+<td class="c-imp">实现上下文隔离，直接支撑老师要的「注意力聚焦」</td>
+</tr><tr>
+<td class="c-no">9</td>
+<td class="c-req"><div class="req">增加可观测性方便发现错误细节</div></td>
+<td class="c-loc"><code>agent/base.py(TaskContext/record)；tools/debug_one_trace.py</code></td>
+<td class="c-imp">trace 可回放，为 #6 瓶颈分析、#43 归因提供数据底座</td>
+</tr><tr>
+<td class="c-no">10</td>
+<td class="c-req"><div class="req">提示词具体、阶段化、针对性、隔离性，使输出固定格式</div></td>
+<td class="c-loc"><code>agent/prompts/、赛事提交版/prompts/；agent/sub_goal_solver.py:324(prefill 参照)</code></td>
+<td class="c-imp">输出结构稳定化，Blueprint 解析成功率 0/3→3/3，单题耗时 439.7s→26.7s</td>
+</tr><tr>
+<td class="c-no">12</td>
+<td class="c-req"><div class="req">任务书强调分布式推理，结合子问题划分落实</div></td>
+<td class="c-loc"><code>agent/sub_goal_solver.py</code></td>
+<td class="c-imp">任务书「分布式推理」要求落地</td>
+</tr><tr>
+<td class="c-no">15</td>
+<td class="c-req"><div class="req">在公开基准（IMO 等）做实验，书生 vs deepseek 对比，发现问题</div></td>
+<td class="c-loc"><code>测试工具/（main.py、intern_s1.py）；imo_bench_eval/</code></td>
+<td class="c-imp">老师要的公开基准对比实验基础设施</td>
+</tr><tr>
+<td class="c-no">19</td>
+<td class="c-req"><div class="req">本地部署 deepseek harness 对接书生，评估是否提升解题</div></td>
+<td class="c-loc"><code>测试工具/、agent/answer_oracle.py</code></td>
+<td class="c-imp">完成书生↔DeepSeek 双模型打通</td>
+</tr><tr>
+<td class="c-no">24</td>
+<td class="c-req"><div class="req">从文献获取前人经验，尝试复现论文</div></td>
+<td class="c-loc"><code>LEAP复现优化计划.md；tools/leap_eval.py；eval_A|B|C/leap_eval_*.json</code></td>
+<td class="c-imp">从「未做论文复现」→ LEAP 三阶段复现 + 对照实验 3/3 vs 0/3</td>
+</tr><tr>
+<td class="c-no">26</td>
+<td class="c-req"><div class="req">书生先生成骨架 sketch / Informal Blueprint（Proof Body Outline），再求解</div></td>
+<td class="c-loc"><code>agent/lean_pre_verifier.py:139(_generate_sketch) :169(generate_and_audit_sketch)</code></td>
+<td class="c-imp">「先出骨架再求解」从论文方法变为实际流程</td>
+</tr><tr>
+<td class="c-no">27</td>
+<td class="c-req"><div class="req">用 Blueprint 工具从骨架提取依赖关系，自动拆出多个子目标</div></td>
+<td class="c-loc"><code>agent/blueprint_planner.py:58(节点) :72(DAG) :103(_find_cycle) :134(to_subgoal_plan) :422(generate_blueprint)</code></td>
+<td class="c-imp">依赖驱动分解替代简单切块，支撑 #29 动态子智能体</td>
+</tr><tr>
+<td class="c-no">29</td>
+<td class="c-req"><div class="req">子目标对应子智能体，支持动态创建与回溯（失败回退/重规划）</div></td>
+<td class="c-loc"><code>agent/sub_goal_solver.py:283-288(开关+回退) :389(_plan_from_blueprint) :413(_audit_blueprint_tree)</code></td>
+<td class="c-imp">满足老师「不能硬套固定静态管线」的核心关切</td>
+</tr><tr>
+<td class="c-no">30</td>
+<td class="c-req"><div class="req">求解子目标需 lemma 记忆：累积/复用已证引理</div></td>
+<td class="c-loc"><code>agent/lemma_memory.py；agent/sub_goal_solver.py:413</code></td>
+<td class="c-imp">修掉「无人写入的假钥匙」，数论子域 +23pp</td>
+</tr><tr>
+<td class="c-no">31</td>
+<td class="c-req"><div class="req">评估 leansearch 是否启用（先试试再决定）</div></td>
+<td class="c-loc"><code>agent/lean_search.py；tests/test_lean_search.py</code></td>
+<td class="c-imp">用 A/B 数据回答老师「先试试再决定」，避免盲目启用</td>
+</tr><tr>
+<td class="c-no">32</td>
+<td class="c-req"><div class="req">形成推理闭环：搜定理 → informal 推理 → 翻译 Lean → Lean 审核</div></td>
+<td class="c-loc"><code>agent/lean_pre_verifier.py、agent/lean_translator.py、agent/lean_refiner.py</code></td>
+<td class="c-imp">闭环实证 +8.9pp，是本项目最大单点杠杆</td>
+</tr><tr>
+<td class="c-no">33</td>
+<td class="c-req"><div class="req">让 AI 直接用 Mathlib 答题（不只做验证）</div></td>
+<td class="c-loc"><code>agent/lean_bridge.py；agent/lean_search.py:129(_official_search)</code></td>
+<td class="c-imp">lean↔mathlib 通道 + 官方语义检索接入</td>
+</tr><tr>
+<td class="c-no">35</td>
+<td class="c-req"><div class="req">Mathlib 本地部分编译落地（核心 Tactic 可用）</div></td>
+<td class="c-loc"><code>D:/mathlib4-last_bump_for_v4.31.0；agent/lean_bridge.py:393(_mathlib_ready)</code></td>
+<td class="c-imp">解决 517 个冷门模块缺失导致的 import 失败</td>
+</tr><tr>
+<td class="c-no">37</td>
+<td class="c-req"><div class="req">比赛平台环境核查（无 Lean、无外网等约束）</div></td>
+<td class="c-loc"><code>赛事提交版/docs/平台Lean环境咨询模板.md（主项目 docs/ 下无，路径需订正）</code></td>
+<td class="c-imp">明确「比赛走降级路径、Lean 验证留本地」的战略取舍</td>
+</tr><tr>
+<td class="c-no">38</td>
+<td class="c-req"><div class="req">LEAP 蓝图分解接入双端流程（本地主项目 + 赛事提交版）</div></td>
+<td class="c-loc"><code>agent/blueprint_planner.py ↔ 赛事提交版/agent/blueprint_planner.py；prompts/blueprint.py ↔ 赛事提交版/prompts/；测试工具/leap_panel.py</code></td>
+<td class="c-imp">本地主项目与赛事提交版功能一致，避免双副本漂移</td>
+</tr><tr>
+<td class="c-no">43</td>
+<td class="c-req"><div class="req">统计题目没做对的原因：Lean 审核多次不通过，还是其它环节？给出归因分布</div></td>
+<td class="c-loc"><code>docs/Phase0难题能力诊断报告_20260828.md</code></td>
+<td class="c-imp">用数据纠正「错题主因是 Lean 审核失败」的误判，指向真正瓶颈（时间分配）</td>
+</tr><tr>
+<td class="c-no">50</td>
+<td class="c-req"><div class="req">验证「增加候选数量的收益 &lt; 重复验证精炼的收益」作为调优方向约束</div></td>
+<td class="c-loc"><code>docs/Phase0难题能力诊断报告_20260828.md</code></td>
+<td class="c-imp">为后续调优设立方向约束，避免牺牲验证换候选</td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>五、需你决策的三件事</h2>
+<div class="callout c-warn">
+<b>1. 资料库编号冲突</b>：是否按本看板的 50 条方案回写本地 xlsx 与远端？（远端是 38 条，本地 45 条，二者 #34–#38 内容互斥）
+</div>
+<div class="callout c-info">
+<b>2. 截止时间与评分权重</b>：资料库无此字段。请给真实截止日期 + 材料/演示占比，我据此重排 S1–S4 并调整 S4 的投入。
+</div>
+<div class="callout c-warn">
+<b>3. 两处记录与磁盘不符</b>：#34 标注「报告 docs/LEAP复现介绍.docx」但该 docx <b>不存在</b>（实际产出是 LEAP复现优化计划.md + 对照表.md + eval 数据）；
+#37 标注「docs/平台Lean环境咨询模板.md」但主项目 docs/ 下<b>无此文件</b>（实际在 赛事提交版/docs/ 下）。
+这两项状态是否需要从「已完成」降为「进行中（材料待补）」？
+</div>
+</section>
+
+<footer>math-ai-evaluator · 老师要求执行计划 · 2026-08-30</footer>
+</div>
+<script>
+(function(){
+  var btns=document.querySelectorAll('.fbtn'), tb=document.getElementById('tb');
+  btns.forEach(function(b){
+    b.addEventListener('click',function(){
+      btns.forEach(function(x){x.classList.remove('on')});
+      b.classList.add('on');
+      var f=b.getAttribute('data-f');
+      Array.prototype.forEach.call(tb.children,function(tr){
+        var st=tr.getAttribute('data-st'), pr=tr.getAttribute('data-prio'), show;
+        if(f==='all') show=true;
+        else if(f==='high') show=(pr==='高' && st!=='已完成');
+        else show=(st===f);
+        tr.style.display=show?'':'none';
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "n": 30,
+  "off_correct": 8,
+  "on_correct": 5,
+  "off_accuracy": 0.2667,
+  "on_accuracy": 0.1667,
+  "delta_pp": -10.0,
+  "gained": 0,
+  "lost": 3,
+  "net": -3,
+  "both_correct": 5,
+  "both_wrong": 22,
+  "mcnemar_p": 0.25,
+  "verdict": "有害（建议关闭）",
+  "gained_ids": [],
+  "lost_ids": [
+    "imo-bench-algebra-022",
+    "imo-bench-combinatorics-015",
+    "imo-bench-combinatorics-092"
+  ]
+}
