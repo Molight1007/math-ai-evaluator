@@ -228,6 +228,7 @@ class AgentConfig:
     theorem_memory_enable: bool = True
     theorem_memory_path: str = ""      # 空 = 默认 data/theorem_memory.json
     theorem_memory_top_k: int = 5      # 每题注入的高频定理数
+    theorem_memory_stale_days: int = 0 # 9/1 增：排除 last_seen 超过 N 天的定理；0=关闭（向后兼容）
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
     # ---- 骨架 Lean 语法审核 + leansearch（#28 / #31）----
     enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
@@ -431,7 +432,7 @@ class ReasoningAgent:
             "lean_preverify_tiers",
             # 跨题定理记忆
             "theorem_memory_enable", "theorem_memory_path",
-            "theorem_memory_top_k",
+            "theorem_memory_top_k", "theorem_memory_stale_days",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

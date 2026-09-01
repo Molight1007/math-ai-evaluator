@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -55,6 +56,46 @@ class TheoremMemoryTest(unittest.TestCase):
         m.record_hit("unknown", "gcd_dvd")  # unknown 忽略
         m.record_hit("Number theory", "")  # 空定理名忽略
         self.assertEqual(m.domain_summary(), {})
+
+    # ---- 9/1 增：陈旧过滤（staleness）测试 ----
+    def test_stale_days_filter(self) -> None:
+        """stale_days>0 时，last_seen 超过阈值的定理被排除；不影响未过期的定理。"""
+        from agent.theorem_memory import TheoremMemory
+        m = TheoremMemory(self.path)
+        now = int(time.time())
+        with m._lock:
+            # 注入：old_thm 60 天前用过；recent_thm 昨天用过
+            m._data["Number theory"] = {
+                "old_thm":   {"hits": 10, "first_seen": now - 90*86400,
+                              "last_seen": now - 60*86400},
+                "recent_thm": {"hits": 1,  "first_seen": now - 86400,
+                               "last_seen": now - 86400},
+            }
+        # 默认（关闭）：返回按 hits 降序全集
+        self.assertEqual(m.top_theorems("Number theory", 5),
+                         ["old_thm", "recent_thm"])
+        # stale_days=30：old_thm 被排除；recent_thm 保留
+        self.assertEqual(m.top_theorems("Number theory", 5, stale_days=30),
+                         ["recent_thm"])
+        # stale_days=0 / None：明确关闭
+        self.assertEqual(m.top_theorems("Number theory", 5, stale_days=0),
+                         ["old_thm", "recent_thm"])
+        self.assertEqual(m.top_theorems("Number theory", 5, stale_days=None),
+                         ["old_thm", "recent_thm"])
+
+    def test_stale_days_fallback_when_all_stale(self) -> None:
+        """退路保护：全集都陈旧时退回全集（防冷启动/数据稀疏时静默丢失）。"""
+        from agent.theorem_memory import TheoremMemory
+        m = TheoremMemory(self.path)
+        now = int(time.time())
+        with m._lock:
+            m._data["Number theory"] = {
+                "very_old": {"hits": 5, "first_seen": now - 200*86400,
+                             "last_seen": now - 100*86400},
+            }
+        # stale_days=30 → 应过滤；过滤后空 → 退回全集
+        self.assertEqual(m.top_theorems("Number theory", 5, stale_days=30),
+                         ["very_old"])
 
 
 if __name__ == "__main__":

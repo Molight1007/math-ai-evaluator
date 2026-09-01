@@ -98,11 +98,29 @@ class TheoremMemory:
                 entry["last_seen"] = now
             self._save()
 
-    def top_theorems(self, domain: str, k: int = 5) -> list[str]:
-        """返回某域命中次数最多的 k 个定理名（按 hits 降序）。"""
+    def top_theorems(self, domain: str, k: int = 5,
+                     *, stale_days: int | None = None) -> list[str]:
+        """返回某域命中次数最多的 k 个定理名（按 hits 降序）。
+
+        stale_days（可选，9/1 增）：
+          - None / 0 = 关闭过滤，保持原排序（向后兼容）
+          - N > 0    = 排除 (now - last_seen) > N*86400 的定理
+        退路保护：过滤后若无候选，退回全集按原排序——防冷启动/数据稀疏时静默丢失。
+        这样能让"很久不出现的定理"不再永久占 top-k 名额（陈旧占位）。
+        """
         with self._lock:
             bucket = self._data.get(domain, {})
-            ranked = sorted(bucket.items(), key=lambda kv: -kv[1].get("hits", 0))
+            ranked = sorted(bucket.items(),
+                            key=lambda kv: -kv[1].get("hits", 0))
+            if not stale_days or stale_days <= 0:
+                return [name for name, _ in ranked[:k]]
+            # 陈旧过滤：last_seen 超过 stale_days 的排除
+            cutoff = int(time.time()) - stale_days * 86400
+            fresh = [(name, e) for name, e in ranked
+                     if e.get("last_seen", 0) >= cutoff]
+            if fresh:
+                return [name for name, _ in fresh[:k]]
+            # 退路：全集陈旧（冷启动/稀疏），不返回空
             return [name for name, _ in ranked[:k]]
 
     def domain_summary(self) -> dict:

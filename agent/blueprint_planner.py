@@ -545,13 +545,19 @@ class BlueprintPlannerAgent(BaseAgent):
         return self._mathlib_searcher or None
 
     def _known_domain_theorems(self, ctx: TaskContext) -> list[str]:
-        """读取本域高频"已验证可用"定理（跨题定理记忆，供 DAG 生成复用）。"""
+        """读取本域高频"已验证可用"定理（跨题定理记忆，供 DAG 生成复用）。
+
+        9/1 增：theorem_memory_stale_days 排除久未出现的定理，防陈旧占位；
+        退路由 TheoremMemory.top_theorems 自身保证（数据稀疏时退回全集）。
+        """
         try:
             from .theorem_memory import TheoremMemory
             mem = TheoremMemory(
                 str(getattr(self.config, "theorem_memory_path", "")))
             top_k = int(getattr(self.config, "theorem_memory_top_k", 5))
-            return mem.top_theorems(ctx.domain or "", k=top_k)
+            stale = int(getattr(self.config, "theorem_memory_stale_days", 0))
+            return mem.top_theorems(
+                ctx.domain or "", k=top_k, stale_days=stale if stale > 0 else None)
         except Exception:  # noqa: BLE001
             return []
 
