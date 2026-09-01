@@ -57,6 +57,7 @@ MIN_STATEMENT_CHARS = 8
 REJECT_REPLAN_THRESHOLD = 0.40
 # 评审触发数：reject 节点数 >= 该绝对值 → 提示整树重生成
 # 9/1 用户拍板 3→5：006/017/027 冒烟实锤——24-31% 比例的 DAG 被绝对数 3 误卡
+# （大图 17 节点 4 个 reject=24% 仍触发重构，浪费预算）。比例阈值 40% 继续兜底。
 REJECT_REPLAN_COUNT = 5
 
 # ============================================================
@@ -92,6 +93,10 @@ class DagReviewResult:
 class DagReviewReport:
     """整张 DAG 的评审报告（聚合 + 触发重生成决策依据）。"""
     results: dict = field(default_factory=dict)   # node_id -> DagReviewResult
+    # 9/1 增：评审是否降级（预算耗尽跳过部分/全部 LLM 节点）。
+    # 冒烟 007 实锤：超时风暴下 14 个节点 LLM 全跳过 → reject=0 → 假 pass=True。
+    # degraded=True 时 should_replan 强制返回 True（宁重构不假放行）。
+    degraded: bool = False
 
     @property
     def reject_count(self) -> int:
@@ -118,9 +123,12 @@ class DagReviewReport:
                       reject_ratio_thr: float = REJECT_REPLAN_THRESHOLD,
                       reject_count_thr: int = REJECT_REPLAN_COUNT) -> bool:
         """是否建议整树重生成？规则：
-        - reject 数 >= 3（绝对量） → 强烈建议（局部修不动）
+        - reject 数 >= 绝对阈值（9/1 3→5） → 强烈建议（局部修不动）
         - reject 比例 >= 40%（相对）→ 也建议（系统性失败）
+        - 评审降级（预算耗尽跳过 LLM）→ 强制 True，宁重构不假放行
         """
+        if self.degraded:
+            return True
         return (self.reject_count >= reject_count_thr
                 or self.reject_ratio >= reject_ratio_thr)
 
@@ -137,6 +145,7 @@ class DagReviewReport:
             "results": {nid: r.to_dict() for nid, r in self.results.items()},
             "reject_count": self.reject_count,
             "reject_ratio": self.reject_ratio,
+            "degraded": self.degraded,
             "should_replan": self.should_replan(),
         }
 
@@ -238,6 +247,9 @@ class DagReviewerAgent(BaseAgent):
             results[node.id] = res
 
         report = DagReviewReport(results=results)
+        # 9/1 增：预算耗尽导致 LLM 节点被跳过 → 标记评审降级，
+        # should_replan 强制 True（宁重构不假放行，冒烟 007 教训）
+        report.degraded = bool(llm_skipped)
         ctx.dag_review_report = report.to_dict()
         replan_flag = report.should_replan(self._reject_thr,
                                            self._reject_count_thr)
@@ -247,10 +259,12 @@ class DagReviewerAgent(BaseAgent):
             f"reject={report.reject_count}/{len(results)} "
             f"({report.reject_ratio:.0%}), "
             f"llm_skipped={len(llm_skipped)}, "
+            f"degraded={report.degraded}, "
             f"should_replan={replan_flag}",
             dag_review_replan=replan_flag,
             dag_review_reject_ratio=round(report.reject_ratio, 3),
             dag_review_reject_count=report.reject_count,
+            dag_review_degraded=report.degraded,
         )
         return report
 

@@ -335,26 +335,31 @@ class SubGoalSolverAgent(BaseAgent):
                             f"DAG 修复预算不足，提前停止 (round={round_idx + 1})")
                 return False
             # 3a) 先试子树级局部重写（精准修改，不动好的部分）
+            # 9/1 冒烟 10 题实锤：reject 波及根（LCA=根）时子树重写全白费
+            # （013 子树77%>整树44%、029 71%>64%、028 80%≈80%），且 3a 的
+            # 退化转发会多生成一次整树 → 直接跳过子树走 3b，省一轮 LLM+评审
             if rejected_ids:
-                new_dag = planner.regenerate_subtree(
-                    ctx, prior_dag=dag, rejected_ids=rejected_ids,
-                    feedback_lines=feedback_lines)
-                if new_dag is not None:
-                    dag = new_dag
-                    self.record(ctx, "dag_replan",
-                                f"DAG 子树重写: {len(dag.nodes)} 节点, "
-                                f"rejected={rejected_ids[:5]}")
-                    # 重写后再评审一次：通过则停，否则升级整树
-                    report2 = reviewer.review(ctx, dag, results_map={})
-                    if not report2.should_replan():
+                lca = dag._lca(rejected_ids)
+                if lca is not None and lca != dag.root_id:
+                    new_dag = planner.regenerate_subtree(
+                        ctx, prior_dag=dag, rejected_ids=rejected_ids,
+                        feedback_lines=feedback_lines)
+                    if new_dag is not None:
+                        dag = new_dag
                         self.record(ctx, "dag_replan",
-                                    "子树重写后 DAG 通过评审，停止修复")
-                        return True
-                    feedback_lines = (report2.merge_from_hints().split("\n")
-                                      if report2.merge_from_hints() else feedback_lines)
-                    rejected_ids = report2.rejected_nodes()
-                    continue  # 子树修不动 → 下一轮升级整树
-            # 3b) 整树重生成（子树修不动 / 无 reject 明细时兜底）
+                                    f"DAG 子树重写: {len(dag.nodes)} 节点, "
+                                    f"rejected={rejected_ids[:5]}")
+                        # 重写后再评审一次：通过则停，否则升级整树
+                        report2 = reviewer.review(ctx, dag, results_map={})
+                        if not report2.should_replan():
+                            self.record(ctx, "dag_replan",
+                                        "子树重写后 DAG 通过评审，停止修复")
+                            return True
+                        feedback_lines = (report2.merge_from_hints().split("\n")
+                                          if report2.merge_from_hints() else feedback_lines)
+                        rejected_ids = report2.rejected_nodes()
+                        continue  # 子树修不动 → 下一轮升级整树
+            # 3b) 整树重生成（子树修不动 / 无 reject 明细 / LCA=根 时兜底）
             new_dag = planner.regenerate_with_feedback(
                 ctx, prior_dag=dag, feedback_lines=feedback_lines)
             if new_dag is None:
