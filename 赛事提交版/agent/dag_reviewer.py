@@ -314,9 +314,11 @@ class DagReviewerAgent(BaseAgent):
         try:
             from prompts.dag_review import (
                 DAG_REVIEW_SYSTEM, DAG_REVIEW_USER_TEMPLATE)
+            from utils.prefill import prefill_messages, stitch
         except ImportError:
             from submit.prompts.dag_review import (
                 DAG_REVIEW_SYSTEM, DAG_REVIEW_USER_TEMPLATE)
+            from submit.utils.prefill import prefill_messages, stitch
 
         # 上下文：父节点、兄弟节点、依赖节点 statement
         parent_stmts, child_stmts, dep_stmts = [], [], []
@@ -356,14 +358,24 @@ class DagReviewerAgent(BaseAgent):
         ) + result_block
 
         try:
+            # prefill 锚定 JSON 顶层：Intern 系列无短种子时会先输出长思维块，
+            # 把 token 预算吃满后 JSON 被腰斩 → extract_json 返回 None → 全部
+            # 默认 accept（score=0.50 恒等，评审失去意义）。与 BlueprintPlanner
+            # 生成 DAG 时的 prefill 修复同根因（eval_A 0/3）。
+            _PREFILL = '{"verdict": '
             resp = self.llm(
                 ctx,
-                [
-                    {"role": "system", "content": DAG_REVIEW_SYSTEM},
-                    {"role": "user", "content": user_msg},
-                ],
+                prefill_messages(
+                    [
+                        {"role": "system", "content": DAG_REVIEW_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    _PREFILL,
+                ),
                 0.2, 1024,
             )
+            if resp:
+                resp = stitch(_PREFILL, resp)
         except Exception as exc:  # noqa: BLE001
             logger.warning("DagReviewer LLM 调用异常 %s: %s", node.id, exc)
             return DagReviewResult(node.id, "accept", 0.5, [], "", False)
