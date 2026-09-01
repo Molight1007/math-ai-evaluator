@@ -659,14 +659,14 @@ class BlueprintPlannerAgent(BaseAgent):
             from .theorem_memory import TheoremMemory
             mem = TheoremMemory(
                 str(getattr(self.config, "theorem_memory_path", "")))
-            top_k = int(getattr(self.config, "theorem_memory_top_k", 5))
+            top_k = int(getattr(self.config, "theorem_memory_top_k", 15))
             stale = int(getattr(self.config, "theorem_memory_stale_days", 0))
             return mem.top_theorems(
                 ctx.domain or "", k=top_k, stale_days=stale if stale > 0 else None)
         except Exception:  # noqa: BLE001
             return []
 
-    def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 5):
+    def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 15):
         searcher = self._get_mathlib_searcher()
         if searcher is None:
             return None
