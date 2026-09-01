@@ -576,3 +576,88 @@ class BlueprintPlannerAgent(BaseAgent):
         except Exception as e:  # noqa: BLE001
             logger.warning("Mathlib 定理检索失败: %s", e)
             return None
+
+    # ----------------------------------------------------------
+    # 整树重生成（#34，老师要求："dag 框架错了要重新生成")
+    #
+    # 触发场景：
+    #   - DagReviewer.review() 报告 should_replan=True
+    #   - SubGoalSolver.run 末尾 if replan → 调用本方法
+    #
+    # 输入：
+    #   - prior_dag: 上一轮的 BlueprintDAG（记录到 trace 便于诊断）
+    #   - feedback_lines: list[str]，DagReviewer 聚合的 reject hints
+    #   - extra_context: 可选，每子目标求解/验证结果（用于让 LLM 看"答错了"信号）
+    #
+    # 输出：新 BlueprintDAG；写入 ctx.blueprint。
+    # ----------------------------------------------------------
+    def regenerate_with_feedback(self, ctx: TaskContext,
+                                  prior_dag: "BlueprintDAG",
+                                  feedback_lines: list,
+                                  extra_context: str = "",
+                                  max_attempts: int = 3) -> Optional["BlueprintDAG"]:
+        """基于失败反馈重建 DAG（重写提示词 = 原题 + 反馈，避免循环/粒度问题）。"""
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            self.record(ctx, "blueprint_replan", "预算不足，跳过整树重生成")
+            return None
+        try:
+            from prompts.blueprint import BLUEPRINT_REPLAN_USER_TEMPLATE
+        except ImportError:
+            from submit.prompts.blueprint import BLUEPRINT_REPLAN_USER_TEMPLATE
+
+        # 反馈块 = 拒收节点 + hint，逐条列出
+        feedback_block_lines = list(feedback_lines or [])
+        if extra_context:
+            feedback_block_lines.append("【补充上下文（求解/验证反馈）】")
+            feedback_block_lines.append(extra_context)
+        feedback_block = "\n".join(
+            f"  - {line}" for line in feedback_block_lines) or "  （无明确反馈，请自行审视）"
+
+        user_msg = BLUEPRINT_REPLAN_USER_TEMPLATE.format(
+            problem=ctx.problem,
+            feedback_block=feedback_block,
+        )
+        # prefill 锚定顶层包装（同首次生成）
+        _PREFILL = '{"root_id": "g", "nodes": ['
+        for attempt in range(max_attempts):
+            if not ctx.budget.can_spend(1):
+                self.record(ctx, "blueprint_replan", "重生成预算耗尽，终止")
+                return None
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    _PREFILL,
+                ),
+                0.2, 6144,
+            )
+            if resp:
+                resp = stitch(_PREFILL, resp)
+            if not resp:
+                continue
+            raw = extract_json(resp)
+            if raw is None:
+                logger.warning("BlueprintReplan: JSON 解析失败 (attempt %d)", attempt + 1)
+                continue
+            dag = parse_blueprint(raw)
+            if dag is None:
+                logger.warning("BlueprintReplan: DAG 结构非法 (attempt %d)", attempt + 1)
+                continue
+            ok, errors = dag.validate()
+            if not ok:
+                logger.warning("BlueprintReplan: 校验失败 (attempt %d): %s",
+                               attempt + 1, "; ".join(errors[:5]))
+                continue
+            ctx.blueprint = dag.to_dict()
+            self.record(ctx, "blueprint_replan",
+                        f"DAG 重生成成功: {len(dag.nodes)} 节点, "
+                        f"根={dag.root_id}, "
+                        f"上一轮 {len(prior_dag.nodes)} 节点")
+            return dag
+
+        self.record(ctx, "blueprint_replan",
+                    f"DAG 重生成 {max_attempts} 次尝试均失败")
+        return None

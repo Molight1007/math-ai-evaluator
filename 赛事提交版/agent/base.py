@@ -385,6 +385,10 @@ class TaskContext:
     # ---- Stage 3 迭代精炼（#29/#30/#32/#33）----
     refine_result: dict = field(default_factory=dict)  # sorry 补全+回溯结果（LeanRefinerAgent 写入）
 
+    # ---- DAG 动态评审（LEAP 5.3，#34，2026-09-01）----
+    # DagReviewerAgent 写入：评审 DAG 分解质量，建议触发整树重生成
+    dag_review_report: dict = field(default_factory=dict)
+
     # ---- 难题深度求解通道字段 ----
     tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
     tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
