@@ -460,5 +460,147 @@ class SubGoalReviewReplanTest(unittest.TestCase):
         self.assertIn("dag_review", trace_steps)
 
 
+# ============================================================
+# 子树级局部重写（#34 第二级）测试
+# ============================================================
+
+class SubtreeRewriteTest(unittest.TestCase):
+    """BlueprintDAG._subtree_ids / _lca / _prune_subtree / _graft_subtree 纯逻辑测试。"""
+
+    def test_subtree_ids(self):
+        dag = sample_dag()
+        self.assertEqual(dag._subtree_ids("n1"), {"n1", "n1a", "n1b"})
+        self.assertEqual(dag._subtree_ids("n2"), {"n2", "n2a", "n2b"})
+        self.assertEqual(dag._subtree_ids("g"), set(dag.nodes.keys()))
+        self.assertEqual(dag._subtree_ids("n1a"), {"n1a"})
+
+    def test_lca_same_branch(self):
+        dag = sample_dag()
+        # n1a 与 n1b 的 LCA 是 n1
+        self.assertEqual(dag._lca(["n1a", "n1b"]), "n1")
+        # n1a 与 n2a 的 LCA 是根 g
+        self.assertEqual(dag._lca(["n1a", "n2a"]), "g")
+        # 单个节点 LCA 是自身
+        self.assertEqual(dag._lca(["n1a"]), "n1a")
+        # 不存在的节点忽略
+        self.assertEqual(dag._lca(["n1a", "zzz"]), "n1a")
+
+    def test_prune_subtree(self):
+        dag = sample_dag()
+        pruned = dag._prune_subtree("n1")
+        # n1 保留但 children 清空；n1a/n1b 删除；n2 及子树原样
+        self.assertIn("n1", pruned.nodes)
+        self.assertEqual(pruned.nodes["n1"].children, [])
+        self.assertNotIn("n1a", pruned.nodes)
+        self.assertNotIn("n1b", pruned.nodes)
+        self.assertIn("n2", pruned.nodes)
+        self.assertEqual(pruned.nodes["n2"].children, ["n2a", "n2b"])
+        self.assertEqual(pruned.nodes["g"].children, ["n1", "n2"])
+        ok, errors = pruned.validate()
+        self.assertTrue(ok, f"裁剪后应合法: {errors}")
+
+    def test_graft_subtree(self):
+        dag = sample_dag()
+        # 新子树：根 r 分解出 r1, r2（模拟 LLM 重写 n1）
+        new_nodes = {
+            "r": BlueprintNode("r", "and", "证明平方非负", ["r1", "r2"], "重写"),
+            "r1": BlueprintNode("r1", "and", "x^2 非负的代数证明", [], "叶子"),
+            "r2": BlueprintNode("r2", "and", "x^2 非负的几何证明", [], "叶子"),
+        }
+        new_dag = BlueprintDAG(new_nodes, root_id="r")
+        merged = dag._graft_subtree("n1", new_dag, id_prefix="r0")
+        self.assertIsNotNone(merged)
+        # n1 的 children 指向新节点（加前缀）
+        self.assertEqual(merged.nodes["n1"].children, ["r0_r1", "r0_r2"])
+        self.assertIn("r0_r1", merged.nodes)
+        self.assertIn("r0_r2", merged.nodes)
+        self.assertNotIn("n1a", merged.nodes)  # 旧子树已摘除
+        self.assertEqual(merged.nodes["n2"].children, ["n2a", "n2b"])  # 其他分支不动
+        ok, errors = merged.validate()
+        self.assertTrue(ok, f"拼接后应合法: {errors}")
+        # 原 DAG 未被污染
+        self.assertIn("n1a", dag.nodes)
+        self.assertEqual(dag.nodes["n1"].children, ["n1a", "n1b"])
+
+    def test_graft_invalid_new_dag(self):
+        dag = sample_dag()
+        self.assertIsNone(dag._graft_subtree("n1", None, id_prefix="r0"))
+        # 新 DAG 根不存在于自身节点 → 拒绝
+        empty = BlueprintDAG({}, root_id="r")
+        self.assertIsNone(dag._graft_subtree("n1", empty, id_prefix="r0"))
+        # root_id 不存在于原图 → 拒绝
+        new_dag = BlueprintDAG({"r": BlueprintNode("r", "and", "x", [])}, root_id="r")
+        self.assertIsNone(dag._graft_subtree("zzz", new_dag, id_prefix="r0"))
+
+    def test_regenerate_subtree_mock(self):
+        """mock LLM：子树重写成功 → 只动 LCA 子树，其他节点保留。"""
+        cfg = SimpleNamespace(
+            use_blueprint=True, use_blueprint_dag=True,
+            enable_dag_replan=True, dag_replan_max_rounds=2,
+            use_leansearch=False, theorem_memory_enable=False,
+        )
+        new_dag_json = json.dumps({
+            "root_id": "r",
+            "nodes": [
+                {"id": "r", "type": "and", "statement": "证明平方非负",
+                 "children": ["r1", "r2"], "rationale": "重写"},
+                {"id": "r1", "type": "and", "statement": "x^2 非负的代数证明", "children": []},
+                {"id": "r2", "type": "and", "statement": "x^2 非负的几何证明", "children": []},
+            ],
+        }, ensure_ascii=False)
+
+        class MockClient:
+            def __init__(self):
+                self.calls = 0
+
+            def chat(self, *a, **kw):
+                self.calls += 1
+                return new_dag_json
+
+        client = MockClient()
+        planner = BlueprintPlannerAgent(client, cfg)
+        ctx = make_ctx()
+        result = planner.regenerate_subtree(
+            ctx, prior_dag=sample_dag(), rejected_ids=["n1a", "n1b"],
+            feedback_lines=["[n1a] 粒度太粗", "[n1b] 循环风险"])
+        self.assertIsNotNone(result)
+        # 只重写了 n1 子树（前缀 r0_），n2 分支原样
+        self.assertNotIn("n1a", result.nodes)
+        self.assertIn("r0_r1", result.nodes)
+        self.assertEqual(result.nodes["n2"].children, ["n2a", "n2b"])
+        self.assertEqual(result.nodes["g"].children, ["n1", "n2"])
+
+    def test_regenerate_subtree_root_lca_fallback(self):
+        """LCA=根 → 退化为整树重生成（mock 返回新 DAG）。"""
+        cfg = SimpleNamespace(
+            use_blueprint=True, use_blueprint_dag=True,
+            enable_dag_replan=True, dag_replan_max_rounds=2,
+            use_leansearch=False, theorem_memory_enable=False,
+        )
+        new_dag_json = json.dumps({
+            "root_id": "g2",
+            "nodes": [
+                {"id": "g2", "type": "and", "statement": "证明 f(x)=x^2 非负",
+                 "children": ["m1"], "rationale": "全新分解"},
+                {"id": "m1", "type": "and", "statement": "平方非负新证法", "children": []},
+            ],
+        }, ensure_ascii=False)
+
+        class MockClient:
+            def chat(self, *a, **kw):
+                return new_dag_json
+
+        client = MockClient()
+        planner = BlueprintPlannerAgent(client, cfg)
+        ctx = make_ctx()
+        # n1a 与 n2a 的 LCA 是根 → 整树
+        result = planner.regenerate_subtree(
+            ctx, prior_dag=sample_dag(), rejected_ids=["n1a", "n2a"],
+            feedback_lines=["[n1a] 粒度太粗"])
+        self.assertIsNotNone(result)
+        self.assertIn("m1", result.nodes)
+        self.assertNotIn("n1", result.nodes)
+
+
 if __name__ == "__main__":
     unittest.main()

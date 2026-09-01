@@ -177,6 +177,11 @@ class DagReviewerAgent(BaseAgent):
         self._reject_thr = float(getattr(config, "dag_review_reject_thr",
                                           REJECT_REPLAN_THRESHOLD)
                                   or REJECT_REPLAN_THRESHOLD)
+        # 绝对 reject 阈值也可配置（冒烟 006：3/13=23% 仍触发重生成 → 大图偏严，
+        # 默认保持 3 不动，等真实 A/B 数据再决定是否收紧）
+        self._reject_count_thr = int(getattr(config, "dag_review_reject_count",
+                                              REJECT_REPLAN_COUNT)
+                                      or REJECT_REPLAN_COUNT)
 
     # ----------------------------------------------------------
     # BaseAgent 抽象方法实现：包装 review() 入口（与 orchestrator 集成时用）
@@ -233,15 +238,18 @@ class DagReviewerAgent(BaseAgent):
 
         report = DagReviewReport(results=results)
         ctx.dag_review_report = report.to_dict()
+        replan_flag = report.should_replan(self._reject_thr,
+                                           self._reject_count_thr)
         self.record(
             ctx, "dag_review",
             f"DAG 评审: total={len(results)} "
             f"reject={report.reject_count}/{len(results)} "
             f"({report.reject_ratio:.0%}), "
             f"llm_skipped={len(llm_skipped)}, "
-            f"should_replan={report.should_replan(self._reject_thr)}",
-            dag_review_replan=report.should_replan(self._reject_thr),
+            f"should_replan={replan_flag}",
+            dag_review_replan=replan_flag,
             dag_review_reject_ratio=round(report.reject_ratio, 3),
+            dag_review_reject_count=report.reject_count,
         )
         return report
 

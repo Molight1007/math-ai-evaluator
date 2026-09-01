@@ -283,7 +283,17 @@ class SubGoalSolverAgent(BaseAgent):
         return ctx
 
     def _review_and_maybe_replan(self, ctx, dag=None, max_replan_rounds: int = 2) -> bool:
-        """评审 DAG + 必要时整树重生成；返回是否触发了重生成。"""
+        """评审 DAG + 三级动态修复（#34 老师要求："dag 蓝图不能是死的"）。
+
+        三级漏斗（由精准到全局，LEAP 2.5 子树回溯 + 5.3 reviewer 信号）：
+          1. 子树级局部重写：只重写 reject 节点所在子树（LCA），其余保留
+          2. 整树重生成：子树修不动 / 波及根 → 全图重写（带全部 hint）
+          3. 硬上限防死循环
+
+        判定信号（DagReviewer）：
+          - reject_count >= 3（绝对）或 reject_ratio >= 40%（相对）→ 触发修复
+        返回是否触发了任何修复。
+        """
         from .dag_reviewer import DagReviewerAgent
         from .blueprint_planner import BlueprintDAG
         reviewer = DagReviewerAgent(self.client, self.config)
@@ -305,11 +315,13 @@ class SubGoalSolverAgent(BaseAgent):
         report = reviewer.review(ctx, dag, results_map=results_map)
         if not report.should_replan():
             return False
-        # 2) 应重生成：聚合 hint，加 budget 闸 + 硬上限
+        # 2) 应修复：聚合 hint + rejected 节点（"错误的地方 + 原因"）
         from .blueprint_planner import (
             BlueprintPlannerAgent, BlueprintDAG)
         planner = BlueprintPlannerAgent(self.client, self.config)
-        feedback_lines = report.merge_from_hints().split("\n") if report.merge_from_hints() else []
+        rejected_ids = report.rejected_nodes()
+        hints = report.merge_from_hints()
+        feedback_lines = hints.split("\n") if hints else []
         if not feedback_lines:
             feedback_lines.append(
                 "请提供粒度更细、子目标间无循环、可独立证明的 DAG")
@@ -320,8 +332,29 @@ class SubGoalSolverAgent(BaseAgent):
         for round_idx in range(replan_rounds):
             if not ctx.budget or not ctx.budget.can_spend(2):
                 self.record(ctx, "dag_replan",
-                            f"DAG 重生成预算不足，提前停止 (round={round_idx + 1})")
+                            f"DAG 修复预算不足，提前停止 (round={round_idx + 1})")
                 return False
+            # 3a) 先试子树级局部重写（精准修改，不动好的部分）
+            if rejected_ids:
+                new_dag = planner.regenerate_subtree(
+                    ctx, prior_dag=dag, rejected_ids=rejected_ids,
+                    feedback_lines=feedback_lines)
+                if new_dag is not None:
+                    dag = new_dag
+                    self.record(ctx, "dag_replan",
+                                f"DAG 子树重写: {len(dag.nodes)} 节点, "
+                                f"rejected={rejected_ids[:5]}")
+                    # 重写后再评审一次：通过则停，否则升级整树
+                    report2 = reviewer.review(ctx, dag, results_map={})
+                    if not report2.should_replan():
+                        self.record(ctx, "dag_replan",
+                                    "子树重写后 DAG 通过评审，停止修复")
+                        return True
+                    feedback_lines = (report2.merge_from_hints().split("\n")
+                                      if report2.merge_from_hints() else feedback_lines)
+                    rejected_ids = report2.rejected_nodes()
+                    continue  # 子树修不动 → 下一轮升级整树
+            # 3b) 整树重生成（子树修不动 / 无 reject 明细时兜底）
             new_dag = planner.regenerate_with_feedback(
                 ctx, prior_dag=dag, feedback_lines=feedback_lines)
             if new_dag is None:
@@ -329,7 +362,7 @@ class SubGoalSolverAgent(BaseAgent):
                 return True  # 已尝试过，标记触发
             dag = new_dag
             self.record(ctx, "dag_replan",
-                        f"DAG 第 {round_idx + 1}/{replan_rounds} 轮重生成: "
+                        f"DAG 第 {round_idx + 1}/{replan_rounds} 轮整树重生成: "
                         f"{len(new_dag.nodes)} 节点, root={new_dag.root_id}")
             # 重生成后再评审一次，避免死循环（重写还拒 → 停）
             new_plan = new_dag.to_subgoal_plan()
