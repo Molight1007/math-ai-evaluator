@@ -171,6 +171,25 @@ class _Evaluator(ast.NodeVisitor):
         raise ValueError(f"不允许的语法节点: {type(node).__name__}")
 
 
+# 净化用正则：剥离非 ASCII（中文/全角标点/全角乘除号）与 = 尾巴
+_NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
+_TRAIL_TAIL_RE = re.compile(r"[=＝].*$")          # 截断 "3-1=2" 的 = 尾巴
+_WS_RE = re.compile(r"\s+")
+
+
+def _clean_expr(expr: str) -> str:
+    """净化被污染的 <calc> 表达式（仅当直接求值失败时调用）。
+
+    剥离中文/全角标点、截断 = 尾巴、压缩空白；**保留 ASCII 全部字符**
+    （`*`、`,`、`(` 等都是合法语法，删了会算出错误值）。
+    返回净化后表达式；若没有可净化内容返回原串（此时调用方不重试）。
+    """
+    cleaned = _NON_ASCII_RE.sub("", expr)
+    cleaned = _TRAIL_TAIL_RE.sub("", cleaned)
+    cleaned = _WS_RE.sub("", cleaned)
+    return cleaned
+
+
 def safe_eval(expr: str) -> str:
     """安全求值 <calc> 表达式，返回精确结果字符串。
 
@@ -205,6 +224,7 @@ def resolve_all_calcs(text: str) -> tuple[str, list[tuple[str, str]]]:
     """扫描文本中的 <calc> 块，全部求值，返回 (回填后的文本, [(表达式, 结果)]).
 
     回填规则：<calc>expr</calc> → [计算] expr = 结果（保留可读性）。
+    若直接求值失败（模型在块里塞了中文/标点/等号），尝试净化后重试一次。
     """
     blocks = extract_calc_blocks(text)
     if not blocks:
@@ -213,6 +233,13 @@ def resolve_all_calcs(text: str) -> tuple[str, list[tuple[str, str]]]:
     out = text
     for expr in blocks:
         result = safe_eval(expr)
-        resolved.append((expr, result))
-        out = out.replace(f"<calc>{expr}</calc>", f"[计算] {expr} = {result}", 1)
+        shown = expr
+        if result.startswith("ERROR:"):
+            cleaned = _clean_expr(expr)
+            if cleaned and cleaned != expr:
+                retry = safe_eval(cleaned)
+                if not retry.startswith("ERROR:"):
+                    result, shown = retry, cleaned
+        resolved.append((shown, result))
+        out = out.replace(f"<calc>{expr}</calc>", f"[计算] {shown} = {result}", 1)
     return out, resolved
