@@ -206,6 +206,111 @@ class BlueprintDAG:
             stack.extend(parents.get(p, []))
         return result
 
+    # ---------------- 子树级局部重写（#34 第二级，LEAP 2.5） ----------------
+    def _subtree_ids(self, root_id: str) -> set:
+        """返回以 root_id 为根的子树内全部节点 id（含 root 自身）。"""
+        out, stack = set(), [root_id]
+        while stack:
+            nid = stack.pop()
+            if nid in out:
+                continue
+            out.add(nid)
+            node = self.nodes.get(nid)
+            if node:
+                stack.extend(node.children)
+        return out
+
+    def _lca(self, node_ids) -> Optional[str]:
+        """最低公共祖先：所有 node 的祖先集合（含自身）交集中深度最大的。
+
+        深度用祖先数衡量（祖先越多 = 越深）。用于"只重写 reject 节点所在子树"：
+        以 LCA 为子树根重写，保证覆盖所有被拒节点、又最小化波及范围。
+        """
+        ids = [n for n in node_ids if n in self.nodes]
+        if not ids:
+            return None
+        common = set(self._ancestors(ids[0])) | {ids[0]}
+        for nid in ids[1:]:
+            common &= (self._ancestors(nid) | {nid})
+        if not common:
+            return None
+        return max(common, key=lambda n: len(self._ancestors(n)))
+
+    def _prune_subtree(self, root_id: str) -> "BlueprintDAG":
+        """摘除 root_id 的整棵子树（root 自身保留为'待重分解'锚点）。
+
+        返回裁剪后的 DAG：root_id 保留但其 children 清空（等待 LLM 重新分解），
+        子树内其余节点全部删除；其余节点与边原样保留。
+        """
+        subtree = self._subtree_ids(root_id)
+        nodes = {}
+        for nid, node in self.nodes.items():
+            if nid in subtree and nid != root_id:
+                continue  # 摘除
+            # 过滤子引用：被摘除的节点从 children 中移除；root_id 自身保留
+            kept_children = [
+                c for c in node.children
+                if c not in subtree or c == root_id]
+            nodes[nid] = BlueprintNode(
+                id=nid, node_type=node.node_type, statement=node.statement,
+                children=kept_children if nid != root_id else [],
+                rationale=node.rationale,
+            )
+        return BlueprintDAG(
+            nodes=nodes, root_id=self.root_id,
+            merge_strategy=self.merge_strategy,
+            problem_analysis=self.problem_analysis,
+        )
+
+    def _graft_subtree(self, root_id: str,
+                       new_dag: "BlueprintDAG",
+                       id_prefix: str = "r") -> Optional["BlueprintDAG"]:
+        """把新分解的子树接到 root_id 下（子树级局部重写最后一步）。
+
+        new_dag：LLM 重新分解的子树（根节点 statement 应 ≈ root_id 的 statement）。
+        返回拼接后的完整 DAG；结构非法返回 None。
+
+        id 冲突处理：新子树非根节点统一加 id_prefix 前缀，避免与现存节点撞名。
+        """
+        if new_dag is None or not new_dag.nodes or new_dag.root_id not in new_dag.nodes:
+            return None
+        new_root = new_dag.nodes[new_dag.root_id]
+        # 收集新子树的非根节点，加前缀重命名（children 同步重写）
+        renamed: dict = {}
+        for nid, node in new_dag.nodes.items():
+            if nid == new_dag.root_id:
+                continue
+            new_id = f"{id_prefix}_{nid}"
+            renamed[new_id] = BlueprintNode(
+                id=new_id, node_type=node.node_type, statement=node.statement,
+                children=[f"{id_prefix}_{c}" if c in new_dag.nodes else c
+                          for c in node.children],
+                rationale=node.rationale,
+            )
+        # 先摘除 root_id 的旧子树（root 保留为锚点），避免旧节点残留
+        base = self._prune_subtree(root_id) if root_id in self.nodes else self
+        # 深拷贝现存节点，避免污染入参 DAG
+        nodes = {}
+        for nid, node in base.nodes.items():
+            nodes[nid] = BlueprintNode(
+                id=nid, node_type=node.node_type, statement=node.statement,
+                children=list(node.children), rationale=node.rationale,
+            )
+        if root_id not in nodes:
+            return None
+        # root_id 的 children 换成新根的子节点（新根自身不落盘，仅作为分解锚点）
+        nodes[root_id].children = [
+            f"{id_prefix}_{c}" if c in new_dag.nodes else c
+            for c in new_root.children]
+        nodes.update(renamed)
+        merged = BlueprintDAG(
+            nodes=nodes, root_id=self.root_id,
+            merge_strategy=self.merge_strategy,
+            problem_analysis=self.problem_analysis,
+        )
+        ok, _ = merged.validate()
+        return merged if ok else None
+
     @staticmethod
     def _short(text: str, limit: int = 40) -> str:
         t = " ".join(text.split())
@@ -660,4 +765,123 @@ class BlueprintPlannerAgent(BaseAgent):
 
         self.record(ctx, "blueprint_replan",
                     f"DAG 重生成 {max_attempts} 次尝试均失败")
+        return None
+
+    # ----------------------------------------------------------
+    # 子树级局部重写（#34 第二级，LEAP 2.5 核心："子树缺陷 → DFS 回溯"）
+    #
+    # 与整树重生成的区别：
+    #   - 整树：reject 多 / 根级结构错误 → 全推倒重来（改动大，误伤好的部分）
+    #   - 子树：只定位"错在哪"（LCA 最低公共祖先），只重写该子树，
+    #     其余节点原样保留（改动精准，不误伤）
+    #
+    # 输入：
+    #   - prior_dag: 当前 BlueprintDAG
+    #   - rejected_ids: DagReviewer 判 reject 的节点 id 列表（"错误的地方"）
+    #   - feedback_lines: 聚合的 reconstruction_hint（"错误的原因"，注入提示词）
+    #
+    # 策略：
+    #   1. 计算 rejected_ids 的 LCA。若 LCA 是根 → 波及全图，退化为整树重生成。
+    #   2. 否则 _prune_subtree(LCA) 摘除该子树（保留 LCA 锚点），
+    #      让 LLM 只针对"LCA 这一层如何分解"重新生成子树。
+    #   3. _graft_subtree 接回，validate 通过才返回。
+    # ----------------------------------------------------------
+    def regenerate_subtree(self, ctx: TaskContext,
+                           prior_dag: "BlueprintDAG",
+                           rejected_ids: list,
+                           feedback_lines: list,
+                           max_attempts: int = 3) -> Optional["BlueprintDAG"]:
+        """基于评审反馈**局部重写**被拒节点所在子树（其余节点保留）。"""
+        if ctx.budget is not None and not ctx.budget.can_spend(1):
+            self.record(ctx, "blueprint_subtree", "预算不足，跳过子树重写")
+            return None
+        if not rejected_ids:
+            return None
+        try:
+            from prompts.blueprint import BLUEPRINT_SUBTREE_USER_TEMPLATE
+        except ImportError:
+            from submit.prompts.blueprint import BLUEPRINT_SUBTREE_USER_TEMPLATE
+
+        lca = prior_dag._lca(rejected_ids)
+        if lca is None:
+            return None
+        # 波及根 → 直接整树（子树重写无意义）
+        if lca == prior_dag.root_id:
+            self.record(ctx, "blueprint_subtree",
+                        "LCA=根，退化整树重生成")
+            return self.regenerate_with_feedback(
+                ctx, prior_dag, feedback_lines, max_attempts=max_attempts)
+        lca_node = prior_dag.nodes[lca]
+
+        # 反馈块：只保留"位于该子树内"的 reject 节点 hint（减少噪声）
+        subtree_ids = prior_dag._subtree_ids(lca)
+        feedback_block_lines = []
+        for line in (feedback_lines or []):
+            for nid in subtree_ids:
+                if line.startswith(f"[{nid}]"):
+                    feedback_block_lines.append(line)
+                    break
+        if not feedback_block_lines:
+            feedback_block_lines = list(feedback_lines or [])[:6]
+        feedback_block = "\n".join(
+            f"  - {line}" for line in feedback_block_lines) or "  （无明确反馈，请自行审视）"
+
+        user_msg = BLUEPRINT_SUBTREE_USER_TEMPLATE.format(
+            problem=(ctx.problem or "")[:2000],
+            root_id=lca,
+            target_statement=lca_node.statement,
+            feedback_block=feedback_block,
+        )
+        # prefill 锚定（子树也是标准 DAG JSON 结构）
+        _PREFILL = '{"root_id": "r", "nodes": ['
+        for attempt in range(max_attempts):
+            if not ctx.budget.can_spend(1):
+                self.record(ctx, "blueprint_subtree", "重写预算耗尽，终止")
+                return None
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    _PREFILL,
+                ),
+                0.2, 6144,
+            )
+            if resp:
+                resp = stitch(_PREFILL, resp)
+            if not resp:
+                continue
+            raw = extract_json(resp)
+            if raw is None:
+                logger.warning("BlueprintSubtree: JSON 解析失败 (attempt %d)", attempt + 1)
+                continue
+            new_dag = parse_blueprint(raw)
+            if new_dag is None:
+                logger.warning("BlueprintSubtree: DAG 结构非法 (attempt %d)", attempt + 1)
+                continue
+            # 新子树根 statement 应 ≈ 被重写的目标节点（防止模型跑题）
+            new_root_stmt = (new_dag.nodes.get(new_dag.root_id)
+                             or new_dag.nodes[next(iter(new_dag.nodes))]).statement.strip()
+            tgt_stmt = lca_node.statement.strip()
+            if new_root_stmt and tgt_stmt and new_root_stmt[:30] != tgt_stmt[:30]:
+                logger.warning(
+                    "BlueprintSubtree: 新根 statement 与目标不符 (%s != %s), attempt %d",
+                    new_root_stmt[:30], tgt_stmt[:30], attempt + 1)
+                continue
+            # 接回原图
+            merged = prior_dag._graft_subtree(lca, new_dag, id_prefix=f"r{attempt}")
+            if merged is None:
+                logger.warning("BlueprintSubtree: 拼接校验失败 (attempt %d)", attempt + 1)
+                continue
+            ctx.blueprint = merged.to_dict()
+            self.record(ctx, "blueprint_subtree",
+                        f"子树重写成功: LCA={lca}, "
+                        f"原 {len(prior_dag.nodes)} 节点 → {len(merged.nodes)} 节点, "
+                        f"reject_ids={rejected_ids[:5]}")
+            return merged
+
+        self.record(ctx, "blueprint_subtree",
+                    f"子树重写 {max_attempts} 次尝试均失败, LCA={lca}")
         return None
