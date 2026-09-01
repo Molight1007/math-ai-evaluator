@@ -280,7 +280,14 @@ class TestReviewFullFlow(unittest.TestCase):
                                for i in range(3)} | {
             f"y{i}": DagReviewResult(f"y{i}", "accept", 0.9) for i in range(7)
         })
-        self.assertTrue(r4.should_replan())  # 3 reject 绝对数超阈值
+        # 9/1 阈值 3→5：3/10=30% 不触发（原 count>=3 误卡低比例大图，见冒烟 006/017/027）
+        self.assertFalse(r4.should_replan())
+        # 5 reject + 5 accept = 50% → 比例触发
+        r5 = DagReviewReport({f"x{i}": DagReviewResult(f"x{i}", "reject", 0.2)
+                               for i in range(5)} | {
+            f"y{i}": DagReviewResult(f"y{i}", "accept", 0.9) for i in range(5)
+        })
+        self.assertTrue(r5.should_replan())  # 5/10=50% ≥ 40%
 
     def test_merge_from_hints(self):
         report = DagReviewReport({

@@ -56,7 +56,8 @@ MIN_STATEMENT_CHARS = 8
 # 评审触发比：reject >= 该比例 → 提示整树重生成（Stage 4 调度层使用）
 REJECT_REPLAN_THRESHOLD = 0.40
 # 评审触发数：reject 节点数 >= 该绝对值 → 提示整树重生成
-REJECT_REPLAN_COUNT = 3
+# 9/1 用户拍板 3→5：006/017/027 冒烟实锤——24-31% 比例的 DAG 被绝对数 3 误卡
+REJECT_REPLAN_COUNT = 5
 
 # ============================================================
 # 数据结构

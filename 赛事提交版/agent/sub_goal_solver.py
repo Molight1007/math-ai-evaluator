@@ -291,7 +291,7 @@ class SubGoalSolverAgent(BaseAgent):
           3. 硬上限防死循环
 
         判定信号（DagReviewer）：
-          - reject_count >= 3（绝对）或 reject_ratio >= 40%（相对）→ 触发修复
+          - reject_count >= 5（绝对，9/1 由 3 调高）或 reject_ratio >= 40%（相对）→ 触发修复
         返回是否触发了任何修复。
         """
         from .dag_reviewer import DagReviewerAgent
