@@ -54,7 +54,12 @@ def find_lake() -> str:
 
 
 def get_deps(project: str, entry: str = "Mathlib/Tactic") -> list[str]:
-    """取入口模块的传递依赖 olean 路径（一次只能传一个文件）。"""
+    """取入口模块的传递依赖 olean 路径（一次只能传一个文件）。
+
+    2026-09-01 修复：``lean --deps`` 只输出**依赖**模块，不含入口模块自身
+    （如 Mathlib/Tactic.olean），导致 17bb4db 闭包缺根文件、import 失败。
+    此处显式补上入口模块的 olean（若存在于 build 产物中）。
+    """
     lake = find_lake()
     if not lake:
         print("[error] 未找到 lake", file=sys.stderr)
@@ -66,8 +71,14 @@ def get_deps(project: str, entry: str = "Mathlib/Tactic") -> list[str]:
     if proc.returncode != 0:
         print(f"[error] --deps 失败: {(proc.stderr or '')[:400]}", file=sys.stderr)
         return []
-    return sorted({os.path.normpath(x.strip())
-                   for x in proc.stdout.splitlines() if x.strip()})
+    deps = {os.path.normpath(x.strip())
+            for x in proc.stdout.splitlines() if x.strip()}
+    # 补入口模块自身：import Mathlib.Tactic 需要 Mathlib/Tactic.olean
+    entry_olean = os.path.normpath(
+        os.path.join(project, ".lake", "build", "lib", "lean", entry + ".olean"))
+    if os.path.exists(entry_olean):
+        deps.add(entry_olean)
+    return sorted(deps)
 
 
 def package(deps: list[str], project: str, out_dir: str) -> tuple[int, int]:
@@ -75,7 +86,12 @@ def package(deps: list[str], project: str, out_dir: str) -> tuple[int, int]:
 
     返回 (拷贝文件数, 总字节)。
     """
-    build_lib = os.path.normpath(os.path.join(project, ".lake", "build", "lib"))
+    build_lib = os.path.normpath(
+        os.path.join(project, ".lake", "build", "lib", "lean"))
+    # 兼容无 lean/ 前缀的旧 build 结构
+    if not os.path.isdir(build_lib):
+        build_lib = os.path.normpath(
+            os.path.join(project, ".lake", "build", "lib"))
     n = total = 0
     for src in deps:
         if not os.path.exists(src):
