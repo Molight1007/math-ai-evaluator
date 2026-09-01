@@ -286,7 +286,7 @@ class SolverAgent(BaseAgent):
                 simple_msgs = [
                     {"role": "system",
                      "content": "你是一个数学解题助手。请求解题目并直接输出最终答案（可含简要步骤）。"},
-                    {"role": "user", "content": user + FEWSHOT_SECTION},
+                    {"role": "user", "content": user},
                 ]
                 resp2 = self.llm(ctx, simple_msgs, max(temperature, 0.2), max_tokens)
                 if resp2 and resp2.strip():
