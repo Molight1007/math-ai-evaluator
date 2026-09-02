@@ -237,6 +237,11 @@ class AgentConfig:
     use_leansearch: bool = True
     # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
     use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
+    # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
+    # 蓝图生成后先提交 LLM 审查子目标是否不适定 / 难度>=原题；有问题重生成再确认，
+    # 通过后才进语法审核。默认开启（老师明确要求）。LLM 失败/预算不足降级放行不阻断。
+    enable_skeleton_review: bool = True
+    skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
     # ---- Stage 3 迭代精炼 + lemma 记忆（#29/#30/#32/#33）----
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
     use_refiner: bool = False               # 整树搭桥后执行 Stage 3 sorry 迭代精炼（#32，默认关闭先试）
@@ -401,6 +406,8 @@ class ReasoningAgent:
             # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
             # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
             "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
+            # 骨架编排层评审（老师 9/2 建议：求解前规划质量门，2026-09-02）
+            "enable_skeleton_review", "skeleton_review_max_rounds",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
             # Algebra 专项

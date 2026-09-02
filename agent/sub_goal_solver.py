@@ -508,6 +508,14 @@ class SubGoalSolverAgent(BaseAgent):
         dag = planner.generate_blueprint(ctx)
         if dag is None:
             return None
+        # 老师 9/2 建议：骨架编排层 review（求解前规划质量门）。
+        # 生成骨架后先提交 LLM 审查：子目标是否不适定 / 求解难度是否 >= 原问题；
+        # 有问题 → 带评审反馈重新生成骨架 → 再 review 确认；
+        # 通过后才进入下方语法审核（_audit_blueprint_tree）与子目标求解。
+        if getattr(self.config, "enable_skeleton_review", True):
+            dag = self._skeleton_review_loop(ctx, dag, planner)
+            if dag is None:
+                return None
         plan = dag.to_subgoal_plan()
         if not plan.get("subgoals"):
             logger.warning("Blueprint DAG 无可用叶子子目标")
@@ -520,6 +528,48 @@ class SubGoalSolverAgent(BaseAgent):
                     f"Blueprint DAG → {len(plan['subgoals'])} 个子目标 "
                     f"(根={dag.root_id}, 节点={len(dag.nodes)})")
         return plan
+
+    def _skeleton_review_loop(self, ctx: TaskContext, dag,
+                              planner, max_rounds: int = 2):
+        """骨架编排层评审循环（老师 9/2 建议：求解前规划质量门）。
+
+        评审 → 不过 → 带评审反馈重生成骨架 → 再评审，最多 max_rounds 轮。
+        结束条件：评审通过 / 预算不足 / LLM 降级 → 返回当前 DAG。
+        评审是质量增强门（非正确性门）：失败降级放行，不阻断主流程。
+        """
+        max_rounds = int(getattr(self.config, "skeleton_review_max_rounds",
+                                 max_rounds) or max_rounds)
+        max_rounds = max(1, max_rounds)
+        for round_idx in range(max_rounds):
+            from .skeleton_reviewer import SkeletonReviewerAgent
+            reviewer = SkeletonReviewerAgent(self.client, self.config)
+            report = reviewer.review(ctx, dag)
+            if not report.should_regenerate():
+                if report.degraded:
+                    self.record(ctx, "skeleton_review",
+                                f"骨架评审降级/预算不足（round={round_idx + 1}），放行")
+                else:
+                    self.record(ctx, "skeleton_review",
+                                f"骨架评审通过（round={round_idx + 1}），进入语法审核")
+                return dag
+            if ctx.budget is not None and not ctx.budget.can_spend(2):
+                self.record(ctx, "skeleton_review",
+                            "骨架重生成预算不足，保留当前骨架")
+                return dag
+            feedback_lines = report.feedback_lines()
+            new_dag = planner.regenerate_with_feedback(
+                ctx, prior_dag=dag, feedback_lines=feedback_lines)
+            if new_dag is None:
+                self.record(ctx, "skeleton_review",
+                            f"第 {round_idx + 1} 轮骨架重生成失败，保留当前骨架")
+                return dag
+            dag = new_dag
+            self.record(ctx, "skeleton_review",
+                        f"骨架第 {round_idx + 1}/{max_rounds} 轮重生成: "
+                        f"{len(dag.nodes)} 节点")
+        self.record(ctx, "skeleton_review",
+                    f"骨架评审达硬上限 {max_rounds} 轮，采用末轮骨架")
+        return dag
 
     def _audit_blueprint_tree(self, ctx: TaskContext, dag) -> None:
         """用 LeanTranslatorAgent 对 DAG 做整树翻译+审核（安全降级）。
