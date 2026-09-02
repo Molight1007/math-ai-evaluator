@@ -98,6 +98,19 @@ _LATEX_SYMBOL_MAP = {
     r"\Delta": "Δ", r"\lambda": "λ", r"\sqrt": "√",
 }
 
+# 数学函数命令 → 剥反斜杠（\ln → ln）。2026-09-02 补：
+# Q1(0466) 模型输出 \ln 而 gold 是纯文本 ln，字符串/sympy 全不匹配
+# → expr_wrong 假阴性（45 题 expr_wrong 里可能混有同类误伤）。
+# 长命令先替换避免子串误伤（\arcsin 先于 \sin）；\operatorname{ln} 单独正则处理。
+_FUNC_CMDS = (
+    r"\arcsin", r"\arccos", r"\arctan",
+    r"\sinh", r"\cosh", r"\tanh",
+    r"\ln", r"\log", r"\lg", r"\exp",
+    r"\sin", r"\cos", r"\tan", r"\cot", r"\sec", r"\csc",
+    r"\lim", r"\max", r"\min", r"\sup", r"\inf",
+    r"\deg", r"\mod",
+)
+
 
 # 分式命令的等价写法：\dfrac / \tfrac / \cfrac 与 \frac 语义相同，
 # 不归一化会让「模型答对了但判分器判错」（实测 45 条里至少 2 条属此类）。
@@ -124,6 +137,11 @@ def _clean_answer(text: str) -> str:
         text = text.replace(cmd, "")
     for cmd in _FRAC_ALIASES:
         text = text.replace(cmd, "\\frac")
+    # \operatorname{ln} → ln（函数命令的一种写法）
+    text = re.sub(r'\\operatorname\s*\{([^}]*)\}', r'\1', text)
+    # \ln → ln / \sin → sin（剥反斜杠；长命令在前已排序）
+    for cmd in _FUNC_CMDS:
+        text = text.replace(cmd, cmd[1:])
     for cmd, uni in _LATEX_SYMBOL_MAP.items():
         text = text.replace(cmd, uni)
     return text
@@ -284,6 +302,39 @@ def _matches_one(pred_f: str, gold_f: str) -> bool:
     return False
 
 
+def _option_letter_match(pred_f: str, gold_f: str) -> bool:
+    """选项类答案匹配（2026-09-02，Q2 假阴性修复）。
+
+    IMO 选择题：模型答 `\boxed{A}`，gold 是选项文本 `A. 绝对收敛`。
+    _norm_candidate 后是 'A' vs 'A.绝对收敛'，字符串/分数/浮点/sympy 均不匹配
+    → 答对却判 False（error_class=expr_wrong 误伤正确答案）。
+    规则（双向，pred/gold 互换检查）：
+      ① 单选项字母 'A' ↔ 选项文本 'A.绝对收敛' / 'A、绝对收敛' / 'A)绝对收敛'
+      ② 纯内容 '绝对收敛' ↔ 选项文本 'A.绝对收敛'（模型只答内容没写字母）
+    """
+    def _option_letter(s: str) -> Optional[str]:
+        m = re.match(r'^([A-Da-d])$', s)
+        return m.group(1).upper() if m else None
+
+    def _option_text(s: str) -> Optional[tuple]:
+        # 返回 (选项字母大写, 内容)；仅匹配 'X.' / 'X、' / 'X)' / 'X，' 分隔的选项文本
+        m = re.match(r'^([A-Da-d])[\.、\)，,]\s*(.+)$', s)
+        if m:
+            return m.group(1).upper(), m.group(2)
+        return None
+
+    if not pred_f or not gold_f:
+        return False
+    for p, g in ((pred_f, gold_f), (gold_f, pred_f)):
+        pl = _option_letter(p)
+        gt = _option_text(g)
+        if pl and gt and pl == gt[0]:
+            return True  # ① 字母 ↔ 选项文本
+        if gt and p == gt[1]:
+            return True  # ② 纯内容 ↔ 选项文本
+    return False
+
+
 def answers_match(pred: str, gold: str) -> bool:
     """多级答案匹配：字符串相等 → 分数等价 → 浮点近似 → SymPy 符号等价。
 
@@ -295,9 +346,15 @@ def answers_match(pred: str, gold: str) -> bool:
     gold_f = _norm_candidate(gold)
     if _matches_one(pred_f, gold_f):
         return True
+    # 选项类答案：'A' ↔ 'A.绝对收敛' / '绝对收敛' ↔ 'A.绝对收敛'（2026-09-02）
+    if _option_letter_match(pred_f, gold_f):
+        return True
     # 推导文本：提取 '= X' 结论逐个匹配
     for cand in _extract_equals_candidates(pred):
-        if _matches_one(_norm_candidate(cand), gold_f):
+        cand_f = _norm_candidate(cand)
+        if _matches_one(cand_f, gold_f):
+            return True
+        if _option_letter_match(cand_f, gold_f):
             return True
     return False
 
@@ -452,6 +509,8 @@ class EvalEngine:
         overrides = dict(DEFAULT_AGENT_OVERRIDES)
         if agent_overrides:
             overrides.update(agent_overrides)
+        # 保存生效覆盖（小样本自适应要用），避免二次重建时丢失
+        self._effective_overrides = overrides
         self.agent = ReasoningAgent(self.llm_client, **overrides)
         logger.info("EvalEngine init: %s, overrides=%s", self.llm_client, overrides)
         self.domain_stats: Dict[str, Dict[str, int]] = defaultdict(
@@ -528,6 +587,29 @@ class EvalEngine:
 
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:
         tests = self.load_tests(test_file)
+        # ---- 小样本自适应（2026-09-02，DAG 冒烟 2 题全败根因）----
+        # PaperPacer 用 paper_total_questions（45/112 全卷数）评估"卷面进度"，
+        # 小卷（--test_file 2 题）第 1 题一完成就误判"卷面落后"→ 单题软预算被
+        # 收紧到 ~200-500s → DAG 全链路（蓝图+评审+重写+子目标求解）跑不完
+        # → llm() budget_skip → [子目标求解失败]。
+        # 修正：实际题数 < 配置全卷数时，按实际题数重建 agent：
+        #   paper_total_questions = 实际题数；paper_target_time = 题数 × 1200
+        # （每题按单题硬限配足总池 → 进度判定恒为"正常"，每题拿满档位预算）。
+        # 45 题/112 题全卷基准不受影响（不触发）。
+        if tests:
+            cfg_total = int(self._effective_overrides.get(
+                "paper_total_questions", 0) or 0)
+            actual = len(tests)
+            if cfg_total and actual < cfg_total:
+                adapted = dict(self._effective_overrides)
+                adapted["paper_total_questions"] = actual
+                adapted["paper_target_time"] = actual * 1200
+                self.agent = ReasoningAgent(self.llm_client, **adapted)
+                self._effective_overrides = adapted
+                logger.info(
+                    "小样本自适应: 实际 %d 题 < 全卷 %d 题，重建 agent "
+                    "(paper_total_questions=%d, paper_target_time=%d)",
+                    actual, cfg_total, actual, actual * 1200)
         done_ids = set()
         results = []
         if self.resume and os.path.exists(output_file):

@@ -398,6 +398,9 @@ class ReasoningAgent:
             "lemma_domains",
             "max_answer_tokens", "revise_sample_times",
             "use_blueprint", "use_blueprint_dag", "use_sub_goal",
+            # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
+            # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
+            "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
             # 难题深度求解通道
             "enable_difficulty_router", "enable_llm_difficulty",
             # Algebra 专项
