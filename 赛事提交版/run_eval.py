@@ -478,24 +478,25 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "use_proof_channel": False,
     "use_lemma_accumulation": False,
     "by_enable_fast_path": True,
-    # ---- 本地卷档位预算（2026-09-02 晚二次修正）----
-    # 卷预算 54000s 后仍现占位符：真因是 LLM 超时（蓝图 max_tokens=6144，
-    # 120s 超时 ×3 次重试 = 360s+）直接耗尽 standard 档 540s 单题预算。
-    # 两路齐修：①utils/llm_client.py 超时 120→240s ②standard 档 540→900s
-    # （给 DAG 全链路 + 超时重试余量；fast 120 不变防简单题烧时间；
-    # deep 保持 1200 = 平台单题硬限）。仅本地评测生效，平台 112 题卷
-    # 仍在 user_agent.py 默认 tier_budget（fast 120/standard 540/deep 1200）。
-    "tier_budget": {"fast": 120.0, "standard": 900.0, "deep": 1200.0},
-    # ---- 全卷调度：本地 45 题小卷 ----
-    # 2026-09-02 晚修正：8680s（按 112 题平台配额折算）对现版本过紧——
-    # 骨架编排层评审（老师 9/2 建议）使每题多 1-3 次 LLM 调用与可能的重生成，
-    # 单题软预算 540-578s 内跑不完 DAG 全链路（蓝图+评审+子目标+验证）
-    # → llm() budget_skip → [子目标求解失败] 占位符（第一轮 9 题 3 个）。
-    # 改为 45×1200=54000s 总池：pacer 进度判定恒"正常"，每题拿满档位预算
-    # （fast 120 / standard 540 / deep 1200，deep 受单题硬限 1200s 封顶），
-    # 反映模型真实上限。仅影响本地评测（平台 112 题卷在 user_agent.py 配 21000s）。
+    # ---- 本地卷档位预算（2026-09-02 晚三次修正：对齐比赛限时）----
+    # 平台 112 题卷 tier_budget = fast 120 / standard 540 / deep 1200
+    # （user_agent.py 口径，#49 已 480→540 上调）。本地评测必须与平台一致，
+    # 否则"本地验证通过"不代表"比赛限时下可复现"。
+    # 历史：540→900 是配合 54000s 不限时总池的放宽，违背比赛时间模拟，
+    # 已回退。分时桶实测 >700s 档正确率 0%——多给时间不换正确率，
+    # standard 540s 足够覆盖 450s 内能解对的快题。
+    "tier_budget": {"fast": 120.0, "standard": 540.0, "deep": 1200.0},
+    # ---- 全卷调度：本地 45 题小卷（2026-09-02 三次修正：恢复比赛折算）----
+    # 用户要求：测试时间限制必须符合比赛要求，不能"不限时"。
+    # 折算口径（题·秒守恒）：平台 112 题卷 target 21000s × 并发 3 =
+    # 63000 题·秒 → 题均 562.5 题秒。45 题应得 45 × 562.5 = 25313 题秒，
+    # 本地 pacer 并发假设同为 3 → target = 25313 / 3 ≈ 8438s（≈2.34h）。
+    # 进度正常（elapsed/target ≤ 完成比例）时每题仍拿满档位预算；
+    # 全卷拖沓时自动收紧（MIN_SOFT=120s 保底防占位符）——与平台同机制。
+    # 历史：54000s（45×1200）="进度恒正常、每题吃满档"= 不限时，已废弃；
+    # 8680s 是旧平台 18000s 时代口径（×1.2 余量），现版平台 21000s 更新为 8438s。
     "paper_total_questions": 45,
-    "paper_target_time": 54000,
+    "paper_target_time": 8438,
     # 前置验证最多 2 次尝试（原默认 2 轮 = 3 次，每次 21s 编译 + LLM 调用，
     # 单题可烧掉 3-5 分钟；preverify 是「检查理解」不是「写论文」，1 轮足够）
     "preverify_max_rounds": 1,
@@ -630,25 +631,31 @@ class EvalEngine:
         # 收紧到 ~200-500s → DAG 全链路（蓝图+评审+重写+子目标求解）跑不完
         # → llm() budget_skip → [子目标求解失败]。
         # 修正：待评测题数 < 配置全卷数时，按待评测题数重建 agent：
-        #   paper_total_questions = 待评测题数；paper_target_time = 题数 × 1200
-        # （每题按单题硬限配足总池 → 进度判定恒为"正常"，每题拿满档位预算）。
+        #   paper_total_questions = 待评测题数；paper_target_time = 题数 ×
+        #   (全卷 target / 全卷题数)，保证小卷的"题均可用时间"与全卷一致。
         # 2026-09-02 晚修复：判定基准从 len(tests) 改为 len(pending)——
         # --resume 断点续跑时 tests 仍是全卷（45），若按全卷判定不触发自适应，
         # 剩余 36 题继续吃 45 题紧预算（~540s/题）→ 占位符重演。
+        # 2026-09-02 三次修正：target 由 54000 恢复比赛折算 8438（45/112×21000），
+        # 题均墙钟 8438/45 ≈ 187.5s（× 并发 3 = 562 题秒，与平台题均一致）。
         if pending:
             cfg_total = int(self._effective_overrides.get(
                 "paper_total_questions", 0) or 0)
+            cfg_target = float(self._effective_overrides.get(
+                "paper_target_time", 0) or 0)
             actual = len(pending)
             if cfg_total and actual < cfg_total:
+                per_q = cfg_target / max(1, cfg_total)
                 adapted = dict(self._effective_overrides)
                 adapted["paper_total_questions"] = actual
-                adapted["paper_target_time"] = actual * 1200
+                adapted["paper_target_time"] = max(120.0, int(actual * per_q))
                 self.agent = ReasoningAgent(self.llm_client, **adapted)
                 self._effective_overrides = adapted
                 logger.info(
                     "小样本自适应: 待评测 %d 题 < 全卷 %d 题，重建 agent "
-                    "(paper_total_questions=%d, paper_target_time=%d)",
-                    actual, cfg_total, actual, actual * 1200)
+                    "(paper_total_questions=%d, paper_target_time=%d, per_q=%.1fs)",
+                    actual, cfg_total, actual,
+                    int(adapted["paper_target_time"]), per_q)
         with ThreadPoolExecutor(max_workers=max(1, self.concurrency)) as executor:
             future_map = {executor.submit(self.solve_one, t): t for t in pending}
             for future in as_completed(future_map):

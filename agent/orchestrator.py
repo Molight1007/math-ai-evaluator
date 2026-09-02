@@ -97,6 +97,7 @@ class Orchestrator(BaseAgent):
                 self.pacer.end()
                 return safe_json_serialize({
                     "final_response": answer, "trace": ctx.trace,
+                    "diag": self._collect_diag(ctx),
                 })
             elapsed_total = time.time() - ctx.total_start_time
             total_budget = ctx.total_deadline - ctx.total_start_time
@@ -151,6 +152,7 @@ class Orchestrator(BaseAgent):
                 return safe_json_serialize({
                     "final_response": fast_result, "trace": ctx.trace,
                     "candidates": [], "verdicts": [],
+                    "diag": self._collect_diag(ctx),
                 })
 
             # 2.5) 难度路由：静态预判 + LLM 自评 → 三级档位（难题深度通道）
@@ -406,6 +408,7 @@ class Orchestrator(BaseAgent):
                         self.pacer.end(tier=tier)
                         return safe_json_serialize({
                             "final_response": direct_answer, "trace": ctx.trace,
+                            "diag": self._collect_diag(ctx),
                         })
                     best = self._pick_best_from_candidates(ctx)
                     if best:
@@ -413,6 +416,7 @@ class Orchestrator(BaseAgent):
                         self.pacer.end(tier=tier)
                         return safe_json_serialize({
                             "final_response": best, "trace": ctx.trace,
+                            "diag": self._collect_diag(ctx),
                         })
 
             # 5.5) 低置信度强制复核（v2.6 杀掉虚高置信度）：
@@ -472,45 +476,8 @@ class Orchestrator(BaseAgent):
                     "distinct_theorems": len(ctx.used_theorems or []),
                 },
                 # ---- 逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）----
-                # 打包各阶段中间状态：理解→蓝图→骨架评审→子目标→Lean→验证→预算。
-                # 由 run_eval.solve_one 落盘为结果行 diag 字段；tools/analyze_errors.py 消费。
-                "diag": {
-                    # ① 题型与档位
-                    "question_type": ctx.question_type or "",
-                    "domain": ctx.domain or "",
-                    "tier": getattr(ctx, "tier", "") or "",
-                    "tier_evidence": getattr(ctx, "tier_evidence", None) or {},
-                    "soft_budget": round(float(getattr(ctx, "soft_budget", 0) or 0), 1),
-                    # ② 题目理解（Lean 前置 preverify）
-                    "formal_spec": (ctx.formal_spec or "")[:600],
-                    "formal_gaps": list(ctx.formal_gaps or [])[:10],
-                    "preverify_trace": ctx.preverify_trace or {},
-                    # ③ 蓝图 DAG + 骨架评审 + DAG 评审
-                    "blueprint_nodes": len((ctx.blueprint or {}).get("nodes", []) or []),
-                    "blueprint_merge": (ctx.blueprint or {}).get("merge_strategy", ""),
-                    "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
-                    "dag_review": ctx.dag_review_report or {},
-                    "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
-                    # ④ 子目标求解（结构化轨迹）
-                    "subgoal_trace": ctx.subgoal_trace or [],
-                    "subgoal_merge_plan": (ctx.subgoal_merge_plan or "")[:300],
-                    "lemma_repo": list(ctx.lemma_repo or [])[:20],
-                    # ⑤ Lean 硬验证门禁
-                    "lean_gate": ctx.lean_gate or [],
-                    # ⑥ 候选/验证/自纠错
-                    "n_candidates": len(ctx.candidates or []),
-                    "n_verdicts": len(ctx.verdicts or []),
-                    "revise_round": getattr(ctx, "revise_round", 0),
-                    "revise_feedback": list(ctx.revise_feedback or [])[:20],
-                    # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
-                    "budget_skips": sum(1 for t in (ctx.trace or [])
-                                        if isinstance(t, dict) and t.get("step") == "budget_skip"),
-                    "degraded_flags": sum(1 for t in (ctx.trace or [])
-                                          if isinstance(t, dict)
-                                          and ("degrad" in str(t.get("step", "")).lower()
-                                               or "degrad" in str(t.get("content", "")).lower())),
-                    "placeholder": "[子目标求解失败]" in (ctx.final_response or ""),
-                },
+                # 统一由 _collect_diag 构建（全 getattr 兜底：提前 return / 异常路径也覆盖）
+                "diag": self._collect_diag(ctx),
             })
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
@@ -899,6 +866,52 @@ class Orchestrator(BaseAgent):
         "答案只写数值、表达式或选项字母，不要写任何解释或推理。"
     )
 
+    def _collect_diag(self, ctx: TaskContext) -> dict:
+        """逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）。
+
+        打包各阶段中间状态：理解→蓝图→骨架评审→子目标→Lean→验证→预算。
+        全部 getattr + 默认值兜底：任意提前 return / 异常路径下调用都安全
+        （TaskContext 各字段均有默认值，直接访问也不会崩）。
+        由 run_eval.solve_one 落盘为结果行 diag 字段；tools/analyze_errors.py 消费。
+        """
+        return {
+            # ① 题型与档位
+            "question_type": getattr(ctx, "question_type", "") or "",
+            "domain": getattr(ctx, "domain", "") or "",
+            "tier": getattr(ctx, "tier", "") or "",
+            "tier_evidence": getattr(ctx, "tier_evidence", None) or {},
+            "soft_budget": round(float(getattr(ctx, "soft_budget", 0) or 0), 1),
+            # ② 题目理解（Lean 前置 preverify）
+            "formal_spec": (getattr(ctx, "formal_spec", "") or "")[:600],
+            "formal_gaps": list(getattr(ctx, "formal_gaps", None) or [])[:10],
+            "preverify_trace": getattr(ctx, "preverify_trace", None) or {},
+            # ③ 蓝图 DAG + 骨架评审 + DAG 评审
+            "blueprint_nodes": len((getattr(ctx, "blueprint", None) or {}).get("nodes", []) or []),
+            "blueprint_merge": (getattr(ctx, "blueprint", None) or {}).get("merge_strategy", ""),
+            "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
+            "dag_review": getattr(ctx, "dag_review_report", None) or {},
+            "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
+            # ④ 子目标求解（结构化轨迹）
+            "subgoal_trace": getattr(ctx, "subgoal_trace", None) or [],
+            "subgoal_merge_plan": (getattr(ctx, "subgoal_merge_plan", "") or "")[:300],
+            "lemma_repo": list(getattr(ctx, "lemma_repo", None) or [])[:20],
+            # ⑤ Lean 硬验证门禁
+            "lean_gate": getattr(ctx, "lean_gate", None) or [],
+            # ⑥ 候选/验证/自纠错
+            "n_candidates": len(getattr(ctx, "candidates", None) or []),
+            "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
+            "revise_round": getattr(ctx, "revise_round", 0),
+            "revise_feedback": list(getattr(ctx, "revise_feedback", None) or [])[:20],
+            # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
+            "budget_skips": sum(1 for t in (getattr(ctx, "trace", None) or [])
+                                if isinstance(t, dict) and t.get("step") == "budget_skip"),
+            "degraded_flags": sum(1 for t in (getattr(ctx, "trace", None) or [])
+                                  if isinstance(t, dict)
+                                  and ("degrad" in str(t.get("step", "")).lower()
+                                       or "degrad" in str(t.get("content", "")).lower())),
+            "placeholder": "[子目标求解失败]" in (getattr(ctx, "final_response", "") or ""),
+        }
+
     def _emergency_direct_solve(self, problem: str) -> str:
         """紧急直答：用最精简 prompt 逼模型输出答案，绝不返回原题。
 
@@ -946,6 +959,7 @@ class Orchestrator(BaseAgent):
                               "content": "紧急直答失败，返回占位答案"})
         return safe_json_serialize({
             "final_response": answer, "trace": ctx.trace,
+            "diag": self._collect_diag(ctx),
         })
 
     def _fallback(self, ctx: TaskContext, problem: str, exc: Exception) -> dict:
@@ -958,11 +972,13 @@ class Orchestrator(BaseAgent):
         if answer:
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "使用已有候选最佳答案作为兜底"})
-            return {"final_response": answer, "trace": trace}
+            return {"final_response": answer, "trace": trace,
+                    "diag": self._collect_diag(ctx)}
         # 紧急直答
         answer = self._emergency_direct_solve(problem)
         if not answer:
             answer = "未给出有效解答。"
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "紧急直答失败，返回占位答案"})
-        return {"final_response": answer, "trace": trace}
+        return {"final_response": answer, "trace": trace,
+                "diag": self._collect_diag(ctx)}
