@@ -478,6 +478,14 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "use_proof_channel": False,
     "use_lemma_accumulation": False,
     "by_enable_fast_path": True,
+    # ---- 本地卷档位预算（2026-09-02 晚二次修正）----
+    # 卷预算 54000s 后仍现占位符：真因是 LLM 超时（蓝图 max_tokens=6144，
+    # 120s 超时 ×3 次重试 = 360s+）直接耗尽 standard 档 540s 单题预算。
+    # 两路齐修：①utils/llm_client.py 超时 120→240s ②standard 档 540→900s
+    # （给 DAG 全链路 + 超时重试余量；fast 120 不变防简单题烧时间；
+    # deep 保持 1200 = 平台单题硬限）。仅本地评测生效，平台 112 题卷
+    # 仍在 user_agent.py 默认 tier_budget（fast 120/standard 540/deep 1200）。
+    "tier_budget": {"fast": 120.0, "standard": 900.0, "deep": 1200.0},
     # ---- 全卷调度：本地 45 题小卷 ----
     # 2026-09-02 晚修正：8680s（按 112 题平台配额折算）对现版本过紧——
     # 骨架编排层评审（老师 9/2 建议）使每题多 1-3 次 LLM 调用与可能的重生成，

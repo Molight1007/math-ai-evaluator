@@ -28,7 +28,9 @@ import requests
 
 logger = logging.getLogger("MathPilot.LLMClient")
 
-_DEFAULT_TIMEOUT = 120  # 秒
+_DEFAULT_TIMEOUT = 240  # 秒（2026-09-02：120→240。蓝图 DAG 生成 max_tokens=6144，
+                        # Intern-S2-397B 服务端生成慢时 >120s，3 次重试链烧 360s+
+                        # 直接耗尽单题 standard 档预算 → 子目标全 budget_skip → 占位符）
 _MAX_RETRIES = 2
 _RETRY_BACKOFF = 2.0
 
