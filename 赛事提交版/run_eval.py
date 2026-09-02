@@ -478,14 +478,16 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "use_proof_channel": False,
     "use_lemma_accumulation": False,
     "by_enable_fast_path": True,
-    # ---- 全卷调度：本地 45 题小卷，按 112 题全卷的题均配额折算 ----
-    # 平台：112 题 / 18000s（5h 墙钟，并发 3）
-    # 45 题应得 45/112 × 18000 ≈ 7232s；再给 20% 余量 ≈ 8680s
-    # （2026-08-28 修正：5400s 会让 paper_cap 只有 360s/题，而 Lean 前置
-    #   验证在本地真编译 mathlib（每次 ~21s）+ 子目标求解就超过预算，
-    #   表现为「剩余时间不足，跳过 LLM」→ 全部输出 [子目标求解失败]）
+    # ---- 全卷调度：本地 45 题小卷 ----
+    # 2026-09-02 晚修正：8680s（按 112 题平台配额折算）对现版本过紧——
+    # 骨架编排层评审（老师 9/2 建议）使每题多 1-3 次 LLM 调用与可能的重生成，
+    # 单题软预算 540-578s 内跑不完 DAG 全链路（蓝图+评审+子目标+验证）
+    # → llm() budget_skip → [子目标求解失败] 占位符（第一轮 9 题 3 个）。
+    # 改为 45×1200=54000s 总池：pacer 进度判定恒"正常"，每题拿满档位预算
+    # （fast 120 / standard 540 / deep 1200，deep 受单题硬限 1200s 封顶），
+    # 反映模型真实上限。仅影响本地评测（平台 112 题卷在 user_agent.py 配 21000s）。
     "paper_total_questions": 45,
-    "paper_target_time": 8680,
+    "paper_target_time": 54000,
     # 前置验证最多 2 次尝试（原默认 2 轮 = 3 次，每次 21s 编译 + LLM 调用，
     # 单题可烧掉 3-5 分钟；preverify 是「检查理解」不是「写论文」，1 轮足够）
     "preverify_max_rounds": 1,
@@ -587,29 +589,6 @@ class EvalEngine:
 
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:
         tests = self.load_tests(test_file)
-        # ---- 小样本自适应（2026-09-02，DAG 冒烟 2 题全败根因）----
-        # PaperPacer 用 paper_total_questions（45/112 全卷数）评估"卷面进度"，
-        # 小卷（--test_file 2 题）第 1 题一完成就误判"卷面落后"→ 单题软预算被
-        # 收紧到 ~200-500s → DAG 全链路（蓝图+评审+重写+子目标求解）跑不完
-        # → llm() budget_skip → [子目标求解失败]。
-        # 修正：实际题数 < 配置全卷数时，按实际题数重建 agent：
-        #   paper_total_questions = 实际题数；paper_target_time = 题数 × 1200
-        # （每题按单题硬限配足总池 → 进度判定恒为"正常"，每题拿满档位预算）。
-        # 45 题/112 题全卷基准不受影响（不触发）。
-        if tests:
-            cfg_total = int(self._effective_overrides.get(
-                "paper_total_questions", 0) or 0)
-            actual = len(tests)
-            if cfg_total and actual < cfg_total:
-                adapted = dict(self._effective_overrides)
-                adapted["paper_total_questions"] = actual
-                adapted["paper_target_time"] = actual * 1200
-                self.agent = ReasoningAgent(self.llm_client, **adapted)
-                self._effective_overrides = adapted
-                logger.info(
-                    "小样本自适应: 实际 %d 题 < 全卷 %d 题，重建 agent "
-                    "(paper_total_questions=%d, paper_target_time=%d)",
-                    actual, cfg_total, actual, actual * 1200)
         done_ids = set()
         results = []
         if self.resume and os.path.exists(output_file):
@@ -630,6 +609,31 @@ class EvalEngine:
             logger.info(f"断点续跑：跳过 {len(done_ids)} 道已完成")
         pending = [t for t in tests if str(t.get("id", t.get("_line_no"))) not in done_ids]
         logger.info(f"待评测: {len(pending)} / 总计: {len(tests)}")
+        # ---- 小样本自适应（2026-09-02，DAG 冒烟 2 题全败根因）----
+        # PaperPacer 用 paper_total_questions（45/112 全卷数）评估"卷面进度"，
+        # 小卷（--test_file 2 题）第 1 题一完成就误判"卷面落后"→ 单题软预算被
+        # 收紧到 ~200-500s → DAG 全链路（蓝图+评审+重写+子目标求解）跑不完
+        # → llm() budget_skip → [子目标求解失败]。
+        # 修正：待评测题数 < 配置全卷数时，按待评测题数重建 agent：
+        #   paper_total_questions = 待评测题数；paper_target_time = 题数 × 1200
+        # （每题按单题硬限配足总池 → 进度判定恒为"正常"，每题拿满档位预算）。
+        # 2026-09-02 晚修复：判定基准从 len(tests) 改为 len(pending)——
+        # --resume 断点续跑时 tests 仍是全卷（45），若按全卷判定不触发自适应，
+        # 剩余 36 题继续吃 45 题紧预算（~540s/题）→ 占位符重演。
+        if pending:
+            cfg_total = int(self._effective_overrides.get(
+                "paper_total_questions", 0) or 0)
+            actual = len(pending)
+            if cfg_total and actual < cfg_total:
+                adapted = dict(self._effective_overrides)
+                adapted["paper_total_questions"] = actual
+                adapted["paper_target_time"] = actual * 1200
+                self.agent = ReasoningAgent(self.llm_client, **adapted)
+                self._effective_overrides = adapted
+                logger.info(
+                    "小样本自适应: 待评测 %d 题 < 全卷 %d 题，重建 agent "
+                    "(paper_total_questions=%d, paper_target_time=%d)",
+                    actual, cfg_total, actual, actual * 1200)
         with ThreadPoolExecutor(max_workers=max(1, self.concurrency)) as executor:
             future_map = {executor.submit(self.solve_one, t): t for t in pending}
             for future in as_completed(future_map):
