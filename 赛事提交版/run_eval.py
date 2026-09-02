@@ -584,6 +584,11 @@ class EvalEngine:
         usage_stats = {}
         if isinstance(result, dict):
             usage_stats = result.get("mathlib_usage_stats") or {}
+        # 逐步归因诊断（2026-09-02）：orchestrator 已打包各阶段中间状态，
+        # 这里落盘为结果行 diag 字段（错题可定位到理解/蓝图/子目标/验证等环节）
+        diag = {}
+        if isinstance(result, dict):
+            diag = result.get("diag") or {}
         return {
             "id": pid, "domain": domain,
             "question": question, "gold": gold,
@@ -593,6 +598,8 @@ class EvalEngine:
             # #1/#2 证据链：实际用到的 Mathlib 定理（leansearch 命中/编译通过）
             "used_theorems": used_theorems,
             "mathlib_usage_stats": usage_stats,
+            # 逐步归因诊断（可空：老结果文件无此字段）
+            "diag": diag,
         }
 
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:

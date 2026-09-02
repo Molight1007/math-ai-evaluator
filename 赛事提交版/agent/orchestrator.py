@@ -471,6 +471,46 @@ class Orchestrator(BaseAgent):
                     **(ctx.mathlib_usage_stats or {}),
                     "distinct_theorems": len(ctx.used_theorems or []),
                 },
+                # ---- 逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）----
+                # 打包各阶段中间状态：理解→蓝图→骨架评审→子目标→Lean→验证→预算。
+                # 由 run_eval.solve_one 落盘为结果行 diag 字段；tools/analyze_errors.py 消费。
+                "diag": {
+                    # ① 题型与档位
+                    "question_type": ctx.question_type or "",
+                    "domain": ctx.domain or "",
+                    "tier": getattr(ctx, "tier", "") or "",
+                    "tier_evidence": getattr(ctx, "tier_evidence", None) or {},
+                    "soft_budget": round(float(getattr(ctx, "soft_budget", 0) or 0), 1),
+                    # ② 题目理解（Lean 前置 preverify）
+                    "formal_spec": (ctx.formal_spec or "")[:600],
+                    "formal_gaps": list(ctx.formal_gaps or [])[:10],
+                    "preverify_trace": ctx.preverify_trace or {},
+                    # ③ 蓝图 DAG + 骨架评审 + DAG 评审
+                    "blueprint_nodes": len((ctx.blueprint or {}).get("nodes", []) or []),
+                    "blueprint_merge": (ctx.blueprint or {}).get("merge_strategy", ""),
+                    "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
+                    "dag_review": ctx.dag_review_report or {},
+                    "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
+                    # ④ 子目标求解（结构化轨迹）
+                    "subgoal_trace": ctx.subgoal_trace or [],
+                    "subgoal_merge_plan": (ctx.subgoal_merge_plan or "")[:300],
+                    "lemma_repo": list(ctx.lemma_repo or [])[:20],
+                    # ⑤ Lean 硬验证门禁
+                    "lean_gate": ctx.lean_gate or [],
+                    # ⑥ 候选/验证/自纠错
+                    "n_candidates": len(ctx.candidates or []),
+                    "n_verdicts": len(ctx.verdicts or []),
+                    "revise_round": getattr(ctx, "revise_round", 0),
+                    "revise_feedback": list(ctx.revise_feedback or [])[:20],
+                    # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
+                    "budget_skips": sum(1 for t in (ctx.trace or [])
+                                        if isinstance(t, dict) and t.get("step") == "budget_skip"),
+                    "degraded_flags": sum(1 for t in (ctx.trace or [])
+                                          if isinstance(t, dict)
+                                          and ("degrad" in str(t.get("step", "")).lower()
+                                               or "degrad" in str(t.get("content", "")).lower())),
+                    "placeholder": "[子目标求解失败]" in (ctx.final_response or ""),
+                },
             })
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
