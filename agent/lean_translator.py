@@ -150,7 +150,7 @@ class LeanTranslatorAgent(BaseAgent):
                     {"role": "system", "content": LEAN_NODE_TRANSLATE_SYSTEM},
                     {"role": "user", "content": user_msg},
                 ],
-                0.0, 1024,
+                0.0, 32768,
             )
             if not raw:
                 continue

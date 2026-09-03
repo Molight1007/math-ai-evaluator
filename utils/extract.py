@@ -368,6 +368,35 @@ _REFUSAL_PATTERNS: list[re.Pattern] = [
 ]
 
 
+_INCOMPLETE_TAIL_RE = re.compile(
+    r"(?:最终答案|答案|结果|故|解|解集|通解|特解)[：:是为\s]*$")
+_LATEX_HALF_RE = re.compile(r"[\\^]\s*\{?\s*$")
+_LATEX_BEGIN_RE = re.compile(r"\\begin\{[^}]+\}\s*$")
+
+
+def is_truncated_answer(text: str) -> bool:
+    """判断答案字符串是否明显截断/不完整（2026-09-02 老师需求）。
+
+    观测用，不修改内容。识别 LaTeX 半截（\\xxx{、^{）、花括号不配对、
+    中文前缀词结尾、占位符。识别为 True 时答案几乎必然判错。
+    """
+    if not text:
+        return True
+    s = text.strip()
+    if not s:
+        return True
+    if _LATEX_HALF_RE.search(s) or _LATEX_BEGIN_RE.search(s):
+        return True
+    if _INCOMPLETE_TAIL_RE.search(s):
+        return True
+    # 花括号不配对（最稳的 LaTeX 截断信号）：`{` 多于 `}` ⇒ 中间有未闭合块
+    if s.count("{") > s.count("}"):
+        return True
+    if "[子目标求解失败]" in s or "未给出有效解答" in s:
+        return True
+    return False
+
+
 def is_valid_final_answer(text: str) -> bool:
     """
     检查 final_answer 是否为有效的数学解答（非拒绝语、非空模板、非占位符）。

@@ -149,6 +149,30 @@ def _mathlib_import_block() -> str:
         else CORE_MATHLIB_IMPORTS.rstrip("\n")
 
 
+def _cross_check_problem_numbers(problem: str, lean_code: str) -> bool:
+    """防自证交叉核对（2026-09-03 老师指令）：验证代码必须引用题目关键数字。
+
+    自证形态：LLM 生成 'example : (X:ℚ) = X := rfl' —— 编译通过但只验 X=X，
+    与题目无关（022 v4 实测 answer_valid 但答案 50005000 ≠ 真值 25502500）。
+    规则：problem 中 >=3 位的数字至少一个出现在 lean_code 里。完全不引用 =
+    验证代码与题目无关联 = 疑似自证。保守排除 0/1/2/10 等通用小整数。
+    v17 补丁（084 实测）：题目无 >=3 位数字时原逻辑直接放行 → 残缺答案
+    也能 answer_valid（漏洞）。改为：题目无大数字时，退而检查
+    **答案里的数字是否进代码**（用调用方传入的 answer 强化——见 verify_answer）。
+    """
+    try:
+        prob_nums = set(re.findall(r"\b(\d{3,})\b", problem or ""))
+        code_nums = set(re.findall(r"\b(\d{3,})\b", lean_code or ""))
+        if not prob_nums:
+            # 题目本身无 >=3 位数字（罕见）→ 无法按题面交叉，
+            # 返回 None 表示"需调用方用答案数字二次核对"
+            return None
+        common = prob_nums & code_nums
+        return len(common) >= 1
+    except Exception:  # noqa: BLE001  核对失败宁可放行（不误伤）
+        return True
+
+
 def _prepend_mathlib_import(code: str) -> str:
     """归一化代码的 Mathlib import（兼容本地部分编译布局）。
 
@@ -556,10 +580,9 @@ class LeanBridge:
         return ready
 
     def _budget_ok(self, n: int = 1) -> bool:
-        """检查 LLM 调用预算是否足够（预算为 None 时不限制）。"""
-        if self.budget is None:
-            return True
-        return self.budget.can_spend(n)
+        """2026-09-03 老师：比赛无次数上限——预算检查恒放行（原实现预算耗尽
+        返回 False → lean_bridge _llm_call 拦截 → 翻译失败 unknown——隐藏 bug）。"""
+        return True
 
     # ------------------------------------------------------------------
     # LLM 调用（走注入的 client，计入 Budget）
@@ -621,7 +644,7 @@ class LeanBridge:
             {"role": "user", "content": LEAN_CONVERT_USER.format(
                 problem=problem, reasoning=reasoning)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=65536,
                              prefill=_mathlib_import_block() + "\n")
         return _strip_code_fence(raw)
 
@@ -681,7 +704,7 @@ class LeanBridge:
                 problem=problem, reasoning=reasoning,
                 lean_code=lean_code, compile_error=compile_error)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=1024,
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=32768,
                              prefill='{"error_category":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
@@ -813,7 +836,7 @@ class LeanBridge:
                 problem=problem, reasoning=reasoning, answer=answer,
                 answer_hint=hint)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=65536,
                              prefill='{"lean_code":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
@@ -841,7 +864,7 @@ class LeanBridge:
                     problem=problem, reasoning=reasoning, answer=answer,
                     answer_hint=retry_hint)},
             ]
-            raw2 = self._llm_call(retry_msgs, temperature=0.0, max_tokens=2048,
+            raw2 = self._llm_call(retry_msgs, temperature=0.0, max_tokens=65536,
                                   prefill='{"lean_code":')
             parsed2 = _parse_analysis_json(raw2)
             if not parsed2 or parsed2.get("error"):
@@ -908,6 +931,34 @@ class LeanBridge:
                                          allow_sorry=False)
 
             if comp and comp.get("ok"):
+                # 2026-09-03 防自证（老师指令）：编译通过 ≠ 真验证。
+                # 自证形态：LLM 写 'example : (50005000:ℚ) = 50005000 := rfl'——
+                # 代码与题目无关，验 X=X 恒等式（022 v4 实测 answer_valid 但
+                # 50005000 ≠ 真值 25502500）。交叉核对：验证代码必须引用
+                # **题目关键数字**（>=3 位数且排除通用小整数），无交叉 = 自证嫌疑 → 拒绝。
+                # v17 补丁：题目无大数字时退而用"答案数字"核对——答案里的
+                # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
+                _cc = _cross_check_problem_numbers(problem, lean_code)
+                if _cc is None:
+                    # 题目无 >=3 位数字：用答案侧数字二次核对（answer 内数字须出现在代码）
+                    ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
+                    code_nums2 = set(re.findall(r"\b(\d{1,})\b", lean_code or ""))
+                    common2 = (ans_nums & code_nums2) - {"0", "1", "2"}
+                    _cc = len(common2) >= 1 or not ans_nums - {"0", "1", "2"}
+                if not _cc:
+                    report = BugReport(
+                        verdict="proof_invalid",
+                        findings=[Finding(
+                            location="answer_verify", kind="Critical",
+                            severity=5,
+                            desc="疑似自证：验证代码未引用题目关键数字/条件（只验自身恒等式），"
+                                 "无法证明答案与题目相关。请重写：把题目条件与答案一起形式化"
+                                 "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
+                    setattr(report, "lean_code", lean_code)
+                    setattr(report, "suggestion",
+                            "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
+                    logger.warning("[LeanBridge] 答案验证疑似自证，拒绝（代码未引用题目数字）")
+                    return report
                 report = BugReport(verdict="answer_valid", findings=[])
                 # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
                 setattr(report, "lean_code", lean_code)
@@ -952,7 +1003,7 @@ class LeanBridge:
             {"role": "user", "content": LEAN_FORMALIZE_PROBLEM_USER.format(
                 problem=problem, domain=domain or "未知", feedback=feedback_block)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=65536,
                              prefill='{"formal_spec":')
         parsed = _parse_analysis_json(raw)  # 通用 JSON 提取（功能与 analysis 一致）
         if not parsed:
@@ -1077,7 +1128,7 @@ class LeanBridge:
                 problem=problem, domain=domain or "未知",
                 sketch=sketch_nl, feedback=feedback_block)},
         ]
-        raw = self._llm_call(messages, temperature=0.0, max_tokens=2048,
+        raw = self._llm_call(messages, temperature=0.0, max_tokens=65536,
                              prefill='{"formal_spec":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
@@ -1291,6 +1342,18 @@ def _analyze_formal_gaps(compile_error: str) -> list:
     seen = set()
 
     # 1) unknown identifier / declaration / theorem … → 缺失定义或引理
+    # 2026-09-02 bug 修复：过滤英文介词/停用词（to/from/of/with…）——
+    # LLM 翻译英文题面时把介词当 Lean 标识符，产生幽灵 missing_definition
+    # （11 题全中 "missing_definition 'to'" 的噪声源），绝非真缺口。
+    _EN_STOPWORDS = {
+        "to", "from", "of", "with", "by", "for", "at", "in", "on", "into",
+        "onto", "that", "which", "where", "when", "then", "than", "and",
+        "or", "not", "the", "a", "an", "is", "are", "be", "we", "have",
+        "such", "all", "any", "each", "if", "as", "so", "but", "also",
+        "this", "these", "those", "there", "it", "its", "can", "will",
+        "does", "do", "has", "what", "why", "how", "let", "define",
+        "over", "under", "between", "about", "after", "before",
+    }
     for m in re.finditer(
         r"unknown (?:identifier|declaration|theorem|constant|axiom)"
         r"\s*[:'\"\s]*([A-Za-z_][A-Za-z0-9_'.]*)",
@@ -1300,6 +1363,11 @@ def _analyze_formal_gaps(compile_error: str) -> list:
         if name in seen:
             continue
         seen.add(name)
+        # 英文介词/停用词 → 翻译噪声，跳过（不产生 gap）
+        # 正则字符类含 ' 和 .，name 可能带尾部引号（如 to'）→ 先剥
+        _core = name.strip("'\".")
+        if _core in _EN_STOPWORDS or _core.lower() in _EN_STOPWORDS:
+            continue
         # 启发式：首字母大写或含 '.' 多半是引理/定理；否则是定义/量
         is_lemma = name[0].isupper() or "." in name
         gaps.append({

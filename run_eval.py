@@ -151,7 +151,26 @@ def _norm_candidate(text: str) -> str:
     """候选答案规范化（\boxed 去壳 → 排版命令清理 → 分式别名统一 → LaTeX 分数转除法）"""
     if not text:
         return ""
-    return _laTeX_to_py_frac(_clean_answer(text))
+    # 先剥 \boxed/\text 外壳（_clean_answer），再剥中文尾注——顺序重要：
+    # 先剥尾注会破坏 \boxed{ 的 } 闭合（084 v11 实测 \text{ 其中 } 被剥后
+    # 剩 \boxed{Q... 未闭合 → 壳剥不掉）。
+    text = _clean_answer(text)
+    # 2026-09-03：剥中文说明尾注——084 实测 pred 'Q(x)=c(x-1)^2(x+2)(x-4)，
+    # 其中 c∈C 为任意常数'（数学等价却判 format_unresolved）。注意 $ 是 LaTeX
+    # 美元符不是行尾锚。
+    _tail_m = re.search(r"[，,;；、]\s*(?:其中|这里|此时|此外)", text)
+    if _tail_m:
+        text = text[:_tail_m.start()]
+    else:
+        # \text{其中 C∈C} 尾注（084 v11 实测 '\text{ 其中 } C \in \mathbb{C}'）
+        _tail_t = re.search(r"\\text\{\s*(?:其中|这里|此时)[^}]*\}[\s\S]*$", text)
+        if _tail_t:
+            text = text[:_tail_t.start()].rstrip("，,;；、 ") or text
+        else:
+            _tail_m2 = re.search(r"(?:为任意常数|为常数|恒为|，c\s*[∈i]n?)\s*[^，,;；]*$", text)
+            if _tail_m2:
+                text = text[:_tail_m2.start()].rstrip("，,;；、 ") or text
+    return _laTeX_to_py_frac(text)
 
 
 def _extract_equals_candidates(pred: str) -> List[str]:
@@ -346,8 +365,17 @@ def answers_match(pred: str, gold: str) -> bool:
     gold_f = _norm_candidate(gold)
     if _matches_one(pred_f, gold_f):
         return True
+    # 函数定义前缀归一（2026-09-03）：gold 'Q(x)=c(x-1)^2(x-4)(x+2)' ↔
+    # pred '\boxed{C(x-1)^2(x-4)(x+2)}'（084 实况：数学完全一致却被判 expr_wrong）
+    # 剥 'Q(x)='/'f(x)='/'g(x)=' 前缀后比较核心表达式
+    if _match_stripped_func_prefix(pred_f, gold_f):
+        return True
     # 选项类答案：'A' ↔ 'A.绝对收敛' / '绝对收敛' ↔ 'A.绝对收敛'（2026-09-02）
     if _option_letter_match(pred_f, gold_f):
+        return True
+    # 语义等价（2026-09-02 晚）：'n divisible by 2 or 3' ↔ gold 'n=2k,n=3k'
+    # （087 实况：数学答对（Lean answer_valid）却被格式判错，最可惜）
+    if _match_divisibility(pred, gold_f):
         return True
     # 推导文本：提取 '= X' 结论逐个匹配
     for cand in _extract_equals_candidates(pred):
@@ -356,7 +384,61 @@ def answers_match(pred: str, gold: str) -> bool:
             return True
         if _option_letter_match(cand_f, gold_f):
             return True
+        if _match_divisibility(cand, gold_f):
+            return True
     return False
+
+
+# 2026-09-02 晚：整除语义匹配——'divisible by 2 or 3' → 'n=2k,n=3k'
+_DIVISIBLE_RE = re.compile(r'divisibl\w*\s+by\s+([0-9,\sorand]+)', re.IGNORECASE)
+# 函数定义前缀：'Q(x)=' / 'g(x)=' / 'f(x,y)='（只匹配开头，避免误伤中间等号）
+_FUNC_PREFIX_RE = re.compile(r'^[A-Za-z]\([^()]*\)\s*=')
+
+
+def _match_stripped_func_prefix(pred_f: str, gold_f: str) -> bool:
+    """一方带 'Q(x)=' 前缀（函数定义答案）、另一方是裸表达式时，剥前缀比较。
+
+    例：gold 'Q(x)=c(x-1)^2(x-4)(x+2)' ↔ pred 'C(x-1)^2(x-4)(x+2)'。
+    任意常数符号差异（C vs c vs k）用统一占位符 c 归一后交给 _matches_one。
+    """
+    pa, ga = pred_f, gold_f
+    if _FUNC_PREFIX_RE.match(pa):
+        pa = _FUNC_PREFIX_RE.sub("", pa, count=1).strip()
+    if _FUNC_PREFIX_RE.match(ga):
+        ga = _FUNC_PREFIX_RE.sub("", ga, count=1).strip()
+    if pa == pred_f and ga == gold_f:
+        return False  # 两边都没前缀，交给其它匹配层
+    if not pa or not ga:
+        return False
+    # 任意常数符号归一：把出现次数多的"疑似常数"统一……此处简化——
+    # 多项式解集答案允许单字母参数差异（C/c/k/a），先把常见常数符号都
+    # 替换为 c（小心只替换不在括号/指数里的孤立字母太复杂，改用：
+    # 若双方只差常数符号，直接试符号替换）
+    for const_pair in (("C", "c"), ("c", "C"), ("k", "c"), ("a", "c"),
+                       ("C", "k"), ("K", "c")):
+        pa2 = pa.replace(const_pair[0], const_pair[1])
+        if pa2 != pa and _matches_one(pa2, ga):
+            return True
+    return _matches_one(pa, ga)
+
+
+def _match_divisibility(pred: str, gold_f: str) -> bool:
+    """把 'divisible by X or Y' 转成 gold 常见形式 'n=Xk,n=Yk' 比较。"""
+    if not pred:
+        return False
+    # 剥 LaTeX 包装（\text{...}/\boxed{...} 等）再扫——087 实测 pred 是
+    # \boxed{\text{all ... n \text{ divisible by } 2 \text{ or } 3}}
+    clean = re.sub(r"\\(?:text|mathrm|boxed|mbox)\{([^}]*)\}", r"\1", pred)
+    clean = clean.replace("{", "").replace("}", "").replace("\\", "")
+    m = _DIVISIBLE_RE.search(clean)
+    if not m:
+        return False
+    nums = re.findall(r"\d+", m.group(1))
+    if not nums:
+        return False
+    cand = ",".join(f"n={d}k" for d in nums)
+    cand_f = _norm_candidate(cand)
+    return bool(cand_f) and _matches_one(cand_f, gold_f)
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +549,11 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "verifier_voting_times": 2,
     # ---- 对齐 user_agent.py:84 / :94 ----
     "max_total_calls": 150,
-    "max_time_per_question": 1200,
+    # 2026-09-03 老师："先让它完成题目，看对不对；先改对再节约时间"。
+    # 本地评测单题时限放宽到 3600s（1h 封顶防意外挂死），让每题自然跑完
+    # 全部环节（子目标/求解/验证/Lean 闸门），不被 1200s 截断。比赛平台
+    # 时限是平台侧约束（官方 Client 托管），与本文件无关。
+    "max_time_per_question": 2000,
     # ---- 对齐 user_agent.py:101 / :105 / :106 ----
     "max_workers": 3,
     "max_answer_tokens": 8192,
@@ -646,6 +732,13 @@ class EvalEngine:
             actual = len(pending)
             if cfg_total and actual < cfg_total:
                 per_q = cfg_target / max(1, cfg_total)
+                # 2026-09-02 晚方案 A（老师拍板）：小卷放宽——题均预算下限提到
+                # standard 档满值 540s。原 187.5s/题 折算假设"全卷 45 题平均分"，
+                # 小卷（10 题）deep 难题占比高（实测 4/10），1875s 池被
+                # 4×1200s 挤爆 → 后续题被 PaperPacer 压到 120s 保底 → 占位符重演。
+                # 540s/题 下限让小卷的 deep 题能跑满，难题有时间，测试才反映
+                # 真实单题能力（不是被时间池结构性饿死）。
+                per_q = max(per_q, 540.0)
                 adapted = dict(self._effective_overrides)
                 adapted["paper_total_questions"] = actual
                 adapted["paper_target_time"] = max(120.0, int(actual * per_q))

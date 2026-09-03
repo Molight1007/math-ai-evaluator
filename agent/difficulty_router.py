@@ -110,7 +110,7 @@ class DifficultyRouter(BaseAgent):
         # 2) LLM 自评难度（1 次小调用，prefill 抑制 CoT，秒级返回）
         llm_score, llm_note = None, "llm_disabled"
         if (getattr(self.config, 'enable_llm_difficulty', True)
-                and ctx.budget is not None and ctx.budget.can_spend(1)
+                and not ctx.is_time_critical()
                 and not ctx.is_time_critical()):
             llm_score, llm_note = self._llm_assess(ctx)
             if llm_score is None and llm_note != "llm_disabled":

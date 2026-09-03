@@ -112,10 +112,17 @@ class SolverAgent(BaseAgent):
 
     def run(self, ctx: TaskContext) -> TaskContext:
         """根据当前上下文状态决定初始求解还是纠错重解"""
+        # 2026-09-02 老师需求：候选池上限 8（13→8→5→8：003 退步分析——cap5 砍掉好候选
+        # 后 0 票直答退化成 No such function，改回 8 保好候选）。
+        # 无论初始/revise/自改进/playoff 从哪条路径追加，统一封顶。
+        # count 只传 remaining 上限，adaptive 缩小在 _generate_initial 内部做。
+        remaining = 8 - len(getattr(ctx, 'candidates', None) or [])
+        if remaining <= 0:
+            return ctx
         if ctx.revise_round > 0 and ctx.revise_feedback:
-            self._generate_revise(ctx)
+            self._generate_revise(ctx, cap=remaining)
         else:
-            self._generate_initial(ctx)
+            self._generate_initial(ctx, count=remaining)
         return ctx
 
     def add_candidates(self, ctx: TaskContext, count: int = None) -> TaskContext:
@@ -601,7 +608,7 @@ class SolverAgent(BaseAgent):
             # 本地宽松判分能看懂、平台判分看不懂。模型具备给出简洁答案的能力，
             # 缺的是一次明确要求——成本仅一次短调用，收益是消除平台侧的格式性丢分。
             if (getattr(self.config, 'enable_answer_reask', True)
-                    and ctx.budget is not None and ctx.budget.can_spend(1)):
+                    and not ctx.is_time_critical()):
                 answer = self._reask_final_answer(ctx, resp, answer)
             ctx.candidates.append(Candidate(
                 id=cid,
@@ -621,9 +628,12 @@ class SolverAgent(BaseAgent):
     # ----------------------------------------------------------
     # 纠错重解（revise 模式）
     # ----------------------------------------------------------
-    def _generate_revise(self, ctx: TaskContext) -> None:
+    def _generate_revise(self, ctx: TaskContext, cap: int = None) -> None:
         feedback_text = "\n".join(f"- {fb}" for fb in ctx.revise_feedback)
-        count = self.config.revise_sample_times
+        count = cap if cap is not None else self.config.revise_sample_times
+        count = max(0, min(count, 8 - len(getattr(ctx, 'candidates', None) or [])))
+        if count <= 0:
+            return
 
         base_cid = len(ctx.candidates)
 
@@ -725,7 +735,7 @@ class SolverAgent(BaseAgent):
 
         n_ok = 0
         for cand in targets:
-            if ctx.budget is not None and not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 break
             user_content = SELF_IMPROVE_USER.format(
                 problem=ctx.problem,
@@ -862,7 +872,7 @@ class SolverAgent(BaseAgent):
                 new_list.append(c)
                 continue
             # 预算允许才续写
-            if ctx.budget is None or ctx.budget.can_spend(1):
+            if not ctx.is_time_critical():
                 new_c = self.complete_answer(ctx, c)
                 if new_c is not c and new_c.answer and len(new_c.answer) > 1:
                     new_list.append(new_c)
@@ -996,7 +1006,7 @@ class SolverAgent(BaseAgent):
                 ],
                 "最终答案：",
             )
-            direct = self.llm(ctx, _prefill_msgs, 0.0, 1024)
+            direct = self.llm(ctx, _prefill_msgs, 0.0, 32768)
             if direct:
                 direct = stitch("最终答案：", direct)
             if direct and direct.strip():

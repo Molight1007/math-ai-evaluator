@@ -531,7 +531,7 @@ class BlueprintPlannerAgent(BaseAgent):
         结果同时写入 ctx.blueprint（dict 序列化），供后续阶段消费。
         """
         # 预算闸门
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "blueprint", "预算耗尽，跳过蓝图生成")
             return None
 
@@ -702,7 +702,7 @@ class BlueprintPlannerAgent(BaseAgent):
                                   extra_context: str = "",
                                   max_attempts: int = 3) -> Optional["BlueprintDAG"]:
         """基于失败反馈重建 DAG（重写提示词 = 原题 + 反馈，避免循环/粒度问题）。"""
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "blueprint_replan", "预算不足，跳过整树重生成")
             return None
         try:
@@ -725,7 +725,7 @@ class BlueprintPlannerAgent(BaseAgent):
         # prefill 锚定顶层包装（同首次生成）
         _PREFILL = '{"root_id": "g", "nodes": ['
         for attempt in range(max_attempts):
-            if not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 self.record(ctx, "blueprint_replan", "重生成预算耗尽，终止")
                 return None
             resp = self.llm(
@@ -792,7 +792,7 @@ class BlueprintPlannerAgent(BaseAgent):
                            feedback_lines: list,
                            max_attempts: int = 3) -> Optional["BlueprintDAG"]:
         """基于评审反馈**局部重写**被拒节点所在子树（其余节点保留）。"""
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "blueprint_subtree", "预算不足，跳过子树重写")
             return None
         if not rejected_ids:
@@ -835,7 +835,7 @@ class BlueprintPlannerAgent(BaseAgent):
         # prefill 锚定（子树也是标准 DAG JSON 结构）
         _PREFILL = '{"root_id": "r", "nodes": ['
         for attempt in range(max_attempts):
-            if not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 self.record(ctx, "blueprint_subtree", "重写预算耗尽，终止")
                 return None
             resp = self.llm(

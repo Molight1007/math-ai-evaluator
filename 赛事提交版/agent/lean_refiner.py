@@ -165,7 +165,7 @@ class LeanRefinerAgent(BaseAgent):
                 {"role": "system", "content": LEAN_REFINE_SYSTEM},
                 {"role": "user", "content": user_msg},
             ],
-            0.2, 2048,
+            0.2, 32768,
         )
         self._llm_calls += 1
         if not raw:
@@ -345,7 +345,7 @@ class LeanRefinerAgent(BaseAgent):
             ctx.refine_result = {"verdict": "unknown",
                                  "error": "缺少 blueprint 或 sketch_tree"}
             return ctx
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             ctx.refine_result = {"verdict": "unknown", "error": "预算不足"}
             return ctx
         try:

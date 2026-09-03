@@ -152,7 +152,7 @@ class SkeletonReviewerAgent(BaseAgent):
         if not dag.nodes:
             return SkeletonReviewReport(degraded=True)
         # 预算闸门
-        if ctx.budget is not None and not ctx.budget.can_spend(2):
+        if ctx.is_time_critical():
             self.record(ctx, "skeleton_review", "预算不足，跳过骨架评审（放行）")
             return SkeletonReviewReport(degraded=True)
 
@@ -195,7 +195,7 @@ class SkeletonReviewerAgent(BaseAgent):
                     ],
                     _PREFILL,
                 ),
-                0.2, 2048,
+                0.2, 32768,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)

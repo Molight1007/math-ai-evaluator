@@ -571,20 +571,21 @@ class BaseAgent(ABC):
                            self.name, remaining, max_tokens, max_tokens // 2)
             max_tokens = max(1024, max_tokens // 2)
 
-        # Token 裁剪到安全上限（可配置，默认 4096）
-        cap = getattr(self.config, 'max_tokens_cap', 4096)
-        if cap and max_tokens:
-            max_tokens = min(max_tokens, cap)
+        # 2026-09-03 老师：比赛无限 token，**不裁剪 max_tokens**——截断 = 白白丢分
+        # （v10 实测大量 finish_reason=length，答案被腰斩）。cap 配置保留但默认 0=不限；
+        # 若调用方显式传 max_tokens 则尊重（小输出任务如投票只传 512 属正常设计）。
+        cap = getattr(self.config, 'max_tokens_cap', 0) or 0
+        if cap and cap < 65536:
+            if max_tokens:
+                max_tokens = min(max_tokens, cap)
+            else:
+                max_tokens = cap
 
-        reserved = False
+        # 2026-09-03 老师：比赛无次数上限。删除 budget can_spend 强制（仅记账不阻断），
+        # 极端预算耗尽场景不再 skip LLM（导致 Lean 闸门 4/10 题被假跳过），
+        # spend 仍记账用于事后分析（v4 budget_skips 指标）。
         if ctx.budget is not None:
-            with ctx.budget._lock:
-                if not ctx.budget.can_spend(1):
-                    logger.warning("[%s] 预算耗尽 (剩余 %d)，跳过 LLM 调用", 
-                                   self.name, ctx.budget.remaining())
-                    return None
-                ctx.budget.spend(1)
-                reserved = True
+            ctx.budget.spend(1)
         try:
             resp = self.client.chat(
                 messages=messages,
@@ -622,8 +623,7 @@ class BaseAgent(ABC):
                     return _normalize_chat_response(resp3)
                 except Exception:
                     pass
-            if reserved and ctx.budget is not None:
-                ctx.budget.refund(1)
+            # 2026-09-03：budget 强制已删（reserved/refund 逻辑移除）
             ctx.trace.append({"agent": self.name, "step": "llm_error",
                               "content": f"LLM 调用失败: {err_str}"})
             logger.warning("[%s] LLM call failed: %s", self.name, e)

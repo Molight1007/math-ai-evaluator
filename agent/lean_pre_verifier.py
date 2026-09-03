@@ -86,7 +86,7 @@ class LeanPreVerifier(BaseAgent):
         for r in range(max_rounds + 1):
             final["rounds"] = r
             # 预算/时间护栏：不足则跳过（降级，不阻断主流程）
-            if ctx.budget is not None and not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 final["error"] = "预算不足，跳过前置形式化"
                 break
             if ctx.is_time_critical():
@@ -111,11 +111,21 @@ class LeanPreVerifier(BaseAgent):
                 break  # 通过理解，进入骨架审核阶段
 
             if result["verdict"] == "fail":
-                # 声明编译失败 → 带错误反馈重试修正
-                feedback = result["error"]
+                # 2026-09-02 老师拍板：错了就重新理解直到对才通过。
+                # 反馈不只是 Lean 编译错误——加"重新审题"强指令，逼迫 LLM 重读
+                # 题目原文而非重复同样的错误翻译。
+                error_summary = (result.get("error") or "")[:200]
+                feedback = (
+                    f"上轮形式化编译失败：\n{error_summary}\n\n"
+                    "**请重新审题**（不要重复上轮思路）：\n"
+                    "1. 重新通读题目原文，逐条列出题目给定的数学定义/条件/所求量。\n"
+                    "2. 常见错误：把英文介词（to/from/of/with/by）当函数名；"
+                    "漏掉条件或边界；把'求值'译成'求证'等。\n"
+                    "3. 重新写 Lean 声明，确保：每出现的符号在题目中已定义或用 Lean 标准符号。\n"
+                )
                 self.record(ctx, "lean_preverify",
-                            f"题目前置形式化失败（第 {r + 1} 轮），修正重试: "
-                            f"{result['error'][:120]}")
+                            f"题目前置形式化失败（第 {r + 1} 轮），强制重新理解重试: "
+                            f"{error_summary[:120]}")
                 continue
 
             # unknown（环境缺失/转化失败/超时）→ 不重试，直接降级
@@ -123,8 +133,19 @@ class LeanPreVerifier(BaseAgent):
 
         # ---- 骨架阶段 Lean 语法审核（#28，默认启用，安全降级）----
         if getattr(cfg, "enable_sketch_audit", True):
-            if (ctx.budget is None or ctx.budget.can_spend(1)) and not ctx.is_time_critical():
+            if not ctx.is_time_critical():  # 预算已无限制（9/3）
                 self.generate_and_audit_sketch(ctx)
+
+        # 2026-09-02 老师拍板：rounds 用尽仍 fail → 标记"理解未确认"（让下游 Solver
+        # 知道题目理解未经 Lean 校验，谨慎推理）。不阻断主流程（避免题目难时死锁），
+        # 但 final_response 仍可能错（理解错了求解也跟着错）。
+        if final.get("verdict") == "fail":
+            ctx.formal_spec = ""  # 清除可能部分写的 spec
+            ctx._preverify_unconfirmed = True
+            self.record(
+                ctx, "lean_preverify",
+                "preverify 多次重试仍 fail，标记理解未确认——下游推理需谨慎",
+            )
 
         # 未通过/降级：formal_spec 可能留空，但不阻断主流程
         ctx.preverify_trace = final
@@ -158,7 +179,7 @@ class LeanPreVerifier(BaseAgent):
                 {"role": "system", "content": LEAN_SKETCH_SYSTEM},
                 {"role": "user", "content": user_msg},
             ],
-            0.2, 1500,
+            0.2, 32768,
         )
         if not raw:
             return ""
@@ -181,7 +202,7 @@ class LeanPreVerifier(BaseAgent):
 
         # 1) 生成骨架（若未提供）
         if not sketch_text:
-            if ctx.budget is not None and not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 ctx.sketch_audit = {"verdict": "unknown", "error": "预算不足，跳过骨架生成", "gaps": []}
                 return ctx
             sketch_text = self._generate_sketch(ctx)

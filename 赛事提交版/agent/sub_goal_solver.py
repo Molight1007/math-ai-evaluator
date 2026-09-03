@@ -138,8 +138,18 @@ class SubGoalSolverAgent(BaseAgent):
                     break
         if subgoals is None:
             return None
-        if len(subgoals) > 10:
-            subgoals = subgoals[:10]  # 安全上限
+        # 2026-09-03 老师：子目标是**简化求解**的，不是把题目拆得更复杂。
+        # 原上限 10（deep 实测 8 步 × 110s = 882s 吃掉 73% 时间）。
+        # 改为可配置 max_subgoals（默认 6）：少而精，每步都是真正必要的
+        # 简化步骤；省下的时间留给验证器与 Lean 闸门（老师核心诉求）。
+        # 注意：这是"规划时少拆几步"，**不是执行到一半强制中断**——
+        # 已规划的子目标一定会跑完（老师："强制结束就等于错误"）。
+        _max_sg = int(getattr(self.config, "max_subgoals", 6) or 6)
+        if len(subgoals) > _max_sg:
+            self.record(ctx, "subgoal",
+                        f"子目标 {len(subgoals)} 个 > 上限 {_max_sg}，"
+                        f"保留前 {_max_sg} 个（简化求解，非中断）")
+            subgoals = subgoals[:_max_sg]
 
         valid_types = {"compute", "prove", "derive", "verify"}
         seen_ids = set()
@@ -193,7 +203,7 @@ class SubGoalSolverAgent(BaseAgent):
     def run(self, ctx: TaskContext) -> TaskContext:
         """执行子目标规划 → 逐步求解 → 结论合并 全流程，结果追加到 ctx.candidates"""
         # 预算闸门：连规划所需的 1 次 LLM 调用都负担不起时，整体跳过、不追加候选
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
             return ctx
 
@@ -216,12 +226,22 @@ class SubGoalSolverAgent(BaseAgent):
         results_map = {}  # subgoal_id → result_text
 
         for sg in subgoals:
-            if not ctx.budget.can_spend(2):
+            if ctx.is_time_critical():
                 self.record(ctx, "subgoal", f"预算不足，跳过剩余子目标 (当前={sg['id']}/{len(subgoals)})")
                 break
 
             prev_results = self._format_previous_results(results_map, subgoals)
             step_result = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results)
+            # 2026-09-02 老师方案 B：蓝图评审 OK 但子目标失败 → 重做子目标
+            # （不重画蓝图）。一次失败常是瞬时 LLM 错误/预算抖动，带已解
+            # 子目标上下文重试一次；仍失败才记为占位（留给外层占位符兜底）。
+            if step_result.startswith("[子目标") and True:
+                self.record(ctx, "subgoal",
+                            f"子目标 #{sg['id']}「{sg['title']}」失败，带上下文重试一次")
+                prev_results2 = self._format_previous_results(results_map, subgoals)
+                retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results2)
+                if retry and not retry.startswith("[子目标"):
+                    step_result = retry
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
             # v2.9：结构化输出每步子目标的过程与中间结果
@@ -248,7 +268,7 @@ class SubGoalSolverAgent(BaseAgent):
             time.sleep(0.2)  # 速率限制间隔
 
         # 阶段三：结论合并
-        if not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "subgoal", "预算不足，跳过合并阶段")
             # 使用最后一个子目标的结果作为最终答案
             final_answer = self._fallback_from_last_subgoal(subgoals)
@@ -264,6 +284,10 @@ class SubGoalSolverAgent(BaseAgent):
 
         # 构造 Candidate
         full_reasoning = self._build_full_reasoning(subgoals, problem_analysis, final_answer)
+        # 2026-09-02 老师需求：候选池上限 8（与 solver.run 同口径，5→8 保好候选）
+        if len(getattr(ctx, 'candidates', None) or []) >= 8:
+            self.record(ctx, "subgoal", "候选池已达上限 8，跳过子目标候选入池")
+            return
         candidate = Candidate(
             id=len(ctx.candidates),
             answer=final_answer,
@@ -330,7 +354,7 @@ class SubGoalSolverAgent(BaseAgent):
                                     max_replan_rounds) or max_replan_rounds)
         replan_rounds = max(1, replan_rounds)
         for round_idx in range(replan_rounds):
-            if not ctx.budget or not ctx.budget.can_spend(2):
+            if not ctx.budget or not True:
                 self.record(ctx, "dag_replan",
                             f"DAG 修复预算不足，提前停止 (round={round_idx + 1})")
                 return False
@@ -455,7 +479,7 @@ class SubGoalSolverAgent(BaseAgent):
                     ],
                     '{"',
                 ),
-                0.2, 2048,
+                0.2, 32768,
             )
             if resp:
                 resp = stitch('{"', resp)
@@ -552,7 +576,7 @@ class SubGoalSolverAgent(BaseAgent):
                     self.record(ctx, "skeleton_review",
                                 f"骨架评审通过（round={round_idx + 1}），进入语法审核")
                 return dag
-            if ctx.budget is not None and not ctx.budget.can_spend(2):
+            if ctx.is_time_critical():
                 self.record(ctx, "skeleton_review",
                             "骨架重生成预算不足，保留当前骨架")
                 return dag
@@ -577,7 +601,7 @@ class SubGoalSolverAgent(BaseAgent):
         #32 迭代精炼：config.use_refiner 开启时，整树审核后再执行
         Stage 3 sorry 补全循环（含 OR 回溯 + lemma 记忆），结果写 ctx.refine_result。
         """
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             return
         try:
             from .lean_translator import LeanTranslatorAgent
@@ -685,7 +709,7 @@ class SubGoalSolverAgent(BaseAgent):
                 and sg.get("type") in ("proof", "prove", "derive", "lemma")):
             sg_q = f"{sg.get('title','')} {sg.get('description','')}"
             sg_q = sg_q.strip() or ctx.problem
-            sr = self._search_mathlib_theorems(ctx, sg_q, limit=4)
+            sr = self._search_mathlib_theorems(ctx, sg_q, limit=8)
             if sr and sr.get("status") == "ok" and sr.get("results"):
                 lines = "\n".join(
                     f"  - {r['name']} ({r.get('kind','?')}): {(r.get('snippet','') or '')[:100]}"
@@ -711,12 +735,19 @@ class SubGoalSolverAgent(BaseAgent):
         step_result = self._call_step(ctx, user_msg)
 
         # 每步 oracle 校验：仅对计算类子目标（预期数值/表达式结果）做客观检查
+        # 2026-09-03 老师：子目标是**简化求解**的，不是复杂化的。实测 deep 档
+        # 每步 110s（主求解 60s + oracle 10-70s + 重试 60s）→ 8 步吃掉 882s，
+        # 验证/Lean 闸门全没时间。oracle 是**同源自评**（价值低、耗时高），
+        # 默认关闭（sub_goal_oracle_check=False 开启）。
+        # 注意：这里**不是强制结束**——失败重试（_solve_subgoal 的上下文重试）
+        # 仍保留，子目标一定会尽力做完（老师："强制结束就等于错误"）。
         sg_type = sg.get("type", "compute")
-        if (sg_type in ("compute", "derive")
+        if (getattr(self.config, "sub_goal_oracle_check", False)
+                and sg_type in ("compute", "derive")
                 and step_result
                 and not step_result.startswith("[子目标")):
             oracle_fb = self._oracle_check_step(step_result)
-            if oracle_fb and ctx.budget is not None and ctx.budget.can_spend(1):
+            if oracle_fb and not ctx.is_time_critical():
                 retry_msg = user_msg + (
                     f"\n\n[上一步结果客观校验未通过] {oracle_fb}\n"
                     f"请修正错误后重新给出【本步结果】。"
@@ -766,7 +797,7 @@ class SubGoalSolverAgent(BaseAgent):
                 ],
                 "【本步结果】",
             ),
-            0.2, 2048,
+            0.2, 32768,
         )
         if resp:
             resp = stitch("【本步结果】", resp)
@@ -815,7 +846,7 @@ class SubGoalSolverAgent(BaseAgent):
                 ],
                 "【最终答案】",
             ),
-            0.2, 2048,
+            0.2, 32768,
         )
         if resp:
             resp = stitch("【最终答案】", resp)

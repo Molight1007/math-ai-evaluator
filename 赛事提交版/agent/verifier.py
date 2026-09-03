@@ -246,7 +246,7 @@ class VerifierAgent(BaseAgent):
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "), 0.0, 512)
+        raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "), 0.0, 32768)
         return stitch("VERDICT: ", raw) if raw else raw
 
     def _vote_one_scoring(self, ctx, problem: str, candidate_text: str) -> dict | None:
@@ -260,7 +260,7 @@ class VerifierAgent(BaseAgent):
                 problem=problem, candidate_answer=candidate_text
             )},
         ]
-        raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 1024)
+        raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
         if raw:
             raw = stitch('{"', raw)
         try:
@@ -281,7 +281,14 @@ class VerifierAgent(BaseAgent):
     ) -> list[Verdict]:
         """
         批量投票并汇总（BUG-8 修复：用 valid_votes 替代 total_votes）。
+        2026-09-02 修复：deadline 已过仍启动投票 → 每票 LLM 全被跳过返回 None，
+        _is_correct_vote(None) 全判错 + 疯狂刷日志空转（027 实测超 deadline 137s）。
         """
+        # 超时保护：deadline 已过 → 不投票（空 verdicts 由上层走兜底）
+        if ctx.is_timed_out():
+            logger.warning("Verifier: 单题 deadline 已过，跳过投票（%d 票）",
+                           total_votes)
+            return []
         text = self._candidate_text(candidate)
         verdicts: list[Verdict] = []
 
@@ -331,7 +338,7 @@ class VerifierAgent(BaseAgent):
         ]
         try:
             # v2.4.1：prefill「错因：」抑制 CoT，直接输出错因定位
-            raw = self.llm(ctx, prefill_messages(messages, "错因："), 0.0, 1024)
+            raw = self.llm(ctx, prefill_messages(messages, "错因："), 0.0, 32768)
             return stitch("错因：", raw) if raw else "无法提取失败原因。"
         except Exception as e:
             logger.error(f"Feedback extraction failed: {e}")
@@ -361,7 +368,7 @@ class VerifierAgent(BaseAgent):
         empty = {"verdict": "unknown", "findings": []}
         try:
             # prefill 锚定到 JSON 开头：Intern 无短种子会先吐思维块吃满预算
-            raw = self.llm(ctx, prefill_messages(messages, "{"), 0.0, 2048)
+            raw = self.llm(ctx, prefill_messages(messages, "{"), 0.0, 32768)
             if not raw:
                 return empty
             raw = stitch("{", raw)
@@ -471,7 +478,7 @@ class VerifierAgent(BaseAgent):
             return ""
         if getattr(best_cluster, "confidence", 0.0) >= 0.5:
             return ""
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             return ""
 
         # 取 best_cluster 的代表候选（共识簇内第一个候选）
@@ -590,8 +597,7 @@ class VerifierAgent(BaseAgent):
                     ],
                     "答案：",
                 ),
-                0.0,
-                2048,
+                0.0, 32768,
             )
             if resp:
                 resp = stitch("答案：", resp)
@@ -621,7 +627,7 @@ class VerifierAgent(BaseAgent):
         ]
         try:
             # v2.4.1：prefill「{"」引导 JSON 输出，抑制 CoT 前置长推理
-            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 2048)
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
             if raw:
                 raw = stitch('{"', raw)
             m = re.search(r'\{[^{}"]*(?:"[^"]*"[^{}]*)*\}', raw, re.DOTALL)
@@ -736,7 +742,7 @@ class VerifierAgent(BaseAgent):
             confidence = (best_cluster.vote_correct / best_cluster.vote_total
                           if best_cluster.vote_total else 0.0)
             # 触发条件：置信度低（验证结果不可靠）或投票全否
-            if confidence < 0.5 and ctx.budget.can_spend(1):
+            if confidence < 0.5 and True:
                 top_ans = best_cluster.answer_norm or ""
                 if self._playoff_recheck(ctx, problem, top_ans):
                     best_cluster.vote_correct += 1

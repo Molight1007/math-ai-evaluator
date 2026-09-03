@@ -28,10 +28,13 @@ import requests
 
 logger = logging.getLogger("MathPilot.LLMClient")
 
-_DEFAULT_TIMEOUT = 240  # 秒（2026-09-02：120→240。蓝图 DAG 生成 max_tokens=6144，
-                        # Intern-S2-397B 服务端生成慢时 >120s，3 次重试链烧 360s+
-                        # 直接耗尽单题 standard 档预算 → 子目标全 budget_skip → 占位符）
-_MAX_RETRIES = 2
+_DEFAULT_TIMEOUT = 180  # 秒（2026-09-03：240→180。v9 实测 LLM API 不稳时
+                        # 3 次重试链一次失败烧 14 分钟（003 吃满 2867s 致 Lean 闸门
+                        # 0 执行）。180s 覆盖长推理（蓝图 6144 tokens），
+                        # 同时把单次失败耗时压下来）
+_CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
+_MAX_RETRIES = 1      # 2026-09-03：2→1。持续网络问题时 3 次重试纯浪费；
+                       # 瞬时抖动 1 次重试足够，配合调用方 is_time_critical 兜底
 _RETRY_BACKOFF = 2.0
 
 # ============================================================
@@ -154,7 +157,7 @@ class LLMClient:
                     url,
                     headers=headers,
                     json=payload,
-                    timeout=self.timeout,
+                    timeout=(_CONNECT_TIMEOUT, self.timeout),
                     stream=stream,
                 )
                 if resp.status_code == 200:

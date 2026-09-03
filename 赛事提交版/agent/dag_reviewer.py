@@ -220,7 +220,7 @@ class DagReviewerAgent(BaseAgent):
                      为 None 时仅按 DAG 结构本身评审。
         """
         # 预算闸门
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
+        if ctx.is_time_critical():
             self.record(ctx, "dag_review", "预算不足，跳过 DAG 评审")
             return DagReviewReport()
         if not dag or not dag.nodes:
@@ -239,7 +239,7 @@ class DagReviewerAgent(BaseAgent):
         candidates = self._llm_candidates(dag, heuristic_results)
         candidates = candidates[: self._max_review]
         for node in candidates:
-            if not ctx.budget.can_spend(1):
+            if ctx.is_time_critical():
                 self.record(ctx, "dag_review", "LLM 预算耗尽，评审提前终止")
                 llm_skipped.append(node.id)
                 break
@@ -395,7 +395,7 @@ class DagReviewerAgent(BaseAgent):
                     ],
                     _PREFILL,
                 ),
-                0.2, 1024,
+                0.2, 32768,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)

@@ -90,6 +90,32 @@ def _preprocess_latex(expr: str) -> str:
     return expr
 
 
+def _insert_implicit_mul(s: str) -> str:
+    """隐式乘法归一（2026-09-03）：'c(x-1)^2(x+2)(x-4)' 在 SymPy 里解析失败
+    （`c(` 当函数调用 / `2(` 报错 / `)(` 语法错）→ 插入 '*'（只插 * 不重复括号，
+    lookahead 不消费原括号）：
+      幂指数后括号   ^2(x → ^2*(x
+      相邻括号       )(x  → )*(x
+      右括号后字母   )c → )*c
+      常数/变量乘括号 c(x → c*(x（函数名如 sin/cos 除外）
+    """
+    _MATH_FUNCS = {"sin", "cos", "tan", "arcsin", "arccos", "arctan", "exp",
+                   "log", "ln", "sqrt", "abs", "min", "max", "floor", "ceil",
+                   "operatorname", "frac", "gcd", "lcm"}
+    s = re.sub(r"(\^)(\d+)(?=\()", r"\1\2*", s)
+    s = re.sub(r"\)(?=\()", ")*", s)
+    s = re.sub(r"\)(?=[A-Za-z])", r")*", s)
+
+    def _var_open(m):
+        name = m.group(1)
+        if name in _MATH_FUNCS:
+            return m.group(0)
+        return name + "*"
+
+    s = re.sub(r"([A-Za-z]+)(?=\()", _var_open, s)
+    return s
+
+
 def _try_parse(expr_str: str) -> Tuple[Optional[sp.Expr], str]:
     """尝试将字符串解析为 SymPy 表达式。返回 (表达式, 错误信息)。"""
     if not _HAS_SYMPY:
@@ -98,6 +124,7 @@ def _try_parse(expr_str: str) -> Tuple[Optional[sp.Expr], str]:
         return None, "表达式包含危险关键词"
     try:
         processed = _preprocess_latex(expr_str)
+        processed = _insert_implicit_mul(processed)
         parsed = sp.sympify(processed, evaluate=False)
         return parsed, ""
     except Exception as e:

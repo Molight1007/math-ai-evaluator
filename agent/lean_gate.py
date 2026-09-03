@@ -141,16 +141,19 @@ class LeanGate:
                                    "candidates": len(candidates)})
             return kept, feedbacks
 
-        # v2.8 时间/预算护栏：应急/时间紧张/预算不足时降级放行，
-        # 避免 standard 档证明题的 Lean 编译拖垮单题 20 分钟硬限。
-        if getattr(ctx.state, 'emergency', False) or ctx.is_time_critical():
+        # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
+        # 时间保护改用 **1200s hard 硬顶** 而非被 soft_budget 收紧的 deadline——
+        # standard 档 soft=540s，题实际跑 560s（超 soft 才结束），若用
+        # ctx.time_remaining()（看 soft deadline）闸门必然 time_critical 跳过。
+        # 单答案验证 5-21s 相对 1200s 硬顶完全可负担，只有快撞硬顶才放行。
+        import time as _t
+        _hard_deadline = ctx.start_time + float(
+            getattr(self.config, "max_time_per_question", 1200))
+        if _hard_deadline - _t.time() < 2:
             self._record_ctx(ctx, {"enabled": True, "degraded": "time_critical",
                                    "tier": tier, "domain": domain})
             return kept, feedbacks
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
-            self._record_ctx(ctx, {"enabled": True, "degraded": "budget_exhausted",
-                                   "tier": tier, "domain": domain})
-            return kept, feedbacks
+        # 2026-09-03 老师：比赛无次数上限。删 budget 强制（保留 spend 记账作指标）。
 
         bridge = self._bridge_inst
         if bridge is None:
@@ -279,6 +282,107 @@ class LeanGate:
         else:
             self._record_ctx(ctx, {"rejected": 0, "kept": len(kept)})
         return kept, feedbacks
+
+    # ------------------------------------------------------------------
+    # 最终答案闸门（2026-09-02 老师需求：Lean 拦错误逻辑、提高优先级）
+    # ------------------------------------------------------------------
+    def gate_final_answer(self, ctx: TaskContext, tier: str,
+                          answer: str, reasoning: str = "") -> bool:
+        """对**被选中提交的最终答案**做一次 Lean 验证（5-21s）。
+
+        与原 apply()（全候选过滤，8×10s 常因 time_critical 整批跳过）不同：
+        只验 1 个答案 → 单次成本可负担 → 不再因时间紧张跳过 Lean 把关。
+        - verdict in (proof_valid, answer_valid) → True（通过放行）
+        - proof_invalid / 严格拒绝 → False（调用方换候选）
+        - 环境缺失 / 异常 → 降级放行 True（不因 Lean 环境误伤答案）
+        """
+        if not answer or not answer.strip():
+            self._record_ctx(ctx, {"gate": "final_answer", "tier": tier,
+                                   "skipped": "empty_answer"})
+            return True
+        domain = getattr(ctx, "domain", "")
+        qtype = getattr(ctx, "question_type", "")
+        is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
+        entry = {"gate": "final_answer", "tier": tier,
+                 "is_proof": is_proof, "answer": answer[:80]}
+        # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
+        # 时间检查必须用 **1200s hard 硬顶**（不是 ctx.time_remaining 看的 soft
+        # deadline）——standard 档 soft=540s，题跑 560s 超 soft 才结束，用 soft
+        # deadline 算剩余必然 <2s 全跳（wrong10b 实测 5/10 题因此跳过）。
+        import time as _t2
+        if (ctx.start_time + float(getattr(self.config,
+                                           "max_time_per_question", 1200))
+                - _t2.time() < 2):
+            entry["degraded"] = "time_critical"
+            self._record_ctx(ctx, entry)
+            return True
+        # 2026-09-02 老师强调：Lean 是最后保证，**不受 LLM 调用次数预算限制**。
+        # 2026-09-03 老师：比赛无次数上限。删 budget 强制——base.py llm() 入口
+        # 已删除 can_spend 检查，bridge 内部 _llm_call 也不再强制。Lean 是
+        # 最后保证，让它有需要多少次 LLM 调用就跑多少次。
+        bridge = self._bridge_inst
+        if bridge is None or not bridge.lean_available:
+            entry["degraded"] = "env_unavailable"
+            self._record_ctx(ctx, entry)
+            return True
+        try:
+            if is_proof:
+                report = bridge.verify(
+                    problem=ctx.problem or "",
+                    reasoning=reasoning or answer,
+                    domain=domain,
+                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                )
+            else:
+                report = bridge.verify_answer(
+                    problem=ctx.problem or "",
+                    reasoning=reasoning or answer,
+                    answer=answer,
+                    domain=domain,
+                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                )
+        except Exception as e:  # noqa: BLE001
+            entry["error"] = str(e)[:200]
+            entry["degraded"] = "exception_lenient"
+            self._record_ctx(ctx, entry)
+            return True
+        if report is None:
+            entry["degraded"] = "no_report"
+            self._record_ctx(ctx, entry)
+            return True
+        if report.verdict in ("proof_valid", "answer_valid"):
+            entry["verdict"] = report.verdict
+            entry["lean_valid"] = True
+            BaseAgent.note_compile_valid(ctx)
+            self._record_ctx(ctx, entry)
+            return True
+        if report.verdict == "proof_invalid":
+            entry["verdict"] = "proof_invalid"
+            entry["lean_valid"] = False
+            msg = "Lean 编译/逻辑错误"
+            try:
+                from .answer_oracle import AnswerOracle
+                structured = AnswerOracle.findings_to_feedback(
+                    getattr(report, "findings", []) or [])
+                if structured:
+                    msg = structured
+                elif getattr(report, "suggestion", ""):
+                    msg = report.suggestion
+            except Exception:  # noqa: BLE001
+                msg = report.suggestion or str(
+                    (report.findings or [None])[0])[:200]
+            entry["feedback"] = msg[:200]
+            self._record_ctx(ctx, entry)
+            return False
+        # 2026-09-03 老师指令："当答案无法被验证或标记为未知时，必须默认拒绝
+        # 而非放行"。unknown（翻译失败/验证无法判定/自证嫌疑）→ 一律拒绝，
+        # 让 6.5 步换候选/重生成（校验不了就不许裸奔输出）。
+        entry["verdict"] = "unknown"
+        entry["degraded"] = "strict_reject"
+        entry["feedback"] = ("Lean 验证无法判定（unknown）：翻译失败或代码未交叉引用题目条件。"
+                             "禁止放行裸答案——请重写验证代码，锚定题目数值与条件。")
+        self._record_ctx(ctx, entry)
+        return False
 
     # ------------------------------------------------------------------
     # 诊断记录

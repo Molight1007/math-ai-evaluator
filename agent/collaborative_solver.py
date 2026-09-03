@@ -84,7 +84,7 @@ class CollaborativeSolver(BaseAgent):
         if ctx.is_time_critical() or ctx.is_timed_out():
             self.record(ctx, "collab", "时间紧张/超时，跳过三Agent协作")
             return ctx
-        if ctx.budget is not None and not ctx.budget.can_spend(3):
+        if ctx.is_time_critical():
             self.record(ctx, "collab", "预算不足，跳过三Agent协作")
             return ctx
 
@@ -107,7 +107,7 @@ class CollaborativeSolver(BaseAgent):
             if ctx.is_time_critical() or ctx.is_timed_out():
                 self.record(ctx, "collab", f"第{rnd}轮前时间紧张，停止协作循环")
                 break
-            if ctx.budget is not None and not ctx.budget.can_spend(2):
+            if ctx.is_time_critical():
                 self.record(ctx, "collab", f"第{rnd}轮前预算不足，停止协作循环")
                 break
 

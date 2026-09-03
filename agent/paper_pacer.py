@@ -73,6 +73,9 @@ class PaperPacer:
         self.started = 0      # 已开始处理的题数
         self.done = 0         # 已完成的题数
         self.deep_used = 0    # 已占用 deep 档的题数
+        # 2026-09-02 老师需求「时间动态分配」：每题省下的时间累积，
+        # 后续题可在收紧时加回去（盈余→难题加时间）。
+        self.bonus_pool = 0.0
         self.history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -85,11 +88,20 @@ class PaperPacer:
             idx = self.started
         return idx
 
-    def end(self, tier: str = None, duration: float = None) -> None:
-        """记录一道题处理完成。"""
+    def end(self, tier: str = None, duration: float = None,
+            soft: float = None) -> None:
+        """记录一道题处理完成。
+
+        soft: 该题分配到的软预算帽（秒）。若 soft > duration，
+        盈余累入 bonus_pool，供后续题收紧时加回（动态分配）。
+        """
         with self._lock:
             self.done += 1
+            if soft is not None and duration is not None:
+                surplus = max(0.0, float(soft) - float(duration))
+                self.bonus_pool += surplus
             self.history.append({"tier": tier, "duration": duration,
+                                 "soft": soft,
                                  "at": time.time() - self.start_time})
 
     # ------------------------------------------------------------------
@@ -116,17 +128,27 @@ class PaperPacer:
             answered = max(self.done, self.started - self._inflight_window)
         tier_cap = float(self.tier_caps.get(tier, 480.0))
 
+        # 2026-09-02 开局宽容：开题阶段（answered < inflight_window），
+        # 并发 3 题都刚开始，done=0 → answered=0，time_frac>0 永远判定"落后"，
+        # 死锁 deep 档 1200s 拿不到（实测 4 题全拿 ~560s 平均线）。
+        # 修复：开题直接给满档，让 deep 档 1200s 真生效。
+        if answered < self._inflight_window:
+            return tier_cap
+
         # 进度判定：时间消耗比例 ≤ 完成比例 → 正常/超前，给满档位预算
         budget_frac = answered / max(1, self.total_questions)
         time_frac = elapsed / max(1.0, self.target_seconds)
         if time_frac <= budget_frac:
             return tier_cap
 
-        # 落后 → 收紧到平均（剩余墙钟 × 并发 / 剩余题数），保底 min_soft
+        # 落后 → 收紧到平均（剩余墙钟 × 并发 / 剩余题数）+ 盈余加成
+        # 2026-09-02 老师需求：已完成题省下的时间（bonus_pool）按剩余题数
+        # 摊还给后续题，让"简单题早完成→难题有更多时间"。
         remaining_target = max(1.0, self.target_seconds - elapsed)
         remaining_q = max(1, self.total_questions - answered)
         paper_cap = self.concurrency * remaining_target / remaining_q
-        return min(tier_cap, max(paper_cap, self.min_soft))
+        bonus_per_q = self.bonus_pool / remaining_q
+        return min(tier_cap, max(paper_cap + bonus_per_q, self.min_soft))
 
     # ------------------------------------------------------------------
     # deep 档配额（防止全卷超时）
@@ -173,6 +195,7 @@ class PaperPacer:
             "done": self.done,
             "total": self.total_questions,
             "started": self.started,
+            "bonus_pool": round(self.bonus_pool, 1),
             # deep 配额诊断：验收时用 deep_used ≤ total × ratio 校验
             "deep_used": self.deep_used,
             "deep_quota_cap": round(
