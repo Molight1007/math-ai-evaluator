@@ -70,3 +70,6 @@ deploy/user_api_settings.json
 
 # test_mathlib 依赖包（.lake gitlink 损坏，仅本地构建用，不提交）
 与lean相关的插件/test_mathlib/.lake/
+
+# 外部克隆仓库（嵌套 git，不入库）
+formal-imo/
