@@ -214,28 +214,20 @@ class Verdict:
 
 @dataclass
 class Budget:
-    """LLM 调用预算控制器（线程安全）"""
+    """LLM 调用**计数器**（线程安全）。
+
+    2026-09-03 老师定调"比赛无调用次数上限"后，预算不再阻断任何调用，
+    本类只保留记账用途（事后分析调用量）。原 ``can_spend`` / ``refund`` /
+    ``remaining`` 三个方法在全项目已无调用点（审核确认），一并删除，
+    避免后人误以为预算仍会拦截。
+    """
     max_calls: int
     used_calls: int = 0
     _lock: RLock = field(default_factory=RLock, repr=False)
 
-    def can_spend(self, n: int = 1) -> bool:
-        """是否还有余额"""
-        with self._lock:
-            return self.used_calls + n <= self.max_calls
-
     def spend(self, n: int = 1) -> None:
         with self._lock:
             self.used_calls += n
-
-    def refund(self, n: int = 1) -> None:
-        """调用失败/异常时回退预算"""
-        with self._lock:
-            self.used_calls = max(0, self.used_calls - n)
-
-    def remaining(self) -> int:
-        with self._lock:
-            return max(0, self.max_calls - self.used_calls)
 
     def set_max_calls(self, new_max: int) -> None:
         """动态调整总调用预算（deep 档位需要更多预算时调用）。"""
@@ -444,8 +436,15 @@ class TaskContext:
 
     # ---- 时间检查方法（适配竞赛新规则）----
     def time_remaining(self) -> float:
-        """返回当前题目剩余壁钟时间（秒），负值=已超时"""
-        if self.deadline == 0.0:
+        """返回当前题目剩余壁钟时间（秒），负值=已超时。
+
+        2026-09-03 审核统一口径：``BaseAgent.llm`` 早已把 ``deadline < 1e8``
+        视为「测试 fixture 的伪 epoch 值」按无限剩余处理，而本方法没有，
+        导致同一个 ctx 在 llm() 看是"时间充裕"、在 is_time_critical() 看是
+        "已超时"——测试里表现为子目标求解被误报"预算耗尽"整体跳过。
+        两处口径统一，避免这类自相矛盾的时间判断。
+        """
+        if self.deadline == 0.0 or self.deadline < 10**8:
             return float("inf")
         import time
         return self.deadline - time.time()

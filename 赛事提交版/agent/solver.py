@@ -28,7 +28,6 @@ from .base import (
     detect_template_leak,
 )
 from prompts.policy import (
-    POLICY_SYSTEM,
     SELF_IMPROVE_USER,
     get_policy_system,
     get_domain_hint,
@@ -817,9 +816,6 @@ class SolverAgent(BaseAgent):
                 if detect_truncated(resp):
                     logger.warning("Direct solve %d truncated → retry with continuation prompt", attempt + 1)
                     if attempt < 2:
-                        continuation = (
-                            direct_system + "\n\n上一轮回答被截断，请继续完成推理并确保输出完整的【最终答案】。"
-                        )
                         user_content = (
                             f"上一轮你的回答被截断在：{resp[-200:]}\n\n"
                             f"请从截断处续写，给出完整的最终答案。原题目：\n{ctx.problem}"

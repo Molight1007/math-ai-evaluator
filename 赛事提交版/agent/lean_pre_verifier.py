@@ -85,12 +85,12 @@ class LeanPreVerifier(BaseAgent):
         feedback = ""
         for r in range(max_rounds + 1):
             final["rounds"] = r
-            # 预算/时间护栏：不足则跳过（降级，不阻断主流程）
+            # 时间护栏：紧迫则跳过（降级，不阻断主流程）。
+            # 2026-09-03 审核：原来这里连写两个 is_time_critical() 分支
+            # （"预算不足"在前、"时间紧张"在后），后者永远不可达——预算闸门
+            # 删除时的清理遗漏。现只保留一个时间判断。
             if ctx.is_time_critical():
-                final["error"] = "预算不足，跳过前置形式化"
-                break
-            if ctx.is_time_critical():
-                final["error"] = "时间紧张，跳过前置形式化"
+                final["error"] = "时间紧迫，跳过前置形式化"
                 break
 
             result = bridge.formalize_problem(

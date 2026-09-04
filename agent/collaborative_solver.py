@@ -219,8 +219,11 @@ class CollaborativeSolver(BaseAgent):
             ans = extract_final_answer(target)
             if ans and not AnswerOracle.is_parseable(ans):
                 notes.append("- 该解答的最终答案无法解析为有效数学表达式，请重点核查")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001  解析检查异常吞掉 = 静默跳过
+            # 2026-09-04 审核：与 lean_gate 吞 AttributeError 同型——
+            # is_parseable 内部 bug 会让"解析检查"系统性失效。留证据。
+            logger.debug("collab sanity 解析检查异常（跳过）: %s: %s",
+                         type(exc).__name__, exc)
         return "\n".join(notes) if notes else ""
 
     def _role_integrate(self, ctx: TaskContext, solution: str, review: str) -> str:

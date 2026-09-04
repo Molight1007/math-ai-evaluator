@@ -20,7 +20,6 @@ LeanRefinerAgent —— LEAP Stage 3：迭代精炼（#29/#32/#33）
 - #30 lemma 记忆：已证叶子入 LemmaMemory，供后续节点引用
 """
 
-import json
 import logging
 import os
 import re
@@ -346,7 +345,9 @@ class LeanRefinerAgent(BaseAgent):
                                  "error": "缺少 blueprint 或 sketch_tree"}
             return ctx
         if ctx.is_time_critical():
-            ctx.refine_result = {"verdict": "unknown", "error": "预算不足"}
+            # 2026-09-03 审核：文案"预算不足"是预算闸门时代的遗留——
+            # 实际判断的是时间紧迫。改文案防误导。
+            ctx.refine_result = {"verdict": "unknown", "error": "时间紧迫，跳过精炼"}
             return ctx
         try:
             dag = BlueprintDAG.from_dict(ctx.blueprint)

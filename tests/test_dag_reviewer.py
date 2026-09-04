@@ -253,15 +253,32 @@ class TestReviewFullFlow(unittest.TestCase):
         self.assertIn("results", ctx.dag_review_report)
         self.assertEqual(ctx.dag_review_report["reject_count"], 3)
 
-    def test_review_respects_budget(self):
-        # 预算耗尽时 review 直接返回空报告
+    def test_review_respects_time_critical(self):
+        """2026-09-03 预算解除：时间紧迫才跳过 DAG 评审（返回空报告）。
+
+        原 test_review_respects_budget 用 Budget(max_calls=0) 模拟预算耗尽
+        期望空报告——预算闸门已删，预算=0 评审照常执行（启发式+LLM 全跑）。
+        真实跳过条件是 is_time_critical()（deadline 过期）。
+        """
+        import time as _t
         client = make_mock_client()
         config = make_config()
         agent = DagReviewerAgent(client, config)
         ctx = make_ctx()
-        ctx.budget = Budget(max_calls=0)  # 预算=0
+        ctx.budget = Budget(max_calls=0)  # 预算=0（不再阻断）
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期 → 时间紧迫
         report = agent.review(ctx, make_dag(), results_map={})
         self.assertEqual(len(report.results), 0)
+
+    def test_budget_zero_still_reviews(self) -> None:
+        """预算=0 不再阻断：DAG 评审照常产出结果（新语义）。"""
+        client = make_mock_client()
+        config = make_config()
+        agent = DagReviewerAgent(client, config)
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        report = agent.review(ctx, make_dag(), results_map={})
+        self.assertGreater(len(report.results), 0)
 
     def test_should_replan_thresholds(self):
         # 阈值正确性

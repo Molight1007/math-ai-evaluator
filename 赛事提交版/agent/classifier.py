@@ -10,7 +10,6 @@ from __future__ import annotations
 """
 
 import logging
-import re
 
 from .base import BaseAgent, TaskContext
 from .question_type import classify_question_type

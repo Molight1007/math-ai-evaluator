@@ -23,7 +23,7 @@ from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_respo
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
-from .verifier import VerifierAgent, AnswerCluster
+from .verifier import VerifierAgent
 from .formatter import FormatterAgent
 from .difficulty_router import DifficultyRouter
 from .paper_pacer import PaperPacer
@@ -106,16 +106,28 @@ class Orchestrator(BaseAgent):
         LLM 心算错值后全链路自洽执行，Lean unknown 拦不住。这里用
         **确定性 Python 采样**（20k 点）找突破声称值的可行点 → 证伪。
         """
+        # 审核补充（2026-09-03）：原实现所有早退分支都是裸 return，
+        # v17 全程 0 条 value_attack 痕迹时无法判断"未触发"还是"异常被吞"。
+        # 每个早退点都留 debug 日志，便于下一轮定位。
         try:
             if ctx.is_time_critical():
+                logger.debug("[C-lite] 跳过数值攻击：时间紧张")
                 return
-            merge_text = (getattr(ctx, "blueprint_merge", "") or ""
-                          or getattr(ctx, "subgoal_merge_plan", "") or "")
+            # 审核修正（2026-09-03）：原读 `ctx.blueprint_merge`——该属性**不存在**
+            # （TaskContext 无此字段，diag 用的是 ctx.blueprint["merge_strategy"]），
+            # 等于蓝图那一路 merge 文本永远拿不到，只剩子目标整合方案兜底。
+            _bp = getattr(ctx, "blueprint", None) or {}
+            _bp_merge = _bp.get("merge_strategy", "") if isinstance(_bp, dict) \
+                else str(getattr(_bp, "merge_strategy", "") or "")
+            merge_text = _bp_merge or getattr(ctx, "subgoal_merge_plan", "") or ""
             if not merge_text:
+                logger.debug("[C-lite] 跳过数值攻击：无蓝图 merge 文本"
+                             "（blueprint.merge_strategy / subgoal_merge_plan 均空）")
                 return
             # 只对"极值声称"题下手（其余题型放行，零误伤）
             import re as _re2
             if not (_re2.search(r"max|min|最大|最小", merge_text, _re2.I)):
+                logger.debug("[C-lite] 跳过数值攻击：merge 文本无极值关键词")
                 return
             from .value_attack import attack_value_claim
             from utils.prefill import prefill_messages, stitch
@@ -135,20 +147,25 @@ class Orchestrator(BaseAgent):
                 [{"role": "system", "content": sys_p},
                  {"role": "user", "content": user_p}], '{"direction":'), 0.0, 32768)
             if not raw:
+                logger.debug("[C-lite] 跳过数值攻击：LLM 提取返回空")
                 return
             raw = stitch('{"direction":', raw)
             m = _re2.search(r"\{[\s\S]*\}", raw)
             if not m:
+                logger.debug("[C-lite] 跳过数值攻击：LLM 输出无 JSON 块")
                 return
             import json as _json
             try:
                 parsed = _json.loads(m.group())
-            except Exception:  # noqa: BLE001
+            except (_json.JSONDecodeError, ValueError) as exc:
+                logger.debug("[C-lite] 跳过数值攻击：JSON 解析失败 %s", exc)
                 return
             direction = str(parsed.get("direction") or "")
             claimed = parsed.get("claimed")
             code = str(parsed.get("code") or "")
             if direction not in ("max", "min") or claimed is None:
+                logger.debug("[C-lite] 跳过数值攻击：direction=%r claimed=%r 不合法",
+                             direction, claimed)
                 return
             # 2) 数值攻击
             result = attack_value_claim(
@@ -437,11 +454,19 @@ class Orchestrator(BaseAgent):
 
             # C-lite（2026-09-03）：子目标蓝图 merge 产出后、候选生成前，
             # 数值攻击蓝图极值声称——009 型"蓝图心算错值"在求解前就证伪。
-            if not getattr(ctx, "_blueprint_value_false", None):
+            # 审核修正（2026-09-03）：原读 `_blueprint_value_false`（带下划线），
+            # 写入处是 `blueprint_value_false`（无下划线）→ 幂等守卫从未生效。
+            if not getattr(ctx, "blueprint_value_false", None):
                 try:
                     self._value_attack_blueprint(ctx, tier)
-                except Exception as _e2:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001  数值攻击失败不阻断主链路
+                    # 2026-09-03 审核：原为 `pass` 无日志 → v17 全程 0 痕迹时
+                    # 无法区分"未触发"与"异常被吞"（与 lean_gate 吞 AttributeError
+                    # 同型）。改为 warning + 埋点，任何失败都留证据。
+                    logger.warning("[C-lite] 数值攻击异常（已跳过）: %s: %s",
+                                   type(exc).__name__, exc)
+                    self.record(ctx, "value_attack",
+                                f"数值攻击异常跳过: {type(exc).__name__}: {exc}")
 
             self._stage_start(ctx, "3_solve")
             # 3) 求解
@@ -695,7 +720,6 @@ class Orchestrator(BaseAgent):
                             break
                     g_ok = self.lean_gate.gate_final_answer(
                         ctx, tier, ctx.final_response, best_reasoning)
-                    _switched = False
                     _tried = 0
                     _last_feedback = ""
                     while (not g_ok
@@ -759,7 +783,6 @@ class Orchestrator(BaseAgent):
                                             ctx, tier, _fresh.answer,
                                             getattr(_fresh, "reasoning", "") or "")
                                         if g_ok:
-                                            _switched = True
                                             self.record(
                                                 ctx, "lean_gate",
                                                 f"Solver 读 Lean 反馈重生成的候选 "
@@ -778,7 +801,6 @@ class Orchestrator(BaseAgent):
                             ctx, tier, _next.answer,
                             getattr(_next, "reasoning", "") or "")
                         if g_ok:
-                            _switched = True
                             self.record(ctx, "lean_gate",
                                         f"换候选 #{_next.id} 过 Lean 闸门，采用其答案")
                     if not g_ok:
@@ -1263,6 +1285,12 @@ class Orchestrator(BaseAgent):
             "subgoal_trace": getattr(ctx, "subgoal_trace", None) or [],
             "subgoal_merge_plan": (getattr(ctx, "subgoal_merge_plan", "") or "")[:300],
             "lemma_repo": list(getattr(ctx, "lemma_repo", None) or [])[:20],
+            # ④' C-lite 数值攻击（2026-09-03 审核补：原本只 record 进 trace，
+            # 而 trace 不落盘 → v17 事后完全查不到是否执行。现在进 diag。）
+            "value_attack": [str(t.get("content", ""))[:200]
+                             for t in (getattr(ctx, "trace", None) or [])
+                             if isinstance(t, dict)
+                             and t.get("step") == "value_attack"],
             # ⑤ Lean 硬验证门禁
             "lean_gate": getattr(ctx, "lean_gate", None) or [],
             # ⑥ 候选/验证/自纠错

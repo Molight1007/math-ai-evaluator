@@ -318,7 +318,6 @@ class DagReviewerAgent(BaseAgent):
 
         启发式已 reject 的不再 LLM（避免烧预算 + 启发式判断已够用）。
         """
-        all_ids = set(dag.nodes.keys())
         already_rejected = set(heuristic_results.keys())
         # 叶子：最关键的评审目标（决定求解能否展开）
         leaves = [n for nid, n in dag.nodes.items()

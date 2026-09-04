@@ -109,11 +109,20 @@ class ParseSubgoalPlanTest(unittest.TestCase):
         self.assertEqual(plan[0]["type"], "compute")
 
     def test_too_many_subgoals_capped(self) -> None:
+        """默认上限 6（2026-09-03 老师：子目标是简化求解，拆 10 步反而更碎）。"""
         raw = {"subgoals": [
             {"id": i, "title": f"s{i}", "type": "compute"} for i in range(1, 20)
         ]}
         plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
-        self.assertEqual(len(plan), 10)
+        self.assertEqual(len(plan), 6)
+
+    def test_max_subgoals_param_override(self) -> None:
+        """上限可由调用方（config.max_subgoals）覆盖。"""
+        raw = {"subgoals": [
+            {"id": i, "title": f"s{i}", "type": "compute"} for i in range(1, 20)
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw, 3)
+        self.assertEqual(len(plan), 3)
 
 
 class RunFlowTest(unittest.TestCase):
@@ -125,14 +134,29 @@ class RunFlowTest(unittest.TestCase):
         self.assertEqual(len(ctx.candidates), 2)
         self.assertIn("最终答案", ctx.candidates[-1].reasoning)
 
-    def test_run_exhausted_budget_skips(self) -> None:
+    def test_time_critical_skips(self) -> None:
+        """2026-09-03 预算解除后：只有**时间紧迫**才跳过子目标求解。
+
+        原 test_run_exhausted_budget_skips 用 Budget(max_calls=0) 模拟"预算
+        耗尽 → 跳过"——预算闸门已删（比赛无次数上限），该行为不复存在。
+        改为验证真实跳过条件：deadline 已过（is_time_critical=True）。
+        """
+        import time as _t
         agent = make_agent()
         ctx = make_ctx()
-        ctx.budget.spend(20)  # 预算完全耗尽
+        ctx.deadline = _t.time() - 1  # 真实时间戳，已过期 → 时间紧迫
         ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
         agent.run(ctx)
-        # 预算耗尽时规划阶段直接失败，不追加候选
         self.assertEqual(len(ctx.candidates), 1)
+
+    def test_budget_zero_still_runs(self) -> None:
+        """预算=0 不再阻断（闸门删除后的新语义）：子目标求解照常追加候选。"""
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        self.assertEqual(len(ctx.candidates), 2)
 
     def test_run_partial_budget_still_appends_fallback(self) -> None:
         agent = make_agent()

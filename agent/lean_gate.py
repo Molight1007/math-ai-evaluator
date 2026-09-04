@@ -146,10 +146,14 @@ class LeanGate:
         # standard 档 soft=540s，题实际跑 560s（超 soft 才结束），若用
         # ctx.time_remaining()（看 soft deadline）闸门必然 time_critical 跳过。
         # 单答案验证 5-21s 相对 1200s 硬顶完全可负担，只有快撞硬顶才放行。
+        # 2026-09-04 审核修复：start_time 为伪值（<1e8，测试 fixture 常用 0）
+        # 时该判断 `start_time + 1200 - now < 2` 恒 True → 整批误降级放行
+        # （lean_gate 5 个测试全挂）。伪值视同无硬顶，与 base.time_remaining
+        # / llm() 的 deadline<1e8 口径统一。
         import time as _t
         _hard_deadline = ctx.start_time + float(
             getattr(self.config, "max_time_per_question", 1200))
-        if _hard_deadline - _t.time() < 2:
+        if ctx.start_time >= 10**8 and _hard_deadline - _t.time() < 2:
             self._record_ctx(ctx, {"enabled": True, "degraded": "time_critical",
                                    "tier": tier, "domain": domain})
             return kept, feedbacks
@@ -309,9 +313,11 @@ class LeanGate:
         # 时间检查必须用 **1200s hard 硬顶**（不是 ctx.time_remaining 看的 soft
         # deadline）——standard 档 soft=540s，题跑 560s 超 soft 才结束，用 soft
         # deadline 算剩余必然 <2s 全跳（wrong10b 实测 5/10 题因此跳过）。
+        # 2026-09-04 审核修复：start_time 伪值（<1e8）视同无硬顶（同 apply()）。
         import time as _t2
-        if (ctx.start_time + float(getattr(self.config,
-                                           "max_time_per_question", 1200))
+        if (ctx.start_time >= 10**8
+                and ctx.start_time + float(getattr(self.config,
+                                                   "max_time_per_question", 1200))
                 - _t2.time() < 2):
             entry["degraded"] = "time_critical"
             self._record_ctx(ctx, entry)

@@ -73,3 +73,5 @@ deploy/user_api_settings.json
 
 # 外部克隆仓库（嵌套 git，不入库）
 formal-imo/
+.git_broken_20260903_2254/
+.git_gitcode_mess_20260903/

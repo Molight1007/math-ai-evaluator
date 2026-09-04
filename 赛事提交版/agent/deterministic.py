@@ -393,8 +393,11 @@ class DeterministicChecker:
                         return {"verdict": "pass",
                                 "evidence": f"符号代入验证通过: {var}={answer}",
                                 "method": "substitution"}
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # 2026-09-04 审核：符号代入异常 → unknown（合理降级），
+                    # 但原来无日志，无法区分"真不可代入"与"代码 bug"。留证据。
+                    logger.debug("符号代入验证异常 → unknown: %s: %s",
+                                 type(exc).__name__, exc)
                 return {"verdict": "unknown", "evidence": "答案含变量，无法数值代入",
                         "method": "substitution"}
             val = self._num(diff.subs(var, ans_expr))

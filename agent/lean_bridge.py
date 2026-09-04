@@ -32,7 +32,6 @@ import shutil
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .base import BugReport, Finding
@@ -579,11 +578,6 @@ class LeanBridge:
         self._mathlib_ready_cache = ready
         return ready
 
-    def _budget_ok(self, n: int = 1) -> bool:
-        """2026-09-03 老师：比赛无次数上限——预算检查恒放行（原实现预算耗尽
-        返回 False → lean_bridge _llm_call 拦截 → 翻译失败 unknown——隐藏 bug）。"""
-        return True
-
     # ------------------------------------------------------------------
     # LLM 调用（走注入的 client，计入 Budget）
     # ------------------------------------------------------------------
@@ -600,9 +594,8 @@ class LeanBridge:
         返回前用 ``stitch`` 把种子与续写拼接回完整文本（兼容后端
         continuation/echo/ignored 三种形态）。
         """
-        if not self._budget_ok(1):
-            logger.warning("[LeanBridge] 预算耗尽，跳过 LLM 调用")
-            return ""
+        # 2026-09-03 审核：原有 `_budget_ok` 预算闸门已删（比赛无次数上限，
+        # 恒放行的死分支反而掩盖了"翻译被跳过 → unknown"的历史根因）。
         msgs = messages
         seed = prefill
         stitch = None

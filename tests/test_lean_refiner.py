@@ -289,13 +289,32 @@ class RefineTreeTest(unittest.TestCase):
         self.assertIn("缺少", ctx.refine_result["error"])
 
     def test_budget_gate(self):
+        """2026-09-03 预算解除后改为验证时间紧迫才跳过精炼。
+
+        原用 Budget(max_calls=0) 模拟"预算耗尽→unknown"——预算闸门已删。
+        真实跳过条件是 is_time_critical()（deadline 过期）。
+        """
+        import time as _t
         agent = make_refiner()
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期 → 时间紧迫
+        ctx.blueprint = dag_with_or().to_dict()
+        ctx.sketch_tree = sketch_tree_for(dag_with_or())
+        agent.run(ctx)
+        self.assertEqual(ctx.refine_result["verdict"], "unknown")
+        self.assertIn("时间", ctx.refine_result["error"])
+
+    def test_budget_zero_still_refines(self) -> None:
+        """预算=0 不再阻断：精炼照常执行（mock 桥 ok → verdict ok）。"""
+        agent = make_refiner(ok_after=0)
         ctx = make_ctx()
         ctx.budget = Budget(max_calls=0)
         ctx.blueprint = dag_with_or().to_dict()
         ctx.sketch_tree = sketch_tree_for(dag_with_or())
         agent.run(ctx)
-        self.assertEqual(ctx.refine_result["verdict"], "unknown")
+        self.assertIn("verdict", ctx.refine_result)
+        self.assertNotEqual(ctx.refine_result["verdict"], "unknown")
 
 
 if __name__ == "__main__":

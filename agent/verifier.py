@@ -526,8 +526,11 @@ class VerifierAgent(BaseAgent):
             from .answer_oracle import AnswerOracle
             if not AnswerOracle.is_parseable(answer):
                 return "候选答案无法解析为有效数学表达式，可能为幻觉或格式错误。"
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # 2026-09-04 审核：异常吞掉 = "可解析性检查"静默跳过 → 全部放行
+            # （与 lean_gate 吞 AttributeError 历史同型）。留证据。
+            logger.debug("verifier 可解析检查异常（跳过放行）: %s: %s",
+                         type(exc).__name__, exc)
         return ""
 
     # ==================================================================

@@ -113,7 +113,7 @@ class SubGoalSolverAgent(BaseAgent):
         return None
 
     @staticmethod
-    def _parse_subgoal_plan(raw: dict) -> list[dict] | None:
+    def _parse_subgoal_plan(raw: dict, max_subgoals: int = 6) -> list[dict] | None:
         """验证并规范化子目标规划，返回按拓扑序排列的子目标列表。
 
         v2.6 宽容性增强：LLM 实际输出常省略字段（如用 step/name/task 代替
@@ -144,11 +144,14 @@ class SubGoalSolverAgent(BaseAgent):
         # 简化步骤；省下的时间留给验证器与 Lean 闸门（老师核心诉求）。
         # 注意：这是"规划时少拆几步"，**不是执行到一半强制中断**——
         # 已规划的子目标一定会跑完（老师："强制结束就等于错误"）。
-        _max_sg = int(getattr(self.config, "max_subgoals", 6) or 6)
+        # 2026-09-03 审核修复：原实现在 @staticmethod 里写 `self.config` /
+        # `self.record(ctx, ...)` → 每次调用必抛 NameError（本方法无 self/ctx），
+        # 且该分支无条件执行 = 子目标规划 100% 崩溃。改为**上限走参数**，
+        # 调用方从 config 读取后传入，静态方法保持无状态（测试可直接调用）。
+        _max_sg = int(max_subgoals or 6)
         if len(subgoals) > _max_sg:
-            self.record(ctx, "subgoal",
-                        f"子目标 {len(subgoals)} 个 > 上限 {_max_sg}，"
-                        f"保留前 {_max_sg} 个（简化求解，非中断）")
+            logger.info("SubGoal plan: 子目标 %d 个 > 上限 %d，保留前 %d 个"
+                        "（简化求解，非中断）", len(subgoals), _max_sg, _max_sg)
             subgoals = subgoals[:_max_sg]
 
         valid_types = {"compute", "prove", "derive", "verify"}
@@ -490,7 +493,8 @@ class SubGoalSolverAgent(BaseAgent):
             if raw is None:
                 logger.warning("SubGoal plan: JSON parse failed on attempt %d", attempt + 1)
                 continue
-            subgoals = self._parse_subgoal_plan(raw)
+            subgoals = self._parse_subgoal_plan(
+                raw, int(getattr(self.config, "max_subgoals", 6) or 6))
             if subgoals is None:
                 logger.warning("SubGoal plan: invalid subgoals on attempt %d", attempt + 1)
                 continue
@@ -819,8 +823,10 @@ class SubGoalSolverAgent(BaseAgent):
             # 结果可解析为数学表达式 → 通过；否则视为非法（可能为幻觉/格式错误）
             if not AnswerOracle.is_parseable(step_result):
                 return "该步结果无法解析为有效数学表达式"
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # 2026-09-04 审核：异常吞掉 = 子目标 sanity check 静默放行。留证据。
+            logger.debug("子目标 sanity check 异常（放行）: %s: %s",
+                         type(exc).__name__, exc)
         return ""
 
     # ---------- 阶段三：合并 ----------

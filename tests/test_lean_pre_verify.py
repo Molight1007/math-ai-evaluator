@@ -84,8 +84,13 @@ def test_preverify_disabled():
     assert ctx.formal_spec == ""
 
 
-def test_preverify_budget_exhausted():
-    """预算耗尽 → 前置验证降级 unknown，不阻断。"""
+def test_preverify_budget_zero_still_runs():
+    """2026-09-03 预算解除：预算=0 不再阻断前置形式化。
+
+    原 test_preverify_budget_exhausted 断言"预算耗尽→unknown+预算不足"——
+    预算闸门已删，该行为不复存在。现验证：预算=0 时流程照常执行，
+    结果取决于 bridge 实际返回（mock 为 ok → verdict=ok）。
+    """
     from agent.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
@@ -94,10 +99,32 @@ def test_preverify_budget_exhausted():
         preverify_timeout = 60.0
 
     agent = LeanPreVerifier(client=mock.MagicMock(), config=_Cfg())
-    ctx = _make_ctx(budget_calls=0)  # 预算已耗尽
+    ctx = _make_ctx(budget_calls=0)  # 预算=0（历史语义：已耗尽）
+    fake_bridge = mock.MagicMock()
+    fake_bridge.formalize_problem.return_value = {
+        "verdict": "ok", "lean_code": "code",
+        "formal_spec": "已知条件→结论", "error": ""}
+    with mock.patch.object(agent, "_build_bridge", return_value=fake_bridge):
+        agent.run(ctx)
+    assert ctx.preverify_trace["verdict"] == "ok"
+
+
+def test_preverify_time_critical_skips():
+    """真实跳过条件：时间紧迫（is_time_critical=True）→ 降级 unknown。"""
+    import time as _t
+    from agent.lean_pre_verifier import LeanPreVerifier
+
+    class _Cfg:
+        enable_lean_preverify = True
+        preverify_max_rounds = 2
+        preverify_timeout = 60.0
+
+    agent = LeanPreVerifier(client=mock.MagicMock(), config=_Cfg())
+    ctx = _make_ctx()
+    ctx.deadline = _t.time() - 1  # 真实时间戳已过期
     agent.run(ctx)
     assert ctx.preverify_trace["verdict"] == "unknown"
-    assert "预算不足" in ctx.preverify_trace["error"]
+    assert "时间" in ctx.preverify_trace["error"]
 
 
 def test_preverify_ok_writes_formal_spec():

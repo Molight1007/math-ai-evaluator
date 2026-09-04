@@ -11,9 +11,7 @@
 拦截点：蓝图 merge / 候选答案里出现"极值 = 数值"时。
 """
 import logging
-import random
 import re
-import time
 
 logger = logging.getLogger("MathPilot")
 
@@ -47,13 +45,6 @@ def _to_python_func(expr_lean: str) -> str:
     return expr_lean
 
 
-def _sample_simplex(n_vars: int, total: float, rng: random.Random):
-    """在 x_i >= 0, Σx_i = total 的单纯形上采样（Dirichlet 均匀）。"""
-    u = [rng.expovariate(1.0) for _ in range(n_vars)]
-    s = sum(u)
-    return [total * v / s for v in u]
-
-
 def attack_value_claim(problem: str, claimed: float, direction: str,
                        func_src: str | None, n_samples: int = _N_SAMPLES
                        ) -> dict:
@@ -76,7 +67,6 @@ def attack_value_claim(problem: str, claimed: float, direction: str,
             return {"ok": True, "reason": "函数源码无 f，跳过"}
     except Exception as e:  # noqa: BLE001
         return {"ok": True, "reason": f"函数编译失败: {str(e)[:80]}"}
-    rng = random.Random(20260903)
     best = None
     try:
         for _ in range(n_samples):

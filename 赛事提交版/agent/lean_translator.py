@@ -21,7 +21,6 @@ LeanTranslatorAgent —— LEAP Stage 2：Blueprint DAG → Lean 4 骨架（#26/
 - run(ctx)：从 ctx.blueprint 取 DAG 执行，写 ctx.sketch_tree
 """
 
-import json
 import logging
 import re
 from typing import Optional

@@ -87,7 +87,7 @@ class FormatterAgent(BaseAgent):
             if fallback:
                 answer = fallback
                 self.record(ctx, "finalize",
-                           f"最佳候选答案为拒绝/不完整，改用候选兜底答案")
+                           "最佳候选答案为拒绝/不完整，改用候选兜底答案")
                 confidence = 0.0
 
         # 答案质量终检 + 自动修复
