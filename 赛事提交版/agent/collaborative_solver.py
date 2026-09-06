@@ -209,9 +209,9 @@ class CollaborativeSolver(BaseAgent):
     def _collect_oracle_context(ctx: TaskContext, target: str) -> str:
         """收集客观验证依据（供审查 Agent 重点核查）。"""
         notes = []
-        # 1) 上层已产生的客观反馈（Lean Finding / oracle 复核）
-        lean_fb = getattr(ctx, 'lean_reject_feedback', None) or []
-        for fb in lean_fb[:3]:
+        # 1) 上层已产生的客观反馈（AuditGate / Oracle 复核 / 对抗检出）
+        audit_fb = getattr(ctx, 'audit_reject_feedback', None) or []
+        for fb in audit_fb[:3]:
             notes.append(f"- {fb}")
         # 2) 对 target 答案的轻量客观 sanity check（SymPy 可解析性）
         try:

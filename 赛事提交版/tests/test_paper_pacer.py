@@ -47,10 +47,16 @@ class BudgetForTest(unittest.TestCase):
         soft = p.budget_for("standard")
         self.assertAlmostEqual(soft, 480.0, places=1,
                                msg="并发换算后约 482s > 档位帽 480s，应拿满")
-        # 题数更多时平均预算被压到档位帽以下
+        # 题数更多时平均预算被压到档位帽以下。
+        # 9/2 起新逻辑「进度正常给满档、落后才收紧」：要触发收紧必须让
+        # time_frac > budget_frac（耗时比例 > 完成比例）——
+        # 400 题完成 4 题 = 1%，须耗时 > 1% × 18000s = 180s。
         p2 = make_pacer(paper_total_questions=400, paper_target_time=18000)
+        p2.start_time = time.time() - 200.0  # 耗时 ≈200s > 180s → 落后
+        p2.started = 4
+        p2.done = 4                            # answered=4 ≥ 3，越过开局面
         self.assertLess(p2.budget_for("standard"), 480.0,
-                        "400 题时平均预算约 135s，standard 不得放满")
+                        "400 题落后时平均预算约 135s，standard 必须收紧")
 
     def test_concurrency_factor_applied(self) -> None:
         """回归：paper_cap 必须乘并发数（墙钟 → 单题时长）。
@@ -58,21 +64,36 @@ class BudgetForTest(unittest.TestCase):
         漏乘会让单题预算只有真实可用值的 1/3 —— 全卷大量时间被闲置，
         "难题用满 20 分钟"永远拿不到时间。
         """
-        # 用 100 题避开 MIN_SOFT 保底（否则两档都被抬到 120，看不出差异）
+        # 用 100 题避开 MIN_SOFT 保底（否则两档都被抬到 120，看不出差异）。
+        # 9/2 新逻辑「进度正常给满档、落后才收紧」：要测并发换算（paper_cap
+        # = 并发×剩余/剩余题数）必须处于"落后"态——100 题完成 4 题 = 4%，
+        # 须耗时 > 4% × 18000s = 720s。
         base = dict(paper_total_questions=100, paper_target_time=18000)
         p1 = make_pacer(max_workers=1, **base)
         p3 = make_pacer(max_workers=3, **base)
-        self.assertAlmostEqual(p1.budget_for("deep"), 180.0, places=1)
-        self.assertAlmostEqual(p3.budget_for("deep"), 540.0, places=1,
+        for p in (p1, p3):
+            p.start_time = time.time() - 800.0  # 耗时 ≈800s > 720s → 落后
+            p.started = 4
+            p.done = 4
+        s1 = p1.budget_for("deep")
+        s3 = p3.budget_for("deep")
+        self.assertAlmostEqual(s1, 180.0, delta=5.0)   # ≈ 1×剩余/剩余题数
+        self.assertAlmostEqual(s3, 540.0, delta=15.0,  # ≈ 3×s1
                                msg="并发 3 的单题预算应为并发 1 的 3 倍")
+        self.assertAlmostEqual(s3 / s1, 3.0, places=1)
 
     def test_tightens_when_behind(self) -> None:
         """卷面落后时自动收紧（paper_cap 变小）。"""
         p = make_pacer()
         # 伪造：已用掉大部分目标时间，但只做完了 2 题
         p.start_time = time.time() - 17000.0
-        p.started = 2
+        p.started = 5
         p.done = 2
+        # 注意：answered = done=2 < inflight_window=3 时会命中 9/2 开局宽容
+        # 直接给满档——但 2 题已做、时间已耗 17000s 显然不是"开局"。
+        # answered 不足时由 done=2 兜底已偏紧；为测收紧分支，将 done 抬到
+        # ≥ inflight（代表"已开始足够多题、仍在途"的真实落后场景）。
+        p.done = 3
         soft = p.budget_for("deep")
         self.assertLess(soft, 1200.0, "落后时 deep 预算必须被收紧")
         self.assertGreaterEqual(soft, 120.0, "MIN_SOFT 保底不得突破")

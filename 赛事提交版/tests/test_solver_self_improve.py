@@ -73,13 +73,29 @@ class ImproveCandidatesTest(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertEqual(ctx.candidates[0].reasoning, "很长的原解答" * 30)
 
-    def test_budget_short_skips(self) -> None:
+    def test_time_critical_skips(self) -> None:
+        """2026-09-03 预算解除：时间紧迫才跳过自改进。
+
+        原 test_budget_short_skips 用 Budget(max_calls=0) 模拟预算耗尽
+        → 跳过改进——预算闸门已删，预算=0 也会照常改进。
+        """
+        import time as _t
         s = make_solver(IMPROVED)
-        ctx = make_ctx(max_calls=0)  # 预算耗尽
+        ctx = make_ctx(max_calls=0)  # 预算=0（不再阻断）
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期 → 时间紧迫
         ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答"))
         n = s.improve_candidates(ctx)
         self.assertEqual(n, 0)
         self.assertEqual(ctx.candidates[0].reasoning, "原解答")
+
+    def test_budget_zero_still_improves(self) -> None:
+        """预算=0 不再阻断：自改进照常执行（新语义）。"""
+        s = make_solver(IMPROVED)
+        ctx = make_ctx(max_calls=0)
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答"))
+        n = s.improve_candidates(ctx)
+        self.assertEqual(n, 1)
+        self.assertIn("步骤1", ctx.candidates[0].reasoning)
 
     def test_placeholder_reasoning_skipped(self) -> None:
         s = make_solver(IMPROVED)

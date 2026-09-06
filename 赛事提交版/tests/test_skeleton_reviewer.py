@@ -168,13 +168,31 @@ class TestSkeletonReviewerAgent(unittest.TestCase):
         self.assertTrue(report.degraded)
         self.assertFalse(report.should_regenerate())
 
-    def test_budget_exhausted_degrades_pass(self):
-        """预算耗尽（can_spend=False）→ 跳过评审直接放行。"""
+    def test_budget_zero_still_reviews(self):
+        """2026-09-03 预算解除：预算=0 不再跳过评审。
+
+        原 test_budget_exhausted_degrades_pass 断言"预算耗尽(can_spend=False)
+        → degraded 放行"——预算闸门已删，评审照常调 LLM（此处 resp_map 给
+        replan 结果，返回非 degraded 的 replan 报告）。真实跳过条件是
+        is_time_critical()，见 test_time_critical_degrades_pass。
+        """
         client = make_mock_client(resp_map={"评审要求": _resp({
             "overall": "replan", "verdicts": {}})})
         reviewer = SkeletonReviewerAgent(client, make_config())
         ctx = make_ctx()
         ctx.budget = Budget(max_calls=0)
+        report = reviewer.review(ctx, make_dag())
+        self.assertFalse(report.degraded)
+        self.assertTrue(report.should_regenerate())
+
+    def test_time_critical_degrades_pass(self):
+        """真实跳过条件：时间紧迫（is_time_critical）→ degraded 放行。"""
+        import time as _t
+        client = make_mock_client(resp_map={"评审要求": _resp({
+            "overall": "replan", "verdicts": {}})})
+        reviewer = SkeletonReviewerAgent(client, make_config())
+        ctx = make_ctx()
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期
         report = reviewer.review(ctx, make_dag())
         self.assertTrue(report.degraded)
         self.assertFalse(report.should_regenerate())
@@ -253,20 +271,28 @@ class TestSkeletonReviewerAgent(unittest.TestCase):
         fb = planner.regenerate_with_feedback.call_args[1]["feedback_lines"]
         self.assertTrue(any("拆细" in ln for ln in fb))
 
-    def test_loop_budget_exhausted_keeps_dag(self):
-        """集成：重生成前预算不足（can_spend 检查在循环内）→ 保留当前骨架。"""
+    def test_loop_time_critical_keeps_dag(self):
+        """集成：评审 replan 后、重生成前时间紧迫 → 保留当前骨架。
+
+        2026-09-03 重写：原 test_loop_budget_exhausted_keeps_dag 用
+        Budget(max_calls=1) 卡"重生成前预算检查"——预算闸门已删。当前
+        _skeleton_review_loop 的真实中断条件是 ctx.is_time_critical()。
+        此处 mock review 返回 replan（模拟"评审已过，需重生成"），
+        随后循环内 is_time_critical() 拦截 → 不调 planner、保留原 DAG。
+        """
+        import time as _t
         from agent.sub_goal_solver import SubGoalSolverAgent
         planner = MagicMock()
         solver = SubGoalSolverAgent(MagicMock(), make_config(
             enable_skeleton_review=True, skeleton_review_max_rounds=2))
         ctx = make_ctx()
-        # 第一次评审返回 replan（非 degraded），但循环内重生成前 can_spend(2)=False
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期 → 时间紧迫
         with patch.object(SkeletonReviewerAgent, "review", return_value=SkeletonReviewReport(
                 verdicts={"n1a": SkeletonVerdict("n1a", "ill_posed")},
                 overall="replan")):
             dag = make_dag()
-            ctx.budget = Budget(max_calls=1)  # 1+2<=1 False → 重生成前卡住
             result = solver._skeleton_review_loop(ctx, dag, planner)
+        # 评审要 replan，但时间紧迫 → 重生成前中断，保留原 DAG
         self.assertIs(result, dag)
         self.assertEqual(planner.regenerate_with_feedback.call_count, 0)
 

@@ -165,8 +165,9 @@ class AdversarialVerifier(BaseAgent):
     def run(self, ctx: TaskContext, tier: str = "standard") -> TaskContext:
         """对最佳候选做证伪探测，把结果写入 ``ctx.adversarial_result``。
 
-        命中错误时同时把反馈追加进 ``ctx.lean_reject_feedback``，
-        由 orchestrator 的 revise 通道消费（与 Lean 反馈同一入口）。
+        命中错误时同时把反馈追加进 ``ctx.audit_reject_feedback``
+        （2026-09-06 更名；原 lean_reject_feedback），由 orchestrator 的
+        revise 通道消费（与 AuditGate/Oracle 客观反馈同一入口）。
         """
         cand = None
         bc = getattr(ctx, "_best_cluster", None)
@@ -180,9 +181,9 @@ class AdversarialVerifier(BaseAgent):
         result = self.probe(ctx, cand, tier=tier)
         ctx.adversarial_result = result
         if result.is_actionable:
-            fb = getattr(ctx, "lean_reject_feedback", None) or []
+            fb = getattr(ctx, "audit_reject_feedback", None) or []
             fb.append(result.to_feedback())
-            ctx.lean_reject_feedback = fb
+            ctx.audit_reject_feedback = fb
         self.record(ctx, "adversarial",
                     ("检出 %s" % (result.error_type or "未知类型"))
                     if result.is_actionable else "未找到错误",

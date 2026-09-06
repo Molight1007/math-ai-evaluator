@@ -52,9 +52,8 @@ class ExtractFinalAnswerTest(unittest.TestCase):
     def test_shell_output_rejected(self) -> None:
         """回归：纯定界符 / 纯标题的"空壳"输出必须返回空串。
 
-        历史失败样本（本地评测 45 条里 4 条）：模型答案区只写出 `$$`、`\[`
-        或 `## 最终答案`，此前会被尾部兜底策略原样返回并当作答案提交，
-        判分器必然判错。返回空串才能让调用方换用其它候选或重试。
+        历史失败样本（本地评测 45 条里 4 条）：模型答案区只写出 `$$`、`\\[`
+        或 `## 最终答案`，此前会被尾部兜底策略原样返回并当作答案提交，        判分器必然判错。返回空串才能让调用方换用其它候选或重试。
         """
         for shell in ("$$", r"\[", "## 最终答案", "#### Answer", "$", "## 最终答案\n"):
             self.assertEqual(extract_final_answer(shell), "",

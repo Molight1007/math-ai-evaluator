@@ -373,9 +373,11 @@ class TaskContext:
     state: RunState = field(default_factory=RunState)          # 运行期覆盖态（B6）
     round_state: RoundState = field(default_factory=RoundState)  # AcceptGate 门控态（P4）
     lemma_repo: list[str] = field(default_factory=list)  # 已验证的子结论（引理积累）
-    # ---- Lean 硬验证门禁字段（v2.5+LeanBridge）----
-    lean_gate: list = field(default_factory=list)       # 每候选 Lean 验证诊断记录
-    lean_reject_feedback: list = field(default_factory=list)  # 被 Lean 淘汰候选的反馈（供 revise）
+    # ---- 硬验证门禁字段（v2.5+LeanBridge；2026-09-06 起主链路由 AuditGate 承担）----
+    lean_gate: list = field(default_factory=list)  # 遗留：Lean 验证诊断记录（本地证据链/旧日志兼容保留）
+    audit_reject_feedback: list = field(default_factory=list)  # 被客观审核淘汰候选的反馈（供 revise）
+    # ---- AuditGate 审核记录（2026-09-06 去 Lean 化：平台审核由 AuditGate 承担）----
+    audit_gate: list = field(default_factory=list)      # 每候选/最终答案 AuditGate 审核诊断记录
 
     # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
     formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）

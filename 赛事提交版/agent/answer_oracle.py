@@ -1,17 +1,17 @@
 from __future__ import annotations
-"""统一客观答案验证层（AnswerOracle，v2.7）。
+"""统一客观答案验证层（AnswerOracle，v2.7；2026-09-06 去 Lean 化）。
 
 设计背景
 ========
 当前"写不对难题"的根因之一是：验证器（Verifier）与解题器（Solver）同源，
-A/B 投票本质是"让同一个模型再读一遍"，会一起错；而 Lean/SymPy 两个客观
-工具没有形成闭环——Lean 只"过滤"候选、SymPy 只做"能否解析"旁证。
+A/B 投票本质是"让同一个模型再读一遍"，会一起错；而客观工具没有形成闭环。
 
-本模块把"客观答案验证"从 verifier / lean_gate 中抽离为统一入口，按题型分流：
-
-- 证明题 → LeanBridge.verify（NL→Lean→编译→错误分析），把 BugReport/Finding
-  的精确错误定位（location/kind/severity/desc）结构化为可注入 revise 的反馈；
-- 计算题 → SymPy 符号等价（多候选 self-consistency 聚类）+ 答案可解析性。
+本模块把"客观答案验证"从 verifier 中抽离为统一入口。2026-09-06 起
+Lean 系（LeanBridge/lean_gate）随「检测链去 Lean 化」从平台链路移除
+（平台无 Lean 可执行文件，历史实证只空转不审核），本模块只保留：
+- 计算/数值题 → SymPy 符号等价（多候选 self-consistency 聚类）+ 答案可解析性；
+- 证明题 → 不编译不误判，直接返回 unknown（散文证明不可程序化等价判定），
+  由 AuditGate（rubric 结构化判分）与对抗式验证承担客观把关。
 
 客观验证不依赖"验证器与解题器同源"的 LLM 自评，是数学领域区别于通用
 LLM 编排的最大增量（对应 LangGraph 的 oracle-in-the-loop 思想）。
@@ -21,15 +21,15 @@ LLM 编排的最大增量（对应 LangGraph 的 oracle-in-the-loop 思想）。
 - 独立文件，不污染 orchestrator 主流程；上层只调用
   ``AnswerOracle(client, config, budget).verify(ctx, candidate)`` 一行；
 - 任何异常一律吞掉并降级 ``verdict='unknown'``，绝不因 oracle 导致评测崩溃；
-- Lean/SymPy 不可用时仅打 warning 并整体降级 unknown，不阻断主流程。
+- SymPy 不可用时仅打 warning 并整体降级 unknown，不阻断主流程。
 
 对外契约
 ========
 ``verify()`` 返回 ``OracleResult``：
 - verdict: 'correct' | 'incorrect' | 'unknown'
 - feedback: 结构化错误定位（供 revise / 审查复用）
-- evidence: 客观证据（sympy 重算值 / lean 结论 / 共识统计）
-- oracle_type: 'lean' | 'sympy' | 'none'
+- evidence: 客观证据（sympy 重算值 / 共识统计）
+- oracle_type: 'sympy' | 'none'
 """
 
 import logging
@@ -51,7 +51,7 @@ class OracleResult:
     verdict: str = "unknown"            # 'correct' | 'incorrect' | 'unknown'
     feedback: str = ""                  # 结构化错误定位（供 revise / 审查复用）
     evidence: dict = field(default_factory=dict)  # 客观证据
-    oracle_type: str = "none"           # 'lean' | 'sympy' | 'none'
+    oracle_type: str = "none"           # 'sympy' | 'none'（'lean' 已于 2026-09-06 移除）
 
     @property
     def is_correct(self) -> bool:
@@ -72,7 +72,7 @@ class OracleResult:
 
 
 class AnswerOracle:
-    """统一客观答案验证层。按题型分流：证明题走 Lean，计算题走 SymPy。"""
+    """统一客观答案验证层。按题型分流：证明题 unknown，计算题走 SymPy。"""
 
     name = "AnswerOracle"
 
@@ -80,21 +80,6 @@ class AnswerOracle:
         self.client = client
         self.config = config
         self.budget = budget
-        self._bridge = None
-
-    # ------------------------------------------------------------------
-    # Lean 桥接（延迟初始化，避免无 client / 循环导入时崩溃）
-    # ------------------------------------------------------------------
-    @property
-    def _bridge_inst(self):
-        if self._bridge is None:
-            try:
-                from .lean_bridge import LeanBridge
-                self._bridge = LeanBridge(self.client, self.config, self.budget)
-            except Exception as e:  # noqa: BLE001
-                logger.warning("AnswerOracle: LeanBridge 初始化失败: %s", e)
-                self._bridge = None
-        return self._bridge
 
     # ------------------------------------------------------------------
     # 主入口
@@ -112,61 +97,18 @@ class AnswerOracle:
 
         返回:
             OracleResult（verdict / feedback / evidence）。
+
+        2026-09-06 去 Lean 化：证明题不再走 LeanBridge 编译（平台无 Lean），
+        散文证明无法程序化等价判定 → 直接 unknown 放行，避免误把证明文本
+        当"无法解析的表达式"判 incorrect（会把每题证明都误触发 revise）。
+        客观把关由 AuditGate（6.5 rubric）+ 对抗式验证（4.6）承担。
         """
         qt = question_type or getattr(ctx, "question_type", "") or ""
         domain = getattr(ctx, "domain", "") or ""
         if qt == _PROOF_TYPE or any(k in domain for k in _PROOF_DOMAINS):
-            return self.verify_proof(ctx, candidate)
+            return OracleResult(verdict="unknown", oracle_type="none",
+                                evidence={"reason": "proof_not_computational"})
         return self.verify_computational(candidate, candidates)
-
-    # ------------------------------------------------------------------
-    # 证明题：Lean 客观验证
-    # ------------------------------------------------------------------
-    def verify_proof(self, ctx: TaskContext, candidate) -> OracleResult:
-        """证明题 → LeanBridge.verify，把 Finding 结构化为可注入 revise 的反馈。"""
-        bridge = self._bridge_inst
-        if bridge is None or not getattr(bridge, "lean_available", False):
-            return OracleResult(verdict="unknown", oracle_type="lean",
-                                evidence={"reason": "lean_unavailable"})
-        reasoning = getattr(candidate, "reasoning", "") or ""
-        try:
-            report = bridge.verify(
-                problem=getattr(ctx, "problem", "") or "",
-                reasoning=reasoning,
-                domain=getattr(ctx, "domain", "") or "",
-                timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning("AnswerOracle: Lean 验证异常: %s", e)
-            return OracleResult(verdict="unknown", oracle_type="lean",
-                                evidence={"reason": "exception"})
-
-        if report is None:
-            return OracleResult(verdict="unknown", oracle_type="lean",
-                                evidence={"reason": "no_report"})
-
-        verdict = getattr(report, "verdict", "unknown")
-        if verdict == "proof_valid":
-            return OracleResult(verdict="correct", oracle_type="lean",
-                                evidence={"verdict": verdict})
-        if verdict == "proof_invalid":
-            findings = getattr(report, "findings", []) or []
-            feedback = self.findings_to_feedback(findings)
-            if not feedback:
-                feedback = getattr(report, "suggestion", "") or ""
-            return OracleResult(
-                verdict="incorrect",
-                feedback=feedback,
-                oracle_type="lean",
-                evidence={
-                    "verdict": verdict,
-                    "n_findings": len(findings),
-                    "suggestion": getattr(report, "suggestion", "") or "",
-                },
-            )
-        # unknown（翻译不确定 / 环境缺失）→ 降级，交由上层投票兜底
-        return OracleResult(verdict="unknown", oracle_type="lean",
-                            evidence={"verdict": verdict})
 
     # ------------------------------------------------------------------
     # 计算题：SymPy 客观验证
@@ -258,6 +200,8 @@ class AnswerOracle:
         """把 Finding 列表结构化为可注入 revise 的错误定位文本。
 
         格式：`- {location} [{kind}](严重度{severity}): {desc}`
+        2026-09-06 起主链路不再产生 Lean Finding（去 Lean 化）；本方法保留
+        供本地 Lean 证据链工具（lean_gate 迁移 tools/lean_local 前）复用。
         """
         if not findings:
             return ""

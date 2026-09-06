@@ -9,10 +9,10 @@
   2. HTML 体检报告（逐题归因 + 阶段状态 + trace 关键事件）
 
 归因环节划分：
-  ① 理解  preverify/formal_gaps        —— 题目理解错 → Lean 前置验证 fail / gaps 多
+  ① 理解  preverify/formal_gaps        —— 题目理解错 → 原 Lean 前置验证 fail / gaps 多
   ② 规划  蓝图节点/骨架评审/DAG评审    —— 子目标不适定 → skeleton_review replan/ill_posed
   ③ 求解  子目标 trace/占位符          —— 子目标算错 → placeholder / result 标记失败
-  ④ 验证  lean_gate/verdicts           —— Lean 拒掉正确解 / 漏检错误解
+  ④ 验证  audit_gate/verdicts          —— AuditGate（程序/反例/rubric）拒错解 / 漏检错解
   ⑤ 预算  budget_skips/degraded/tier   —— 时间不够被截断
   ⑥ 输出  判分 error_class             —— pred/gold 不匹配（真错或判分问题）
 
@@ -97,11 +97,12 @@ def attribute_question(row: dict) -> list[str]:
     if gaps:
         flags.append(f"? 前置验证发现 {len(gaps)} 个形式化缺口")
 
-    # ④ Lean 硬验证
-    lg = d.get("lean_gate") or []
+    # ④ AuditGate 客观审核（旧日志兼容 lean_gate 键）
+    lg = d.get("audit_gate") or d.get("lean_gate") or []
     if lg:
-        ok = sum(1 for g in lg if isinstance(g, dict) and g.get("valid"))
-        flags.append(f"i Lean 门禁 {ok}/{len(lg)} 通过")
+        rejects = sum(1 for g in lg if isinstance(g, dict)
+                      and g.get("verdict") == "reject")
+        flags.append(f"i AuditGate 审核 {len(lg)} 条，拒绝 {rejects} 条")
 
     # ⑥ 判分
     if row.get("correct") is False:
@@ -170,9 +171,11 @@ def _fmt_stage(d: dict) -> list[tuple[str, str]]:
         out.append(("③ 求解", f"子目标 {len(sub)} 步，失败 {n_fail}"))
     else:
         out.append(("③ 求解", "无子目标轨迹（未走 DAG 路径）"))
-    # Lean
-    lg = d.get("lean_gate") or []
-    out.append(("④ Lean", f"门禁 {sum(1 for g in lg if isinstance(g, dict) and g.get('valid'))}/{len(lg)} 通过"))
+    # AuditGate 客观审核（旧日志兼容 lean_gate 键）
+    lg = d.get("audit_gate") or d.get("lean_gate") or []
+    rejects = sum(1 for g in lg if isinstance(g, dict)
+                  and g.get("verdict") == "reject")
+    out.append(("④ 审核", f"AuditGate {len(lg)} 条，拒绝 {rejects} 条"))
     # 预算
     out.append(("⑤ 预算", f"档位={d.get('tier', '-')} 软预算={d.get('soft_budget', '-')}s "
                           f"跳过={d.get('budget_skips', 0)}次"))
@@ -186,7 +189,8 @@ def _trace_events(trace: list) -> list[dict]:
     keys = []
     stage_boundary = {"classify", "paper_pacer", "lean_preverify", "blueprint",
                       "skeleton_review", "dag_review", "subgoal", "merge",
-                      "verify", "revise", "self_improve", "lean_gate", "budget_skip"}
+                      "verify", "revise", "self_improve", "lean_gate",
+                      "audit_gate", "budget_skip"}
     for t in trace:
         if not isinstance(t, dict):
             continue

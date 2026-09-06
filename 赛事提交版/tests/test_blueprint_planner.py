@@ -313,11 +313,25 @@ class PlannerAgentTest(unittest.TestCase):
         dag = planner.generate_blueprint(ctx)
         self.assertIsNone(dag)
 
-    def test_budget_gate(self):
+    def test_time_critical_gate(self):
+        """2026-09-03 预算解除：时间紧迫才跳过蓝图生成（返回 None）。
+
+        原 test_budget_gate 用 Budget(max_calls=0) 模拟"无预算 → 跳过"——
+        预算闸门已删，预算=0 蓝图照常生成。真实跳过条件是 is_time_critical()。
+        """
+        import time as _t
         ctx = make_ctx()
-        ctx.budget = Budget(max_calls=0)  # 无预算
+        ctx.budget = Budget(max_calls=0)  # 预算=0（不再阻断）
+        ctx.deadline = _t.time() - 1  # 真实时间戳已过期 → 时间紧迫
         planner = BlueprintPlannerAgent(MockClient(), make_agent().config)
         self.assertIsNone(planner.generate_blueprint(ctx))
+
+    def test_budget_zero_still_generates(self) -> None:
+        """预算=0 不再阻断：蓝图照常生成（新语义）。"""
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        planner = BlueprintPlannerAgent(MockClient(), make_agent().config)
+        self.assertIsNotNone(planner.generate_blueprint(ctx))
 
 
 class SubGoalIntegrationTest(unittest.TestCase):
