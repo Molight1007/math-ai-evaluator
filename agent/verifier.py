@@ -26,6 +26,10 @@ from prompts.verifier import (
     VERIFIER_FEEDBACK_TEMPLATE,
     VERIFIER_BUGREPORT_SYSTEM,
     VERIFIER_BUGREPORT_TEMPLATE,
+    VERIFIER_RUBRIC_SYSTEM,
+    VERIFIER_RUBRIC_TEMPLATE,
+    VERIFIER_CHALLENGE_SYSTEM,
+    VERIFIER_CHALLENGE_TEMPLATE,
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
 from utils.extract import smart_fallback_answer
@@ -274,6 +278,145 @@ class VerifierAgent(BaseAgent):
                 except json.JSONDecodeError:
                     pass
             return None
+
+    # ==================================================================
+    # v3 P2（2026-09-06 移植自 sq 分支）：rubric 结构化判分 + 反例挑战
+    # ==================================================================
+    # sq 分支（平台 ~24 分）的检测资产：rubric 让投票从 A/B 二元升级为
+    # verdict+confidence+error_type+step_index+reason（错因质量 → revise
+    # 定向性）；反例挑战让"非数值答案"也能被程序化数值验证证伪。
+
+    def _vote_one_rubric(self, ctx, problem: str, candidate_text: str) -> dict | None:
+        """一次 rubric 结构化判分（JSON prefill，秒级返回）。
+
+        输出 {"verdict","confidence","error_type","step_index","reason"}，
+        借鉴 Intern-MO judge：独立重算 → 对比 → 定位错因。
+        """
+        messages = [
+            {"role": "system", "content": VERIFIER_RUBRIC_SYSTEM},
+            {"role": "user", "content": VERIFIER_RUBRIC_TEMPLATE.format(
+                problem=problem, candidate_answer=candidate_text
+            )},
+        ]
+        try:
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
+            if raw:
+                raw = stitch('{"', raw)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Rubric 判分调用失败: %s", e)
+            return None
+        rub = self._parse_json_loose(raw)
+        if rub is None:
+            logger.warning("Rubric 判分 JSON 解析失败: %s", (raw or "")[:120])
+        return rub
+
+    def _vote_rubric(self, ctx, problem: str, candidate,
+                     use_deterministic: bool = True) -> list[Verdict]:
+        """rubric 判分路径：结构化判分 + 确定性旁证（多证据汇审）。
+
+        - rubric: verdict A/B + confidence + 错因定位（error_type/step_index/reason）
+        - 确定性 fail → 硬否决（rubric 票全翻错，绕过 LLM 误判，0 LLM、可复现）
+        - 确定性 pass → 追加一张独立正确票（deterministic_pass，非 LLM 客观票）
+        - 确定性 unknown → 只挂证据，不改判
+        """
+        text = self._candidate_text(candidate)
+        votes: list[Verdict] = []
+
+        # 1) rubric 判分（1 次 JSON prefill）
+        rub = self._vote_one_rubric(ctx, problem, text)
+        if rub is None:
+            votes.append(Verdict(correct=True, raw="rubric_parse_failed",
+                                 feedback="rubric 判分解析失败，保守放行"))
+        else:
+            correct = str(rub.get("verdict", "B")).upper() == "A"
+            feedback = ""
+            if not correct:
+                parts = []
+                step = rub.get("step_index")
+                if step is not None:
+                    parts.append(f"步骤{step}")
+                err = rub.get("error_type", "")
+                if err and err != "无":
+                    parts.append(err)
+                reason = rub.get("reason", "")
+                if reason:
+                    parts.append(reason)
+                feedback = "；".join(parts)
+            try:
+                conf = float(rub.get("confidence", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                conf = 0.0
+            votes.append(Verdict(
+                correct=correct,
+                raw=json.dumps(rub, ensure_ascii=False),
+                feedback=feedback,
+                score=rub,
+                confidence=(conf if correct else 0.0),
+            ))
+
+        # 2) 确定性旁证（0 LLM 预算）：fail 硬否决 / pass 独立正确票 / unknown 挂证据
+        if use_deterministic:
+            det = self._deterministic_check(ctx, problem, candidate)
+            if det.get("verdict") == "fail":
+                logger.warning("确定性验证失败 → 硬否决候选: %s",
+                               det.get("evidence", "")[:80])
+                for v in votes:
+                    v.correct = False
+                    v.confidence = 0.0
+                votes.append(Verdict(correct=False, raw="deterministic_fail",
+                                     feedback=f"确定性验证否决: {det.get('evidence', '')[:120]}",
+                                     deterministic=det))
+            elif det.get("verdict") == "pass":
+                votes.append(Verdict(correct=True, raw="deterministic_pass",
+                                     deterministic=det))
+            else:
+                # unknown：只挂证据，不追加票
+                for v in votes:
+                    v.deterministic = det
+
+        return votes
+
+    def _challenge_counterexample(self, ctx, problem: str,
+                                  candidate_text: str, answer: str) -> dict:
+        """反例挑战（P2）：LLM 生成候选命题 → 程序数值验证才生效。
+
+        只对非纯数值答案触发（数值答案已走确定性代入验证）。
+        返回 {"hard_fail": bool, "evidence": str}。
+        """
+        if not answer or not str(answer).strip():
+            return {"hard_fail": False, "evidence": "无答案可挑战"}
+        if re.fullmatch(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(answer).strip()):
+            return {"hard_fail": False, "evidence": "数值答案，跳过命题反例搜索"}
+        messages = [
+            {"role": "system", "content": VERIFIER_CHALLENGE_SYSTEM},
+            {"role": "user", "content": VERIFIER_CHALLENGE_TEMPLATE.format(
+                problem=problem, candidate_answer=candidate_text
+            )},
+        ]
+        try:
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
+            if raw:
+                raw = stitch('{"', raw)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("反例挑战调用失败: %s", e)
+            return {"hard_fail": False, "evidence": "调用异常"}
+        parsed = self._parse_json_loose(raw)
+        if not parsed or not parsed.get("found"):
+            return {"hard_fail": False, "evidence": "模型未提出反例命题"}
+        statement = str(parsed.get("statement", "")).strip()
+        if not statement:
+            return {"hard_fail": False, "evidence": "反例命题为空"}
+        try:
+            from .deterministic import DeterministicChecker
+            checker = DeterministicChecker(attempts=300)
+            res = checker.search_counterexample(statement)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("反例搜索异常: %s", e)
+            return {"hard_fail": False, "evidence": f"搜索异常: {str(e)[:80]}"}
+        if res.get("found"):
+            return {"hard_fail": True,
+                    "evidence": f"反例验证成功: {statement} 在 {res.get('counterexample')} 处不成立"}
+        return {"hard_fail": False, "evidence": f"反例搜索未找到 ({statement[:80]})"}
 
     def _vote(
         self, ctx, problem: str, candidate, total_votes: int = 5,
@@ -657,6 +800,8 @@ class VerifierAgent(BaseAgent):
         use_playoff: bool = False,
         voting_times: int = None,
         use_deterministic: bool = False,
+        use_rubric: bool = False,
+        use_challenge: bool = False,
     ) -> dict:
         """
         验证主流程。
@@ -664,6 +809,11 @@ class VerifierAgent(BaseAgent):
         参数:
             voting_times: 每候选投票数；None 时回退 config.verifier_voting_times。
                           （难题深度通道：deep 档传 3，fast/standard 传 1）
+            use_rubric: 2026-09-06（移植自 sq）：rubric 结构化判分路径
+                        （verdict+confidence+error_type+step_index+reason，
+                        内嵌确定性旁证：fail 硬否决 / pass 独立正确票）。
+            use_challenge: 2026-09-06（移植自 sq）：反例挑战——对全错票的
+                        非数值答案，LLM 生成命题 → 程序数值验证 → hard_fail 硬否决。
 
         返回:
             {
@@ -701,14 +851,35 @@ class VerifierAgent(BaseAgent):
                             or getattr(self.config, 'verifier_voting_times', 1))
         all_verdicts: list[list[Verdict]] = []
         for i, cand in enumerate(candidates):
-            vds = self._vote(ctx, problem, cand, total_votes=voting_times,
-                             use_scoring=use_scoring)
+            if use_rubric:
+                # rubric 结构化判分路径（含确定性旁证：fail 硬否决 / pass 独立票）
+                vds = self._vote_rubric(ctx, problem, cand,
+                                        use_deterministic=use_deterministic)
+            else:
+                vds = self._vote(ctx, problem, cand, total_votes=voting_times,
+                                 use_scoring=use_scoring)
+            # 反例挑战（P2，sq 语义）：仅"该候选无任何正确票"且非数值答案时触发，
+            # LLM 生成命题 → 程序数值验证 → hard_fail 硬否决（客观证伪）。
+            if use_challenge and vds and not any(v.correct for v in vds):
+                ans = (cand.get("answer", "") if isinstance(cand, dict)
+                       else getattr(cand, "answer", ""))
+                chal = self._challenge_counterexample(
+                    ctx, problem, self._candidate_text(cand), str(ans))
+                if chal.get("hard_fail"):
+                    for v in vds:
+                        v.correct = False
+                        v.confidence = 0.0
+                    vds.append(Verdict(correct=False, raw="counterexample_fail",
+                                       feedback=f"反例挑战否决: {chal.get('evidence', '')[:120]}"))
+                self.record(ctx, "challenge",
+                            f"候选#{i} 反例挑战: {chal['evidence'][:100]}")
             all_verdicts.append(vds)
 
         # v2.8 确定性硬否决：SymPy 代入回验/反例对候选做客观旁证，
         # fail → 该候选全部票判错（淘汰）；unknown/pass → 仅挂证据不改判决。
         # 全部 fail 时回退保留（宁可 unknown 绝不误杀，镜像 LeanGate 降级逻辑）。
-        if use_deterministic and candidates:
+        # （use_rubric=True 时确定性已在 _vote_rubric 内处理，此处跳过避免重复）
+        if use_deterministic and candidates and not use_rubric:
             det_results = [self._deterministic_check(ctx, problem, c) for c in candidates]
             n_fail = sum(1 for r in det_results if r.get("verdict") == "fail")
             if 0 < n_fail < len(candidates):

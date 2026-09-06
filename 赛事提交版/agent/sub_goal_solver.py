@@ -46,7 +46,30 @@ except ImportError:
     from submit.utils.extract import extract_final_answer, smart_fallback_answer
     from submit.utils.prefill import prefill_messages, stitch
 
+# calc_tool（2026-09-04 下沉）：与 Solver 主链同款确定性计算器。
+# 子目标步骤/合并原先完全靠模型心算（无 <calc> 纪律、无回填），
+# 是数值错的高发且无防线处。此处导入与 solver.py:39-45 同构。
+try:
+    from .calc_tool import resolve_all_calcs
+except ImportError:  # 提交包（submit/）路径兜底
+    try:
+        from calc_tool import resolve_all_calcs
+    except ImportError:
+        resolve_all_calcs = None
+
 logger = logging.getLogger("MathPilot")
+
+# 计算纪律引导（与 solver._CALC_GUIDE 同文案，2026-09-04 下沉子目标/合并）。
+# 追加到 STEP/MERGE 的 system 提示词（不追加 user 末尾——v2.10 教训：
+# 收尾结构后追加会诱发模型"续写模式"）。
+_CALC_GUIDE = (
+    "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
+    "<calc>1/2+1/3</calc>、<calc>3*7-1</calc>），系统会自动精确求值并回填结果。"
+    "涉及数值计算时务必使用该标记，不要心算。\n"
+    "**<calc> 与 </calc> 之间必须且只能是纯数学表达式**"
+    "（数字、+ - * / ** % //、括号、函数 comb/perm/fact/gcd/lcm/abs），"
+    "禁止出现任何中文、文字解释、句号或换行——出现非表达式字符会直接导致计算失败。"
+)
 
 
 class SubGoalSolverAgent(BaseAgent):
@@ -210,6 +233,55 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
             return ctx
 
+        # 2026-09-04 子目标阶段预算（老师：砍环节内重复、不砍环节本身；
+        # 且不止加限制，还要保证体系在规定时间内跑完、强制收尾产出）。
+        # 背景：preverify 提速省下的 ~300s 全被子目标贪婪 re-plan/re-review
+        # 吃掉（bridge sub 529-717s → mcp sub 780-1112s），merge 被挤进
+        # is_time_critical 区 → 走 fallback 而非真合并 → 060 对变错
+        # （答案停在 S(1)..S(12) 枚举、未合成 2617/2618）。
+        # 依据（bridge 18 题实测）：正确题 sub 全在 661-717s，失控题 780-1112s。
+        # 预算取 750s：保住已知正确深度、刹住失控；可配 subgoal_stage_budget_sec。
+        # 时钟挂 ctx（⚠ 不能挂 self：EvalEngine 的 agent 是共享单例，
+        # ThreadPoolExecutor 并发 2 时同一实例同时服务多题，self 属性会竞态；
+        # ctx 每题独立）。orchestrator 可能多次调用 run()（2.7 / deep 3_solve /
+        # 3.5），共享 ctx._subgoal_stage_start，避免"每次调用重置预算"把总时间再吃一遍。
+        stage_budget = float(
+            getattr(self.config, "subgoal_stage_budget_sec", 750.0) or 0.0)
+        stage_start = float(getattr(ctx, "_subgoal_stage_start", 0.0) or 0.0)
+        if not stage_start:
+            stage_start = time.time()
+            ctx._subgoal_stage_start = stage_start
+        ctx._subgoal_stage_budget = stage_budget
+        # 2026-09-04 第二层保险（老师：不止加限制，还要保证体系在规定时间跑完）：
+        # 固定预算之外，子目标最迟必须在 `全局 deadline - subgoal_tail_reserve`
+        # 前结束 —— 给 3_solve 收尾 + 6_format + 6.5_lean_gate 留底线时间。
+        # reserve 取 180s 的理由（2026-09-04 审查修正）：必须 > critical_tail
+        # （standard 120s / deep 60s）且覆盖 merge（最坏 ~90s 一次 LLM）+
+        # format(<5s) + gate(≤2 次 ~40s)。若 reserve 只留 90s，子目标吃到
+        # stage_end 时全局剩 90s < 120s → merge 前 is_time_critical() 为真 →
+        # 真 merge 被全局 critical 抢走、退回 fallback —— "强制收尾"失效。
+        # 180s 保证 break 发生时全局仍 > critical_tail，merge 在非 critical 区真跑。
+        # 注意：tail_reserve 与固定预算**解耦独立**——即便 subgoal_stage_budget_sec
+        # 显式设 0（放弃固定上限），deadline 前 reserve 的硬约束依然生效，
+        # 这是"保证体系跑得完"的底线，不受固定预算开关影响。
+        _hard_end = float(getattr(ctx, "deadline", 0.0) or 0.0)
+        _tail_reserve = float(
+            getattr(self.config, "subgoal_tail_reserve_sec", 180.0) or 0.0)
+        _fixed_end = (stage_start + stage_budget
+                      if stage_budget > 0 else float("inf"))
+        if _hard_end > 10 ** 8 and _tail_reserve > 0:
+            ctx._subgoal_stage_end = min(_fixed_end, _hard_end - _tail_reserve)
+        elif stage_budget > 0:
+            ctx._subgoal_stage_end = _fixed_end
+        else:
+            ctx._subgoal_stage_end = 0.0
+
+        def _stage_left() -> float:
+            """子目标阶段剩余秒数（0 = 未启用阶段预算，返回 inf）"""
+            if not ctx._subgoal_stage_end:
+                return float("inf")
+            return ctx._subgoal_stage_end - time.time()
+
         # 阶段一：子目标规划
         plan_data = self._plan_subgoals(ctx)
         if plan_data is None:
@@ -232,19 +304,33 @@ class SubGoalSolverAgent(BaseAgent):
             if ctx.is_time_critical():
                 self.record(ctx, "subgoal", f"预算不足，跳过剩余子目标 (当前={sg['id']}/{len(subgoals)})")
                 break
+            # 2026-09-04 阶段预算闸：子目标阶段超预算 → 停解新子目标，
+            # 但**不 return**，保留已解结果进入 merge 收尾（见阶段三）。
+            if _stage_left() <= 0:
+                self.record(ctx, "subgoal",
+                            f"子目标阶段预算 {stage_budget:.0f}s 用尽，"
+                            f"停止求解剩余子目标 (当前={sg['id']}/{len(subgoals)})，"
+                            "强制收尾 merge")
+                break
 
             prev_results = self._format_previous_results(results_map, subgoals)
             step_result = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results)
             # 2026-09-02 老师方案 B：蓝图评审 OK 但子目标失败 → 重做子目标
             # （不重画蓝图）。一次失败常是瞬时 LLM 错误/预算抖动，带已解
             # 子目标上下文重试一次；仍失败才记为占位（留给外层占位符兜底）。
-            if step_result.startswith("[子目标") and True:
+            # 2026-09-04 阶段预算：重试 = 一次完整 LLM 轮（60-110s），
+            # 阶段预算剩余不足时不再重试（省下的时间留给 merge 收尾）。
+            if step_result.startswith("[子目标") and _stage_left() > 120:
                 self.record(ctx, "subgoal",
                             f"子目标 #{sg['id']}「{sg['title']}」失败，带上下文重试一次")
                 prev_results2 = self._format_previous_results(results_map, subgoals)
                 retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results2)
                 if retry and not retry.startswith("[子目标"):
                     step_result = retry
+            elif step_result.startswith("[子目标") and _stage_left() <= 120:
+                self.record(ctx, "subgoal",
+                            f"子目标 #{sg['id']}「{sg['title']}」失败，"
+                            f"阶段预算剩余 {_stage_left():.0f}s 不足，放弃重试，强制收尾")
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
             # v2.9：结构化输出每步子目标的过程与中间结果
@@ -271,11 +357,23 @@ class SubGoalSolverAgent(BaseAgent):
             time.sleep(0.2)  # 速率限制间隔
 
         # 阶段三：结论合并
+        # 2026-09-04 保护：预算已尽且一个子目标都没解出（典型：或chestrator 后续
+        # 调用 run() 时预算早已耗尽）→ 空 merge 只产垃圾，直接 return 不追加候选。
+        if not results_map and _stage_left() <= 0:
+            self.record(ctx, "subgoal",
+                        "子目标阶段预算已尽且无已解子目标，跳过空 merge")
+            return ctx
         if ctx.is_time_critical():
-            self.record(ctx, "subgoal", "预算不足，跳过合并阶段")
+            # 全局真正逼近 deadline（剩 < critical_tail）→ 连 1 次 merge LLM 调用
+            # 都挤不出来时，用最后一个子目标结果兜底（不空手返回）。
+            self.record(ctx, "subgoal", "全局预算不足，跳过合并阶段")
             # 使用最后一个子目标的结果作为最终答案
             final_answer = self._fallback_from_last_subgoal(subgoals)
         else:
+            # 2026-09-04：即使子目标阶段预算已用尽（_stage_left()<=0），
+            # 只要全局未 critical 就**必须真 merge**——这是"强制收尾产出"的关键：
+            # 此前阶段预算用尽直接 return / 或 merge 被全局 critical 挤掉，
+            # 答案停在子目标枚举（060: S(1)..S(12)）而没合成最终结论。
             final_answer = self._merge_results(ctx, subgoals, subgoal_plan_summary,
                                                results_map, merge_strategy)
 
@@ -287,9 +385,10 @@ class SubGoalSolverAgent(BaseAgent):
 
         # 构造 Candidate
         full_reasoning = self._build_full_reasoning(subgoals, problem_analysis, final_answer)
-        # 2026-09-02 老师需求：候选池上限 8（与 solver.run 同口径，5→8 保好候选）
-        if len(getattr(ctx, 'candidates', None) or []) >= 8:
-            self.record(ctx, "subgoal", "候选池已达上限 8，跳过子目标候选入池")
+        # 2026-09-02 老师需求：候选池统一封顶（与 solver.run 同口径）。
+        # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）
+        if len(getattr(ctx, 'candidates', None) or []) >= 6:
+            self.record(ctx, "subgoal", "候选池已达上限 6，跳过子目标候选入池")
             return
         candidate = Candidate(
             id=len(ctx.candidates),
@@ -305,8 +404,15 @@ class SubGoalSolverAgent(BaseAgent):
         # - reject 比例 >= 40%（相对阈值）
         # 满足任一 → 注入失败反馈让 BlueprintPlanner.regenerate_with_feedback 重写 DAG。
         # 硬上限 MAX_REPLAN_ROUNDS 防死循环；预算耗尽或 DAG 不可改进即停。
-        if getattr(self.config, "enable_dag_replan", True):
+        # 2026-09-04 阶段预算：replan 是"候选已入池后"的改进环节（评审+重生成
+        # 每轮 2-3 次 LLM），budget 用尽时跳过——不影响已产出的 merge 答案，
+        # 把时间留给 orchestrator 后续 3_solve/lean 验证/答案闸门。
+        if (getattr(self.config, "enable_dag_replan", True)
+                and _stage_left() > 0):
             self._review_and_maybe_replan(ctx, dag=ctx.blueprint)
+        elif getattr(self.config, "enable_dag_replan", True):
+            self.record(ctx, "dag_replan",
+                        f"子目标阶段预算用尽（剩 {_stage_left():.0f}s），跳过 DAG replan")
         return ctx
 
     def _review_and_maybe_replan(self, ctx, dag=None, max_replan_rounds: int = 2) -> bool:
@@ -791,12 +897,20 @@ class SubGoalSolverAgent(BaseAgent):
             ctx.lemma_repo.append(entry)
 
     def _call_step(self, ctx: TaskContext, user_msg: str) -> str:
-        """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。"""
+        """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。
+
+        2026-09-04 calc 纪律下沉：system 追加 <calc> 计算引导（与 solver 主链
+        同款），响应回填 <calc> 块为精确值——子目标步骤不再靠模型心算。
+        """
+        _step_system = SUBGOAL_STEP_SYSTEM
+        if (resolve_all_calcs is not None
+                and getattr(self.config, 'enable_calc_tool', True)):
+            _step_system = SUBGOAL_STEP_SYSTEM + _CALC_GUIDE
         resp = self.llm(
             ctx,
             prefill_messages(
                 [
-                    {"role": "system", "content": SUBGOAL_STEP_SYSTEM},
+                    {"role": "system", "content": _step_system},
                     {"role": "user", "content": user_msg},
                 ],
                 "【本步结果】",
@@ -807,6 +921,12 @@ class SubGoalSolverAgent(BaseAgent):
             resp = stitch("【本步结果】", resp)
         if resp is None:
             return "[子目标求解失败]"
+
+        # 2026-09-04 calc_tool 回填：<calc>表达式</calc> → [计算] 表达式 = 精确值
+        # （在提取【本步结果】之前，让精确结果参与结果提取；与 solver 同序）
+        if (resolve_all_calcs is not None
+                and getattr(self.config, 'enable_calc_tool', True)):
+            resp = resolve_all_calcs(resp)[0]
 
         # 提取「本步结果」部分
         result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
@@ -833,7 +953,11 @@ class SubGoalSolverAgent(BaseAgent):
     def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
                        plan_summary: str, results_map: dict[int, str],
                        merge_strategy: str) -> str:
-        """调用 LLM 合并所有子目标结果"""
+        """调用 LLM 合并所有子目标结果。
+
+        2026-09-04 calc 纪律下沉：合并阶段若需汇总计算（各子目标结果代入/
+        化简求值），同样强制 <calc> 标记并由系统回填，杜绝 merge 心算错。
+        """
         all_results = self._format_all_results(results_map, subgoals)
         user_msg = SUBGOAL_MERGE_USER_TEMPLATE.format(
             problem=ctx.problem,
@@ -841,13 +965,17 @@ class SubGoalSolverAgent(BaseAgent):
             all_results=all_results,
             merge_strategy=merge_strategy or "将各子目标结果按逻辑顺序组合，得出原题的最终答案。",
         )
+        _merge_system = SUBGOAL_MERGE_SYSTEM
+        if (resolve_all_calcs is not None
+                and getattr(self.config, 'enable_calc_tool', True)):
+            _merge_system = SUBGOAL_MERGE_SYSTEM + _CALC_GUIDE
 
         # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
         resp = self.llm(
             ctx,
             prefill_messages(
                 [
-                    {"role": "system", "content": SUBGOAL_MERGE_SYSTEM},
+                    {"role": "system", "content": _merge_system},
                     {"role": "user", "content": user_msg},
                 ],
                 "【最终答案】",
@@ -858,6 +986,11 @@ class SubGoalSolverAgent(BaseAgent):
             resp = stitch("【最终答案】", resp)
         if resp is None:
             return self._fallback_from_last_subgoal(subgoals)
+
+        # 2026-09-04 calc_tool 回填（先于答案提取，与 solver/_call_step 同序）
+        if (resolve_all_calcs is not None
+                and getattr(self.config, 'enable_calc_tool', True)):
+            resp = resolve_all_calcs(resp)[0]
 
         # 优先提取「最终答案」
         answer = extract_final_answer(resp)

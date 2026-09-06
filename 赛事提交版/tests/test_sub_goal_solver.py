@@ -109,11 +109,20 @@ class ParseSubgoalPlanTest(unittest.TestCase):
         self.assertEqual(plan[0]["type"], "compute")
 
     def test_too_many_subgoals_capped(self) -> None:
+        """默认上限 6（2026-09-03 老师：子目标是简化求解，拆 10 步反而更碎）。"""
         raw = {"subgoals": [
             {"id": i, "title": f"s{i}", "type": "compute"} for i in range(1, 20)
         ]}
         plan = SubGoalSolverAgent._parse_subgoal_plan(raw)
-        self.assertEqual(len(plan), 10)
+        self.assertEqual(len(plan), 6)
+
+    def test_max_subgoals_param_override(self) -> None:
+        """上限可由调用方（config.max_subgoals）覆盖。"""
+        raw = {"subgoals": [
+            {"id": i, "title": f"s{i}", "type": "compute"} for i in range(1, 20)
+        ]}
+        plan = SubGoalSolverAgent._parse_subgoal_plan(raw, 3)
+        self.assertEqual(len(plan), 3)
 
 
 class RunFlowTest(unittest.TestCase):
@@ -125,14 +134,29 @@ class RunFlowTest(unittest.TestCase):
         self.assertEqual(len(ctx.candidates), 2)
         self.assertIn("最终答案", ctx.candidates[-1].reasoning)
 
-    def test_run_exhausted_budget_skips(self) -> None:
+    def test_time_critical_skips(self) -> None:
+        """2026-09-03 预算解除后：只有**时间紧迫**才跳过子目标求解。
+
+        原 test_run_exhausted_budget_skips 用 Budget(max_calls=0) 模拟"预算
+        耗尽 → 跳过"——预算闸门已删（比赛无次数上限），该行为不复存在。
+        改为验证真实跳过条件：deadline 已过（is_time_critical=True）。
+        """
+        import time as _t
         agent = make_agent()
         ctx = make_ctx()
-        ctx.budget.spend(20)  # 预算完全耗尽
+        ctx.deadline = _t.time() - 1  # 真实时间戳，已过期 → 时间紧迫
         ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
         agent.run(ctx)
-        # 预算耗尽时规划阶段直接失败，不追加候选
         self.assertEqual(len(ctx.candidates), 1)
+
+    def test_budget_zero_still_runs(self) -> None:
+        """预算=0 不再阻断（闸门删除后的新语义）：子目标求解照常追加候选。"""
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.budget = Budget(max_calls=0)
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        self.assertEqual(len(ctx.candidates), 2)
 
     def test_run_partial_budget_still_appends_fallback(self) -> None:
         agent = make_agent()
@@ -142,6 +166,92 @@ class RunFlowTest(unittest.TestCase):
         agent.run(ctx)
         # 规划成功但子目标/合并预算不足 → 以"无法求解"兜底仍追加候选
         self.assertEqual(len(ctx.candidates), 2)
+
+
+class StageBudgetTest(unittest.TestCase):
+    """2026-09-04 子目标阶段预算（subgoal_stage_budget_sec）。
+
+    目标（老师）：preverify 省下的时间不被 subgoal 贪婪 re-plan/re-review 吃掉；
+    到点强制收尾 merge；且体系须在 deadline 内跑完（第二层保险）。
+    """
+
+    def _stage_end_of(self, ctx: TaskContext) -> float:
+        return float(getattr(ctx, "_subgoal_stage_end", 0.0) or 0.0)
+
+    def test_fixed_budget_set_on_ctx(self) -> None:
+        """固定 750s 预算写入 ctx._subgoal_stage_end（无真实 deadline 时）。"""
+        agent = make_agent()
+        ctx = make_ctx()  # deadline=999.0（伪 epoch）→ 走固定预算分支
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        self.assertGreater(self._stage_end_of(ctx), 0.0)
+
+    def test_tail_reserve_caps_stage_end(self) -> None:
+        """真实 deadline 下：stage_end ≤ deadline - tail_reserve（180s，默认）。"""
+        import time as _t
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.deadline = _t.time() + 300  # 真实未来时间戳
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        end = self._stage_end_of(ctx)
+        self.assertGreater(end, 0.0)
+        # deadline - end >= tail_reserve(180) - 容忍(计时抖动 5s)
+        self.assertGreaterEqual(ctx.deadline - end, 175.0)
+
+    def test_override_budget_sec_still_tail_capped(self) -> None:
+        """subgoal_stage_budget_sec=0：放弃固定上限，但真实 deadline 下
+        tail_reserve 仍把 stage_end 约束在 deadline-180 前（第二层独立生效）。"""
+        import time as _t
+        from types import SimpleNamespace as _NS
+        agent = make_agent()
+        agent.config = _NS(
+            max_total_calls=20, max_time_per_question=300,
+            max_total_time_seconds=21000, policy_max_tokens=2048,
+            subgoal_stage_budget_sec=0.0,  # 放弃固定预算
+        )
+        ctx = make_ctx()
+        ctx.deadline = _t.time() + 300  # 真实 deadline
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        end = self._stage_end_of(ctx)
+        self.assertGreater(end, 0.0)
+        # deadline - end >= tail_reserve(180) - 容忍(5s)
+        self.assertGreaterEqual(ctx.deadline - end, 175.0)
+
+    def test_disable_both_budget_and_reserve(self) -> None:
+        """固定预算=0 且 tail_reserve=0 → 阶段预算完全停用（stage_end=0）。"""
+        import time as _t
+        from types import SimpleNamespace as _NS
+        agent = make_agent()
+        agent.config = _NS(
+            max_total_calls=20, max_time_per_question=300,
+            max_total_time_seconds=21000, policy_max_tokens=2048,
+            subgoal_stage_budget_sec=0.0,
+            subgoal_tail_reserve_sec=0.0,
+        )
+        ctx = make_ctx()
+        ctx.deadline = _t.time() + 300
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        self.assertEqual(self._stage_end_of(ctx), 0.0)
+
+    def test_share_stage_start_across_runs(self) -> None:
+        """时钟挂 ctx：两次 run() 共享同一 _subgoal_stage_start（不重置）。"""
+        import time as _t
+        agent = make_agent()
+        ctx = make_ctx()
+        ctx.deadline = _t.time() + 300
+        ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
+        agent.run(ctx)
+        start1 = float(getattr(ctx, "_subgoal_stage_start", 0.0) or 0.0)
+        self.assertGreater(start1, 0.0)
+        # 第二次 run：模拟更晚时刻，start 不应重置
+        ctx._subgoal_stage_start = start1 - 100  # 反向验证：显式改早后应被保留
+        agent.run(ctx)
+        self.assertAlmostEqual(
+            float(getattr(ctx, "_subgoal_stage_start", 0.0) or 0.0),
+            start1 - 100, places=0)  # 已存在 → 不重写
 
 
 class ReplanDispatchTest(unittest.TestCase):
@@ -209,6 +319,64 @@ class ReplanDispatchTest(unittest.TestCase):
             # 关键断言：先走子树重写，未升级整树
             m_pl.regenerate_subtree.assert_called_once()
             m_pl.regenerate_with_feedback.assert_not_called()
+
+
+class StepCalcDisciplineTest(unittest.TestCase):
+    """2026-09-04 calc 纪律下沉子目标步骤：system 注入 <calc> 引导 + 响应回填。"""
+
+    class _RecordingClient:
+        def __init__(self, resp: str):
+            self.resp = resp
+            self.last_messages = None
+
+        def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
+            self.last_messages = messages
+            return self.resp
+
+        def call(self, messages=None, temperature=0.0, max_tokens=256, **kw):
+            return self.chat(messages=messages, temperature=temperature,
+                             max_tokens=max_tokens, **kw)
+
+    def _make_agent(self, enable_calc_tool: bool):
+        config = SimpleNamespace(
+            max_total_calls=20,
+            max_time_per_question=300,
+            max_total_time_seconds=21000,
+            policy_max_tokens=2048,
+            enable_calc_tool=enable_calc_tool,
+        )
+        return SubGoalSolverAgent(client=None, config=config)
+
+    def _call_step(self, agent, resp_text: str):
+        client = self._RecordingClient(resp_text)
+        agent.client = client
+        ctx = make_ctx()
+        out = agent._call_step(ctx, "【原题】求值\n【当前子目标 #1】计算")
+        return out, client.last_messages
+
+    def test_system_injects_calc_guide_and_resolves(self) -> None:
+        agent = self._make_agent(enable_calc_tool=True)
+        out, msgs = self._call_step(
+            agent,
+            "【推导过程】\n略\n【本步结果】\n<calc>1/2+1/3</calc>",
+        )
+        # ① system 提示词注入了 calc 纪律
+        sys_content = msgs[0]["content"]
+        self.assertIn("计算环节请用 <calc>", sys_content)
+        # ② <calc> 块被精确回填，不留原始标记
+        self.assertNotIn("<calc>", out)
+        self.assertIn("5/6", out)
+
+    def test_disabled_keeps_original(self) -> None:
+        agent = self._make_agent(enable_calc_tool=False)
+        out, msgs = self._call_step(
+            agent,
+            "【推导过程】\n略\n【本步结果】\n<calc>1/2+1/3</calc>",
+        )
+        sys_content = msgs[0]["content"]
+        self.assertNotIn("计算环节请用 <calc>", sys_content)
+        # 关闭时不做回填：<calc> 原样保留（与 solver 开关语义一致）
+        self.assertIn("<calc>1/2+1/3</calc>", out)
 
 
 if __name__ == "__main__":

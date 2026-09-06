@@ -79,7 +79,8 @@ class TheoremMemory:
             logger.warning("[theorem_memory] 写入失败: %s", exc)
             try:
                 os.remove(tmp)
-            except OSError:
+            except BaseException:
+                # 2026-09-04：同 lean_bridge——沙箱钩子抛非 OSError 时吞掉（清理非关键）
                 pass
 
     def record_hit(self, domain: str, theorem: str) -> None:

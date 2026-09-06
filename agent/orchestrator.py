@@ -611,13 +611,15 @@ class Orchestrator(BaseAgent):
             is_proof = (getattr(ctx, 'question_type', '') == '证明题'
                         or getattr(ctx, 'domain', '') in ('证明', '证明题'))
             tier_votes = self.config.tier_voting_times.get(tier, 1)
-            # 2026-09-02 老师需求：候选池统一封顶 8（兜底所有生成路径：
+            # 2026-09-02 老师需求：候选池统一封顶（兜底所有生成路径：
             # 初始/改进/续写/协作/子目标/revise 追加总量都可能超）
+            # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%；
+            # 平台实测候选边际收益低，杠杆在验证器错因质量，不在堆候选）
             _pre_verify_n = len(ctx.candidates or [])
-            if _pre_verify_n > 8:
-                ctx.candidates = (ctx.candidates or [])[:8]
+            if _pre_verify_n > 6:
+                ctx.candidates = (ctx.candidates or [])[:6]
                 self.record(ctx, "control",
-                            f"候选池 {_pre_verify_n} → 8（统一封顶）")
+                            f"候选池 {_pre_verify_n} → 6（统一封顶）")
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
                 use_clustering=True,
@@ -628,6 +630,8 @@ class Orchestrator(BaseAgent):
                     or (tier != 'deep' and ctx.state.playoff_enabled)
                 ),
                 use_deterministic=getattr(self.config, 'enable_deterministic', True),
+                use_rubric=getattr(self.config, 'use_rubric', False),
+                use_challenge=getattr(self.config, 'use_challenge', False),
                 voting_times=tier_votes,
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
@@ -646,7 +650,14 @@ class Orchestrator(BaseAgent):
             _any_correct = any(
                 getattr(v, 'correct_votes', 0) > 0 for v in (ctx.verdicts or []))
             if _any_correct:
-                self._adversarial_probe(ctx, tier)
+                # 2026-09-04 修复：对抗检出错误 → 立即触发定向修正（原反馈滞留 bug）。
+                # 原实现仅把反馈塞进 lean_reject_feedback，而 5（全 0 票）/
+                # 5.5（置信<0.5）触发条件都看投票共识 → 验证器自信通过时对抗
+                # 检出的错误无人消费、答案带错提交（与 4.5 Oracle 判错即 revise
+                # 不对称）。误报风险由 Step4 _review_bug_feedback 复核兜底，
+                # 死循环由 revise_round 全局上限 5 + 时间检查防护。
+                if self._adversarial_probe(ctx, tier):
+                    self._deep_revise_loop(ctx, ver_result, tier_votes)
 
             self._stage_start(ctx, "5_revise_or_fallback")
             # 5) 全部 0 正确票：
@@ -708,11 +719,21 @@ class Orchestrator(BaseAgent):
                     and ctx.final_response):
                 try:
                     # 2026-09-03 老师：不到 1200s 且 Lean 验证错误就**不放过**，
-                    # 一直换候选重做（去掉"≤2 次"硬限），时间到 1200s 才放行。
+                    # 一直换候选重做、时间到 1200s 才放行 —— 该"不放过"规则自
+                    # 2026-09-04 起**仅保留给 deep 档**（见下方 2026-09-04 档位封顶说明）。
                     # 同时把上一轮 Lean 反馈注入到 revise_feedback（让 LLM 重生成时能看到具体错）。
                     import time as _t3
                     _hard_end = ctx.start_time + float(
                         getattr(self.config, "max_time_per_question", 1200))
+                    # 2026-09-04 按档位封顶（治本：2534334 平台 64 invalid = 时间墙归因）。
+                    # 此前 6.5 对**所有档**都用 1200s 硬限 → fast/standard 题也被拖到
+                    # 墙边，重做耗尽的题整题超时无最终答案。现改为：
+                    #   fast/standard：最多 2 次打回，且整题时间超 tier_budget 即放行；
+                    #   deep：保留"做到 1200s"，但每次打回前保证剩余时间够完成。
+                    _tbl_budget = getattr(self.config, 'tier_budget', None) or {}
+                    _tier_budget = float(_tbl_budget.get(tier, 1200.0))
+                    _rework_deadline = min(_hard_end, ctx.start_time + _tier_budget)
+                    _max_rework = 2 if tier in ("fast", "standard") else None
                     best_reasoning = ""
                     for _c in (ctx.candidates or []):
                         if getattr(_c, "answer", "") == ctx.final_response:
@@ -723,7 +744,8 @@ class Orchestrator(BaseAgent):
                     _tried = 0
                     _last_feedback = ""
                     while (not g_ok
-                           and _t3.time() < _hard_end - 5):
+                           and _t3.time() < _rework_deadline - 5
+                           and (_max_rework is None or _tried < _max_rework)):
                         # 取最近一条 Lean gate 反馈（gate_final_answer 写 ctx.lean_gate）
                         for _entry in reversed(ctx.lean_gate or []):
                             if _entry.get("gate") == "final_answer" and _entry.get("feedback"):
@@ -736,8 +758,8 @@ class Orchestrator(BaseAgent):
                                 f"未通过 Lean：{_last_feedback}"
                             ]
                         self.record(ctx, "lean_gate",
-                                    f"Lean 拒候选 #{_tried+1}（剩余 "
-                                    f"{int(_hard_end - _t3.time())}s）继续换/重做")
+                                    f"Lean 拒候选 #{_tried+1}（本档位重做剩余 "
+                                    f"{int(_rework_deadline - _t3.time())}s）继续换/重做")
                         # 换下一候选（按置信度）试；候选换尽后 → 让 Solver 读
                         # Lean 反馈**重新生成**新候选（真正的"告诉 AI 错哪了"闭环）
                         _next = None
@@ -755,7 +777,9 @@ class Orchestrator(BaseAgent):
                             break
                         if _next is None:
                             # 候选已全部试过 → 触发 Solver 读反馈重新生成（重做到对）
-                            if _t3.time() < _hard_end - 60:
+                            # 2026-09-04：重生成 ≈ 生成(~60-120s) + 闸门验证(5-21s)，
+                            # 剩余 <180s 时无法保证完成 → 不再打回，提交当前答案碰运气。
+                            if _t3.time() < _rework_deadline - 180:
                                 self.record(
                                     ctx, "lean_gate",
                                     "所有候选未过 Lean，触发 Solver 读反馈重新生成"
@@ -764,7 +788,7 @@ class Orchestrator(BaseAgent):
                                     # solver.run 内部：ctx.revise_round>0 且
                                     # ctx.revise_feedback 非空 → 走 _generate_revise
                                     # （读反馈定向修正，见 solver.py:122）。
-                                    # **先腾位**：候选池已满 8（cap）时 solver.run
+                                    # **先腾位**：候选池已满 6（cap）时 solver.run
                                     # remaining=0 直接 return 不生成 → 保留通过
                                     # Lean 的最优候选，其余清空给新候选腾位。
                                     _pass_cands = []
@@ -794,6 +818,13 @@ class Orchestrator(BaseAgent):
                             self.record(ctx, "lean_gate",
                                         "重生成后仍无候选过 Lean 或时间不足，停")
                             break
+                        # 2026-09-04：换候选=再验 1 次（5-21s），剩余 <35s 时打完
+                        # 就到墙边，不再打回，直接提交当前答案（避免撞 1200s 无答案）。
+                        if _rework_deadline - _t3.time() < 35:
+                            self.record(ctx, "lean_gate",
+                                        f"剩余 {int(_rework_deadline - _t3.time())}s "
+                                        "不足完成换候选验证，停")
+                            break
                         _tried += 1
                         ctx._lean_tried = list(getattr(ctx, "_lean_tried", []) or []) + [_next.id]
                         ctx.final_response = _next.answer
@@ -806,7 +837,8 @@ class Orchestrator(BaseAgent):
                     if not g_ok:
                         ctx.lean_rejected = True
                         self.record(ctx, "lean_gate",
-                                    f"直到 1200s 硬限 Lean 仍拒（{_tried} 次换候选），原答案标 rejected")
+                                    f"{tier} 档 Lean 重做达上限仍拒（{_tried} 次换候选/重生成），"
+                                    "当前答案标 rejected 放行")
                 except Exception as _e:  # noqa: BLE001  闸门异常绝不阻断
                     self.record(ctx, "lean_gate",
                                 f"Lean 闸门异常，降级放行: {str(_e)[:120]}")
@@ -1033,6 +1065,8 @@ class Orchestrator(BaseAgent):
                 is_proof=getattr(ctx, 'domain', '') in ('证明', '证明题'),
                 use_playoff=ctx.state.playoff_enabled,
                 use_deterministic=getattr(self.config, 'enable_deterministic', True),
+                use_rubric=getattr(self.config, 'use_rubric', False),
+                use_challenge=getattr(self.config, 'use_challenge', False),
                 voting_times=tier_votes,
             )
             ctx.verdicts = self._verdicts_from_ver_result(ver2, ctx.candidates)

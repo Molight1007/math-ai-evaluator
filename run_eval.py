@@ -553,10 +553,14 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # 本地评测单题时限放宽到 3600s（1h 封顶防意外挂死），让每题自然跑完
     # 全部环节（子目标/求解/验证/Lean 闸门），不被 1200s 截断。比赛平台
     # 时限是平台侧约束（官方 Client 托管），与本文件无关。
-    "max_time_per_question": 2000,
+    # 2026-09-04 平台教训（14.29% 归因）：放开单题时限 → 时间爆炸 → 64 题被
+    # 时间墙切掉 invalid。改回比赛档 1200s（deep 档上限）——超时截断宁可 invalid
+    # 也不拖垮整卷。
+    "max_time_per_question": 1200,
     # ---- 对齐 user_agent.py:101 / :105 / :106 ----
     "max_workers": 3,
-    "max_answer_tokens": 8192,
+    # 9/4：平台不限 token → 本地 override 同步放开（防截断腰斩；上探 65536 对齐 AgentConfig）
+    "max_answer_tokens": 65536,
     "revise_sample_times": 2,
     "max_revise_rounds": 1,
     # ---- 对齐 user_agent.py:109 / :112 / :113 ----

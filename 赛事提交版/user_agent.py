@@ -61,9 +61,11 @@ class AgentConfig:
     # v2.4.0：恢复 24576 上限（ICMA 对齐）。ICMA 实测同模型首轮 24576 仅 143-231s，
     # 模型实际只用 3-7K token，24576 只是上限；降上限会牺牲贴上限的奥赛题成功区间。
     # 真正修超时靠：结构化四章节 prompt（抑制自由 CoT）+ 预算感知 + 压缩 prefill 兜底。
+    # 2026-09-04：比赛不限制模型 token（单题边界=平台 1200s 时间墙）→ 上限放开 65536
+    #   （2534334 平台实测 truncated 238 次答案被腰斩 → 64 invalid；截断比耗时更丢分）。
     policy_sample_times: int = 2       # 候选解答数量
     policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
-    policy_max_tokens: int = 24576     # 策略最大 token（上限，模型实际用 3-7K）
+    policy_max_tokens: int = 65536     # 策略最大 token（上限；9/4 放开，只受 1200s 时间墙）
 
     # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
     use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
@@ -105,18 +107,22 @@ class AgentConfig:
 
     # ---- 智能体补充部件配置 ----
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
-    max_tokens: int = 24576            # 单次最大 token 数（匹配 policy_max_tokens）
-    max_tokens_cap: int = 24576        # 内部 token 裁剪上限（对齐 ICMA reasoning 24576）
+    # 2026-09-04：平台不限 token → max_tokens 65536；max_tokens_cap=0 关闭 base.llm 二次裁剪
+    max_tokens: int = 65536            # 单次最大 token 数（匹配 policy_max_tokens）
+    max_tokens_cap: int = 0            # 内部 token 裁剪上限：0=不裁剪（base.llm 语义）
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     temperature: float = 0.3           # 默认 LLM 温度
 
     # ---- 自纠错参数 ----
-    max_answer_tokens: int = 8192      # solver 单次调用最大 token 数
+    max_answer_tokens: int = 65536    # solver 单次调用最大 token 数（9/4 放开，防答案腰斩）
     revise_sample_times: int = 2       # 自纠错重解候选数
 
     # ---- 新功能开关（简化）----
     use_scoring: bool = False          # Verifier 不用多维评分（简化，减少误判）
     enable_deterministic: bool = True  # 确定性硬否决（v2.8）：SymPy 代入回验 fail 淘汰候选、unknown 放行
+    # 2026-09-06（移植自 sq 分支，默认关，A/B 验证后开）：
+    use_rubric: bool = False           # Verifier rubric 结构化判分（verdict+confidence+错因定位，JSON prefill）
+    use_challenge: bool = False        # Verifier 反例挑战（LLM 命题 → SymPy 程序数值验证 → hard_fail 否决）
     by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
     use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
     use_lemma_accumulation: bool = True  # 引理积累（2026-08-29 起默认开，按领域路由）
@@ -155,7 +161,7 @@ class AgentConfig:
     # 2026-08-30 Algebra 专项：实测无效已回滚（45 题 Algebra 仍 1/11，
     # v3 33.3% < ab_review 35.6%），保留开关但默认关闭
     algebra_force_deep: bool = False
-    tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:4}
+    tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:3}
     tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
     tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
     tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
@@ -249,7 +255,9 @@ class AgentConfig:
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
         if self.tier_sample_times is None:
-            self.tier_sample_times = {"fast": 1, "standard": 2, "deep": 4}
+            # 2026-09-04：deep 4→3（配每候选 3 票，验证成本 12→9 票 ≈ -25%；
+            # 平台实测堆候选边际收益低，杠杆在验证器错因质量，不在候选数量）
+            self.tier_sample_times = {"fast": 1, "standard": 2, "deep": 3}
         if self.tier_temperatures is None:
             self.tier_temperatures = {
                 "fast": [0.1],
@@ -398,6 +406,7 @@ class ReasoningAgent:
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
             "by_enable_fast_path", "use_scoring",
+            "use_rubric", "use_challenge",  # 2026-09-06 sq 移植（A/B 开关）
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "lemma_domains",

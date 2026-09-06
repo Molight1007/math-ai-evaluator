@@ -131,8 +131,15 @@ class LeanPreVerifier(BaseAgent):
             # unknown（环境缺失/转化失败/超时）→ 不重试，直接降级
             break
 
-        # ---- 骨架阶段 Lean 语法审核（#28，默认启用，安全降级）----
-        if getattr(cfg, "enable_sketch_audit", True):
+        # ---- 骨架阶段 Lean 语法审核（#28）----
+        # 2026-09-04 时间优化（老师：砍环节内重复、不砍环节本身）：
+        # 此处"无 DAG 轻量骨架审核"与 2.7 subgoal 的 Blueprint DAG 整树审核
+        # （sub_goal_solver._audit_blueprint_tree → LeanTranslator，写
+        # ctx.sketch_tree 供 lean_refiner 消费）功能重叠，且 ctx.sketch 无下游
+        # 消费者 → 默认关闭（enable_preverify_sketch_audit=True 可追溯重开）。
+        # Lean 证据链不受损：DAG 级整树审核由 enable_sketch_audit（默认 True）
+        # 驱动，完整保留。省下 ~150-200s/题给 3.5/3.6/6.5 候选 Lean 验证。
+        if getattr(cfg, "enable_preverify_sketch_audit", False):
             if not ctx.is_time_critical():  # 预算已无限制（9/3）
                 self.generate_and_audit_sketch(ctx)
 

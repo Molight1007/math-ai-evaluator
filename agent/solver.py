@@ -111,11 +111,13 @@ class SolverAgent(BaseAgent):
 
     def run(self, ctx: TaskContext) -> TaskContext:
         """根据当前上下文状态决定初始求解还是纠错重解"""
-        # 2026-09-02 老师需求：候选池上限 8（13→8→5→8：003 退步分析——cap5 砍掉好候选
-        # 后 0 票直答退化成 No such function，改回 8 保好候选）。
-        # 无论初始/revise/自改进/playoff 从哪条路径追加，统一封顶。
+        # 2026-09-02 老师需求：候选池统一封顶（无论初始/revise/自改进/playoff 从哪条路径追加）。
+        # 历史：13→8→5→8（003 退步分析——cap5 曾砍掉好候选后 0 票直答退化成
+        # No such function，改回 8 保好候选）。
+        # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）。此时初始池
+        # 只到 3、revise 补 ≤3，总量天然 ≤6，封顶不再主动砍候选，无 003 式风险。
         # count 只传 remaining 上限，adaptive 缩小在 _generate_initial 内部做。
-        remaining = 8 - len(getattr(ctx, 'candidates', None) or [])
+        remaining = 6 - len(getattr(ctx, 'candidates', None) or [])
         if remaining <= 0:
             return ctx
         if ctx.revise_round > 0 and ctx.revise_feedback:
@@ -134,7 +136,7 @@ class SolverAgent(BaseAgent):
         """根据题目领域自适应调整候选数量"""
         domain = (ctx.domain or "").lower()
         problem_len = len(ctx.problem)
-        # 难题深度通道：deep 档保持多候选（4 候选，不做缩减）
+        # 难题深度通道：deep 档保持多候选（3 候选，不做缩减）
         if getattr(ctx, 'tier', 'standard') == 'deep':
             return default_count
         # 证明题 → 减少候选（精确推演比广度采样更重要）
@@ -158,26 +160,13 @@ class SolverAgent(BaseAgent):
 
     @staticmethod
     def _adaptive_max_tokens(ctx: TaskContext, base_tokens: int) -> int:
-        """P0-4/5 修复：按题目领域/长度分级 max_tokens，杜绝截断丢答案。
+        """2026-09-04：比赛不限制模型 token → 各档统一返回 base_tokens（=policy_max_tokens=65536）。
 
-        与 ICMA 高分样例对齐：简单题 8192 / 中等 base / 难题 24576。
-        base_tokens（policy_max_tokens）默认 24576，难题上探 24576，
-        cap 同步上调（user_agent max_tokens_cap=24576），不再被二次裁剪。
+        原分级（简单题 8192 / 难题 24576）在平台单题 1200s 时间墙下大量
+        finish_reason=length 答案被腰斩（2534334 平台实测 truncated 238 次、
+        64 题 invalid）——截断比多花时间更丢分。上限只作保险，prefill 压缩下
+        模型实际输出仍克制；真正边界是 1200s 时间墙而非 token 帽。
         """
-        domain = (ctx.domain or "").lower()
-        problem_len = len(ctx.problem or "")
-        # 简单题（选择/填空/算术）→ 中小预算，快速出答案
-        simple_signals = any(k in domain for k in ("choice", "fill", "选择", "填空", "arithmetic", "算术"))
-        if simple_signals:
-            return min(base_tokens, 8192)
-        # 难题（证明/级数/积分/方程/长题）→ 大预算 24576（ICMA 对齐：上限而非实际用量，
-        # 实测模型仅用 3-7K token，24576 保住贴上限的奥赛题；超时由压缩 prefill 兜底）
-        hard_signals = any(k in domain for k in (
-            "proof", "prove", "证明", "series", "级数",
-            "integral", "积分", "equation", "方程", "derivative", "微分",
-        )) or problem_len > 500
-        if hard_signals:
-            return max(base_tokens, 24576)
         return base_tokens
 
     def _use_lemma(self, ctx: TaskContext) -> bool:
@@ -327,12 +316,17 @@ class SolverAgent(BaseAgent):
 
     def _compressed_solve(self, ctx: TaskContext, system: str, user: str,
                           temperature: float = 0.1,
-                          max_tokens: int = 8192) -> str | None:
-        """ICMA 同款压缩求解：prefill 种子「## 问题分析」抑制 CoT，快速产出答案。
+                          max_tokens: int = 8192,
+                          prefill_seed: str = "## 问题分析\n") -> str | None:
+        """ICMA 同款压缩求解：prefill 种子抑制 CoT，快速产出答案。
 
         v2.4.1 起为本环境**主求解路径**：诊断实测完整 CoT 单次调用 >200s 不返回
         （780s 仍读超时），而 prefill 压缩求解 36.7s 即返回 ~2000 tokens 结构化解答。
         prefill 答案前置：即使输出被截断，也只损失思考、不损失答案。
+
+        2026-09-04：prefill_seed 改为可配参数（默认 "## 问题分析\n" 适配主求解/证明
+        四章节格式；revise 传 "【错误分析】\n"、self-improve 传 "【第一步：诊断】\n"
+        与各自 system 要求的输出开头对齐，避免格式错位）。
         """
         try:
             msgs = prefill_messages(
@@ -340,11 +334,11 @@ class SolverAgent(BaseAgent):
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "## 问题分析\n",
+                prefill_seed,
             )
             resp = self.llm(ctx, msgs, temperature, max_tokens)
             if resp:
-                return stitch("## 问题分析\n", resp)
+                return stitch(prefill_seed, resp)
             return None
         except Exception as e:  # noqa: BLE001
             logger.warning("Compressed solve failed: %s", e)
@@ -506,10 +500,9 @@ class SolverAgent(BaseAgent):
                 resp = self._compressed_solve(
                     ctx, current_system, current_user,
                     temperature=current_temp,
-                    max_tokens=min(
-                        self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
-                        16384,
-                    ),
+                    # 9/4：平台不限 token，去 16384 帽（截断=腰斩丢分），收敛到 policy_max_tokens
+                    max_tokens=self._adaptive_max_tokens(
+                        ctx, self.config.policy_max_tokens),
                 )
                 # 空响应 -> 重试
                 if resp is None or not resp.strip():
@@ -533,10 +526,8 @@ class SolverAgent(BaseAgent):
                         _REINFORCED_SYSTEM,
                         f"请用中文重新表达你的解答过程，并给出【最终答案】。\n\n上轮回答：\n{resp[-1500:]}\n\n请用中文写出完整解答和最终答案：",
                         temperature=0.3,
-                        max_tokens=min(
-                            self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
-                            16384,
-                        ),
+                        max_tokens=self._adaptive_max_tokens(
+                            ctx, self.config.policy_max_tokens),
                     )
                     if followup_resp and followup_resp.strip():
                         if not detect_template_leak(followup_resp) and not _needs_followup(followup_resp):
@@ -630,7 +621,7 @@ class SolverAgent(BaseAgent):
     def _generate_revise(self, ctx: TaskContext, cap: int = None) -> None:
         feedback_text = "\n".join(f"- {fb}" for fb in ctx.revise_feedback)
         count = cap if cap is not None else self.config.revise_sample_times
-        count = max(0, min(count, 8 - len(getattr(ctx, 'candidates', None) or [])))
+        count = max(0, min(count, 6 - len(getattr(ctx, 'candidates', None) or [])))
         if count <= 0:
             return
 
@@ -642,13 +633,13 @@ class SolverAgent(BaseAgent):
                 problem=ctx.problem, feedback=feedback_text)
             for retry in range(3):
                 # v2.4.1：revise 也走 prefill（完整 CoT 在本环境必然超时）
+                # 2026-09-04：prefill 种子与 REVISE_SYSTEM 五段格式对齐——【错误分析】开头
                 resp = self._compressed_solve(
                     ctx, REVISE_SYSTEM, user_content,
                     temperature=self.config.policy_temperature,
-                    max_tokens=min(
-                        self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
-                        16384,
-                    ),
+                    max_tokens=self._adaptive_max_tokens(
+                        ctx, self.config.policy_max_tokens),
+                    prefill_seed="【错误分析】\n",
                 )
                 if resp is not None and resp.strip():
                     # 幻觉/拒绝检测（与 _generate_initial 一致）
@@ -740,15 +731,15 @@ class SolverAgent(BaseAgent):
                 problem=ctx.problem,
                 candidate_solution=cand.reasoning,
             )
+            # 2026-09-04：prefill 种子与 SELF_IMPROVE_USER 三步法对齐——【第一步：诊断】开头
             resp = self._compressed_solve(
                 ctx,
                 get_policy_system(use_blueprint=getattr(self.config, "use_blueprint", True)),
                 user_content,
                 temperature=0.1,
-                max_tokens=min(
-                    self._adaptive_max_tokens(ctx, self.config.policy_max_tokens),
-                    16384,
-                ),
+                max_tokens=self._adaptive_max_tokens(
+                    ctx, self.config.policy_max_tokens),
+                prefill_seed="【第一步：诊断】\n",
             )
             if not resp or not resp.strip():
                 continue

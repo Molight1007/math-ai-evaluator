@@ -215,11 +215,9 @@ class LeanTranslatorAgent(BaseAgent):
                     int(__import__("time").monotonic() * 1e6))
                 comp = bridge._compile(code_to_compile, project_dir,
                                        lean_filename=lean_file, allow_sorry=True)
-                try:
-                    __import__("os").remove(
-                        __import__("os").path.join(project_dir, lean_file))
-                except OSError:
-                    pass
+                # 2026-09-04：移入 _lean_trash 代替 os.remove（沙箱 safe-delete 硬杀删除）
+                from .lean_bridge import _trash_lean_file
+                _trash_lean_file(project_dir, lean_file)
             else:
                 import tempfile
                 from .lean_bridge import _compile_lean

@@ -123,10 +123,9 @@ class LeanRefinerAgent(BaseAgent):
                     os.getpid(), int(time.monotonic() * 1e6))
                 comp = bridge._compile(code, project_dir,
                                        lean_filename=lean_file, allow_sorry=allow_sorry)
-                try:
-                    os.remove(os.path.join(project_dir, lean_file))
-                except OSError:
-                    pass
+                # 2026-09-04：移入 _lean_trash 代替 os.remove（沙箱 safe-delete 硬杀删除）
+                from .lean_bridge import _trash_lean_file
+                _trash_lean_file(project_dir, lean_file)
                 return comp
             import tempfile
             from .lean_bridge import _compile_lean

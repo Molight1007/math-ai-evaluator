@@ -234,7 +234,8 @@ class AdversarialVerifier(BaseAgent):
     # ------------------------------------------------------------------
     def _call_probe(self, ctx: TaskContext, reasoning: str, answer: str) -> str:
         """调用模型做对抗式审查（走 prefill 压缩，避免 CoT 吃满 max_tokens）。"""
-        from utils.llm import prefill_messages
+        # 2026-09-04 修复：utils.llm 不存在（曾致 prefill 从未生效、审查静默降级）
+        from utils.prefill import prefill_messages
 
         checklist = "\n".join(
             f"{i}. {name}：{desc}" for i, (name, desc) in enumerate(ERROR_CHECKLIST, 1))
