@@ -134,6 +134,10 @@ class AgentConfig:
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
     self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
+    # 易错点记忆注入（2026-09-06 A 档轻量经验，prompts/error_lessons.py）：
+    # 命中题型/关键词时把历史易错自查清单拼进初始生成与 revise 提示，防重复踩坑。
+    # 默认开（本地评测生效）；A/B 对照可 --override enable_error_lessons=False。
+    enable_error_lessons: bool = True
     # Step 4 bug report 复核（2026-08-29 晚新增，论文流水线 Step 4）
     # 验证器给出缺陷反馈后，让模型先复核反馈是否属实、可驳回误报——
     # 论文：模型可驳回验证器的错误反馈，避免好答案被误报引导改坏。
@@ -397,6 +401,8 @@ class ReasoningAgent:
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
             "enable_self_improve", "self_improve_max",
+            # 易错点记忆注入（2026-09-06 A 档轻量经验）
+            "enable_error_lessons",
             # Step 4 bug report 复核
             "enable_feedback_review",
             # 对抗式验证（#16）

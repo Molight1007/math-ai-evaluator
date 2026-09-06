@@ -106,6 +106,38 @@ def _needs_followup(content: str) -> bool:
     return False  # 禁用：Intern-S 英文输出不影响答案提取
 
 
+# 2026-09-06 易错点记忆（A 档轻量经验注入）：prompts/error_lessons 惰性加载，
+# 由 orchestrator/solver 在初始生成与 revise 时拼接（命中才注入）。
+_LESSON_MOD = None
+
+
+def _lesson_module():
+    global _LESSON_MOD
+    if _LESSON_MOD is None:
+        from prompts.error_lessons import match_lessons, lesson_ids  # noqa: PLC0415
+        _LESSON_MOD = (match_lessons, lesson_ids)
+    return _LESSON_MOD
+
+
+def error_lessons_block(ctx) -> str:
+    """命中当前题的自查清单片段（无命中=空串，零噪音）。"""
+    if getattr(ctx, "state", None) is not None and getattr(
+            getattr(ctx, "state", None), "emergency", False):
+        return ""  # 应急模式不注入，把预算全给解题
+    match_lessons, _ = _lesson_module()
+    return match_lessons(domain=getattr(ctx, "domain", "") or "",
+                         question_type=getattr(ctx, "question_type", "") or "",
+                         problem=ctx.problem or "")
+
+
+def error_lesson_ids(ctx) -> list:
+    """命中的 lesson id 列表（record 诊断用）。"""
+    _, lesson_ids = _lesson_module()
+    return lesson_ids(domain=getattr(ctx, "domain", "") or "",
+                      question_type=getattr(ctx, "question_type", "") or "",
+                      problem=ctx.problem or "")
+
+
 class SolverAgent(BaseAgent):
     name = "Solver"
 
@@ -422,6 +454,16 @@ class SolverAgent(BaseAgent):
             )
         user_content = user_content + _ANSWER_GUIDE
 
+        # 2026-09-06 易错点记忆注入（A 档轻量经验，prompts/error_lessons.py）：
+        # 命中题型/关键词才注入自查清单（无命中返回空串=零噪音）。
+        # 放 user 侧题目之后、_make_one 并行之前——只拼一次，retry 不加倍。
+        if getattr(self.config, 'enable_error_lessons', True):
+            lessons_block = error_lessons_block(ctx)
+            if lessons_block:
+                user_content = user_content + "\n\n" + lessons_block
+                self.record(ctx, "error_lesson",
+                            f"注入历史易错自查清单 {error_lesson_ids(ctx)}")
+
         # 2026-09-01 calc_tool 集成（治 value_wrong）：告知模型计算环节可用
         # <calc>表达式</calc> 标记（精确分数算术，白名单安全求值），系统会把
         # 标记替换为精确结果，避免模型算术错误污染推理与最终答案。
@@ -620,6 +662,14 @@ class SolverAgent(BaseAgent):
     # ----------------------------------------------------------
     def _generate_revise(self, ctx: TaskContext, cap: int = None) -> None:
         feedback_text = "\n".join(f"- {fb}" for fb in ctx.revise_feedback)
+        # 2026-09-06 易错点记忆注入（revise 补救侧）：修订时同步带上同类题
+        # 历史易错自查清单（命中才注入），让重解不只针对反馈、也避开已知坑。
+        if getattr(self.config, 'enable_error_lessons', True):
+            lessons_block = error_lessons_block(ctx)
+            if lessons_block:
+                feedback_text = feedback_text + "\n" + lessons_block
+                self.record(ctx, "error_lesson",
+                            f"revise 注入历史易错自查清单 {error_lesson_ids(ctx)}")
         count = cap if cap is not None else self.config.revise_sample_times
         count = max(0, min(count, 6 - len(getattr(ctx, 'candidates', None) or [])))
         if count <= 0:
