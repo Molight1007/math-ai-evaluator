@@ -1176,7 +1176,8 @@ class Orchestrator(BaseAgent):
             "tier": getattr(ctx, "tier", "") or "",
             "tier_evidence": getattr(ctx, "tier_evidence", None) or {},
             "soft_budget": round(float(getattr(ctx, "soft_budget", 0) or 0), 1),
-            # ② 题目理解（Lean 前置 preverify）
+            # ② 题目理解（原 Lean 前置 preverify 已去 Lean 化移除；以下为遗留字段恒空，
+            #    保留供旧日志/工具兼容）
             "formal_spec": (getattr(ctx, "formal_spec", "") or "")[:600],
             "formal_gaps": list(getattr(ctx, "formal_gaps", None) or [])[:10],
             "preverify_trace": getattr(ctx, "preverify_trace", None) or {},
@@ -1196,8 +1197,11 @@ class Orchestrator(BaseAgent):
                              for t in (getattr(ctx, "trace", None) or [])
                              if isinstance(t, dict)
                              and t.get("step") == "value_attack"],
-            # ⑤ Lean 硬验证门禁
-            "lean_gate": getattr(ctx, "lean_gate", None) or [],
+            # ⑤ 检测链 AuditGate（2026-09-06 去 Lean 化顶替 lean_gate；
+            #    Level0-3 多级瀑布记录：候选过滤 / 最终答案门禁 / 理解确认）
+            "audit_gate": [e for e in (getattr(ctx, "audit_gate", None) or [])][:60],
+            # ⑤' 遗留兼容键（lean_gate 已不执行，恒空；旧日志/analyze_errors 兼容）
+            "lean_gate": list(getattr(ctx, "lean_gate", None) or [])[:60],
             # ⑥ 候选/验证/自纠错
             "n_candidates": len(getattr(ctx, "candidates", None) or []),
             "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
