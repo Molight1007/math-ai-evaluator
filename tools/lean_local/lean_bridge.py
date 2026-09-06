@@ -35,7 +35,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from .base import BugReport, Finding
+from agent.base import BugReport, Finding
 
 logger = logging.getLogger("MathPilot")
 
@@ -1245,7 +1245,7 @@ class LeanBridge:
         转化失败（LLM 空返回 / JSON 解析失败 / 无 lean_code）返回 None。
         """
         try:
-            from prompts.lean_pre_verify import (
+            from tools.lean_local.prompts.lean_pre_verify import (
                 LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
         except ImportError:  # 提交包（submit/）路径兜底
             from submit.prompts.lean_pre_verify import (
@@ -1366,7 +1366,7 @@ class LeanBridge:
         feedback 非空时回传上一次编译错误，要求重新生成骨架。
         """
         try:
-            from prompts.lean_pre_verify import (
+            from tools.lean_local.prompts.lean_pre_verify import (
                 LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
         except ImportError:
             from submit.prompts.lean_pre_verify import (

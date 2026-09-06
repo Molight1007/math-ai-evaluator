@@ -536,38 +536,8 @@ class BlueprintPlannerAgent(BaseAgent):
             return None
 
         problem_text = ctx.problem
-        if getattr(ctx, "formal_spec", ""):
-            problem_text = (ctx.problem + "\n\n[题目的形式化理解（已知条件→结论）]\n"
-                            + ctx.formal_spec)
-        gaps = getattr(ctx, "formal_gaps", [])
-        if gaps:
-            gap_lines = "\n".join(
-                "  - [%s] %s: %s" % (g.get("kind", "other"), g.get("detail", ""),
-                                     g.get("suggestion", ""))
-                for g in gaps)
-            problem_text = (problem_text
-                            + "\n\n[Lean 形式化验证发现的缺口（建议优先作为 DAG 子目标）]\n"
-                            + gap_lines)
-        # #31 leansearch：检索定理注入蓝图生成提示
-        # 2026-08-30 空集信号（LeanSearch v2 论文）：检索结果为空/不可用
-        # 时，显式告知"无相关定理，请自行推理"，而非硬塞噪声 top-k——
-        # 论文证明区分"检索到支持"vs"没找到支持"对求解更重要。
-        if getattr(self.config, "use_leansearch", False):
-            sr = self._search_mathlib_theorems(ctx, problem_text)
-            if sr and sr.get("status") == "ok" and sr.get("results"):
-                th_lines = "\n".join(
-                    "  - %s (%s): %s" % (r["name"], r.get("kind", "?"),
-                                         (r.get("snippet", "") or "")[:120])
-                    for r in sr["results"])
-                problem_text = (problem_text
-                                + "\n\n[检索到的相关 Mathlib 定理（供 DAG 节点证明参考）]\n"
-                                + th_lines
-                                + "\n（如上述定理与本步无关，请忽略并自行推理）")
-            else:
-                # 空集信号：显式告知无可检索定理，不要编造
-                problem_text = (problem_text
-                                + "\n\n[Mathlib 定理检索：未检索到与本题相关的定理，"
-                                  "请完全依靠自身推理能力解题]")
+        # v2.9 遗留：原 Lean 前置形式化注入（formal_spec/formal_gaps/leansearch
+        # 定理检索）已随 2026-09-06 去 Lean 化移除，此处直接使用题干。
 
         # 跨题定理记忆注入（2026-08-29）：本域"编译验证通过"的高频定理，
         # 跳过重复检索/翻译试错——复用性高的定理直接可用。
@@ -638,17 +608,6 @@ class BlueprintPlannerAgent(BaseAgent):
                     f"最后响应片段: {(last_resp or '<None>')[:200]}")
         return None
 
-    # ---- leansearch 复用（与 SubGoalSolverAgent 同款懒加载）----
-    def _get_mathlib_searcher(self):
-        if getattr(self, "_mathlib_searcher", None) is None:
-            try:
-                from .lean_search import MathlibTheoremSearcher
-                self._mathlib_searcher = MathlibTheoremSearcher()
-            except Exception as e:  # noqa: BLE001
-                logger.warning("MathlibTheoremSearcher 初始化失败: %s", e)
-                self._mathlib_searcher = False
-        return self._mathlib_searcher or None
-
     def _known_domain_theorems(self, ctx: TaskContext) -> list[str]:
         """读取本域高频"已验证可用"定理（跨题定理记忆，供 DAG 生成复用）。
 
@@ -665,22 +624,6 @@ class BlueprintPlannerAgent(BaseAgent):
                 ctx.domain or "", k=top_k, stale_days=stale if stale > 0 else None)
         except Exception:  # noqa: BLE001
             return []
-
-    def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 15):
-        searcher = self._get_mathlib_searcher()
-        if searcher is None:
-            return None
-        self.note_mathlib_search(ctx)
-        try:
-            sr = searcher.search(query, limit=limit)
-            # 记录实际命中的定理名（#1/#2 证据链：AI 用了哪些 Mathlib 定理）
-            if sr and sr.get("results"):
-                self.add_used_theorems(
-                    ctx, [r["name"] for r in sr["results"]])
-            return sr
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Mathlib 定理检索失败: %s", e)
-            return None
 
     # ----------------------------------------------------------
     # 整树重生成（#34，老师要求："dag 框架错了要重新生成")

@@ -532,43 +532,9 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "blueprint", "Blueprint DAG 规划失败，回退到 LLM 子目标规划")
         domain = ctx.domain or ""
         domain_hint = get_domain_hint(domain) if domain else ""
-        # v2.9：前置形式化验证通过后，把题目的形式化描述注入规划提示，
-        # 帮助书生准确理解题意后再做子目标分解。
+        # v2.9 遗留：原 Lean 前置形式化注入（formal_spec/formal_gaps/leansearch
+        # 定理检索）已随 2026-09-06 去 Lean 化移除——平台无 Lean，注入恒为空。
         problem_text = ctx.problem
-        if getattr(ctx, "formal_spec", ""):
-            problem_text = (ctx.problem + "\n\n[题目的形式化理解（已知条件→结论）]\n"
-                            + ctx.formal_spec)
-        # v2.9+：把 Lean 形式化编译发现的「缺口」注入规划提示，
-        # 让 AI 优先把"缺失的定义/引理/模块/类型问题"拆成子目标
-        # （即"根据 Lean 编译的逻辑，看缺哪些" → 帮助构建子目标）。
-        gaps = getattr(ctx, "formal_gaps", [])
-        if gaps:
-            gap_lines = "\n".join(
-                "  - [%s] %s: %s" % (g.get("kind", "other"), g.get("detail", ""),
-                                     g.get("suggestion", ""))
-                for g in gaps)
-            problem_text = (problem_text
-                            + "\n\n[Lean 形式化验证发现的缺口（建议优先作为子目标拆解）]\n"
-                            + gap_lines)
-
-        # #31 leansearch 试用：把与题目相关的 Mathlib 定理检索后注入规划提示，
-        # 供书生在分解/证明子目标时参考（默认关闭，由 use_leansearch 启用）。
-        # 2026-08-30 空集信号（LeanSearch v2 论文）：无可用定理时显式告知。
-        if getattr(self.config, "use_leansearch", False):
-            sr = self._search_mathlib_theorems(ctx, problem_text)
-            if sr and sr.get("status") == "ok" and sr.get("results"):
-                th_lines = "\n".join(
-                    "  - %s (%s): %s" % (r["name"], r.get("kind", "?"),
-                                         (r.get("snippet", "") or "")[:120])
-                    for r in sr["results"])
-                problem_text = (problem_text
-                                + "\n\n[检索到的相关 Mathlib 定理（leansearch 试用，"
-                                  "供子目标分解/证明参考）]\n" + th_lines
-                                + "\n（如与本步无关请忽略，自行推理）")
-            else:
-                problem_text = (problem_text
-                                + "\n\n[Mathlib 定理检索：未检索到相关定理，"
-                                  "请完全依靠自身推理能力]")
 
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
@@ -654,10 +620,10 @@ class SubGoalSolverAgent(BaseAgent):
         if not plan.get("subgoals"):
             logger.warning("Blueprint DAG 无可用叶子子目标")
             return None
-        # LEAP Stage 2（#26/#28）：生成 DAG 后做整树 Lean 搭桥审核（写 ctx.sketch_tree，
-        # 供后续阶段消费；失败不阻断主流程）。仅当 Lean 前置验证启用时触发。
-        if getattr(self.config, "enable_sketch_audit", True):
-            self._audit_blueprint_tree(ctx, dag)
+        # 2026-09-06 去 Lean 化：原 LEAP Stage 2 整树 Lean 搭桥审核
+        # （_audit_blueprint_tree / lean_translator / lean_refiner）已移除——
+        # 平台无 Lean，整树翻译+编译只空转。骨架评审（上方 enable_skeleton_review）
+        # 是 LLM 规划质量门，与 Lean 无关，保留。
         self.record(ctx, "blueprint",
                     f"Blueprint DAG → {len(plan['subgoals'])} 个子目标 "
                     f"(根={dag.root_id}, 节点={len(dag.nodes)})")
@@ -705,86 +671,6 @@ class SubGoalSolverAgent(BaseAgent):
                     f"骨架评审达硬上限 {max_rounds} 轮，采用末轮骨架")
         return dag
 
-    def _audit_blueprint_tree(self, ctx: TaskContext, dag) -> None:
-        """用 LeanTranslatorAgent 对 DAG 做整树翻译+审核（安全降级）。
-
-        #32 迭代精炼：config.use_refiner 开启时，整树审核后再执行
-        Stage 3 sorry 补全循环（含 OR 回溯 + lemma 记忆），结果写 ctx.refine_result。
-        """
-        if ctx.is_time_critical():
-            return
-        try:
-            from .lean_translator import LeanTranslatorAgent
-            translator = LeanTranslatorAgent(self.client, self.config)
-            result = translator.translate_and_audit(ctx, dag)
-            ctx.sketch_tree = result
-            self.record(ctx, "lean_translator",
-                        f"Blueprint 整树审核: verdict={result.get('verdict')}; "
-                        f"叶子={result.get('leaf_count')}, "
-                        f"sorry={result.get('sorry_count')}")
-            # 整树审核未通过 → 把缺口并入 formal_gaps，供下一轮子目标规划消费。
-            # 此前 sketch_tree 只在 use_refiner=True 时被读（默认关），
-            # 审核结论等于丢弃；并入 formal_gaps 可复用既有消费通路。
-            if result.get("verdict") == "fail":
-                gaps = [g for g in (result.get("gaps") or [])
-                        if isinstance(g, dict) and g.get("detail")]
-                if gaps:
-                    existing = {g.get("detail") for g in ctx.formal_gaps}
-                    added = 0
-                    for g in gaps:
-                        if g["detail"] not in existing:
-                            ctx.formal_gaps.append(g)
-                            existing.add(g["detail"])
-                            added += 1
-                    if added:
-                        self.record(ctx, "blueprint_audit_reinject",
-                                    f"整树审核未通过，{added} 条缺口并入 formal_gaps")
-            # #32 Stage 3：sorry 迭代补全（可选开启）
-            if getattr(self.config, "use_refiner", False):
-                from .lean_refiner import LeanRefinerAgent
-                refiner = LeanRefinerAgent(self.client, self.config)
-                ctx.refine_result = refiner.refine_tree(ctx, dag, result)
-                self.record(ctx, "lean_refiner",
-                            f"Stage3 精炼: verdict={ctx.refine_result.get('verdict')}; "
-                            f"done={ctx.refine_result.get('done')}, "
-                            f"failed={ctx.refine_result.get('failed')}")
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Blueprint 整树审核失败（降级）: %s", e)
-            ctx.sketch_tree = {"verdict": "unknown", "error": str(e)[:200]}
-
-    # ---------- leansearch 试用（#31）----------
-    def _get_mathlib_searcher(self):
-        """懒加载 MathlibTheoremSearcher（缓存于实例，避免重复扫描源码）。"""
-        if getattr(self, "_mathlib_searcher", None) is None:
-            try:
-                from .lean_search import MathlibTheoremSearcher
-                self._mathlib_searcher = MathlibTheoremSearcher()
-            except Exception as e:  # noqa: BLE001
-                logger.warning("MathlibTheoremSearcher 初始化失败: %s", e)
-                self._mathlib_searcher = False  # 标记失败，避免重复尝试
-        return self._mathlib_searcher or None
-
-    def _search_mathlib_theorems(self, ctx: TaskContext, query: str, limit: int = 5):
-        """试用 leansearch：检索与查询相关的 Mathlib 定理（安全降级返回 None）。
-
-        2026-08-31 老师建议 top-k=50 对照：临时把默认从 5 改 50。
-        F_topk50 跑完改回 5（git diff 留痕）。line 524 的 limit=4 调用点保持 4 不变。
-        """
-        searcher = self._get_mathlib_searcher()
-        if searcher is None:
-            return None
-        self.note_mathlib_search(ctx)
-        try:
-            sr = searcher.search(query, limit=limit)
-            # 记录命中的定理名（#1/#2 证据链）
-            if sr and sr.get("results"):
-                self.add_used_theorems(
-                    ctx, [r["name"] for r in sr["results"]])
-            return sr
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Mathlib 定理检索失败: %s", e)
-            return None
-
     # ---------- 阶段二：逐步求解 ----------
     def _solve_subgoal(self, ctx: TaskContext, sg: dict,
                        plan_summary: str, prev_results: str) -> str:
@@ -811,30 +697,14 @@ class SubGoalSolverAgent(BaseAgent):
                     f"\n【已建立的结论（可直接引用，无需重新推导）】\n"
                     f"{lemma_block}\n")
 
-        # ② 子目标级独立检索（2026-08-30，LeanSearch v2 论文）：
-        # 用当前子目标的描述作为查询（而非整题），提高检索精度。
-        # 供证明类子目标找定理；计算类子目标通常不需要。
-        sg_retrieval = ""
-        if (getattr(self.config, "use_leansearch", False)
-                and sg.get("type") in ("proof", "prove", "derive", "lemma")):
-            sg_q = f"{sg.get('title','')} {sg.get('description','')}"
-            sg_q = sg_q.strip() or ctx.problem
-            sr = self._search_mathlib_theorems(ctx, sg_q, limit=8)
-            if sr and sr.get("status") == "ok" and sr.get("results"):
-                lines = "\n".join(
-                    f"  - {r['name']} ({r.get('kind','?')}): {(r.get('snippet','') or '')[:100]}"
-                    for r in sr["results"])
-                sg_retrieval = (f"\n【当前子目标相关 Mathlib 定理】\n{lines}"
-                                "\n（如与本子目标无关请忽略，自行推理）")
-            else:
-                sg_retrieval = ("\n【当前子目标相关 Mathlib 定理检索：未检索到，"
-                                "请完全依靠自身推理能力】")
+        # ② 原子目标级 leansearch 独立检索（LeanSearch v2 论文）已随
+        # 2026-09-06 去 Lean 化移除——平台无外网/无 Lean，检索恒空转。
 
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=ctx.problem,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
-            lemma_context=lemma_context + sg_retrieval,
+            lemma_context=lemma_context,
             subgoal_id=sg["id"],
             subgoal_title=sg["title"],
             subgoal_type=sg["type"],

@@ -25,11 +25,11 @@ import logging
 import re
 from typing import Optional
 
-from .base import BaseAgent, TaskContext
-from .blueprint_planner import BlueprintDAG, extract_json
+from agent.base import BaseAgent, TaskContext
+from agent.blueprint_planner import BlueprintDAG, extract_json
 # 复用 lean_bridge 的 import 归一化（full 聚合入口 / core 具体模块导入自适应，
 # 2026-09-01：core 闭包缺 Mathlib/Tactic.olean 聚合入口，硬编码会导致验证全降级）
-from .lean_bridge import _mathlib_import_block, _prepend_mathlib_import
+from tools.lean_local.lean_bridge import _mathlib_import_block, _prepend_mathlib_import
 
 logger = logging.getLogger("MathPilot")
 
@@ -115,7 +115,7 @@ class LeanTranslatorAgent(BaseAgent):
     def _bridge_inst(self, ctx: TaskContext):
         """懒加载绑定当前题预算的 LeanBridge。"""
         try:
-            from .lean_bridge import LeanBridge
+            from tools.lean_local.lean_bridge import LeanBridge
             return LeanBridge(self.client, self.config, ctx.budget)
         except Exception as e:  # noqa: BLE001
             logger.warning("LeanTranslator: LeanBridge 构造失败: %s", e)
@@ -134,7 +134,7 @@ class LeanTranslatorAgent(BaseAgent):
         if direct:
             return direct
         try:
-            from prompts.lean_translator import (
+            from tools.lean_local.prompts.lean_translator import (
                 LEAN_NODE_TRANSLATE_SYSTEM, LEAN_NODE_TRANSLATE_USER_TEMPLATE)
         except ImportError:
             from submit.prompts.lean_translator import (
@@ -216,11 +216,11 @@ class LeanTranslatorAgent(BaseAgent):
                 comp = bridge._compile(code_to_compile, project_dir,
                                        lean_filename=lean_file, allow_sorry=True)
                 # 2026-09-04：移入 _lean_trash 代替 os.remove（沙箱 safe-delete 硬杀删除）
-                from .lean_bridge import _trash_lean_file
+                from tools.lean_local.lean_bridge import _trash_lean_file
                 _trash_lean_file(project_dir, lean_file)
             else:
                 import tempfile
-                from .lean_bridge import _compile_lean
+                from tools.lean_local.lean_bridge import _compile_lean
                 with tempfile.TemporaryDirectory(prefix="lean_tree_") as work_dir:
                     comp = _compile_lean(
                         code_to_compile, work_dir,
@@ -237,7 +237,7 @@ class LeanTranslatorAgent(BaseAgent):
             result["verdict"] = "ok"
             return result
         # 4) 编译失败：抽取缺口（定位到具体叶子）
-        from .lean_bridge import _analyze_formal_gaps
+        from tools.lean_local.lean_bridge import _analyze_formal_gaps
         result["gaps"] = _analyze_formal_gaps(comp.get("error", ""))
         result["error"] = comp.get("error", "整树声明编译失败")[:2000]
         result["verdict"] = "fail"

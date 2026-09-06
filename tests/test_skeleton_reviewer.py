@@ -261,8 +261,9 @@ class TestSkeletonReviewerAgent(unittest.TestCase):
 
         solver = SubGoalSolverAgent(MagicMock(), make_config(
             enable_skeleton_review=True, skeleton_review_max_rounds=2))
-        with reviewer_patcher, patch.object(
-                SubGoalSolverAgent, "_audit_blueprint_tree", lambda self, ctx, dag: None):
+        # 2026-09-06：原 patch _audit_blueprint_tree（Lean 骨架审核）已随去
+        # Lean 化删除，评审循环无需再中和该步骤。
+        with reviewer_patcher:
             result = solver._skeleton_review_loop(make_ctx(), make_dag(), planner)
         self.assertIs(result, new_dag)
         # regenerate_with_feedback 只被调用 1 次（第二次评审通过就停）

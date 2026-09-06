@@ -26,8 +26,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "agent"))
 
-from agent.lean_bridge import LeanBridge, _analyze_formal_gaps
-from agent.lean_pre_verifier import LeanPreVerifier
+from tools.lean_local.lean_bridge import LeanBridge, _analyze_formal_gaps
+from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 from agent.base import TaskContext
 
 

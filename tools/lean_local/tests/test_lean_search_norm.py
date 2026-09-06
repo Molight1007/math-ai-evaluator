@@ -14,13 +14,13 @@ sys.path.insert(0, ".")
 
 class NormalizeQueryTest(unittest.TestCase):
     def test_chinese_to_english(self) -> None:
-        from agent.lean_search import normalize_query
+        from tools.lean_local.lean_search import normalize_query
         aug, strong = normalize_query("素数有无穷多个")
         self.assertIn("prime", aug)
         self.assertIn("prime", strong)
 
     def test_latex_to_keywords(self) -> None:
-        from agent.lean_search import normalize_query
+        from tools.lean_local.lean_search import normalize_query
         aug, strong = normalize_query("x^2 >= 0")
         self.assertIn("sq", aug)
         self.assertIn("greater", aug)
@@ -28,20 +28,20 @@ class NormalizeQueryTest(unittest.TestCase):
 
     def test_weak_keywords_excluded(self) -> None:
         """real/integer 等泛词不当强信号，避免噪声命中。"""
-        from agent.lean_search import normalize_query, _WEAK_KEYWORDS
+        from tools.lean_local.lean_search import normalize_query, _WEAK_KEYWORDS
         aug, strong = normalize_query("对所有实数 x 证明不等式")
         self.assertTrue(strong)
         for w in strong:
             self.assertNotIn(w, _WEAK_KEYWORDS)
 
     def test_gcd_query_extracts_strong(self) -> None:
-        from agent.lean_search import normalize_query
+        from tools.lean_local.lean_search import normalize_query
         aug, strong = normalize_query("证明两个数的最大公约数整除它们的和")
         self.assertIn("gcd", strong)
         self.assertIn("dvd", strong)
 
     def test_empty_query(self) -> None:
-        from agent.lean_search import normalize_query
+        from tools.lean_local.lean_search import normalize_query
         self.assertEqual(normalize_query(""), ("", []))
         self.assertEqual(normalize_query(None), ("", []))
 
@@ -52,7 +52,7 @@ class SearchRelevanceTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         try:
-            from agent.lean_search import MathlibTheoremSearcher
+            from tools.lean_local.lean_search import MathlibTheoremSearcher
             cls.searcher = MathlibTheoremSearcher()
         except Exception:  # noqa: BLE001
             cls.searcher = None

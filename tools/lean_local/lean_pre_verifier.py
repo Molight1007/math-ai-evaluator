@@ -21,8 +21,8 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 
 import logging
 
-from .base import BaseAgent, TaskContext
-from .lean_bridge import LeanBridge, _parse_analysis_json, _strip_code_fence
+from agent.base import BaseAgent, TaskContext
+from tools.lean_local.lean_bridge import LeanBridge, _parse_analysis_json, _strip_code_fence
 
 logger = logging.getLogger("MathPilot")
 
@@ -170,7 +170,7 @@ class LeanPreVerifier(BaseAgent):
         返回自然语言骨架（编号子目标列表）；生成失败返回空串（调用方降级）。
         """
         try:
-            from prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
+            from tools.lean_local.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
         except ImportError:
             from submit.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
         formal_spec_block = ""

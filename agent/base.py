@@ -237,7 +237,7 @@ class Budget:
 
 # ------------------------------------------------------------
 # P3：Finding / BugReport（step 级分级验证报告）
-# 供 agent/lean_bridge.py（Lean 形式化验证桥接层）使用。
+# 归档供 tools/lean_local/lean_bridge.py（本地 Lean 证据链桥接层）使用。
 # ------------------------------------------------------------
 @dataclass
 class Finding:

@@ -24,16 +24,16 @@ def _make_ctx(problem="证明：根号 2 是无理数", domain="证明", budget_
 
 def test_imports():
     """改动/新增模块可正常导入（无语法/循环导入错误）。"""
-    import agent.lean_bridge         # noqa: F401
-    import agent.lean_pre_verifier   # noqa: F401
+    import tools.lean_local.lean_bridge         # noqa: F401
+    import tools.lean_local.lean_pre_verifier   # noqa: F401
     import agent.sub_goal_solver     # noqa: F401
     import agent.orchestrator        # noqa: F401
-    import prompts.lean_pre_verify   # noqa: F401
+    import tools.lean_local.prompts.lean_pre_verify   # noqa: F401
 
 
 def test_compile_lean_allow_sorry():
     """声明模式（allow_sorry=True）下含 sorry 的定理声明应编译通过。"""
-    from agent import lean_bridge
+    from tools.lean_local import lean_bridge
     code = "import Mathlib\n\ntheorem t : True := by\n  sorry\n"
     fake_run = mock.MagicMock(returncode=0, stderr="", stdout="")
     with tempfile.TemporaryDirectory() as d:
@@ -46,7 +46,7 @@ def test_compile_lean_allow_sorry():
 
 def test_formalize_problem_lean_unavailable():
     """Lean 环境不可用 → formalize_problem 降级 unknown。"""
-    from agent.lean_bridge import LeanBridge
+    from tools.lean_local.lean_bridge import LeanBridge
     bridge = LeanBridge(client=mock.MagicMock(), config=mock.MagicMock(), budget=None)
     with mock.patch.object(LeanBridge, "lean_available",
                            new_callable=mock.PropertyMock, return_value=False):
@@ -57,14 +57,14 @@ def test_formalize_problem_lean_unavailable():
 
 def test_formalize_problem_ok():
     """声明编译通过 → formalize_problem 返回 ok。"""
-    from agent.lean_bridge import LeanBridge
+    from tools.lean_local.lean_bridge import LeanBridge
     bridge = LeanBridge(client=mock.MagicMock(), config=mock.MagicMock(), budget=None)
     with mock.patch.object(LeanBridge, "lean_available",
                            new_callable=mock.PropertyMock, return_value=True), \
          mock.patch.object(bridge, "_formalize_to_lean",
                            return_value={"formal_spec": "条件→结论",
                                          "lean_code": "import Mathlib\ntheorem t : True := by\n  sorry"}), \
-         mock.patch("agent.lean_bridge._compile_lean", return_value={"ok": True, "error": ""}):
+         mock.patch("tools.lean_local.lean_bridge._compile_lean", return_value={"ok": True, "error": ""}):
         r = bridge.formalize_problem("题目")
         assert r["verdict"] == "ok", r
         assert r["formal_spec"] == "条件→结论"
@@ -72,7 +72,7 @@ def test_formalize_problem_ok():
 
 def test_preverify_disabled():
     """开关关闭 → 前置验证直接跳过，preverify_trace 标记 disabled。"""
-    from agent.lean_pre_verifier import LeanPreVerifier
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
         enable_lean_preverify = False
@@ -91,7 +91,7 @@ def test_preverify_budget_zero_still_runs():
     预算闸门已删，该行为不复存在。现验证：预算=0 时流程照常执行，
     结果取决于 bridge 实际返回（mock 为 ok → verdict=ok）。
     """
-    from agent.lean_pre_verifier import LeanPreVerifier
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
         enable_lean_preverify = True
@@ -112,7 +112,7 @@ def test_preverify_budget_zero_still_runs():
 def test_preverify_time_critical_skips():
     """真实跳过条件：时间紧迫（is_time_critical=True）→ 降级 unknown。"""
     import time as _t
-    from agent.lean_pre_verifier import LeanPreVerifier
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
         enable_lean_preverify = True
@@ -129,7 +129,7 @@ def test_preverify_time_critical_skips():
 
 def test_preverify_ok_writes_formal_spec():
     """前置验证通过 → 写入 ctx.formal_spec 与 preverify_trace。"""
-    from agent.lean_pre_verifier import LeanPreVerifier
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
         enable_lean_preverify = True
@@ -150,7 +150,7 @@ def test_preverify_ok_writes_formal_spec():
 
 def test_preverify_fail_then_ok_retry():
     """失败后带反馈重试，第二轮通过（修正循环）。"""
-    from agent.lean_pre_verifier import LeanPreVerifier
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 
     class _Cfg:
         enable_lean_preverify = True

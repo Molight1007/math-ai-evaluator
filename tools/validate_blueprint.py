@@ -66,7 +66,7 @@ def main() -> int:
         return 1
     print(f"[select] {len(items)} 题: {[it['id'] for it in items]}")
 
-    cfg = AgentConfig(use_blueprint_dag=True, use_leansearch=False)
+    cfg = AgentConfig(use_blueprint_dag=True)
     planner = BlueprintPlannerAgent(client, cfg)
 
     results = []

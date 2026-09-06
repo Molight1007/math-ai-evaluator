@@ -13,7 +13,7 @@ import tempfile
 
 import pytest
 
-from agent.lean_search import MathlibTheoremSearcher, TheoremCallStats
+from tools.lean_local.lean_search import MathlibTheoremSearcher, TheoremCallStats
 
 
 def _res(*names: str) -> list[dict]:

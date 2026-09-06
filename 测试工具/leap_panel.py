@@ -178,8 +178,7 @@ class LeapPanel(ttk.Frame):
         except RuntimeError as e:
             self._log(f"[错误] {e}\n")
             return
-        cfg = AgentConfig(use_blueprint=True, enable_sketch_audit=True,
-                          use_refiner=True)
+        cfg = AgentConfig(use_blueprint=True, enable_audit_gate=True)
         self.run_btn.configure(state="disabled")
         self.progress["value"] = 0
         self.progress["maximum"] = len(items)

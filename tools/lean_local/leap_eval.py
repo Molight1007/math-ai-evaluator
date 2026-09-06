@@ -2,8 +2,8 @@
 """LEAP 三阶段端到端跑分脚本（工具）
 
 用法示例（在项目根目录 D:/挑战杯 下运行）：
-    python tools/leap_eval.py --backend intern --problems PB-Basic-001 --out eval_out
-    python tools/leap_eval.py --backend deepseek --limit 3 --out eval_out_ds
+    python tools/lean_local/leap_eval.py --backend intern --problems PB-Basic-001 --out eval_out
+    python tools/lean_local/leap_eval.py --backend deepseek --limit 3 --out eval_out_ds
 
 参数：
     --backend  intern | deepseek     模型后端（书生 / DeepSeek）
@@ -40,9 +40,9 @@ if _ROOT not in sys.path:
 
 from agent.base import TaskContext, Budget
 from agent.blueprint_planner import BlueprintDAG, BlueprintPlannerAgent
-from agent.lean_translator import LeanTranslatorAgent
-from agent.lean_refiner import LeanRefinerAgent
-from agent.lean_pre_verifier import LeanPreVerifier
+from tools.lean_local.lean_translator import LeanTranslatorAgent
+from tools.lean_local.lean_refiner import LeanRefinerAgent
+from tools.lean_local.lean_pre_verifier import LeanPreVerifier
 from user_agent import AgentConfig
 
 DEFAULT_BENCH = os.path.join(_ROOT, "superhuman", "imobench", "lean_proof_bench.csv")
@@ -244,8 +244,8 @@ def run_bare(client, cfg: AgentConfig, item: Dict) -> Dict:
                 "compiled": False, "sorries": -1,
                 "error": "未提取到 Lean 代码",
                 "elapsed_s": round(time.time() - t0, 1)}
-    from agent.lean_refiner import LeanRefinerAgent
-    from agent.lean_translator import count_sorries
+    from tools.lean_local.lean_refiner import LeanRefinerAgent
+    from tools.lean_local.lean_translator import count_sorries
     refiner = LeanRefinerAgent(client, cfg)
     ctx = TaskContext(problem=item["problem"], metadata={},
                       domain="proof", budget=None)
@@ -380,12 +380,14 @@ def main() -> int:
         random.shuffle(items)
         print(f"[select] 随机 {len(items)} 题")
 
-    cfg = AgentConfig(
-        use_blueprint=True,
-        enable_sketch_audit=True,
-        use_leansearch=args.leansearch,
-        use_refiner=not args.no_refiner,
-    )
+    cfg = AgentConfig()
+    # 归档兼容：lean 系配置字段已从 AgentConfig 移除（2026-09-06 去 Lean 化），
+    # 归档工具需要时经 setattr 挂载（下游均 getattr 读取，行为与移除前一致）。
+    for _k, _v in (("use_blueprint", True),
+                   ("enable_sketch_audit", True),
+                   ("use_leansearch", args.leansearch),
+                   ("use_refiner", not args.no_refiner)):
+        setattr(cfg, _k, _v)
 
     os.makedirs(args.out, exist_ok=True)
     results = []

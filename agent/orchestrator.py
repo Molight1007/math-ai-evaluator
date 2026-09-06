@@ -602,8 +602,7 @@ class Orchestrator(BaseAgent):
             #      验不过 → 换候选（按答案与 final 不同的顺序试 ≤2 个）。
             # gate_final_answer 内部已自护：空答案放行、time_remaining<15s
             # 或 budget.skip 才跳过；rubric 高置信 B 才打回（宁 unknown 不误杀）。
-            if (getattr(self.config, 'enable_audit_gate',
-                        getattr(self.config, 'enable_lean_verify', True))
+            if (getattr(self.config, 'enable_audit_gate', True)
                     and ctx.final_response):
                 try:
                     # 2026-09-03 老师：不到 1200s 且审核判错就**不放过**，

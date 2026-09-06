@@ -33,8 +33,8 @@ from __future__ import annotations
 import logging
 import re
 
-from .base import BaseAgent, Budget, TaskContext
-from .lean_bridge import LeanBridge
+from agent.base import BaseAgent, Budget, TaskContext
+from tools.lean_local.lean_bridge import LeanBridge
 
 logger = logging.getLogger("MathPilot")
 
@@ -246,7 +246,7 @@ class LeanGate:
                     # "第 X 步/某位置：错误描述" 的定向修正依据。
                     msg = "Lean 编译/逻辑错误"
                     try:
-                        from .answer_oracle import AnswerOracle
+                        from agent.answer_oracle import AnswerOracle
                         structured = AnswerOracle.findings_to_feedback(
                             getattr(report, "findings", []) or [])
                         if structured:
@@ -367,7 +367,7 @@ class LeanGate:
             entry["lean_valid"] = False
             msg = "Lean 编译/逻辑错误"
             try:
-                from .answer_oracle import AnswerOracle
+                from agent.answer_oracle import AnswerOracle
                 structured = AnswerOracle.findings_to_feedback(
                     getattr(report, "findings", []) or [])
                 if structured:
@@ -409,7 +409,7 @@ class LeanGate:
         try:
             if not names:
                 return
-            from .lean_search import get_stats
+            from tools.lean_local.lean_search import get_stats
             get_stats().note_adopted(names)
         except Exception as exc:  # noqa: BLE001
             logger.debug("[lean_gate] 采用埋点回记失败（已忽略）: %s", exc)
@@ -422,7 +422,7 @@ class LeanGate:
                 return
             if not getattr(self.config, "theorem_memory_enable", True):
                 return
-            from .theorem_memory import TheoremMemory
+            from agent.theorem_memory import TheoremMemory
             mem = TheoremMemory(
                 str(getattr(self.config, "theorem_memory_path", "")))
             for n in names:
