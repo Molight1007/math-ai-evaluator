@@ -218,13 +218,6 @@ class AgentConfig:
     # 通过后才进语法审核。默认开启（老师明确要求）。LLM 失败/预算不足降级放行不阻断。
     enable_skeleton_review: bool = True
     skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
-    # ---- 跨题定理记忆（2026-08-29 新增；原记录 lean_gate"编译验证通过"的定理）----
-    # 去 Lean 化后 lean_gate 不再写入；blueprint_planner 仍按配置读取（getattr 兜底），
-    # 是否随 Lean 一并关闭待用户确认（当前保留字段以维持运行时行为不变）。
-    theorem_memory_enable: bool = True
-    theorem_memory_path: str = ""      # 空 = 默认 data/theorem_memory.json
-    theorem_memory_top_k: int = 15     # 每题注入的高频定理数
-    theorem_memory_stale_days: int = 0 # 排除 last_seen 超过 N 天的定理；0=关闭（向后兼容）
     # ---- lemma 记忆（#30，跨题持久化）----
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
 
@@ -412,9 +405,8 @@ class ReasoningAgent:
             "adversarial_max_reasoning",
             # 检测链（2026-09-06 去 Lean 化；顶替原 Lean 硬验证开关）
             "enable_audit_gate",
-            # 跨题定理记忆
-            "theorem_memory_enable", "theorem_memory_path",
-            "theorem_memory_top_k", "theorem_memory_stale_days",
+            # lemma 记忆
+            "lemma_storage_path",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

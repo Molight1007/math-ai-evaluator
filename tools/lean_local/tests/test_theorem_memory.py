@@ -14,7 +14,8 @@ import tempfile
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
 
 
 class TheoremMemoryTest(unittest.TestCase):
@@ -23,7 +24,7 @@ class TheoremMemoryTest(unittest.TestCase):
         self.path = os.path.join(self._tmp, "theorem_memory.json")
 
     def test_record_and_rank(self) -> None:
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         m = TheoremMemory(self.path)
         m.record_hit("Number theory", "gcd_dvd")
         m.record_hit("Number theory", "gcd_dvd")
@@ -35,13 +36,13 @@ class TheoremMemoryTest(unittest.TestCase):
         self.assertEqual(m.top_theorems("Geometry", 3), [])  # 空域
 
     def test_persistence_across_instances(self) -> None:
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         TheoremMemory(self.path).record_hit("Number theory", "dvd_add")
         m2 = TheoremMemory(self.path)  # 重新加载 = 模拟新进程
         self.assertIn("dvd_add", m2.top_theorems("Number theory", 5))
 
     def test_atomic_write_valid_json(self) -> None:
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         m = TheoremMemory(self.path)
         for i in range(20):
             m.record_hit("Number theory", f"thm_{i % 5}")
@@ -50,7 +51,7 @@ class TheoremMemoryTest(unittest.TestCase):
         self.assertEqual(data["Number theory"]["thm_0"]["hits"], 4)
 
     def test_ignore_unknown_domain(self) -> None:
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         m = TheoremMemory(self.path)
         m.record_hit("", "gcd_dvd")     # 空域忽略
         m.record_hit("unknown", "gcd_dvd")  # unknown 忽略
@@ -60,7 +61,7 @@ class TheoremMemoryTest(unittest.TestCase):
     # ---- 9/1 增：陈旧过滤（staleness）测试 ----
     def test_stale_days_filter(self) -> None:
         """stale_days>0 时，last_seen 超过阈值的定理被排除；不影响未过期的定理。"""
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         m = TheoremMemory(self.path)
         now = int(time.time())
         with m._lock:
@@ -85,7 +86,7 @@ class TheoremMemoryTest(unittest.TestCase):
 
     def test_stale_days_fallback_when_all_stale(self) -> None:
         """退路保护：全集都陈旧时退回全集（防冷启动/数据稀疏时静默丢失）。"""
-        from agent.theorem_memory import TheoremMemory
+        from tools.lean_local.theorem_memory import TheoremMemory
         m = TheoremMemory(self.path)
         now = int(time.time())
         with m._lock:

@@ -422,7 +422,7 @@ class LeanGate:
                 return
             if not getattr(self.config, "theorem_memory_enable", True):
                 return
-            from agent.theorem_memory import TheoremMemory
+            from tools.lean_local.theorem_memory import TheoremMemory
             mem = TheoremMemory(
                 str(getattr(self.config, "theorem_memory_path", "")))
             for n in names:

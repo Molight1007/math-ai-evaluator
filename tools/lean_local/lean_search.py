@@ -264,7 +264,7 @@ class Lsv2Corpus:
     # ------------------------------------------------------------------
     @staticmethod
     def _default_path() -> str:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         for rel in _CORPUS_PATH_CANDIDATES:
             p = os.path.join(root, rel)
             if os.path.exists(p):

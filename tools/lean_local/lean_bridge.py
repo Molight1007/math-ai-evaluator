@@ -53,7 +53,7 @@ _MAX_ERROR_CHARS = 5000                # 编译错误输出截断上限（防 to
 # ---------------------------------------------------------------------
 def _project_root() -> str:
     """仓库根目录（agent/ 的上一级）。"""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _detect_lean_executable() -> str:
@@ -332,7 +332,7 @@ def _maybe_auto_setup_lean(lean_executable: str) -> None:
     if _LEAN_SETUP_TRIED or shutil.which(lean_executable):
         return
     _LEAN_SETUP_TRIED = True
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     script = os.path.join(root, "deploy", "setup_lean.sh")
     if not os.path.exists(script):
         return

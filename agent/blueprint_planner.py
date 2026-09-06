@@ -536,18 +536,10 @@ class BlueprintPlannerAgent(BaseAgent):
             return None
 
         problem_text = ctx.problem
-        # v2.9 遗留：原 Lean 前置形式化注入（formal_spec/formal_gaps/leansearch
-        # 定理检索）已随 2026-09-06 去 Lean 化移除，此处直接使用题干。
-
-        # 跨题定理记忆注入（2026-08-29）：本域"编译验证通过"的高频定理，
-        # 跳过重复检索/翻译试错——复用性高的定理直接可用。
-        if getattr(self.config, "theorem_memory_enable", True):
-            known = self._known_domain_theorems(ctx)
-            if known:
-                problem_text = (problem_text
-                                + "\n\n[本域已验证可用的 Mathlib 定理"
-                                  "（可直接引用，勿重复检索）]\n"
-                                + "\n".join(f"  - {t}" for t in known))
+        # v2.9 遗留：原 Lean 前置形式化/leansearch/跨题定理记忆注入
+        # （formal_spec/formal_gaps/theorem_memory）已随 2026-09-06 去 Lean 化
+        # 全部移除（theorem_memory 为 lean_gate"编译验证通过"定理的复用缓存，
+        # 无 Lean 后无写入方，2026-09-06 用户确认一并关闭），此处直接使用题干。
 
         user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
         last_resp = None
@@ -607,23 +599,6 @@ class BlueprintPlannerAgent(BaseAgent):
                     f"蓝图生成 {max_attempts} 次尝试均失败; "
                     f"最后响应片段: {(last_resp or '<None>')[:200]}")
         return None
-
-    def _known_domain_theorems(self, ctx: TaskContext) -> list[str]:
-        """读取本域高频"已验证可用"定理（跨题定理记忆，供 DAG 生成复用）。
-
-        9/1 增：theorem_memory_stale_days 排除久未出现的定理，防陈旧占位；
-        退路由 TheoremMemory.top_theorems 自身保证（数据稀疏时退回全集）。
-        """
-        try:
-            from .theorem_memory import TheoremMemory
-            mem = TheoremMemory(
-                str(getattr(self.config, "theorem_memory_path", "")))
-            top_k = int(getattr(self.config, "theorem_memory_top_k", 15))
-            stale = int(getattr(self.config, "theorem_memory_stale_days", 0))
-            return mem.top_theorems(
-                ctx.domain or "", k=top_k, stale_days=stale if stale > 0 else None)
-        except Exception:  # noqa: BLE001
-            return []
 
     # ----------------------------------------------------------
     # 整树重生成（#34，老师要求："dag 框架错了要重新生成")
