@@ -15,8 +15,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from agent import lean_bridge
-from agent.lean_bridge import (
+from tools.lean_local import lean_bridge
+from tools.lean_local.lean_bridge import (
     _compile_via_mcp, _has_sorry_warning, _is_lake_workdir, _scan_untrusted,
     get_lean_backend, set_lean_backend,
 )
@@ -105,9 +105,9 @@ class CompileViaMcpTest(unittest.TestCase):
         client.request.return_value = {"ok": ok, "items": items or [],
                                        "goal": goal, "error": ""}
         py.return_value = client
-        return mock.patch("agent.lean_bridge._detect_mcp_proxy_python",
+        return mock.patch("tools.lean_local.lean_bridge._detect_mcp_proxy_python",
                           return_value="C:/py.exe"), \
-            mock.patch("agent.lean_bridge._LeanMcpProxyClient", py), client
+            mock.patch("tools.lean_local.lean_bridge._LeanMcpProxyClient", py), client
 
     def test_error_items_fail_with_locations(self):
         p1, p2, client = self._stub_proxy(items=[
@@ -168,7 +168,7 @@ class CompileViaMcpTest(unittest.TestCase):
         self.assertEqual(client.request.call_count, 2)
 
     def test_no_proxy_env_returns_none(self):
-        with mock.patch("agent.lean_bridge._detect_mcp_proxy_python",
+        with mock.patch("tools.lean_local.lean_bridge._detect_mcp_proxy_python",
                         return_value=""):
             r = _compile_via_mcp("C:/p/v.lean", "code", _PROJ, 60.0,
                                  allow_sorry=False)
@@ -178,9 +178,9 @@ class CompileViaMcpTest(unittest.TestCase):
         client = mock.MagicMock()
         client.request.side_effect = RuntimeError("proxy 崩溃")
         py = mock.Mock(return_value=client)
-        with mock.patch("agent.lean_bridge._detect_mcp_proxy_python",
+        with mock.patch("tools.lean_local.lean_bridge._detect_mcp_proxy_python",
                         return_value="C:/py.exe"), \
-             mock.patch("agent.lean_bridge._LeanMcpProxyClient", py):
+             mock.patch("tools.lean_local.lean_bridge._LeanMcpProxyClient", py):
             r = _compile_via_mcp("C:/p/v.lean", "code", _PROJ, 60.0,
                                  allow_sorry=False)
         self.assertIsNone(r)
@@ -203,7 +203,7 @@ class CompileLeanDispatchTest(unittest.TestCase):
     def test_mcp_dispatch_in_lake_workdir(self):
         d = _mk_lake_dir()
         code = "import Mathlib.Tactic\n\nexample : 1 = 1 := by rfl\n"
-        with mock.patch("agent.lean_bridge._compile_via_mcp",
+        with mock.patch("tools.lean_local.lean_bridge._compile_via_mcp",
                         return_value={"ok": True, "error": ""}) as m_via:
             set_lean_backend("mcp")
             r = lean_bridge._compile_lean(code, d, timeout=30.0,
@@ -214,10 +214,10 @@ class CompileLeanDispatchTest(unittest.TestCase):
     def test_bridge_does_not_dispatch(self):
         d = _mk_lake_dir()
         code = "import Mathlib.Tactic\n\nexample : 1 = 1 := by rfl\n"
-        with mock.patch("agent.lean_bridge._compile_via_mcp") as m_via:
+        with mock.patch("tools.lean_local.lean_bridge._compile_via_mcp") as m_via:
             set_lean_backend("bridge")
             # 真实 lake 不可用则 _compile_lean 走命令失败——改用 mock subprocess
-            with mock.patch("agent.lean_bridge.subprocess.run") as m_run:
+            with mock.patch("tools.lean_local.lean_bridge.subprocess.run") as m_run:
                 m_run.return_value = mock.MagicMock(
                     returncode=0, stderr="", stdout="")
                 r = lean_bridge._compile_lean(code, d, timeout=30.0,
@@ -229,8 +229,8 @@ class CompileLeanDispatchTest(unittest.TestCase):
         # 非 lake 工程（比赛临时目录直编场景）→ mcp 不适用，走 bridge
         d = tempfile.mkdtemp()
         code = "example : 1 = 1 := by rfl\n"
-        with mock.patch("agent.lean_bridge._compile_via_mcp") as m_via, \
-             mock.patch("agent.lean_bridge.subprocess.run") as m_run:
+        with mock.patch("tools.lean_local.lean_bridge._compile_via_mcp") as m_via, \
+             mock.patch("tools.lean_local.lean_bridge.subprocess.run") as m_run:
             m_run.return_value = mock.MagicMock(returncode=0, stderr="",
                                                 stdout="")
             set_lean_backend("mcp")

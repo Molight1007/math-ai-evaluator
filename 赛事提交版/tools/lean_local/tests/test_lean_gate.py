@@ -7,7 +7,7 @@ unknown 的 lenient/strict 两种降级、环境缺失与异常的整体降级�
 import unittest
 
 from agent.base import BugReport, Finding, TaskContext, Candidate
-from agent.lean_gate import LeanGate
+from tools.lean_local.lean_gate import LeanGate
 from user_agent import AgentConfig
 
 

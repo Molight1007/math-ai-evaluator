@@ -203,44 +203,14 @@ class AgentConfig:
     deep_critical_tail_seconds: float = 60.0  # deep 档再收紧，把时间用得更尽
     deep_quota_ratio: float = 0.25            # deep 档全卷占比上限（>25% 会导致全卷超时）
 
-    # ---- Lean 形式化硬验证（deep 档证明题门禁，v2.5+LeanBridge）----
-    # 仅对 deep 档且 domain∈{证明,证明题} 的候选执行；fast/standard 档不触发。
-    # verdict=proof_valid → 候选计入有效；proof_invalid → 淘汰并注入 revise 反馈；
-    # unknown（Lean 环境缺失/超时/翻译错误）→ 按 lean_gate_strict 决定降级放行或保守拒绝。
-    enable_lean_verify: bool = True         # 总开关：证明题启用 Lean 硬验证（v2.8 扩展到全部档位）
-    lean_gate_all_proofs: bool = True       # v2.8：扩展到全部证明题（含 standard 档）；False=仅 deep 档
-    lean_gate_nonproof_deep_only: bool = False  # 2026-09-01：非证明题（解答题）是否仅 deep 档走 Lean；
-                                                # False=全档启用（用户要求所有题过 Lean）
-    lean_gate_strict: bool = False          # unknown 时是否保守拒绝；False=降级放行（不损失分数）
-    lean_timeout: float = 60.0              # 单次 Lean 编译超时（秒）
-    lean_executable: str = ""               # Lean 可执行文件名（默认自动探测本地工具链）
-    lean_project_dir: str = ""              # 带 Mathlib 依赖的 Lean 工程目录（默认自动探测 <root>/lean下载版/test_mathlib）
-    # ---- Lean 前置形式化验证 + 子目标主路径（v2.9）----
-    enable_lean_preverify: bool = True      # 前置形式化验证开关：解题前把题目转 Lean 声明校验理解
-    preverify_max_rounds: int = 2           # 前置形式化失败后的修正重试上限
-    preverify_timeout: float = 60.0         # 前置形式化单轮超时（秒）
-    # 前置形式化只在哪些档位执行（2026-08-29 新增，08-30 二次修正）
-    # D5 实测 preverify 挤占求解预算；08-30 debug15 实测：**全档位反而更差**
-    # （21% vs 按档位 36% vs Step2 50%）——standard 加 formal_spec 提示干扰
-    # 求解。**回滚到只 deep 档**（难题 Lean 价值最大）。
-    # 2026-09-01 用户明确：比赛几乎只有证明题+解答题，两者都要走 Lean 两阶段
-    # （阶段一 preverify 题目理解→Lean 编译→失败带错误重新理解；阶段二
-    #  lean_gate 答案审核→失败定位修正）。故选档 deep+standard 全档执行
-    # （fast 快车道跳过）；如 A/B 数据证明 standard 干扰求解再回退。
-    lean_preverify_tiers: list = field(default_factory=lambda: ["deep", "standard"])
-    # 跨题定理记忆（2026-08-29 新增）
-    # 记录 lean_gate"编译验证通过"的定理按域持久化，同域新题注入复用，
-    # 跳过重复检索+翻译试错。应对"定理调用复用性高、反复检索浪费"。
-    theorem_memory_enable: bool = True
-    theorem_memory_path: str = ""      # 空 = 默认 data/theorem_memory.json
-    theorem_memory_top_k: int = 15     # 每题注入的高频定理数
-    theorem_memory_stale_days: int = 0 # 9/1 增：排除 last_seen 超过 N 天的定理；0=关闭（向后兼容）
-    enable_subgoal_main_path: bool = True   # 子目标细化作为主路径（前置验证后统一跑一次）
-    # ---- 骨架 Lean 语法审核 + leansearch（#28 / #31）----
-    enable_sketch_audit: bool = True        # 题目前置形式化后，生成骨架并用 Lean 审核严谨性（#28）
-    # 2026-08-30：默认开启。官方语义 API（leansearch.net）质量高 + 空集信号
-    # + 子目标级查询后，证明类题目真实受益；计算题检索无害（如无结果显式告知）
-    use_leansearch: bool = True
+    # ---- 检测链（2026-09-06 去 Lean 化；平台无 Lean 可执行文件，历史归因实证）----
+    # 原 Lean 硬验证（lean_gate）与前置形式化（lean_pre_verifier）由多级
+    # AuditGate 检测链取代：Level0 程序硬核验 → Level1 反例搜索 → Level2
+    # LLM rubric 判分 → Level3 playoff。硬否决优先、宁 unknown 不误杀、只审不答。
+    # lean 系配置字段随代码迁移 tools/lean_local/（本地证据链工具专用），
+    # 不再出现在平台配置（遗留 kwarg 经 ReasoningAgent 白名单过滤自动丢弃）。
+    enable_audit_gate: bool = True          # 检测链总开关（顶替 enable_lean_verify）
+    enable_subgoal_main_path: bool = True   # 子目标细化作为主路径
     # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
     use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
     # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
@@ -248,9 +218,8 @@ class AgentConfig:
     # 通过后才进语法审核。默认开启（老师明确要求）。LLM 失败/预算不足降级放行不阻断。
     enable_skeleton_review: bool = True
     skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
-    # ---- Stage 3 迭代精炼 + lemma 记忆（#29/#30/#32/#33）----
+    # ---- lemma 记忆（#30，跨题持久化）----
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
-    use_refiner: bool = False               # 整树搭桥后执行 Stage 3 sorry 迭代精炼（#32，默认关闭先试）
 
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
@@ -390,13 +359,6 @@ class ReasoningAgent:
         self.client = client
         self.config = AgentConfig()
 
-        # 平台 Lean 环境探测（2026-08-31，零重量）：仅当仓库存在 deploy/.probe
-        # 标记时执行 deploy/probe_lean.sh，输出 PROBE| 前缀日志（进评测日志）。
-        # 目的：用下一次正式提分提交顺带回答"平台能否跑 Lean/Mathlib"——
-        #   关0 预装？关1 GitHub/tuna 网络？关2 自带二进制能否执行？
-        # 任何异常都吞掉，绝不阻塞主流程（评测成绩不受影响）。
-        self._maybe_run_lean_probe()
-
         # 允许通过 kwargs 覆盖配置（向后兼容 run_eval.py 的传参）
         for key in (
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
@@ -441,17 +403,10 @@ class ReasoningAgent:
             "enable_adversarial_verify", "adversarial_tiers",
             "adversarial_min_confidence", "adversarial_max_tokens",
             "adversarial_max_reasoning",
-            # Lean 硬验证
-            "enable_lean_verify", "lean_gate_strict", "lean_timeout", "lean_executable",
-            "lean_gate_nonproof", "lean_gate_nonproof_deep_only",
-            "enable_sketch_audit", "use_leansearch",
-            # 前置形式化验证（rounds 影响预算消耗：每次编译 ~21s）
-            "preverify_max_rounds", "preverify_timeout",
-            # 前置形式化按档位开关
-            "lean_preverify_tiers",
-            # 跨题定理记忆
-            "theorem_memory_enable", "theorem_memory_path",
-            "theorem_memory_top_k", "theorem_memory_stale_days",
+            # 检测链（2026-09-06 去 Lean 化；顶替原 Lean 硬验证开关）
+            "enable_audit_gate",
+            # lemma 记忆
+            "lemma_storage_path",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
@@ -478,40 +433,6 @@ class ReasoningAgent:
             self.config.use_scoring,
             self.config.by_enable_fast_path,
         )
-
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # 平台 Lean 环境探测（零重量，2026-08-31）
-    # ------------------------------------------------------------------
-    def _maybe_run_lean_probe(self) -> None:
-        """deploy/.probe 标记存在时跑探测脚本，输出 PROBE| 日志。
-
-        探测结果只进 stderr（评测日志会捕获），**不改任何求解行为**：
-        - 平台无 lean → 探测打印 not_found，主流程照常走 AI 判分降级
-        - 平台有 lean → 探测打印预装版本，后续提交可接入 lean_gate
-        全程 try/except + 30s 超时，任何失败静默。
-        """
-        try:
-            marker = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "deploy", ".probe")
-            script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "deploy", "probe_lean.sh")
-            if not (os.path.exists(marker) and os.path.exists(script)):
-                return
-            import subprocess
-            proc = subprocess.run(
-                ["bash", script],
-                capture_output=True, text=True, timeout=30,
-            )
-            out = (proc.stdout or "").strip()
-            if out:
-                # 打印到 stderr 走评测日志；同时进 logger 便于本地排查
-                sys.stderr.write(out + "\n")
-                for line in out.splitlines():
-                    if line.startswith("PROBE|"):
-                        logger.info("[lean-probe] %s", line)
-        except Exception as exc:  # noqa: BLE001 - 探测失败绝不影响主流程
-            logger.warning("[lean-probe] 探测跳过（异常）: %s", str(exc)[:120])
 
     # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出
     # ------------------------------------------------------------------

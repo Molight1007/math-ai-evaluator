@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "agent"))
 
-from agent.lean_bridge import LeanBridge, _detect_lean_project_dir  # noqa: E402
+from tools.lean_local.lean_bridge import LeanBridge, _detect_lean_project_dir  # noqa: E402
 
 
 class MockClient:

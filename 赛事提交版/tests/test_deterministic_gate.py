@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""回归测试（v2.8 增量移植）：确定性硬否决 / AcceptGate 门控 / RunState 覆盖 / LeanGate 扩展。
+"""回归测试（v2.8 增量移植）：确定性硬否决 / AcceptGate 门控 / RunState 覆盖。
+
+原 LeanGate 门控扩展用例已随 agent.lean_gate 迁移 tools/lean_local/（去 Lean 化，
+2026-09-06），由 tools/lean_local/tests/test_lean_gate.py 承接。
 
 可直接 `python tests/test_deterministic_gate.py` 运行，也可被 pytest 收集。
 """
@@ -20,7 +23,6 @@ def test_imports():
     import agent.orchestrator    # noqa: F401
     import agent.solver          # noqa: F401
     import agent.difficulty_router  # noqa: F401
-    import agent.lean_gate       # noqa: F401
 
 
 def test_deterministic_check_answer():
@@ -79,36 +81,6 @@ def test_verdict_deterministic_field():
     from agent.base import Verdict
     v = Verdict(correct=False, deterministic={"verdict": "fail"})
     assert v.deterministic["verdict"] == "fail"
-
-
-def test_leangate_enabled_all_proofs():
-    from agent.lean_gate import LeanGate
-
-    class _CfgAll:
-        enable_lean_verify = True
-        lean_gate_all_proofs = True
-
-    class _CfgDeepOnly:
-        enable_lean_verify = True
-        lean_gate_all_proofs = False
-        lean_gate_nonproof_deep_only = True
-
-    g1 = LeanGate.__new__(LeanGate)
-    g1.config = _CfgAll()
-    assert g1._enabled("standard", "证明") is True
-    assert g1._enabled("deep", "证明") is True
-    # 2026-09-01 用户要求「所有题目都要用到 Lean」：非证明题默认全档启用
-    # （走轻量 verify_answer）。旧行为由 lean_gate_nonproof_deep_only=True 保留。
-    assert g1._enabled("standard", "计算") is True
-    assert g1._enabled("standard", "计算", "解答题") is True
-
-    g2 = LeanGate.__new__(LeanGate)
-    g2.config = _CfgDeepOnly()
-    assert g2._enabled("standard", "证明") is False
-    assert g2._enabled("deep", "证明") is True
-    # 非证明题仅 deep 档（旧行为回退开关）
-    assert g2._enabled("standard", "计算") is False
-    assert g2._enabled("deep", "计算") is True
 
 
 if __name__ == "__main__":

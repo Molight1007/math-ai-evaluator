@@ -15,7 +15,7 @@ import tempfile
 
 import pytest
 
-from agent.lean_search import Lsv2Corpus, MathlibTheoremSearcher
+from tools.lean_local.lean_search import Lsv2Corpus, MathlibTheoremSearcher
 
 
 def _write_sample(path: str) -> None:

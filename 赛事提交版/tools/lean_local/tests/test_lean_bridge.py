@@ -12,7 +12,7 @@ import unittest
 import json
 
 from agent.base import BugReport, Finding
-from agent.lean_bridge import (
+from tools.lean_local.lean_bridge import (
     LeanBridge,
     detect_lean_environment,
     _compile_lean,

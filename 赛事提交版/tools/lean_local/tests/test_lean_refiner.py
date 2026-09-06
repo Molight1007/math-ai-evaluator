@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from agent.base import TaskContext, Budget
 from agent.blueprint_planner import BlueprintDAG, BlueprintNode
-from agent.lean_refiner import (
+from tools.lean_local.lean_refiner import (
     LeanRefinerAgent, extract_sorry_blocks, strip_sorry_block,
     replace_sorry_with_proof, MAX_REFINE_ATTEMPTS,
 )

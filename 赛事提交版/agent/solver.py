@@ -598,7 +598,7 @@ class SolverAgent(BaseAgent):
             # 本地宽松判分能看懂、平台判分看不懂。模型具备给出简洁答案的能力，
             # 缺的是一次明确要求——成本仅一次短调用，收益是消除平台侧的格式性丢分。
             if (getattr(self.config, 'enable_answer_reask', True)
-                    and not ctx.is_time_critical()):
+                    and not ctx.gen_time_up()):
                 answer = self._reask_final_answer(ctx, resp, answer)
             ctx.candidates.append(Candidate(
                 id=cid,
@@ -725,7 +725,10 @@ class SolverAgent(BaseAgent):
 
         n_ok = 0
         for cand in targets:
-            if ctx.is_time_critical():
+            # 2026-09-06：升级 gen_time_up——仅 is_time_critical 会在单候选
+            # 300s 级 LLM 调用前放行最后 1-2 个候选，烧穿剩余预算（冒烟
+            # nt-031 3.3=595s / algebra-003 3.3=325s 实证），须按生成侧软截止停。
+            if ctx.gen_time_up():
                 break
             user_content = SELF_IMPROVE_USER.format(
                 problem=ctx.problem,
@@ -858,8 +861,8 @@ class SolverAgent(BaseAgent):
             if c not in chosen:
                 new_list.append(c)
                 continue
-            # 预算允许才续写
-            if not ctx.is_time_critical():
+            # 预算允许才续写（2026-09-06 升级 gen_time_up）
+            if not ctx.gen_time_up():
                 new_c = self.complete_answer(ctx, c)
                 if new_c is not c and new_c.answer and len(new_c.answer) > 1:
                     new_list.append(new_c)

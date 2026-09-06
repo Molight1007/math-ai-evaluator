@@ -25,9 +25,9 @@ import os
 import re
 import time
 
-from .base import BaseAgent, TaskContext
-from .blueprint_planner import BlueprintDAG, extract_json
-from .lemma_memory import LemmaMemory
+from agent.base import BaseAgent, TaskContext
+from agent.blueprint_planner import BlueprintDAG, extract_json
+from agent.lemma_memory import LemmaMemory
 
 logger = logging.getLogger("MathPilot")
 
@@ -100,7 +100,7 @@ class LeanRefinerAgent(BaseAgent):
     # ------------------------------------------------------------------
     def _bridge_inst(self, ctx: TaskContext):
         try:
-            from .lean_bridge import LeanBridge
+            from tools.lean_local.lean_bridge import LeanBridge
             return LeanBridge(self.client, self.config, ctx.budget)
         except Exception as e:  # noqa: BLE001
             logger.warning("LeanRefiner: LeanBridge 构造失败: %s", e)
@@ -109,7 +109,7 @@ class LeanRefinerAgent(BaseAgent):
     def _compile_code(self, ctx: TaskContext, lean_code: str,
                       allow_sorry: bool = True) -> dict:
         """编译 Lean 代码（默认 import Mathlib；allow_sorry 控制是否允许 sorry）。"""
-        from .lean_translator import _prepend_mathlib_import
+        from tools.lean_local.lean_translator import _prepend_mathlib_import
         bridge = self._bridge_inst(ctx)
         if bridge is None:
             return {"ok": False, "error": "LeanBridge 初始化失败"}
@@ -124,11 +124,11 @@ class LeanRefinerAgent(BaseAgent):
                 comp = bridge._compile(code, project_dir,
                                        lean_filename=lean_file, allow_sorry=allow_sorry)
                 # 2026-09-04：移入 _lean_trash 代替 os.remove（沙箱 safe-delete 硬杀删除）
-                from .lean_bridge import _trash_lean_file
+                from tools.lean_local.lean_bridge import _trash_lean_file
                 _trash_lean_file(project_dir, lean_file)
                 return comp
             import tempfile
-            from .lean_bridge import _compile_lean
+            from tools.lean_local.lean_bridge import _compile_lean
             with tempfile.TemporaryDirectory(prefix="lean_refine_") as work_dir:
                 return _compile_lean(
                     code, work_dir, lean_executable=bridge._lean_executable,
@@ -148,7 +148,7 @@ class LeanRefinerAgent(BaseAgent):
         if self._llm_calls >= MAX_REFINE_LLM_CALLS:
             return ""
         try:
-            from prompts.lean_refiner import (
+            from tools.lean_local.prompts.lean_refiner import (
                 LEAN_REFINE_SYSTEM, LEAN_REFINE_USER_TEMPLATE)
         except ImportError:
             from submit.prompts.lean_refiner import (
@@ -294,7 +294,7 @@ class LeanRefinerAgent(BaseAgent):
 
     def _build_decl_for_node(self, node_id: str, statement: str) -> str:
         """为节点构造可精炼的 Lean 声明（复用 translator 的直包逻辑）。"""
-        from .lean_translator import build_declaration
+        from tools.lean_local.lean_translator import build_declaration
         decl = build_declaration(node_id, statement)
         if decl:
             return decl
@@ -320,7 +320,7 @@ class LeanRefinerAgent(BaseAgent):
     # ------------------------------------------------------------------
     def _search_mathlib(self, ctx: TaskContext, query: str, limit: int = 5):
         try:
-            from .lean_search import MathlibTheoremSearcher
+            from tools.lean_local.lean_search import MathlibTheoremSearcher
             if getattr(self, "_searcher", None) is None:
                 self._searcher = MathlibTheoremSearcher()
             self.note_mathlib_search(ctx)

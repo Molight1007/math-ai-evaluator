@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 from agent.base import TaskContext, Budget
 from agent.blueprint_planner import BlueprintDAG, BlueprintNode
-from agent.lean_translator import (
+from tools.lean_local.lean_translator import (
     LeanTranslatorAgent, build_declaration, sanitize_node_id,
     count_sorries, extract_declaration_names, _strip_fence,
 )
@@ -249,7 +249,7 @@ class SubGoalIntegrationTest(unittest.TestCase):
         client = MockClient()
         agent = make_agent(client)
         # 让整树审核走 stub（避免真实 Lean 编译）
-        from agent.lean_translator import LeanTranslatorAgent
+        from tools.lean_local.lean_translator import LeanTranslatorAgent
         orig = LeanTranslatorAgent.translate_and_audit
 
         def fake_audit(self, ctx, dag):

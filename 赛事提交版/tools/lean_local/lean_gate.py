@@ -33,8 +33,8 @@ from __future__ import annotations
 import logging
 import re
 
-from .base import BaseAgent, Budget, TaskContext
-from .lean_bridge import LeanBridge
+from agent.base import BaseAgent, Budget, TaskContext
+from tools.lean_local.lean_bridge import LeanBridge
 
 logger = logging.getLogger("MathPilot")
 
@@ -141,16 +141,23 @@ class LeanGate:
                                    "candidates": len(candidates)})
             return kept, feedbacks
 
-        # v2.8 时间/预算护栏：应急/时间紧张/预算不足时降级放行，
-        # 避免 standard 档证明题的 Lean 编译拖垮单题 20 分钟硬限。
-        if getattr(ctx.state, 'emergency', False) or ctx.is_time_critical():
+        # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
+        # 时间保护改用 **1200s hard 硬顶** 而非被 soft_budget 收紧的 deadline——
+        # standard 档 soft=540s，题实际跑 560s（超 soft 才结束），若用
+        # ctx.time_remaining()（看 soft deadline）闸门必然 time_critical 跳过。
+        # 单答案验证 5-21s 相对 1200s 硬顶完全可负担，只有快撞硬顶才放行。
+        # 2026-09-04 审核修复：start_time 为伪值（<1e8，测试 fixture 常用 0）
+        # 时该判断 `start_time + 1200 - now < 2` 恒 True → 整批误降级放行
+        # （lean_gate 5 个测试全挂）。伪值视同无硬顶，与 base.time_remaining
+        # / llm() 的 deadline<1e8 口径统一。
+        import time as _t
+        _hard_deadline = ctx.start_time + float(
+            getattr(self.config, "max_time_per_question", 1200))
+        if ctx.start_time >= 10**8 and _hard_deadline - _t.time() < 2:
             self._record_ctx(ctx, {"enabled": True, "degraded": "time_critical",
                                    "tier": tier, "domain": domain})
             return kept, feedbacks
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
-            self._record_ctx(ctx, {"enabled": True, "degraded": "budget_exhausted",
-                                   "tier": tier, "domain": domain})
-            return kept, feedbacks
+        # 2026-09-03 老师：比赛无次数上限。删 budget 强制（保留 spend 记账作指标）。
 
         bridge = self._bridge_inst
         if bridge is None:
@@ -239,7 +246,7 @@ class LeanGate:
                     # "第 X 步/某位置：错误描述" 的定向修正依据。
                     msg = "Lean 编译/逻辑错误"
                     try:
-                        from .answer_oracle import AnswerOracle
+                        from agent.answer_oracle import AnswerOracle
                         structured = AnswerOracle.findings_to_feedback(
                             getattr(report, "findings", []) or [])
                         if structured:
@@ -303,17 +310,22 @@ class LeanGate:
         entry = {"gate": "final_answer", "tier": tier,
                  "is_proof": is_proof, "answer": answer[:80]}
         # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
-        # 旧阈值 15s 导致 standard 档（soft=540s）题跑满 540 后剩余<15s 全跳。
-        # 改：只剩 <2s 才放行（单答案验证 5-21s，允许轻微超 soft 边界；
-        # 1200s hard cap 才是硬限，soft 微超不影响 hard_total）。
-        if ctx.is_time_critical() and ctx.time_remaining() < 2:
+        # 时间检查必须用 **1200s hard 硬顶**（不是 ctx.time_remaining 看的 soft
+        # deadline）——standard 档 soft=540s，题跑 560s 超 soft 才结束，用 soft
+        # deadline 算剩余必然 <2s 全跳（wrong10b 实测 5/10 题因此跳过）。
+        # 2026-09-04 审核修复：start_time 伪值（<1e8）视同无硬顶（同 apply()）。
+        import time as _t2
+        if (ctx.start_time >= 10**8
+                and ctx.start_time + float(getattr(self.config,
+                                                   "max_time_per_question", 1200))
+                - _t2.time() < 2):
             entry["degraded"] = "time_critical"
             self._record_ctx(ctx, entry)
             return True
-        if ctx.budget is not None and not ctx.budget.can_spend(1):
-            entry["degraded"] = "budget_exhausted"
-            self._record_ctx(ctx, entry)
-            return True
+        # 2026-09-02 老师强调：Lean 是最后保证，**不受 LLM 调用次数预算限制**。
+        # 2026-09-03 老师：比赛无次数上限。删 budget 强制——base.py llm() 入口
+        # 已删除 can_spend 检查，bridge 内部 _llm_call 也不再强制。Lean 是
+        # 最后保证，让它有需要多少次 LLM 调用就跑多少次。
         bridge = self._bridge_inst
         if bridge is None or not bridge.lean_available:
             entry["degraded"] = "env_unavailable"
@@ -355,7 +367,7 @@ class LeanGate:
             entry["lean_valid"] = False
             msg = "Lean 编译/逻辑错误"
             try:
-                from .answer_oracle import AnswerOracle
+                from agent.answer_oracle import AnswerOracle
                 structured = AnswerOracle.findings_to_feedback(
                     getattr(report, "findings", []) or [])
                 if structured:
@@ -368,16 +380,15 @@ class LeanGate:
             entry["feedback"] = msg[:200]
             self._record_ctx(ctx, entry)
             return False
-        # unknown：strict 拒绝、否则放行
-        if self.strict:
-            entry["verdict"] = "unknown"
-            entry["degraded"] = "strict_reject"
-            self._record_ctx(ctx, entry)
-            return False
+        # 2026-09-03 老师指令："当答案无法被验证或标记为未知时，必须默认拒绝
+        # 而非放行"。unknown（翻译失败/验证无法判定/自证嫌疑）→ 一律拒绝，
+        # 让 6.5 步换候选/重生成（校验不了就不许裸奔输出）。
         entry["verdict"] = "unknown"
-        entry["degraded"] = "lenient_pass"
+        entry["degraded"] = "strict_reject"
+        entry["feedback"] = ("Lean 验证无法判定（unknown）：翻译失败或代码未交叉引用题目条件。"
+                             "禁止放行裸答案——请重写验证代码，锚定题目数值与条件。")
         self._record_ctx(ctx, entry)
-        return True
+        return False
 
     # ------------------------------------------------------------------
     # 诊断记录
@@ -398,7 +409,7 @@ class LeanGate:
         try:
             if not names:
                 return
-            from .lean_search import get_stats
+            from tools.lean_local.lean_search import get_stats
             get_stats().note_adopted(names)
         except Exception as exc:  # noqa: BLE001
             logger.debug("[lean_gate] 采用埋点回记失败（已忽略）: %s", exc)
@@ -411,7 +422,7 @@ class LeanGate:
                 return
             if not getattr(self.config, "theorem_memory_enable", True):
                 return
-            from .theorem_memory import TheoremMemory
+            from tools.lean_local.theorem_memory import TheoremMemory
             mem = TheoremMemory(
                 str(getattr(self.config, "theorem_memory_path", "")))
             for n in names:

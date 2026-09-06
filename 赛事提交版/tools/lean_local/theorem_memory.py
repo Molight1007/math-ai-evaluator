@@ -37,9 +37,11 @@ import time
 
 logger = logging.getLogger("MathPilot")
 
-_DEFAULT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "theorem_memory.json")
+# 归档于 tools/lean_local/（2026-09-06）：默认库文件仍落仓库根 data/，
+# 需上溯 3 级（tools/lean_local → tools → 根）。
+_ROOT3 = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+_DEFAULT_PATH = os.path.join(_ROOT3, "data", "theorem_memory.json")
 
 
 class TheoremMemory:

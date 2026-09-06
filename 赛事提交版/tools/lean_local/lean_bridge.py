@@ -35,7 +35,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from .base import BugReport, Finding
+from agent.base import BugReport, Finding
 
 logger = logging.getLogger("MathPilot")
 
@@ -53,7 +53,7 @@ _MAX_ERROR_CHARS = 5000                # 编译错误输出截断上限（防 to
 # ---------------------------------------------------------------------
 def _project_root() -> str:
     """仓库根目录（agent/ 的上一级）。"""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _detect_lean_executable() -> str:
@@ -332,7 +332,7 @@ def _maybe_auto_setup_lean(lean_executable: str) -> None:
     if _LEAN_SETUP_TRIED or shutil.which(lean_executable):
         return
     _LEAN_SETUP_TRIED = True
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     script = os.path.join(root, "deploy", "setup_lean.sh")
     if not os.path.exists(script):
         return
@@ -1245,7 +1245,7 @@ class LeanBridge:
         转化失败（LLM 空返回 / JSON 解析失败 / 无 lean_code）返回 None。
         """
         try:
-            from prompts.lean_pre_verify import (
+            from tools.lean_local.prompts.lean_pre_verify import (
                 LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
         except ImportError:  # 提交包（submit/）路径兜底
             from submit.prompts.lean_pre_verify import (
@@ -1366,7 +1366,7 @@ class LeanBridge:
         feedback 非空时回传上一次编译错误，要求重新生成骨架。
         """
         try:
-            from prompts.lean_pre_verify import (
+            from tools.lean_local.prompts.lean_pre_verify import (
                 LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
         except ImportError:
             from submit.prompts.lean_pre_verify import (
