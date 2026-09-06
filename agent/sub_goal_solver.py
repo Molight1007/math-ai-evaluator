@@ -229,7 +229,8 @@ class SubGoalSolverAgent(BaseAgent):
     def run(self, ctx: TaskContext) -> TaskContext:
         """执行子目标规划 → 逐步求解 → 结论合并 全流程，结果追加到 ctx.candidates"""
         # 预算闸门：连规划所需的 1 次 LLM 调用都负担不起时，整体跳过、不追加候选
-        if ctx.is_time_critical():
+        # 2026-09-06：升级 gen_time_up（生成侧软截止，未设时回退 is_time_critical）
+        if ctx.gen_time_up():
             self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
             return ctx
 
@@ -301,7 +302,10 @@ class SubGoalSolverAgent(BaseAgent):
         results_map = {}  # subgoal_id → result_text
 
         for sg in subgoals:
-            if ctx.is_time_critical():
+            # 2026-09-06：升级 gen_time_up——只查 is_time_critical（=deadline-120/60s）
+            # 挡不住"750s stage_budget 之外 for-sg 主循环一路烧到临界点"
+            # （冒烟 geom-051 2.7=1073s 实证），必须更早停手给验证留预算。
+            if ctx.gen_time_up():
                 self.record(ctx, "subgoal", f"预算不足，跳过剩余子目标 (当前={sg['id']}/{len(subgoals)})")
                 break
             # 2026-09-04 阶段预算闸：子目标阶段超预算 → 停解新子目标，
@@ -363,9 +367,11 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "subgoal",
                         "子目标阶段预算已尽且无已解子目标，跳过空 merge")
             return ctx
-        if ctx.is_time_critical():
-            # 全局真正逼近 deadline（剩 < critical_tail）→ 连 1 次 merge LLM 调用
-            # 都挤不出来时，用最后一个子目标结果兜底（不空手返回）。
+        if ctx.gen_time_up():
+            # 生成侧软截止/全局逼近 deadline（2026-09-06 升级 gen_time_up；
+            # 正常 750s stage_budget 结束于 ~760s < gen_deadline，merge 仍真跑，
+            # 只有跑超到 gen_deadline 才兜底）→ 连 1 次 merge LLM 调用都挤不出
+            # 时，用最后一个子目标结果兜底（不空手返回）。
             self.record(ctx, "subgoal", "全局预算不足，跳过合并阶段")
             # 使用最后一个子目标的结果作为最终答案
             final_answer = self._fallback_from_last_subgoal(subgoals)
@@ -652,7 +658,7 @@ class SubGoalSolverAgent(BaseAgent):
                     self.record(ctx, "skeleton_review",
                                 f"骨架评审通过（round={round_idx + 1}），进入语法审核")
                 return dag
-            if ctx.is_time_critical():
+            if ctx.gen_time_up():
                 self.record(ctx, "skeleton_review",
                             "骨架重生成预算不足，保留当前骨架")
                 return dag
@@ -727,7 +733,7 @@ class SubGoalSolverAgent(BaseAgent):
                 and step_result
                 and not step_result.startswith("[子目标")):
             oracle_fb = self._oracle_check_step(step_result)
-            if oracle_fb and not ctx.is_time_critical():
+            if oracle_fb and not ctx.gen_time_up():
                 retry_msg = user_msg + (
                     f"\n\n[上一步结果客观校验未通过] {oracle_fb}\n"
                     f"请修正错误后重新给出【本步结果】。"

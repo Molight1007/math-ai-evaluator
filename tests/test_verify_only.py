@@ -71,11 +71,21 @@ def test_generation_steps_all_gated_by_verify_only():
     for needle in _GENERATION_STEPS:
         idx = src.find(needle)
         assert idx >= 0, f"找不到生成步骤锚点：{needle}（代码可能重构，请更新测试）"
-        window = src[max(0, idx - 400):idx + len(needle)]
+        # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符
+        back = 700 if needle == "self.solver.run(ctx)" else 400
+        window = src[max(0, idx - back):idx + len(needle)]
         # solver.run 是主采样，被独立 if 包裹（if not ctx.state.verify_only:）
         if needle == "self.solver.run(ctx)":
-            assert re.search(r"if not ctx\.state\.verify_only:\s*$", window, re.M), \
+            # 2026-09-06 超时修复：verify_only 门禁内又加了 gen_time_up 子分支
+            # （生成侧软截止到且已有候选 → 跳过追加生成，直接进验证）。
+            # 断言改为：门禁行存在、且在 solver.run 之前、gen_time_up 子分支在位。
+            assert "if not ctx.state.verify_only:" in window, \
                 "solver.run 必须包在 `if not ctx.state.verify_only:` 里"
+            assert window.find("if not ctx.state.verify_only:") < \
+                window.find("self.solver.run(ctx)"), \
+                "verify_only 门禁必须出现在 solver.run 之前"
+            assert "gen_time_up" in window, \
+                "solver.run 应有生成侧软截止（gen_time_up）子分支（2026-09-06 超时修复）"
             continue
         # sub_goal_solver 有两处：2.7 子目标主路径在 verify_only 判定**之前**
         # （属预期不门禁，因为它消耗的时间会体现在剩余时间上，触发 3.1 判定）；

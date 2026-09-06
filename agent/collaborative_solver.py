@@ -81,11 +81,11 @@ class CollaborativeSolver(BaseAgent):
     name = "CollaborativeSolver"
 
     def run(self, ctx: TaskContext) -> TaskContext:
-        if ctx.is_time_critical() or ctx.is_timed_out():
+        # 2026-09-06：时间判断升级 ctx.gen_time_up()（生成侧软截止，
+        # 未设时回退 is_time_critical，行为不变）——collab 每轮含
+        # 解题/审查/整合/验证多次 LLM，单轮可达数百秒，必须更早停手。
+        if ctx.gen_time_up() or ctx.is_timed_out():
             self.record(ctx, "collab", "时间紧张/超时，跳过三Agent协作")
-            return ctx
-        if ctx.is_time_critical():
-            self.record(ctx, "collab", "预算不足，跳过三Agent协作")
             return ctx
 
         # 1) 解题 Agent（一次性）
@@ -103,12 +103,9 @@ class CollaborativeSolver(BaseAgent):
         stagnant = 0
 
         for rnd in range(1, max_rounds + 1):
-            # 时间/预算耗尽 → 用当前 best 兜底返回
-            if ctx.is_time_critical() or ctx.is_timed_out():
+            # 时间/预算耗尽 → 用当前 best 兜底返回（2026-09-06 升级 gen_time_up）
+            if ctx.gen_time_up() or ctx.is_timed_out():
                 self.record(ctx, "collab", f"第{rnd}轮前时间紧张，停止协作循环")
-                break
-            if ctx.is_time_critical():
-                self.record(ctx, "collab", f"第{rnd}轮前预算不足，停止协作循环")
                 break
 
             # 2) 审查 Agent：首轮审 solution，后续审上一轮 final

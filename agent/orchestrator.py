@@ -318,6 +318,25 @@ class Orchestrator(BaseAgent):
             if tier == 'deep':
                 ctx.critical_tail_seconds = float(
                     getattr(self.config, 'deep_critical_tail_seconds', 60.0))
+            # 生成侧软截止（2026-09-06 超时修复，冒烟 4/5 题烧穿 1200s 实证）：
+            # 生成类单次 LLM 调用可达 200-300s，各模块循环只在候选/子目标边界查
+            # is_time_critical（= deadline-120/60s）→ 最后一段生成必然跨过临界点
+            # 把剩余预算烧穿 → 4_verify 投票全跳（"deadline 已过跳过投票"×6）、
+            # 6.5 闸门空转（stage_timers 实证 0.0003s）、答案零验证裸提交。
+            # 这里按档位预留 verify_reserve 秒强制留给 4_verify 投票 + 6.5 审核：
+            #   deep=240s（投票 3 票/候选 + 打回重做窗口）/ 其余=180s。
+            # config.verify_reserve_seconds 可覆盖；设 0 关闭（= 旧行为）。
+            _vres = float(getattr(
+                self.config, 'verify_reserve_seconds',
+                240.0 if tier == 'deep' else 180.0))
+            ctx._gen_deadline = (
+                ctx.deadline - _vres
+                if ctx.deadline and ctx.deadline >= 10**8 else 0.0)
+            self.record(ctx, "paper_pacer",
+                        f"生成侧软截止 {ctx.deadline - ctx._gen_deadline:.0f}s"
+                        f" 前停手（verify_reserve={_vres:.0f}s，留给验证/审核）"
+                        if ctx._gen_deadline else
+                        "生成侧软截止未启用（无 deadline）")
             # 按档位调整 LLM 调用预算（deep 档需要更多调用次数）
             max_calls = self.config.tier_max_calls.get(
                 tier, self.config.max_total_calls)
@@ -339,9 +358,10 @@ class Orchestrator(BaseAgent):
 
             self._stage_start(ctx, "2.7_subgoal_main")
             # 2.7) 子目标细化主路径（v2.9）：全部档位统一先跑一次子目标分解逐步求解
+            # 2026-09-06：时间判断升级 gen_time_up（生成侧软截止，给验证留预算）
             if (getattr(self.config, 'enable_subgoal_main_path', True)
                     and not ctx.state.emergency
-                    and not ctx.is_time_critical()):
+                    and not ctx.gen_time_up()):
                 self.record(ctx, "control",
                             "子目标细化主路径先行（前置形式化已校准题意）")
                 self.sub_goal_solver.run(ctx)
@@ -371,7 +391,7 @@ class Orchestrator(BaseAgent):
                     and getattr(self.config, 'deep_use_sub_goal', True)
                     and not getattr(ctx, '_subgoal_main_done', False)
                     and not ctx.state.emergency
-                    and not ctx.is_time_critical()):
+                    and not ctx.gen_time_up()):
                 self.record(ctx, "control", "deep 档 Plan-and-Execute 主路径先行（子目标分解）")
                 self.sub_goal_solver.run(ctx)
 
@@ -394,7 +414,15 @@ class Orchestrator(BaseAgent):
                             f"停止生成新候选，只保留验证",
                             verify_only=True)
             if not ctx.state.verify_only:
-                self.solver.run(ctx)
+                # 2026-09-06 超时修复：生成侧软截止已到且已有候选 → 不再追加
+                # 生成（solver.run 单次可能 200-300s），直接带现有候选进验证。
+                # 无候选时仍必须跑（兜底产出第一候选）。
+                if ctx.gen_time_up() and ctx.candidates:
+                    self.record(ctx, "paper_pacer",
+                                "生成侧软截止已到且已有候选，跳过追加生成"
+                                "直接进入验证/审核")
+                else:
+                    self.solver.run(ctx)
             if not ctx.candidates:
                 self.record(ctx, "control", "Solver 未产出候选，触发兜底直接求解")
                 self.pacer.end(tier=tier, soft=getattr(ctx, "soft_budget", None))
@@ -423,7 +451,7 @@ class Orchestrator(BaseAgent):
                     and not ctx.state.emergency
                     and not ctx.state.verify_only
                     and ctx.candidates):
-                if not ctx.is_time_critical():
+                if not ctx.gen_time_up():
                     n_imp = self.solver.improve_candidates(ctx)
                     if n_imp > 0:
                         self.record(ctx, "control",
@@ -436,7 +464,8 @@ class Orchestrator(BaseAgent):
             if (tier == 'deep'
                     and getattr(self.config, 'enable_collaborative_deep', True)
                     and not ctx.state.emergency
-                    and not ctx.state.verify_only):
+                    and not ctx.state.verify_only
+                    and not ctx.gen_time_up()):
                 self.record(ctx, "control", "deep 档启用三Agent协作验证机制")
                 self.collab.run(ctx)
 
@@ -452,7 +481,7 @@ class Orchestrator(BaseAgent):
                     and use_sub
                     and not getattr(ctx, '_subgoal_main_done', False)
                     and not ctx.state.verify_only
-                    and not ctx.is_time_critical()
+                    and not ctx.gen_time_up()
                     and len(ctx.candidates) < 2):
                 self.record(ctx, "control",
                             "触发子目标分解补充候选",
@@ -553,7 +582,8 @@ class Orchestrator(BaseAgent):
                     and all(v.total_votes > 0 for v in ctx.verdicts)
                     and all(v.correct_votes == 0 for v in ctx.verdicts)):
                 revised_ok = False
-                if tier == 'deep' and not ctx.state.emergency:
+                if (tier == 'deep' and not ctx.state.emergency
+                        and not ctx.gen_time_up()):
                     revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
                 if not revised_ok:
                     self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
@@ -583,7 +613,8 @@ class Orchestrator(BaseAgent):
             _bc = getattr(ctx, '_best_cluster', None)
             if (_bc is not None
                     and getattr(_bc, 'confidence', 1.0) < 0.5
-                    and not ctx.state.emergency):
+                    and not ctx.state.emergency
+                    and not ctx.gen_time_up()):
                 self.record(
                     ctx, "control",
                     f"deep 档低置信度({_bc.confidence:.2f})，强制 revise 复核提升共识",
@@ -939,7 +970,9 @@ class Orchestrator(BaseAgent):
         if audit_fb:
             feedback = feedback + "\n" + "\n".join(audit_fb)
         for r in range(max_rounds):
-            if ctx.is_time_critical():
+            # 2026-09-06：升级 gen_time_up——revise 回环 = solver.run 生成 +
+            # verifier 验证，单轮可烧 200-400s，须按生成侧软截止更早收手。
+            if ctx.gen_time_up():
                 self.record(ctx, "revise", "revise 回环预算不足，提前终止")
                 break
             ctx.revise_round += 1
@@ -1025,11 +1058,13 @@ class Orchestrator(BaseAgent):
                 rep = ctx.candidates[0] if ctx.candidates else None
             if rep is None:
                 return False
-            # 预算护栏：时间紧张时不跑，避免抢走写题时间（#43 归因）
-            if ctx.is_time_critical():
+            # 预算护栏：时间紧张时不跑，避免抢走写题时间（#43 归因）。
+            # 2026-09-06：升级 gen_time_up——对抗审查是可弃增强，到生成侧
+            # 软截止即弃，把 reserve 时间留给 4_verify 主投票与 6.5 最终闸门。
+            if ctx.gen_time_up():
                 self.record(ctx, "adversarial", "预算不足，跳过对抗式审查")
                 return False
-            if getattr(ctx.state, 'emergency', False) or ctx.is_time_critical():
+            if getattr(ctx.state, 'emergency', False) or ctx.gen_time_up():
                 self.record(ctx, "adversarial", "时间紧张，跳过对抗式审查")
                 return False
 

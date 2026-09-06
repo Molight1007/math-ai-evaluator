@@ -431,6 +431,13 @@ class TaskContext:
     # 的时间直接放弃协作验证/ revise / Lean，"难题用满 20 分钟"根本做不到。
     # 改为可配置，默认 120s（由 orchestrator 按档位从 config 写入）。
     critical_tail_seconds: float = 120.0
+    # 生成类阶段软截止（2026-09-06 超时修复）：orchestrator 在档位确定后
+    # 设 _gen_deadline = deadline - verify_reserve，凡"追加生成"类模块
+    # （solver/improve/collab/sub_goal 的生成循环）在循环边界用 gen_time_up()
+    # 判断是否停手，把 verify_reserve 秒强制留给 4_verify 投票 + 6.5 审核。
+    # 未设置（测试 fixture / 其他调用方）= 0.0 → gen_time_up() 回退 is_time_critical，
+    # 行为与旧版完全一致。
+    _gen_deadline: float = 0.0
 
     def verified_ids(self) -> set:
         """已验证过的候选 id 集合（避免重复验证）"""
@@ -463,6 +470,21 @@ class TaskContext:
     def is_timed_out(self) -> bool:
         """当前题目是否已超时"""
         return self.time_remaining() <= 0.0
+
+    def gen_time_up(self) -> bool:
+        """生成类阶段是否应停手（生成侧软截止已到）。
+
+        2026-09-06 超时修复：生成类模块的循环边界统一改查本方法——
+        若 orchestrator 设了 _gen_deadline（单题 deadline 前 verify_reserve 秒），
+        则到点即停，避免"最后一段生成把剩余预算烧穿 → 验证投票全跳、
+        答案零验证裸提交"（冒烟 4/5 题实证）。未设 _gen_deadline 时回退
+        原 is_time_critical 语义，测试/其他调用方行为零变化。
+        """
+        gd = getattr(self, "_gen_deadline", 0.0) or 0.0
+        if gd and gd >= 10**8 and self.deadline and self.deadline >= 10**8:
+            import time
+            return (time.time() > gd) or self.is_time_critical()
+        return self.is_time_critical()
 
     def total_time_remaining(self) -> float:
         """返回Agent总剩余时间（秒）"""
