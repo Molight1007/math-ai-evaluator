@@ -134,6 +134,10 @@ class AgentConfig:
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
     self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
+    # 易错点记忆注入（2026-09-06 A 档轻量经验，prompts/error_lessons.py）：
+    # 命中题型/关键词时把历史易错自查清单拼进初始生成与 revise 提示，防重复踩坑。
+    # 默认开（本地评测生效）；A/B 对照可 --override enable_error_lessons=False。
+    enable_error_lessons: bool = True
     # Step 4 bug report 复核（2026-08-29 晚新增，论文流水线 Step 4）
     # 验证器给出缺陷反馈后，让模型先复核反馈是否属实、可驳回误报——
     # 论文：模型可驳回验证器的错误反馈，避免好答案被误报引导改坏。
@@ -188,7 +192,14 @@ class AgentConfig:
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
     enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
-    collab_max_rounds: int = 6              # 协作验证循环最大轮数（未通过则反复审查修正，时间充裕时保证高正确率）
+    collab_max_rounds: int = 3              # 协作验证循环最大轮数（2026-09-06 P3 用户拍板 6→3：单轮含 3 次 LLM 不可中断、algebra-003 曾烧 535s，收紧省时；时间充裕时停滞检测照常兜底）
+    # 子目标阶段预算（2026-09-06 P1 用户拍板按档拆分）：
+    # deep 保留 750s（难题深度分解值）；standard/fast 用 450s——
+    # 依据：2.7 子目标全档均 ~587s 为最大黑洞，standard 档性价比存疑，
+    # 省下预算自然流向 3_solve/verify。原 subgoal_stage_budget_sec 未入
+    # AgentConfig（sub_goal_solver getattr 兜底 750），现补全可配。
+    subgoal_stage_budget_sec: float = 750.0     # deep 档子目标阶段预算
+    subgoal_stage_budget_sec_std: float = 450.0  # standard/fast 档子目标阶段预算
     accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
     # 结构化 bug report 驱动的修正（论文依据：IMO 2025 验证-精炼流水线）
     # 验证器改为产出「分类 + 原文定位」的结构化错因，注入 revise 步骤。
@@ -388,6 +399,8 @@ class ReasoningAgent:
             "paper_target_time", "paper_min_soft", "paper_total_questions",
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             "enable_collaborative_deep", "collab_max_rounds",
+            # 子目标阶段预算（P1 按档拆分）
+            "subgoal_stage_budget_sec", "subgoal_stage_budget_sec_std",
             # 时间预算（2026-08-28 新增：让动态预算真正生效）
             "critical_tail_seconds", "deep_critical_tail_seconds",
             "deep_quota_ratio",
@@ -397,6 +410,8 @@ class ReasoningAgent:
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
             "enable_self_improve", "self_improve_max",
+            # 易错点记忆注入（2026-09-06 A 档轻量经验）
+            "enable_error_lessons",
             # Step 4 bug report 复核
             "enable_feedback_review",
             # 对抗式验证（#16）
