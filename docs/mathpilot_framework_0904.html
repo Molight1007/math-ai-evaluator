@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="C18Xy5qO180aYYjQ9UtM8l"><head data-page-node-id="DbPWbrfGKA1ICLtjrNL3Op"><meta charset="utf-8" data-page-node-id="ZHvlwoTlQGcVXBsPpNmQC2">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="Mzd1hlJYQMCpvf5eXw7FJB">
+<title>MathPilot 智能体框架</title><style>
+:root{--dg-bg:#ffffff;--dg-ink:#1f2430;--dg-muted:#8b94a7;--dg-panel:#f7f8fa;--dg-line:#e5e8ee;--dg-accent:#3d7eff;}
+body.dark{--dg-bg:#0e1420;--dg-ink:#e8eefc;--dg-muted:#8a97b4;--dg-panel:#151d2c;--dg-line:#26314a;--dg-accent:#4cc9f0;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--dg-bg);color:var(--dg-ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;transition:background .2s,color .2s}
+#bar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--dg-panel);border-bottom:1px solid var(--dg-line)}
+#bar input,#bar select,#bar button{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--dg-line);background:var(--dg-bg);color:var(--dg-ink);cursor:pointer}
+#bar input{cursor:text;min-width:190px}
+#bar button:hover{border-color:var(--dg-accent)}
+#bar .sp{flex:1}
+#hint{padding:7px 16px;font-size:12.5px;color:var(--dg-muted);border-bottom:1px solid var(--dg-line);background:var(--dg-bg)}
+#wrap{overflow:auto;padding:8px 16px 40px}
+svg{max-width:100%;height:auto;display:block}
+.dg-ink{fill:var(--dg-ink)} .dg-muted{fill:var(--dg-muted)} .nlabel{fill:var(--dg-ink)}
+.elabel{fill:var(--dg-muted)}
+.node{transition:opacity .15s}
+.node .nbox{transition:stroke-width .15s}
+svg.focusing .node{opacity:.18}
+svg.focusing .node.hit{opacity:1}
+svg.focusing .edge{opacity:.12}
+svg.focusing .edge.hit{opacity:1}
+.node.hit .nbox{stroke-width:3;stroke:var(--dg-accent)}
+.node.sel .nbox{stroke-width:3;stroke:#f59e0b}
+.node:focus{outline:none}
+.edge.hit{stroke-width:3}
+#legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 16px;font-size:12px;color:var(--dg-muted);border-top:1px solid var(--dg-line)}
+#legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--dg-line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--dg-muted)}
+</style></head>
+<body data-page-node-id="qxTZvmFiTYgu8K48xlrNgO">
+<div id="bar" data-page-node-id="uCDXzO7IiZkGIieQAU8pzW">
+  <input id="q" placeholder="搜索节点…（/ 聚焦）" data-page-node-id="rmT5PDooxInZdr2WBycBs5">
+  <button id="probe" data-page-node-id="Ms6M1nWTaU3VFit9tXgTCt">路径探测</button>
+  <select id="views" data-page-node-id="p4v67mDIhtoXRdGFatOC2i"><option value="" data-page-node-id="c899MvIvVSUibNVzpyIllX">引导视角…</option></select>
+  <span class="sp" data-page-node-id="bFMOnPYnYWxFXFeRvl0vEp"></span>
+  <button id="theme" data-page-node-id="elUF2qsQBppSY9J0dqARxV">深浅色 T</button>
+  <button id="exp" data-page-node-id="KxEcHOT0gJVQKra3NY5ubV">导出 SVG E</button>
+</div>
+<div id="hint" data-hint="<b data-page-node-id="58GIobb5UyDhqiuZbptMzb">支撑底座</b>：LeanBridge/MCP 编译后端（Mathlib 闭包 · sorry/axiom 拦截）｜LeanSearch v2 前提检索｜定理/引理跨题记忆｜单题 1200s · 全卷 6.25h 预算"><b data-page-node-id="WuYRNUJqlvWPNGKejUjPiy">支撑底座</b>：LeanBridge/MCP 编译后端（Mathlib 闭包 · sorry/axiom 拦截）｜LeanSearch v2 前提检索｜定理/引理跨题记忆｜单题 1200s · 全卷 6.25h 预算</div>
+<div id="wrap" data-page-node-id="aJirTUElIKpWktPTasxOMK"><svg id="dg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2516 500" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,sans-serif" role="img" data-page-node-id="CMCqmQ2ncDx0zDP7eyFTVC"><defs data-page-node-id="S0ab0SCZYPTeNR71aLyYCF"><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="encUcSj9cSmC3TMrcC25LB"><path d="M0,0 L10,5 L0,10 z" fill="#1f2430" data-page-node-id="l0Jvo3utb1z3qvoimK5sKb"/></marker><marker id="ah-emph" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="m7ghj4jVgEljA9aU8l6HKQ"><path d="M0,0 L10,5 L0,10 z" fill="#3d7eff" data-page-node-id="NHpYiJw9ONkdChUiHZGP5Y"/></marker><marker id="ah-sec" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="BZedee2qvqXREunHdUGkq3"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626" data-page-node-id="JGy1HtNMOMsRk8kstyuXZz"/></marker></defs><rect class="dg-bg" width="2516" height="500" fill="#f7f8fa" data-page-node-id="FXArpArY32uRHyug74LrXK"/><text class="dg-ink" x="28" y="34" font-size="19" font-weight="700" data-page-node-id="TpCVJNQ7sGcxvq0CCNDyxg">MathPilot 智能体框架</text><text class="dg-muted" x="28" y="56" font-size="12.5" data-page-node-id="6vutqutGdtyqxFxUuB0ehK">两阶段 Lean 主链路（①题目理解 → ②答案闸门）× 生成-验证-精炼循环 · 主模型 Intern-S2</text><rect class="lane" x="28" y="92.0" width="2460.0" height="106.0" rx="10" fill="#e5e8ee" fill-opacity="0.35" data-page-node-id="8fEuyiB8ossAWcdArKFBRb"/><text class="dg-ink" x="44" y="114.0" font-size="12.5" font-weight="600" fill-opacity="0.72" data-page-node-id="0aV7dcXPY4Dn6Nj6nOLYkY">智能体流水线（Orchestrator）</text><rect class="lane" x="28" y="210.0" width="2460.0" height="106.0" rx="10" fill="#e5e8ee" fill-opacity="0.35" data-page-node-id="EBOfqpq6hDdb0k2tN58qUN"/><text class="dg-ink" x="44" y="232.0" font-size="12.5" font-weight="600" fill-opacity="0.72" data-page-node-id="pT42bn3UNbmjCl9AXGwVOn">Lean 工具与记忆支撑</text><path class="edge" data-from="entry" data-to="route" data-id="e1" d="M228.0,151.0 L296.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="B1KgZu0P8hFK46ccC1e2ZU"/><path class="edge" data-from="route" data-to="preverify" data-id="e2" d="M468.0,151.0 L536.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="oX6SgCRaapZfSmsFRPA8Nq"/><path class="edge" data-from="preverify" data-to="plan" data-id="e3" d="M708.0,151.0 L776.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="eWCmbvc1soQLqGz3m1azsF"/><rect x="712.0" y="138.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="0EjTDVXRwaqWWPan8rCgqG"/><text class="elabel" x="742.0" y="151.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="VQ8i2jEyqLeTLu2S1tDaqy">理解确认</text><path class="edge" data-from="plan" data-to="solve" data-id="e4" d="M948.0,151.0 L1016.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="lLc8PKAUuMpk5C2iXNiwb9"/><path class="edge" data-from="solve" data-to="leanmid" data-id="e5" d="M1188.0,151.0 L1256.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="wF2iJilAvZnKNqidy9dBm0"/><rect x="1198.0" y="138.0" width="48.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="Zwl6I4NQNoh01ZBOXYHhiN"/><text class="elabel" x="1222.0" y="151.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="rDlC5oAz9BDbDGoy1m6IA4">候选集</text><path class="edge" data-from="leanmid" data-to="verify" data-id="e6" d="M1428.0,151.0 L1496.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="q7oEoZGhpDD9OGtdIfHBrg"/><rect x="1432.0" y="138.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="EWjBlS6FgxIqmhpMH45ym1"/><text class="elabel" x="1462.0" y="151.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="rpYurlrWqrwdGRvhaD1Ohn">保留候选</text><path class="edge" data-from="verify" data-to="fmt" data-id="e7" d="M1668.0,151.0 L1736.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="pXACCrDrI7nvgrJbNRw6Jw"/><rect x="1672.0" y="138.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="zX6jxCCOXFi5ZIOUUdLLUe"/><text class="elabel" x="1702.0" y="151.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="Y6CSENoAZVid3RM9DsNrl3">有正确票</text><path class="edge" data-from="fmt" data-to="gate" data-id="e8" d="M1908.0,151.0 L1976.0,151.0" fill="none" stroke="#1f2430" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" data-page-node-id="ayunbt7uFClOZy2OhBA3cN"/><path class="edge" data-from="gate" data-to="out" data-id="e9" d="M2148.0,151.0 L2216.0,151.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)" data-page-node-id="eyWH8lNDivuB2pIvgwXgPw"/><rect x="2164.0" y="138.0" width="36.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="qyDFuYa7gIfbOSb3cOrpSl"/><text class="elabel" x="2182.0" y="151.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="dnMcLjLQtJy1bsvMVPkCc8">通过</text><path class="edge" data-from="verify" data-to="solve" data-id="r1" d="M1668.0,151.0 L1698.0,151.0 L1698.0,390.0 L1102.0,390.0 L1102.0,182.0" fill="none" stroke="#8b94a7" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" stroke-dasharray="6 5" data-page-node-id="Ld77FGGqJ5Cfi3edEZIlxs"/><rect x="1325.0" y="377.0" width="150.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="ngZSFjZ37feiHlI2F523n4"/><text class="elabel" x="1400.0" y="390.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="AFHXnc62GyObtdCcPQlcEc">0票/低置信 → 错因重生成</text><path class="edge" data-from="gate" data-to="solve" data-id="r2" d="M2148.0,151.0 L2178.0,151.0 L2178.0,404.0 L1102.0,404.0 L1102.0,182.0" fill="none" stroke="#8b94a7" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" stroke-dasharray="6 5" data-page-node-id="C3dBdXfMt0JTddjutkjVEV"/><rect x="1574.0" y="391.0" width="132.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="YGoZoqJwx6YfRk7cx9rEJy"/><text class="elabel" x="1640.0" y="404.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="CTveJaeUiGVxIsuL1XrBYA">Lean 拒 → 读反馈重做</text><path class="edge" data-from="solve" data-to="memory" data-id="u1" d="M1188.0,151.0 L1222.0,151.0 L1222.0,269.0 L1256.0,269.0" fill="none" stroke="#8b94a7" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah)" stroke-dasharray="6 5" data-page-node-id="DXqotUCoNE3PySMdHAKnHi"/><rect x="1192.0" y="197.0" width="60.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="1j1WykGuzlRh3pYQNcsJFi"/><text class="elabel" x="1222.0" y="210.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="7wTFpZceh2RpUMeHdLL1eJ">引理注入</text><path class="edge" data-from="gate" data-to="lean_tool" data-id="u2" d="M2148.0,151.0 L2178.0,151.0 L2178.0,418.0 L2062.0,418.0 L2062.0,300.0" fill="none" stroke="#3d7eff" stroke-width="1.7" stroke-linejoin="round" marker-end="url(#ah-emph)" data-page-node-id="ENndIDD7zikHxqDGAuCHAJ"/><rect x="2078.0" y="405.0" width="84.0" height="17" rx="4" fill="var(--dg-bg,#fff)" fill-opacity="0.92" data-page-node-id="oCUGFT5Hw39RYcYMtlYjvk"/><text class="elabel" x="2120.0" y="418.0" font-size="11" text-anchor="middle" fill="#8b94a7" data-page-node-id="wcZTrdX7JRLkLP01x1TdPv">最终编译验证</text><g class="node onpath" data-id="entry" tabindex="0" data-page-node-id="fGdHJBQQBlzi0kGznJBFdQ"><rect x="53.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="97UfyIHbngZ2W9JU2OHOvd"/><rect class="nbox" x="56.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="O37MGluCih1MH3BHfEO8Sx"/><text class="nlabel" x="142.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="LXzoDtrwZLKDFxnxztut1Q">题目输入</text><text class="dg-muted" x="142.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="vaD1st3AW8SyxoDRGE528j">平台注入 problem / metadata</text></g><g class="node onpath" data-id="route" tabindex="0" data-page-node-id="vrNssA3eR1bR0Is4olAqiv"><rect x="293.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="uGVkGx5BNLpTuUHoDksGSu"/><rect class="nbox" x="296.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="GXmOv0XbWyWyrQjl0TdU8o"/><text class="nlabel" x="382.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="rWHIT8OHsZixPlgqAxF0ll">题型 · 难度路由</text><text class="dg-muted" x="382.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="fti5CJLrFzNpSS2o0lEYTi">证明/解答/填空 · fast/standard/deep</text></g><g class="node onpath" data-id="preverify" tabindex="0" data-page-node-id="1RYMhzAdAJWBoCT3P9efEg"><rect x="533.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="XwEb3rHb3YPf7tBVYuiBWt"/><rect class="nbox" x="536.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="27hxwVY3ioyHc5E9TQWZcj"/><text class="nlabel" x="622.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="ITnXAT0owx6wjmdZmIw9BN">Lean 前置理解 ①</text><text class="dg-muted" x="622.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="Lx0FhCk38IHjmFUA766MkQ">题目→Lean 声明→编译验证；失败带错重理解</text></g><g class="node onpath" data-id="plan" tabindex="0" data-page-node-id="ADBTtCoYQ3JlGAKDr1Edt4"><rect x="773.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="k3IxuwfidJFZKE0gU9ckMN"/><rect class="nbox" x="776.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="JZgu5u39TQumGyj1wbDapv"/><text class="nlabel" x="862.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="JJSUZUvhroKj0rF0A6sQA5">蓝图 · 子目标规划</text><text class="dg-muted" x="862.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="59aLOPmsyz2XRVj9GktMbx">骨架质量门 · value_attack 极值证伪</text></g><g class="node onpath" data-id="solve" tabindex="0" data-page-node-id="Ox1mtne9VJBXAYCMccyGa5"><rect x="1013.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="h1QzEbBeke7Vl1ApxLvedn"/><rect class="nbox" x="1016.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="VAgGoZY3hw2bsJwZ5PGFtj"/><text class="nlabel" x="1102.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="SvCEpBwERr30LOmEoGibdF">多候选求解</text><text class="dg-muted" x="1102.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="CtlZrLWQxVR1QgL5hKH9dY">prefill 压缩 · Step2 自改进 · calc_tool · deep 三 Agent 协作</text></g><g class="node onpath" data-id="leanmid" tabindex="0" data-page-node-id="LlisVGPS9HWQV5fmdNw5Ri"><rect x="1253.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="Qnsxkzyx3vLbRyh7F0fJYf"/><rect class="nbox" x="1256.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#ede9fe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="tzuSRiWykRqWvfObf0tzJB"/><text class="nlabel" x="1342.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="l2Ef7w0OA4MQZTZ0C1VZmh">候选 Lean 预验证</text><text class="dg-muted" x="1342.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="caMZS3hFFAtrayjAzyKJRZ">top2 独立 verify · 证明题硬门禁</text></g><g class="node" data-id="memory" tabindex="0" data-page-node-id="FQBCzaZDdZcpWjvje3JEVX"><rect class="nbox" x="1256.0" y="238.0" width="172.0" height="62.0" rx="9" fill="#fef3c7" stroke="#e5e8ee" stroke-width="1.4" data-page-node-id="ipsPREIc8CNvJFgHTX4nH9"/><text class="nlabel" x="1342.0" y="273.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="auwJlUOnlrnNLXfm5X22b7">定理 / 引理记忆</text><text class="dg-muted" x="1342.0" y="292.0" font-size="10.5" text-anchor="middle" data-page-node-id="0hUfj7Ucy1fzOxBvaDftqK">跨题持久化 · 同域注入复用</text></g><g class="node onpath" data-id="verify" tabindex="0" data-page-node-id="sSK4DC7EVcDw9zsg03Xzh9"><rect x="1493.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="iwrADwvxzanSu13IBrNBBo"/><rect class="nbox" x="1496.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dbeafe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="rBrJJyQAsvqqTLchBIHGEN"/><text class="nlabel" x="1582.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="4qusG4Vhx8m185u2jzybe4">验证投票</text><text class="dg-muted" x="1582.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="jJF1mg9xOgAcmu2PfqKRib">聚类 · SymPy 代入 · 对抗证伪 · Oracle 复核</text></g><g class="node onpath" data-id="fmt" tabindex="0" data-page-node-id="SUuqtzeHIHWA9PfKf3VheD"><rect x="1733.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="LBRGkTCSFNqfq5gu9IHNmA"/><rect class="nbox" x="1736.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#ede9fe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="RfK1wKjv173h3Ca6NF3r8H"/><text class="nlabel" x="1822.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="ZZ0sl44zDZJBLCrZY2d532">答案定型</text><text class="dg-muted" x="1822.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="dO1IkQusdJlq04xYIB1098">boxed 抽取 · 截断续写 · 尾注剥离</text></g><g class="node onpath" data-id="gate" tabindex="0" data-page-node-id="yK5LnCGukCLjwJ4xxFb4ZJ"><rect x="1973.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="fGOrtDfiH47zgCrFhTtAg2"/><rect class="nbox" x="1976.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#ede9fe" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="ATJ1yRRxINGcKMKIAvQXxs"/><text class="nlabel" x="2062.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="sex7ah1n9o1ewWmOHWkjOm">Lean 最终闸门 ②</text><text class="dg-muted" x="2062.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="AVE3oKUg8VkUlzVsQof7zO">LeanSearch 前提检索 · 编译验证 · 拒则重做至 1200s</text></g><g class="node" data-id="lean_tool" tabindex="0" data-page-node-id="tmil7VZPJO4u65ixYK6jxI"><rect class="nbox" x="1976.0" y="238.0" width="172.0" height="62.0" rx="9" fill="#ede9fe" stroke="#e5e8ee" stroke-width="1.4" data-page-node-id="8WivaXz8uCcNmCCqmnt1mj"/><text class="nlabel" x="2062.0" y="273.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="8TFVZhbnDYPpYHSwMOiHSD">Lean 编译后端</text><text class="dg-muted" x="2062.0" y="292.0" font-size="10.5" text-anchor="middle" data-page-node-id="3jnvAxRmdJ4a0rKndi0Jcc">LeanBridge/MCP · Mathlib 闭包</text></g><g class="node onpath" data-id="out" tabindex="0" data-page-node-id="RuCf2xKDY0sTYukV27VanI"><rect x="2213.0" y="117.0" width="178.0" height="68.0" rx="11" fill="none" stroke="#3d7eff" stroke-width="2.4" data-page-node-id="R16zIBXVzXia1rjuESjUl1"/><rect class="nbox" x="2216.0" y="120.0" width="172.0" height="62.0" rx="9" fill="#dcfce7" stroke="#3d7eff" stroke-width="1.4" data-page-node-id="pe2kkAYstZ0OH33C6Z1aPH"/><text class="nlabel" x="2302.0" y="155.5" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="pWHt4SKNRobeC2v4eMRFqH">结果返回</text><text class="dg-muted" x="2302.0" y="174.0" font-size="10.5" text-anchor="middle" data-page-node-id="l9Dmj40WfWdOJ3K2CUnKse">答案 + 证据链 + 用时归因</text></g></svg></div>
+<div id="legend" data-page-node-id="Ee36Hg4ZdnaU02Mh94gv9m"><span data-page-node-id="6iKNpUgvAOSLpCeypPPuDX"><i style="background:#dbeafe" data-page-node-id="ajc6c52EYp72aYZhy8olUu"></i>智能体</span><span data-page-node-id="nC5bLu2VZWPrBBIo9PktW9"><i style="background:#dcfce7" data-page-node-id="BAwVeClB0j4tR7ctddhZHs"></i>服务/后端</span><span data-page-node-id="AvzmkjCBoOH9wMy3aJIR6O"><i style="background:#fef3c7" data-page-node-id="0tGbOJ0qQlHpOig89mA7cZ"></i>存储</span><span data-page-node-id="pClmnnwEn6sMvq9byrmCpt"><i style="background:#dbeafe" data-page-node-id="FajxfQH5CCsv2QD0Cpc7nO"></i>前端/入口</span><span data-page-node-id="c6xCteo3bd95MXPpMSx9g8"><i style="background:#ede9fe" data-page-node-id="btXDkKeiqs1jvwB656hHWz"></i>工具</span></div>
+<script>window.__VIEWS__=[{"id": "v1", "label": "两阶段 Lean 主链路", "focus": ["preverify", "gate"], "note": "①题目理解→Lean编译 ②答案审核→Lean闸门"}, {"id": "v2", "label": "生成-验证-精炼循环", "focus": ["solve", "verify", "gate"], "note": "0票/低置信/Loan拒 → 错因反馈重生成"}, {"id": "v3", "label": "全链路总览", "focus": ["entry", "route", "preverify", "plan", "solve", "leanmid", "verify", "fmt", "gate", "out"], "note": "主干 10 环节"}];</script>
+<script>
+(function(){
+const svg=document.getElementById('dg');
+const nodes=[...svg.querySelectorAll('.node')];
+const edges=[...svg.querySelectorAll('.edge')];
+const byId=new Map(nodes.map(n=>[n.dataset.id,n]));
+const succ=new Map(),pred=new Map();
+nodes.forEach(n=>{succ.set(n.dataset.id,[]);pred.set(n.dataset.id,[])});
+edges.forEach(e=>{const a=e.dataset.from,b=e.dataset.to;
+  if(succ.has(a)&&pred.has(b)){succ.get(a).push(b);pred.get(b).push(a);}});
+const hint=document.getElementById('hint');
+function say(t){hint.innerHTML=t;}
+function clear(){svg.classList.remove('focusing');
+  nodes.forEach(n=>n.classList.remove('hit','sel'));edges.forEach(e=>e.classList.remove('hit'));}
+
+// ── 可达集合
+function reach(id,map){const seen=new Set(),q=[id];
+  while(q.length){const c=q.pop();for(const n of map.get(c)||[])if(!seen.has(n)){seen.add(n);q.push(n);}}
+  return seen;}
+function show(ids,msg){clear();svg.classList.add('focusing');
+  ids.forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));
+  edges.forEach(e=>{if(ids.has(e.dataset.from)&&ids.has(e.dataset.to))e.classList.add('hit');});
+  say(msg);}
+function focusNode(id){const up=reach(id,pred),dn=reach(id,succ);
+  const ids=new Set([id,...up,...dn]);show(ids,
+   `<b>${id}</b> · 上游 ${up.size} 个 / 下游 ${dn.size} 个（沿已写入的有向边，不推断未声明的关系）`);}
+
+// ── Route Probe：只在已写入的边上做 BFS，找不到就明说
+let probeA=null;
+function probe(b){if(!probeA){probeA=b;say(`起点 <b>${b}</b> 已选，再点一个节点求路径`);return;}
+  const a=probeA;probeA=null;
+  if(a===b){say('起点与终点相同，已取消');return;}
+  const prev=new Map([[a,null]]),q=[a];let found=false;
+  while(q.length){const c=q.shift();if(c===b){found=true;break;}
+    for(const n of succ.get(c)||[])if(!prev.has(n)){prev.set(n,c);q.push(n);}}
+  if(!found){clear();say(`<b>${a}</b> → <b>${b}</b>：<span style="color:#dc2626">无可达路径</span>（IR 中未写入这条链路，不临时脑补中间环节）`);
+    byId.get(a)&&byId.get(a).classList.add('sel');byId.get(b)&&byId.get(b).classList.add('sel');svg.classList.add('focusing');
+    [a,b].forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));return;}
+  const path=[];for(let c=b;c!==null;c=prev.get(c))path.unshift(c);
+  clear();svg.classList.add('focusing');
+  path.forEach(i=>byId.get(i)&&byId.get(i).classList.add('hit'));
+  const ps=new Set(path);
+  edges.forEach(e=>{for(let k=0;k<path.length-1;k++)
+    if(e.dataset.from===path[k]&&e.dataset.to===path[k+1])e.classList.add('hit');});
+  say(`路径 <b>${a} → ${b}</b>：${path.join(' → ')}（${path.length-1} 跳）`);}
+
+nodes.forEach(n=>n.addEventListener('click',ev=>{ev.stopPropagation();
+  if(ev.shiftKey)probe(n.dataset.id);else{focusNode(n.dataset.id);
+    history.replaceState(null,'','?node='+n.dataset.id);}}));
+svg.addEventListener('click',clear);
+
+// ── 搜索
+const q=document.getElementById('q');
+q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();
+  if(!v){clear();say(defHint);return;}
+  const m=nodes.filter(n=>n.dataset.id.toLowerCase().includes(v)||n.textContent.toLowerCase().includes(v));
+  if(!m.length){say('没有匹配的节点');return;}
+  clear();svg.classList.add('focusing');m.forEach(n=>n.classList.add('hit'));
+  say(`匹配 ${m.length} 个节点：${m.slice(0,8).map(n=>n.dataset.id).join('、')}${m.length>8?' …':''}`);});
+document.getElementById('probe').onclick=()=>{probeA=null;say('路径探测：按住 <kbd>Shift</kbd> 依次点击两个节点');};
+
+// ── 引导视图
+const vs=window.__VIEWS__||[];
+const sel=document.getElementById('views');
+vs.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.label;sel.appendChild(o);});
+sel.onchange=()=>{const v=vs[+sel.value];if(!v)return;show(new Set(v.focus),`<b>${v.label}</b> ${v.note||''}`);};
+
+// ── 主题 / 导出
+const T='dg-theme';
+if(localStorage.getItem(T)==='dark')document.body.classList.add('dark');
+document.getElementById('theme').onclick=()=>{document.body.classList.toggle('dark');
+  localStorage.setItem(T,document.body.classList.contains('dark')?'dark':'light');};
+document.getElementById('exp').onclick=()=>{
+  const s=new XMLSerializer().serializeToString(svg);
+  const b=new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+s],{type:'image/svg+xml'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download=(document.title||'diagram')+'.svg';a.click();URL.revokeObjectURL(a.href);};
+const defHint=document.getElementById('hint').dataset.hint;
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'){if(e.key==='Escape'){q.value='';q.dispatchEvent(new Event('input'));}return;}
+  if(e.key==='/'){e.preventDefault();q.focus();}
+  else if(e.key==='t'||e.key==='T')document.getElementById('theme').click();
+  else if(e.key==='e'||e.key==='E')document.getElementById('exp').click();
+  else if(e.key==='Escape')clear();});
+const p=new URLSearchParams(location.search).get('node');
+if(p&&byId.has(p))focusNode(p);
+})();
+</script>
+</body></html>

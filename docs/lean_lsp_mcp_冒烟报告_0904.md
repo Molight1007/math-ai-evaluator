@@ -19,7 +19,9 @@
 | 01_ok | 正确证明 ×2 | **pass**（exit 0，仅 unused var 警告，19s） | diagnostic `success:true`，1 warning @9:14（首文件冷启动 49s） | ✅ |
 | 02_unknown | **009 真题翻译**（自造常量 `Real.rts`） | **fail**：8×`Unknown constant Real.rts` 行 8/9/11/12（20s） | fail：8×error，**列级精确**（8:23/8:49/9:9/…）（38s） | ✅ |
 | 03_logic | **假上界**（009 型中段错：claim ≤170/7 为假） | **fail**：`linarith failed` @13:2 + 目标状态（20s） | fail：error @13:3 完整目标；**lean_goal@13 秒回完整 goal state**（⊢ x/(y+13)+…≤170/7） | ✅ |
-| 04_sorry | **sorry 假证明** | ⚠️ **pass（漏判！）** exit 0，仅 warning "declaration uses sorry"（19s） | diagnostic warning @6:9；**lean_verify → axioms 含 `sorryAx` → 判不可信**（27.7s） | ❌ **LeanBridge 漏，MCP 拦截** |
+| 04_sorry | **sorry 假证明** | ⚠️ 裸 lake：exit 0（仅 warning）；**注意 lean_bridge._compile_lean 源码侧已拦 sorry**（见下注） | diagnostic warning @6:9；**lean_verify → axioms 含 `sorryAx` → 判不可信**（27.7s） | ✅ 语义对齐 |
+
+> **注（诚实修正 09-04）**：04 的"bridge=pass"是**裸 `lake env lean` 命令**的实测（仅反映编译器行为）；本项目 lean_bridge._compile_lean 原有「源码含 `\bsorry\b` → 判 fail」逻辑（allow_sorry=False 时），故 lean_gate 主路径**不会**把直接写 sorry 的代码判 pass。真实剩余漏洞是源码 sorry 之外的**不可信构造**（axiom/unsafe/implemented_by/skipKernelTC），lean_verify 的 axioms 检查是完整解法——已由「档 1」在 lean_bridge 补齐（2026-09-04）。
 
 ## 三、耗时画像（vs LeanBridge 每题 5-21s 全量编译）
 

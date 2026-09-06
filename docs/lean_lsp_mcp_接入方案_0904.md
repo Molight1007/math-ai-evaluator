@@ -17,18 +17,24 @@
 
 ## 二、分档实施建议（9/12 代码冻结前的时间约束）
 
-### 档 1（零 MCP 依赖，立即可做，风险≈0）——补 lean_gate 可靠性漏洞
-- 证据：lake env lean 对 `sorry` 假证 **exit=0 判 pass**（仅 warning `declaration uses 'sorry'`）→ LeanBridge/lean_gate 目前会把 sorry 证当 pass
-- 改动：lean_bridge 编译 **pass 判定加一道输出扫描**：stdout 匹配 `declaration uses 'sorry'` / `sorryAx` / `unsafe` → 判 fail（伪码 ≤10 行）
-- 收益：验证可靠性立即提升，是 lean_verify 逻辑的"穷人版"（覆盖 sorry 主威胁，不含 axioms 全查）
+### 档 1（✅ 已完成 09-04，零 MCP 依赖）——补验证可靠性漏洞
+- 证据：裸 `lake env lean` 对 `sorry` 假证 exit=0 仅 warning；lean_bridge._compile_lean 原有源码 `\bsorry\b` 检查（直接写 sorry 会拦），但 **axiom/unsafe/implemented_by/skipKernelTC 等不可信构造不在检查面**
+- 改动（已落地 agent/lean_bridge.py，三方本地同步）：pass 判定扩展为不可信构造集合扫描 + 输出侧 `uses \`sorry\`` 兜底；allow_sorry=True 声明模式不变；19 单测全绿 + 真实 lake 编译 5 用例冒烟通过（clean pass / sorry 拦 / **axiom 拦** / **unsafe 拦**）
+- 收益：验证可靠性漏洞就地补齐（lean_verify 完整 axioms 检查仍是档 2/后续增强选项）
 
-### 档 2（引 MCP，实验性可选后端）——定位/错因增强
-- 落地：lean_bridge 新增 `LeanMcpBackend`（mcp stdio client 封装：懒启动单实例 + 请求超时 + 失败自动回落 bridge）
-- 三处消费点改造均保持输出协议不变：
-  - preverify / verify_answer / lean_gate 的 fail 诊断 → 附带 lean_goal 定位文本
-  - lean_gate deep 档多候选 → 同一 session 顺序判定（省进程启动，后续文件 19-26s/个）
-  - 修复重试轮（refiner/self-improve 改代码后重判）→ LSP 增量秒回
-- **不进主流程默认路径**：仅在本地评测 A/B 生效，平台/提交版仍 bridge
+### 档 2（✅ 已完成 09-04，实验可选后端）——定位/错因增强
+- 落地（agent/lean_bridge.py 改动 + 新增 agent/lean_mcp_proxy.py）：
+  - 后端开关：环境变量 `LEAN_BACKEND=mcp` 或 config.lean_backend="mcp"（默认 bridge 不动）；
+    mcp 仅在 **lake 工程目录**分发（平台/临时目录直编自动回落 bridge）
+  - **零主进程依赖**：mcp 判定经子进程代理（venv python 跑 lean_mcp_proxy.py，JSONL 一问一答），
+    主进程（3.14）不装 mcp SDK；venv 探测 `~/leanlsp-venv` / 环境变量 LEAN_MCP_PYTHON
+  - 判定语义与 bridge 完全对齐（error items → fail；allow_sorry 声明模式；
+    档1 不可信构造扫描共用 `_scan_untrusted`）；**附加 lean_goal 定位**：fail 时把首个错误行
+    的目标状态拼进 error（`--- [lean-lsp-mcp] 首个错误行目标状态 ---`），喂 _analyze_error
+  - 可靠性：proxy 进程崩溃/超时/无 venv → 自动回落 bridge；模块级单例 + 线程锁（多 worker 串行化）
+- 验证：**23 个新单测全绿 + 全量 299 passed 无回归**；真实冒烟 bridge vs mcp **7/7 判定一致**
+  （clean/sorry/axiom/unsafe/009 翻译错/假上界/语法错），goal 定位段实测输出
+- 使用：本地评测设 `LEAN_BACKEND=mcp` 即走 LSP 后端；平台不设（无 venv）自动 bridge
 
 ## 三、Go/No-Go 判据（Step4 验证后定）
 
@@ -47,6 +53,8 @@
 
 ## 五、时间与风险
 
-- 档 1：≤1h 改动 + 45 题 A/B 验证（2-3h，9/12 前可完成）
-- 档 2：1-2 天改动 + wrong10b/45 题 A/B；**若 9/10 前无正增益证据 → 砍掉**，材料用档 1 + Step2 冒烟证据
-- 主风险：MCP 常驻进程在长评测（2-3h）中的稳定性（看门狗/超时回落需做好）
+- 档 1：✅ 已完成（09-04）：改动 + 19 回归 + 真实编译 5 用例冒烟；三方本地同步，未 push
+- 档 2：✅ 代码适配完成（09-04）：23 新单测 + 全量 299 passed + bridge/mcp 真实 7 用例判定一致；
+  三方本地同步，未 push。**A/B 评测待用户安排**（wrong10b/45 题，本地 `LEAN_BACKEND=mcp` 对照）；
+  若 A/B 无正增益证据 → 材料仍可用"档 1 + 冒烟/对照证据"，档 2 降级为可选工具
+- 主风险：MCP 常驻进程在长评测（2-3h）中的稳定性（看门狗/超时回落已内建：崩溃自动回落 bridge）

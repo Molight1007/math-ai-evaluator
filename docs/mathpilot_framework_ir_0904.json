@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MathPilot 智能体框架",
+    "subtitle": "两阶段 Lean 主链路（①题目理解 → ②答案闸门）× 生成-验证-精炼循环 · 主模型 Intern-S2",
+    "hint": "<b>支撑底座</b>：LeanBridge/MCP 编译后端（Mathlib 闭包 · sorry/axiom 拦截）｜LeanSearch v2 前提检索｜定理/引理跨题记忆｜单题 1200s · 全卷 6.25h 预算",
+    "visual_preset": "classic",
+    "quality_profile": "standard",
+    "views": [
+      {"id": "v1", "label": "两阶段 Lean 主链路", "focus": ["preverify", "gate"], "note": "①题目理解→Lean编译 ②答案审核→Lean闸门"},
+      {"id": "v2", "label": "生成-验证-精炼循环", "focus": ["solve", "verify", "gate"], "note": "0票/低置信/Loan拒 → 错因反馈重生成"},
+      {"id": "v3", "label": "全链路总览", "focus": ["entry", "route", "preverify", "plan", "solve", "leanmid", "verify", "fmt", "gate", "out"], "note": "主干 10 环节"}
+    ]
+  },
+  "lanes": [
+    {"id": "orch", "label": "智能体流水线（Orchestrator）", "members": ["entry", "route", "preverify", "plan", "solve", "leanmid", "verify", "fmt", "gate", "out"]},
+    {"id": "supp", "label": "Lean 工具与记忆支撑", "members": ["memory", "lean_tool"]}
+  ],
+  "nodes": [
+    {"id": "entry", "label": "题目输入", "lane": "orch", "type": "frontend", "layer": 0, "note": "平台注入 problem / metadata"},
+    {"id": "route", "label": "题型 · 难度路由", "lane": "orch", "type": "agent", "layer": 1, "note": "证明/解答/填空 · fast/standard/deep"},
+    {"id": "preverify", "label": "Lean 前置理解 ①", "lane": "orch", "type": "agent", "layer": 2, "note": "题目→Lean 声明→编译验证；失败带错重理解"},
+    {"id": "plan", "label": "蓝图 · 子目标规划", "lane": "orch", "type": "agent", "layer": 3, "note": "骨架质量门 · value_attack 极值证伪"},
+    {"id": "solve", "label": "多候选求解", "lane": "orch", "type": "agent", "layer": 4, "note": "prefill 压缩 · Step2 自改进 · calc_tool · deep 三 Agent 协作"},
+    {"id": "leanmid", "label": "候选 Lean 预验证", "lane": "orch", "type": "tool", "layer": 5, "note": "top2 独立 verify · 证明题硬门禁"},
+    {"id": "verify", "label": "验证投票", "lane": "orch", "type": "agent", "layer": 6, "note": "聚类 · SymPy 代入 · 对抗证伪 · Oracle 复核"},
+    {"id": "fmt", "label": "答案定型", "lane": "orch", "type": "tool", "layer": 7, "note": "boxed 抽取 · 截断续写 · 尾注剥离"},
+    {"id": "gate", "label": "Lean 最终闸门 ②", "lane": "orch", "type": "tool", "layer": 8, "note": "LeanSearch 前提检索 · 编译验证 · 拒则重做至 1200s"},
+    {"id": "out", "label": "结果返回", "lane": "orch", "type": "backend", "layer": 9, "note": "答案 + 证据链 + 用时归因"},
+    {"id": "memory", "label": "定理 / 引理记忆", "lane": "supp", "type": "database", "layer": 5, "note": "跨题持久化 · 同域注入复用"},
+    {"id": "lean_tool", "label": "Lean 编译后端", "lane": "supp", "type": "tool", "layer": 8, "note": "LeanBridge/MCP · Mathlib 闭包"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "entry", "to": "route", "variant": "default", "role": "main"},
+    {"id": "e2", "from": "route", "to": "preverify", "variant": "default", "role": "main"},
+    {"id": "e3", "from": "preverify", "to": "plan", "label": "理解确认", "variant": "default", "role": "main"},
+    {"id": "e4", "from": "plan", "to": "solve", "variant": "default", "role": "main"},
+    {"id": "e5", "from": "solve", "to": "leanmid", "label": "候选集", "variant": "default", "role": "main"},
+    {"id": "e6", "from": "leanmid", "to": "verify", "label": "保留候选", "variant": "default", "role": "main"},
+    {"id": "e7", "from": "verify", "to": "fmt", "label": "有正确票", "variant": "default", "role": "main"},
+    {"id": "e8", "from": "fmt", "to": "gate", "variant": "default", "role": "main"},
+    {"id": "e9", "from": "gate", "to": "out", "label": "通过", "variant": "emphasis", "role": "main"},
+    {"id": "r1", "from": "verify", "to": "solve", "label": "0票/低置信 → 错因重生成", "variant": "return", "role": "return"},
+    {"id": "r2", "from": "gate", "to": "solve", "label": "Lean 拒 → 读反馈重做", "variant": "return", "role": "return"},
+    {"id": "u1", "from": "solve", "to": "memory", "label": "引理注入", "variant": "dashed", "role": "async"},
+    {"id": "u2", "from": "gate", "to": "lean_tool", "label": "最终编译验证", "variant": "emphasis", "role": "main"}
+  ],
+  "mainPath": ["entry", "route", "preverify", "plan", "solve", "leanmid", "verify", "fmt", "gate", "out"]
+}
