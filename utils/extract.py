@@ -147,11 +147,28 @@ def extract_final_answer(text: str) -> str:
     让调用方（solver.py:200、formatter 的 fallback）有机会换用其它候选，
     而不是把定界符当答案提交给判分器。
     历史 45 条里 4 条属于此类，是纯工程可修的丢分。
+    2026-09-06 P4：出口增加 calc 工具标记剥除——模型截断在 `<calc>` 处时
+    产物是裸标记（comb-022 实测 pred='<calc>' 整题格式丢分），resolve 正则需要
+    闭合标签所以不处理，这里统一剥除后按空壳走调用方兜底。
     """
     ans = _extract_final_answer_impl(text)
+    if ans:
+        ans = _strip_calc_markers(ans)
     if ans and not _has_answer_content(ans):
         return ""
     return ans
+
+
+_CALC_BLOCK_RE = re.compile(r"<calc\b[^>]*>.*?</calc>", re.DOTALL | re.IGNORECASE)
+_CALC_STRAG_RE = re.compile(r"</?calc\b[^>]*>?", re.IGNORECASE)
+
+
+def _strip_calc_markers(text: str) -> str:
+    """剥除答案中的 calc 工具标记（完整块与裸 <calc/</calc> 残留）。"""
+    if not text:
+        return text
+    text = _CALC_BLOCK_RE.sub("", text)
+    return _CALC_STRAG_RE.sub("", text).strip()
 
 
 def _extract_final_answer_impl(text: str) -> str:

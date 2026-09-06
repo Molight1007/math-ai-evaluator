@@ -246,8 +246,20 @@ class SubGoalSolverAgent(BaseAgent):
         # ThreadPoolExecutor 并发 2 时同一实例同时服务多题，self 属性会竞态；
         # ctx 每题独立）。orchestrator 可能多次调用 run()（2.7 / deep 3_solve /
         # 3.5），共享 ctx._subgoal_stage_start，避免"每次调用重置预算"把总时间再吃一遍。
-        stage_budget = float(
-            getattr(self.config, "subgoal_stage_budget_sec", 750.0) or 0.0)
+        # 2026-09-06 P1（用户拍板）：子目标预算按档拆分——deep 保留 750s
+        # （难题深度分解值），standard/fast 用 450s（省下预算流向 solve/verify）。
+        # 依据：2.7 子目标全档均 ~587s 是最大黑洞，standard 档 geom-051 曾 1073s
+        # 仍错（post-fix 靠 3_solve 做对）——standard 题子目标分解性价比存疑。
+        # 兼容：config 未显式设 std 档字段（测试 SimpleNamespace）→ 回退主字段
+        # 语义（主字段=0 表示停用固定预算，仅 tail_reserve 兜底）。
+        _tier_now = str(getattr(ctx, "tier", "standard") or "standard")
+        if _tier_now == "deep":
+            _raw_budget = getattr(self.config, "subgoal_stage_budget_sec", 750.0)
+        else:
+            _raw_budget = getattr(self.config, "subgoal_stage_budget_sec_std", None)
+            if _raw_budget is None:
+                _raw_budget = getattr(self.config, "subgoal_stage_budget_sec", 750.0)
+        stage_budget = float(_raw_budget or 0.0)
         stage_start = float(getattr(ctx, "_subgoal_stage_start", 0.0) or 0.0)
         if not stage_start:
             stage_start = time.time()

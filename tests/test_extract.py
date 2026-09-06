@@ -149,3 +149,34 @@ class StripContinuationMarkersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CalcMarkerStripTest(unittest.TestCase):
+    """2026-09-06 P4：模型截断在 <calc> 处 → 裸 calc 标记污染答案（comb-022
+    pred='<calc>' 整题格式丢分实测）；resolve 正则需要闭合标签不处理，
+    extract_final_answer 出口统一剥除后按空壳走调用方兜底。"""
+
+    def _imports(self):
+        from utils.extract import _strip_calc_markers, extract_final_answer
+        return _strip_calc_markers, extract_final_answer
+
+    def test_bare_calc_is_empty(self) -> None:
+        _, extract = self._imports()
+        self.assertEqual(extract("<calc>"), "")
+        self.assertEqual(extract("<calc>\n"), "")
+        self.assertEqual(extract("</calc>"), "")
+
+    def test_calc_in_prose_stripped(self) -> None:
+        strip, _ = self._imports()
+        out = strip("先算 <calc>1/2+1/3</calc> 得 5/6")
+        self.assertNotIn("calc", out)
+        self.assertIn("先算", out)
+        self.assertIn("5/6", out)
+
+    def test_resolved_text_untouched(self) -> None:
+        _, extract = self._imports()
+        self.assertEqual(extract("【最终答案】: \\boxed{1960000}"), "\\boxed{1960000}")
+
+    def test_normal_number_untouched(self) -> None:
+        _, extract = self._imports()
+        self.assertEqual(extract("25502500"), "25502500")
