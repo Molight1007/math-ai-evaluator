@@ -555,7 +555,14 @@ class Orchestrator(BaseAgent):
 
             self._stage_start(ctx, "4.5_oracle")
             # 4.5) deep 档：AnswerOracle 客观复核 best_cluster（区别于投票同源自评）
-            if tier == 'deep' and getattr(ctx, '_best_cluster', None) is not None:
+            # 2026-09-06 超时修复（验证暴露残留洞）：oracle 复核单次可达 300s+，
+            # 原只在内部查 is_time_critical（deadline-60s）→ algebra-003 修复后
+            # verify 提前完成反而给 oracle 打开 365s 烧穿窗口（elapsed 1402s）。
+            # oracle 是"4_verify 之后的复核增强"，到生成侧软截止即弃——
+            # verify 已投过票，放弃复核不损失主验证，只少一层 deep 深查。
+            if (tier == 'deep'
+                    and getattr(ctx, '_best_cluster', None) is not None
+                    and not ctx.gen_time_up()):
                 self._oracle_review_best(ctx, ver_result, tier_votes)
 
             self._stage_start(ctx, "4.6_adv")
