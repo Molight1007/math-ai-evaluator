@@ -1,0 +1,3 @@
+[submodule "vendor/lean-toolchain"]
+	path = vendor/lean-toolchain
+	url = https://gitcode.com/csust-qiming-math/MathPilot-lean-toolchain
