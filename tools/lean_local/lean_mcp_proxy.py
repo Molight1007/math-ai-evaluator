@@ -42,6 +42,49 @@ _SERVER_CANDIDATES = (
     shutil.which("lean-lsp-mcp") or "",
 )
 
+# =====================================================================
+# 联网工具禁用（2026-09-06 比赛禁网对齐）
+# ---------------------------------------------------------------------
+# lean-lsp-mcp 默认注册 5 个「远程检索」工具，一旦被调用就会出网访问
+# 共享公共服务：
+#   lean_leansearch     → https://leansearch.net/search
+#   lean_loogle         → https://loogle.lean-lang.org（远程形态）
+#   lean_leanfinder     → huggingface 托管端点
+#   lean_state_search   → https://premise-search.com
+#   lean_hammer_premise → http://leanpremise.net
+# 赛事平台无外网，本地评测若悄悄用这些工具成绩会虚高。本代理作为
+# lean-lsp-mcp 的唯一启动入口，一律禁用上述工具（官方 LEAN_MCP_DISABLED_TOOLS
+# 机制：直接从工具注册表移除，客户端根本拿不到、无法调用）；
+# 再注入「黑洞代理」（死端口）做纵深防御——即使未来某条代码路径漏网发起
+# urllib/httpx 请求也会立即 connection refused 快速失败，绝不静默出网。
+# 本地 LSP 诊断（lean_diagnostic_messages / lean_goal / lean_build /
+# lean_local_search 等）走 stdio/文件，不经代理，不受影响。
+# 调参需要临时放行远程检索时：设环境变量 LEAN_MCP_ALLOW_NET=1。
+# =====================================================================
+_NET_TOOLS = ("lean_leansearch,lean_loogle,lean_leanfinder,"
+              "lean_state_search,lean_hammer_premise")
+_ALLOW_NET_ENV = "LEAN_MCP_ALLOW_NET"
+_BLACKHOLE_PROXY = "http://127.0.0.1:9"   # 死端口：连接立即被拒（快速失败）
+
+
+def _server_env() -> dict:
+    """构造传给 lean-lsp-mcp server 的环境（默认禁网；ALLOW_NET=1 放行）。"""
+    env = dict(os.environ)
+    allow = (os.environ.get(_ALLOW_NET_ENV, "") or "").strip().lower()
+    if allow in ("1", "true", "yes"):
+        return env
+    # 1) 官方禁用机制：合并用户已有的 LEAN_MCP_DISABLED_TOOLS，不覆盖丢失
+    existing = (env.get("LEAN_MCP_DISABLED_TOOLS", "") or "").strip()
+    merged = _NET_TOOLS if not existing else existing + "," + _NET_TOOLS
+    env["LEAN_MCP_DISABLED_TOOLS"] = merged
+    # 2) 黑洞代理兜底（覆盖父进程可能带出的任何代理设置）
+    env["HTTP_PROXY"] = _BLACKHOLE_PROXY
+    env["HTTPS_PROXY"] = _BLACKHOLE_PROXY
+    env["ALL_PROXY"] = _BLACKHOLE_PROXY
+    env.pop("NO_PROXY", None)
+    env.pop("no_proxy", None)
+    return env
+
 
 def _resolve_server() -> str:
     for c in _SERVER_CANDIDATES:
@@ -154,8 +197,12 @@ async def amain() -> None:
     from mcp.client.stdio import stdio_client
 
     server = _resolve_server()
+    env = _server_env()
+    disabled = (env.get("LEAN_MCP_DISABLED_TOOLS", "") or "").strip()
     params = StdioServerParameters(
-        command=server, args=[], env=dict(os.environ))
+        command=server,
+        args=(["--disable-tools", disabled] if disabled else []),
+        env=env)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

@@ -60,11 +60,17 @@ def _detect_lean_executable() -> str:
     """自动探测本地 Lean 编译器（lean.exe）的绝对路径。
 
     优先级（命中即返回）：
+      0) 环境变量 LEAN_EXE（MathPilot-lean-toolchain 调用约定协议，
+         指向 vendor/lean-toolchain/lean/lean-4.31.0/bin/lean.exe）
       1) elan 管理的当前工具链 lean.exe（C:/Users/<user>/.elan/toolchains/.../bin/lean.exe）
       2) Windows: <root>/lean下载版/lean-toolchain/bin/lean.exe
       3) Linux:   <root>/deploy/lean-cache/lean-4.31.0-linux/bin/lean
+      4) vendor 挂载：<root>/vendor/lean-toolchain/lean/lean-4.31.0/bin/lean(.exe)
     返回空串表示未探测到（调用方回退 "lake"）。
     """
+    exe_env = (os.environ.get("LEAN_EXE", "") or "").strip()
+    if exe_env and os.path.isfile(exe_env):
+        return exe_env
     # elan 工具链（与实际 lake env 使用的版本一致；Windows 带 .exe，Linux 不带）
     elan_toolchains = os.path.expanduser(
         r"~\.elan\toolchains\leanprover--lean4---v4.31.0\bin\lean.exe")
@@ -78,9 +84,22 @@ def _detect_lean_executable() -> str:
                      "lean-4.31.0-linux", "bin", "lean"),
         # setup_lean.sh 的 zip 解压路径（deploy/lean-4.31.0-linux/bin/lean）
         os.path.join(_project_root(), "deploy", "lean-4.31.0-linux", "bin", "lean"),
+        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain submodule 形态）
+        os.path.join(_project_root(), "vendor", "lean-toolchain", "lean",
+                     "lean-4.31.0", "bin", "lean.exe"),
+        os.path.join(_project_root(), "vendor", "lean-toolchain", "lean",
+                     "lean-4.31.0", "bin", "lean"),
+        # 2026-09-07 root 形态（MathPilot-lean-toolchain 成为主仓，代码与
+        # lean/mathlib 同根：<root>/lean/lean-4.31.0-linux（平台 Linux）
+        # 与 <root>/lean/lean-4.31.0（Windows 开发）双树并存按 OS 命中）
+        os.path.join(_project_root(), "lean", "lean-4.31.0-linux", "bin", "lean"),
+        os.path.join(_project_root(), "lean", "lean-4.31.0", "bin", "lean.exe"),
+        os.path.join(_project_root(), "lean", "lean-4.31.0", "bin", "lean"),
     ]
     for c in candidates:
-        if os.path.isfile(c):
+        # Windows 只接受 .exe（无后缀 lean 为 ELF，Windows 不可执行——
+        # root 形态双树并存时 lean-4.31.0-linux/bin/lean 真实存在会误命中）
+        if os.path.isfile(c) and (os.name != "nt" or c.lower().endswith(".exe")):
             return c
     return ""
 
@@ -89,17 +108,25 @@ def _detect_lean_project_dir() -> str:
     """自动探测带 Mathlib 的 Lean 工程目录（编译 verify.lean 时 Mathlib 真正可用）。
 
     候选顺序：
+      0) 环境变量 LEAN_PROJECT_PATH（lean-lsp-mcp 调用约定协议）
       1) 已下载并独立编译好的 mathlib 仓库根目录 D:/mathlib4-last_bump_for_v4.31.0
          （独立 Lake 工程，含完整 Mathlib 源码与构建产物 .lake/build）；
       2) <root>/lean下载版/test_mathlib（仓库内工程，需其依赖 mathlib 已编译）。
+      3) vendor 挂载的 mathlib 闭包 <root>/vendor/lean-toolchain/mathlib/closure-full
+         （非 lake 工程 → _compile 自动走 lean.exe 直编 + LEAN_PATH，见 _compile()）。
     返回空串表示未挂载。
     """
     candidates = [
+        (os.environ.get("LEAN_PROJECT_PATH", "") or "").strip(),
         "D:/mathlib4-last_bump_for_v4.31.0",
         os.path.join(_project_root(), "lean下载版", "test_mathlib"),
+        os.path.join(_project_root(), "vendor", "lean-toolchain",
+                     "mathlib", "closure-full"),
+        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
+        os.path.join(_project_root(), "mathlib", "closure-full"),
     ]
     for c in candidates:
-        if os.path.isdir(c):
+        if c and os.path.isdir(c):
             return c
     return ""
 
@@ -128,6 +155,11 @@ def _mathlib_tactic_entry_available() -> bool:
         os.path.join(proj, "deploy", "mathlib-olean"),
         os.path.join(proj, "data", "mathlib-closure-core"),
         os.path.join(proj, "data", "mathlib-closure"),
+        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
+        os.path.join(proj, "vendor", "lean-toolchain",
+                     "mathlib", "closure-full"),
+        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
+        os.path.join(proj, "mathlib", "closure-full"),
     ]
     return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
                for r in roots)
@@ -247,6 +279,11 @@ LEAN_ANSWER_VERIFY_SYSTEM = """你是一位 Lean 4 形式化专家。你的任�
    - 数字答案：example : <关键计算> = <最终答案> := by norm_num
      （如最终答案=7 → example : (1 + 2 * 3 : ℚ) = 7 := by norm_num）
    - 表达式答案：右侧写最终答案，左侧写推理中实际出现的中间表达式。
+   - **先剥外壳取数值原值**：最终答案常带 \\boxed{} / 中文说明 / 分数等外壳
+     （如 \\boxed{3000}、\\dfrac{2617}{2618}、"最大值为 3000"），锚定的是
+     **数值原值**——先把外壳剥掉取出数值（3000 / 2617 / 2618），
+     再写 ``example : <关键计算> = <该数值> := by <tactic>``，
+     结论侧逐字包含该数值；禁止把不含答案数值的式子当验证。
    - **禁止**把你自己重算的结果当右侧：USER 说最终答案是 4，你就必须写
      ``= 4``，**禁止**写 ``= 3`` 或你算出的任何其他值——否则等于没验证答案。
    - **禁止**恒等式作弊（如 example : (a : ℚ) = a，这验证不了任何计算）。
@@ -775,9 +812,14 @@ class LeanBridge:
 
     @property
     def _lean_executable(self) -> str:
-        """取配置中的 Lean 可执行文件名，缺省 "lake"。"""
+        """取配置中的 Lean 可执行文件名，缺省自动探测（LEAN_EXE env /
+        vendor/lean-toolchain / elan 命中即用），都无则回退 "lake"。"""
         cfg = getattr(self.config, "config", self.config)
-        exe = getattr(cfg, "lean_executable", "") or _DEFAULT_LEAN_EXECUTABLE
+        exe = (getattr(cfg, "lean_executable", "") or "").strip()
+        if not exe:
+            # 2026-09-06：探测链认 LEAN_EXE env 与 vendor 挂载，保证
+            # lean_available 探测的是真实 lean.exe（而非仅 PATH 上的 lake）。
+            exe = _detect_lean_executable() or _DEFAULT_LEAN_EXECUTABLE
         return exe
 
     @property
@@ -836,6 +878,9 @@ class LeanBridge:
             roots += [
                 os.path.join(proj, "deploy", "mathlib-olean"),
                 os.path.join(proj, "data", "mathlib-closure"),
+                # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
+                os.path.join(proj, "vendor", "lean-toolchain",
+                             "mathlib", "closure-full"),
             ]
             for r in roots:
                 # core 闭包无聚合入口，用具体模块 olean 判定；full 闭包两者皆有
@@ -1107,16 +1152,19 @@ class LeanBridge:
         lean_code = _strip_code_fence(str(parsed.get("lean_code", "") or ""))
         if not lean_code:
             return None
-        # 数字锚定兜底校验：answer 为纯数字时，lean_code 必须包含该数字原值，
+        # 数字锚定兜底校验：答案数字（剥 \boxed 壳后）必须出现在 lean_code，
         # 否则视为「没有验证答案」（书生自己重算而非审核 USER 答案），带反馈重试一次。
         if not _answer_embedded(lean_code, answer):
+            _anchor = _unwrap_answer(answer) or (answer or "").strip()
             logger.warning(
-                "[LeanBridge] 答案数字 %r 未出现在验证代码（书生自算而非审核答案），重试",
-                (answer or "").strip()[:40])
-            retry_hint = ("\n## 上一轮输出无效：你生成的验证代码没有包含最终答案原值 "
-                          + (answer or "").strip()[:60]
-                          + "。请重新生成，结论侧必须逐字写该答案："
-                            "example : <关键计算> = <该答案> := by <tactic>\n")
+                "[LeanBridge] 答案 %r 的数值未出现在验证代码（书生自算而非审核答案），重试",
+                _anchor[:40])
+            retry_hint = ("\n## 上一轮输出无效：你生成的验证代码没有包含最终答案的数值原值 "
+                          + _anchor[:60]
+                          + "。请重新生成：先把最终答案的数值提取出来（如 \\boxed{3000} "
+                            "锚 3000、\\dfrac{2617}{2618} 锚 2617 / 2618），"
+                            "再写 example : <关键计算> = <该数值> := by <tactic>，"
+                            "结论侧必须逐字包含该数值原值。\n")
             retry_msgs = [
                 {"role": "system", "content": LEAN_ANSWER_VERIFY_SYSTEM},
                 {"role": "user", "content": LEAN_ANSWER_VERIFY_USER.format(
@@ -1682,25 +1730,53 @@ def _parse_analysis_json(raw: str) -> Optional[dict]:
     return None
 
 
+def _unwrap_answer(answer: str) -> str:
+    """剥最终答案的 LaTeX 外壳（\\boxed{...} 可多层嵌套），露出数值核心。
+
+    2026-09-07（#52 模板化）：LLM 最终答案常带 \\boxed{} / \\dfrac{} 壳，
+    ``_answer_embedded`` 的纯数字 fullmatch 对带壳答案失效 → 壳下数字漏检，
+    自证代码绕过锚定、到编译后 _cc 交叉核对才被拦（nt-093 答对 3000 却
+    proof_invalid 实证）。先剥壳再核对，口径与 _cross_check 统一。
+    """
+    core = (answer or "").strip()
+    for _ in range(5):
+        m = re.fullmatch(r"\\boxed\{(.*)\}", core, re.S)
+        if not m:
+            break
+        core = m.group(1).strip()
+    return core
+
+
 def _answer_embedded(lean_code: str, answer: str) -> bool:
     """校验书生生成的验证代码是否真正锚定了 USER 最终答案。
 
     防止「书生自己重算、无视 USER 最终答案」的假验证（验证自己算的结果
     而非审核答案）：
-    - 纯数字答案：lean_code 必须包含该数字原值（数字边界，防 3 匹配 13）；
-    - 含字母 token 的答案（如 x=1、3n+1）：lean_code 必须引用至少一个答案 token
-      （否则说明它没在验证这个答案）；
-    - 纯中文/符号答案（无字母）：无法代码侧校验，靠提示词 error 路径兜底。
+    - 先剥 \\boxed{} 壳（#52，2026-09-07）——带壳答案的壳下数字不再漏检；
+    - 纯数字答案（含小数）：代码必须包含该数字原值（数字边界，防 3 匹配 13）；
+    - 含字母 token 的答案（如 x=1、3n+1）：代码必须引用至少一个答案 token；
+    - 其他形态（中文句里的数字、分数 LaTeX）：提取全部数字（排除 0/1/2
+      通用小整数）→ 代码须含至少一个（数字边界）；无有效数字则退化 token 检查；
+    - 纯中文/符号答案（无数字无 token）：无法代码侧校验，靠提示词 error
+      路径兜底放行。
     """
-    a = (answer or "").strip()
-    if not a:
+    core = _unwrap_answer(answer)
+    if not core:
         return False
-    # 纯数字 → 数字锚定（带边界）
-    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", a):
-        pat = r"(?<![0-9])" + re.escape(a) + r"(?![0-9])"
+    # 纯数字（整数/小数）→ 数字锚定（带边界，保留小值如 2 的精确检查）
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", core):
+        pat = r"(?<![0-9])" + re.escape(core) + r"(?![0-9])"
         return re.search(pat, lean_code or "") is not None
+    # 非纯数字形态：提取数字核对（排除 0/1/2 通用小整数的假匹配）
+    ans_nums = set(re.findall(r"\d+", core)) - {"0", "1", "2"}
+    if ans_nums:
+        code = lean_code or ""
+        for n in ans_nums:
+            if re.search(r"(?<![0-9])" + re.escape(n) + r"(?![0-9])", code):
+                return True
+        return False
     # 含字母 token 的答案 → 代码必须引用至少一个答案 token
-    ans_tokens = set(re.findall(r"[A-Za-z_]\w*", a))
+    ans_tokens = set(re.findall(r"[A-Za-z_]\w*", core))
     if ans_tokens:
         code_tokens = set(re.findall(r"[A-Za-z_]\w*", lean_code or ""))
         return bool(ans_tokens & code_tokens)

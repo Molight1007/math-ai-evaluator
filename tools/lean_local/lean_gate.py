@@ -106,6 +106,14 @@ class LeanGate:
         return bool(getattr(self.config, "lean_gate_strict", False))
 
     @property
+    def _unknown_stop(self) -> int:
+        """连续 N 个 unknown 后止损（B，2026-09-07）：剩余候选不再逐个
+        整题 verify。同题同翻译器，连续 unknown = 验证器对该题失效（翻译/
+        形式化失败有传染性），再验也只是重复烧 LLM+编译时间；PB-002 实证
+        六候选整题 verify 563s 全 unknown 白烧 9 分钟。0 = 关闭（逐候选全验）。"""
+        return int(getattr(self.config, "lean_gate_unknown_stop", 2) or 0)
+
+    @property
     def _bridge_inst(self) -> LeanBridge | None:
         if self._bridge is None:
             try:
@@ -175,6 +183,8 @@ class LeanGate:
 
         kept = []
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
+        _unknown_streak = 0  # B（2026-09-07）：连续 unknown 计数 → 空转止损
+        _stop = self._unknown_stop
         for cand in candidates:
             entry = {
                 "id": cand.id,
@@ -183,6 +193,22 @@ class LeanGate:
                 "degraded": None,
                 "error": None,
             }
+            # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
+            # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
+            # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
+            if _stop > 1 and _unknown_streak >= _stop and len(candidates) > _stop + 1:
+                entry["degraded"] = "verify_stop"
+                entry["reason"] = (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
+                                   "（验证器失效），止损跳过整题 verify")
+                if self.strict:
+                    feedbacks.append(
+                        f"[Lean 硬验证] 候选 {cand.id} 跳过验证（unknown 止损，"
+                        "strict 保守拒绝）")
+                    # strict 模式：不进 kept
+                else:
+                    kept.append(cand)
+                self._record_ctx(ctx, entry)
+                continue
             try:
                 # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
                 # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
@@ -223,10 +249,12 @@ class LeanGate:
                         BaseAgent.add_used_theorems(ctx, used_names)
                 if report is None:
                     entry["degraded"] = "no_report"
+                    _unknown_streak += 1
                     kept.append(cand)          # 无报告 → 降级放行
                 elif report.verdict in ("proof_valid", "answer_valid"):
                     entry["verdict"] = report.verdict
                     entry["lean_valid"] = True
+                    _unknown_streak = 0        # 验证器正常工作（出绿点），计数清零
                     BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
                     # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
                     # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
@@ -258,8 +286,10 @@ class LeanGate:
                             msg = report.suggestion or report.findings[0].desc
                     feedbacks.append(
                         f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：\n{msg}")
+                    _unknown_streak = 0   # 编译器明确判错 = 验证器正常，计数清零
                 else:  # unknown
                     entry["verdict"] = "unknown"
+                    _unknown_streak += 1
                     if self.strict:
                         entry["degraded"] = "strict_reject"
                         feedbacks.append(
@@ -301,13 +331,13 @@ class LeanGate:
         - 环境缺失 / 异常 → 降级放行 True（不因 Lean 环境误伤答案）
         """
         if not answer or not answer.strip():
-            self._record_ctx(ctx, {"gate": "final_answer", "tier": tier,
-                                   "skipped": "empty_answer"})
+            self._record_ctx(ctx, {"step": "final_gate", "gate": "final_answer",
+                                   "tier": tier, "skipped": "empty_answer"})
             return True
         domain = getattr(ctx, "domain", "")
         qtype = getattr(ctx, "question_type", "")
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
-        entry = {"gate": "final_answer", "tier": tier,
+        entry = {"step": "final_gate", "gate": "final_answer", "tier": tier,
                  "is_proof": is_proof, "answer": answer[:80]}
         # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
         # 时间检查必须用 **1200s hard 硬顶**（不是 ctx.time_remaining 看的 soft
