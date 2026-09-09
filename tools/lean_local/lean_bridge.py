@@ -716,6 +716,17 @@ def _compile_lean(
         {"ok": bool, "error": str}。
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
+    # 2026-09-09 平台零配置兜底：work_dir 即 mathlib 闭包（含 Mathlib/Tactic.olean
+    # 聚合入口）时，若当前进程 LEAN_PATH 未含它则自动注入——平台 clone 后不跑
+    # setup 脚本（无 lean-env.sh）也能让 lean.exe 直编 import Mathlib；LEAN_PATH
+    # 已被环境显式设置时尊重原值（调用约定：env 显式最高优先），仅追加缺失闭包。
+    _lean_entry = os.path.join(work_dir, "Mathlib", "Tactic.olean")
+    if os.path.isfile(_lean_entry):
+        _lp = (os.environ.get("LEAN_PATH", "") or "").strip()
+        _lp_dirs = [os.path.normpath(d) for d in _lp.split(os.pathsep) if d]
+        if os.path.normpath(work_dir) not in _lp_dirs:
+            os.environ["LEAN_PATH"] = (
+                (_lp + os.pathsep) if _lp else "") + work_dir
     lean_file = os.path.join(work_dir, lean_filename)
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)
@@ -869,6 +880,14 @@ class LeanBridge:
                     if "Tactic.olean" in files or "Mathlib.olean" in files:
                         ready = True
                         break
+                # 2026-09-10 平台修复：pdir 本身即闭包根（root 一体化形态
+                # <root>/mathlib/closure-full，纯 olean 闭包无 .lake）——此前
+                # 误判 False 导致 verify_answer 跳过 _prepend_mathlib_import，
+                # JSON 通道 lean_code 无 import → norm_num 等未定义 → 平台
+                # 非证明题答案验证整体失效（本地有 lake 工程不暴露）。
+                if not ready and os.path.isfile(
+                        os.path.join(pdir, "Mathlib", "Tactic.olean")):
+                    ready = True
         else:
             # 无 lake 工程（比赛环境）：LEAN_PATH 或默认部署目录挂载闭包即就绪
             roots: list[str] = [
@@ -881,6 +900,9 @@ class LeanBridge:
                 # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
                 os.path.join(proj, "vendor", "lean-toolchain",
                              "mathlib", "closure-full"),
+                # 2026-09-10 root 一体化形态（与 _mathlib_tactic_entry_available
+                # 的 roots 列表对称；平台无 pdir 时也能识别 <root>/mathlib/closure-full）
+                os.path.join(proj, "mathlib", "closure-full"),
             ]
             for r in roots:
                 # core 闭包无聚合入口，用具体模块 olean 判定；full 闭包两者皆有
