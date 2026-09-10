@@ -934,6 +934,9 @@ def main():
     parser.add_argument("--calc_mandatory", type=str, default=None, choices=["true", "false"], help="calc_mandatory（裸数值断言打回=计算必须走工具）")
     parser.add_argument("--subgoal_calc_router", type=str, default=None, choices=["true", "false"], help="subgoal_calc_router（计算型子目标 terminal 专用路径）")
     parser.add_argument("--tool_calc_enabled", type=str, default=None, choices=["true", "false"], help="tool_calc_enabled（原生 calc_eval 工具调用试点）")
+    # 2026-09-10 L1/L2：计算核验关卡（默认关，A/B 用）
+    parser.add_argument("--answer_selfcheck_enabled", type=str, default=None, choices=["true", "false"], help="answer_selfcheck_enabled（L1：数值答案无 <calc> 工具来源 → 定向重问）")
+    parser.add_argument("--symbolic_crosscheck_enabled", type=str, default=None, choices=["true", "false"], help="symbolic_crosscheck_enabled（L2：独立符号建模求真值 → 与答案比对，不符则打回）")
     parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     args = parser.parse_args()
@@ -989,6 +992,11 @@ def main():
         overrides["subgoal_calc_router"] = args.subgoal_calc_router == "true"
     if args.tool_calc_enabled is not None:
         overrides["tool_calc_enabled"] = args.tool_calc_enabled == "true"
+    # 2026-09-10 L1/L2 计算核验关卡
+    if args.answer_selfcheck_enabled is not None:
+        overrides["answer_selfcheck_enabled"] = args.answer_selfcheck_enabled == "true"
+    if args.symbolic_crosscheck_enabled is not None:
+        overrides["symbolic_crosscheck_enabled"] = args.symbolic_crosscheck_enabled == "true"
     if args.use_fast_path is not None:
         overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:
