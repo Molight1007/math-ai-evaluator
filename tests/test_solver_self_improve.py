@@ -105,6 +105,46 @@ class ImproveCandidatesTest(unittest.TestCase):
         n = s.improve_candidates(ctx)
         self.assertEqual(n, 0)
 
+    # ---- A（2026-09-07）：improve_min_remaining 单候选预留停手 ----
+    def test_min_remaining_stops_before_call(self) -> None:
+        """距生成软截止 < improve_min_remaining（300）→ 不再开新候选改进。"""
+        import time as _t
+        s = make_solver(IMPROVED)
+        s.config = SimpleNamespace(  # 覆盖为带 improve_min_remaining 的配置
+            use_blueprint=False, self_improve_max=3,
+            policy_temperature=0.3, policy_max_tokens=8192,
+            improve_min_remaining=300.0)
+        ctx = make_ctx()
+        ctx._gen_deadline = _t.time() + 60   # 距软截止仅 60s < 300s
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+        n = s.improve_candidates(ctx)
+        self.assertEqual(n, 0, "预留不足应停手，不再发起 200-300s 的改进调用")
+        self.assertEqual(ctx.candidates[0].reasoning, "原解答内容")
+
+    def test_min_remaining_ample_still_improves(self) -> None:
+        """距软截止充足（> 300）→ 照常改进（护栏不误伤正常路径）。"""
+        import time as _t
+        s = make_solver(IMPROVED)
+        s.config = SimpleNamespace(
+            use_blueprint=False, self_improve_max=3,
+            policy_temperature=0.3, policy_max_tokens=8192,
+            improve_min_remaining=300.0)
+        ctx = make_ctx()
+        ctx._gen_deadline = _t.time() + 900  # 距软截止充足
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+        n = s.improve_candidates(ctx)
+        self.assertEqual(n, 1, "软截止充足时应正常改进")
+
+    def test_min_remaining_zero_keeps_old_behavior(self) -> None:
+        """improve_min_remaining=0（默认未配置）→ 仅走 gen_time_up 旧逻辑。"""
+        import time as _t
+        s = make_solver(IMPROVED)  # config 无 improve_min_remaining 字段 → getattr 0
+        ctx = make_ctx()
+        ctx._gen_deadline = _t.time() + 60   # 距截止很近但不 time_critical
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+        n = s.improve_candidates(ctx)
+        self.assertEqual(n, 1, "0=关闭预留护栏，回到旧行为")
+
 
 if __name__ == "__main__":
     unittest.main()

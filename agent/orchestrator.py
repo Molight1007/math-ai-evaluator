@@ -16,6 +16,7 @@ from __future__ import annotations
 """
 
 import logging
+import os
 import time
 import re as _re
 
@@ -31,6 +32,21 @@ from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
 from .audit_gate import AuditGate
 from utils.extract import safe_json_serialize, is_truncated_answer as _is_truncated_answer
+
+# ---- Lean 双通道（2026-09-06 晚恢复）----
+# lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
+# 工具仓离线落地后重新接入检测链：Lean 环境可用 → 硬验证，不可用 → AuditGate 兜底。
+# 惰性 import：模块缺失/import 异常一律视 lean 不可用，绝不拖垮主链路。
+try:
+    from tools.lean_local.lean_gate import LeanGate
+    from tools.lean_local.lean_pre_verifier import LeanPreVerifier
+    _LEAN_MODULES_OK = True
+except Exception:  # noqa: BLE001
+    LeanGate = None
+    LeanPreVerifier = None
+    _LEAN_MODULES_OK = False
+    logger = logging.getLogger("MathPilot")
+    logger.warning("tools.lean_local 不可用，Lean 双通道禁用（回落 AuditGate）")
 
 try:
     from utils.sympy_tools import (
@@ -63,11 +79,48 @@ class Orchestrator(BaseAgent):
         # lean_pre_verifier 在检测链中的全部作用——平台无 Lean，硬核验/反例/
         # rubric 程序与 LLM 混合瀑布，只审不答）
         self.audit_gate = AuditGate(client, config)
+        # Lean 双通道（2026-09-06 晚恢复）：lean 可用即 LeanGate 硬验证 /
+        # LeanPreVerifier 前置形式化；不可用由 _lean_active() 回落 AuditGate。
+        self.lean_gate = (LeanGate(client, config)
+                          if _LEAN_MODULES_OK and LeanGate is not None else None)
+        self.lean_pre_verifier = (
+            LeanPreVerifier(client, config)
+            if _LEAN_MODULES_OK and LeanPreVerifier is not None else None)
+        self._lean_probe: bool | None = None   # lean 环境探测结果（进程内缓存）
         # 对抗式验证器（#16，2026-08-30）：正向验证**通过后**主动证伪，治漏检。
         # 与 Step 4（_review_bug_feedback，治误杀）互补：
         #   正向不过 → Step 4 复核是否误报
         #   正向通过 → 本模块去找漏掉的错误
         self.adv_verifier = AdversarialVerifier(client, config)
+
+    # ------------------------------------------------------------------
+    # Lean 双通道探测（2026-09-06 晚）
+    # ------------------------------------------------------------------
+    def _lean_active(self) -> bool:
+        """Lean 通道是否启用：总开关开 + lean 模块在 + Lean 环境可用（结果缓存）。
+
+        探测 = LeanGate 懒加载的 LeanBridge.lean_available（跑一次
+        `lean --version`，进程内只探一次）。任何异常都视为不可用 → 回落
+        AuditGate，绝不让 lean 探测本身拖垮/阻断评测。
+        环境变量 LEAN_VERIFY=0（或 false/no/off）可一键关闭 lean 通道
+        （单测经 tests/conftest.py 统一置 0；评测 A/B 对照也可用它）。
+        """
+        _env_off = (os.environ.get("LEAN_VERIFY", "1") or "1").strip().lower()
+        if _env_off in ("0", "false", "no", "off"):
+            return False
+        if not getattr(self.config, "enable_lean_verify", True):
+            return False
+        if self.lean_gate is None:
+            return False
+        if self._lean_probe is None:
+            try:
+                _b = self.lean_gate._bridge_inst
+                self._lean_probe = bool(_b is not None and _b.lean_available)
+            except Exception:  # noqa: BLE001
+                self._lean_probe = False
+            if not self._lean_probe:
+                logger.warning("Lean 环境不可用，检测链回落 AuditGate（AI 判分）")
+        return bool(self._lean_probe)
 
     # ------------------------------------------------------------------
     # 阶段耗时埋点（2026-09-03 老师：deep 档需要每个环节具体耗时做决定）
@@ -348,13 +401,23 @@ class Orchestrator(BaseAgent):
                         tier=tier, soft_budget=round(ctx.soft_budget))
 
             self._stage_start(ctx, "2.6_pre_audit")
-            # 2.6) 题意理解确认（原 Lean 前置形式化验证 preverify 已随去 Lean
-            # 移除——平台无 Lean 可执行文件，每次 21s 编译只付时间不审核）。
-            # AuditGate.confirm_understanding 为可选的 LLM 题意复核，
-            # 默认关闭（audit_confirm_understanding=False）省时给真正求解，
-            # 失败不阻断主流程，由下游 revise/重理解兜底。
+            # 2.6) 题意理解确认（2026-09-06 晚恢复 Lean 前置形式化：lean 可用且
+            # 命中档位 → 题目转 Lean 声明编译校验理解，失败带错误强制重新审题；
+            # lean 不可用/档位不命中 → AuditGate 可选 LLM 题意复核，默认关闭，
+            # 失败不阻断主流程，由下游 revise/重理解兜底）。
             if not ctx.state.emergency:
-                self.audit_gate.confirm_understanding(ctx)
+                if (self._lean_active()
+                        and getattr(self.config, "enable_lean_preverify", True)
+                        and tier in tuple(getattr(
+                            self.config, "lean_preverify_tiers", ("deep",)))):
+                    try:
+                        self.lean_pre_verifier.run(ctx)
+                    except Exception as _e2:  # noqa: BLE001
+                        self.record(ctx, "lean_preverify",
+                                    f"前置形式化异常（跳过，不阻断）: "
+                                    f"{type(_e2).__name__}: {str(_e2)[:120]}")
+                else:
+                    self.audit_gate.confirm_understanding(ctx)
 
             self._stage_start(ctx, "2.7_subgoal_main")
             # 2.7) 子目标细化主路径（v2.9）：全部档位统一先跑一次子目标分解逐步求解
@@ -490,17 +553,33 @@ class Orchestrator(BaseAgent):
                 self.sub_goal_solver.run(ctx)
 
             self._stage_start(ctx, "3.6_audit_filter")
-            # 3.6) 候选客观审核（AuditGate Level0-2 瀑布，2026-09-06 去 Lean 化：
-            # 取代原 Lean 硬验证门禁——平台无 Lean，原门禁只空转不审核）。
-            # Level0 程序硬核验（答案代回数值回验）淘汰明显错解并收集 revise 反馈；
-            # 证明题开启 rubric 时叠加结构化判分（高置信 B 才淘汰）。
-            # 全部候选被否 → 回退保留原候选（宁 unknown 不误杀，绝不整批清空）。
+            # 3.6) 候选客观审核（2026-09-06 晚：Lean 双通道 + AuditGate 串行）。
+            # lean 可用 → 先 LeanGate.apply（内部按题型/档位自判：证明题全档整题
+            # verify 淘汰 proof_invalid 并收 revise 反馈；非证明题 lean_gate_nonproof
+            # 默认关 → 秒级记录跳过，零成本）；随后 AuditGate.audit_candidates 照跑
+            # （证明题 rubric 默认关 → 空转零成本；非证明题 Level0 数值代回核验照旧，
+            # 与去 Lean 期完全一致）。lean 不可用 → 纯 AuditGate（现状 AI 判分链）。
             # L1：verify_only 时跳过（把剩余时间留给验证投票）。
             if ctx.state.verify_only:
                 self.record(ctx, "audit_gate",
                             "L1 验证优先：跳过 AuditGate 候选审核（时间不足）")
             else:
                 _audit_total = len(ctx.candidates)
+                if self._lean_active():
+                    _lt = len(ctx.candidates)
+                    lean_kept, lean_fb = self.lean_gate.apply(
+                        ctx, tier, ctx.candidates)
+                    if lean_kept:
+                        ctx.candidates = lean_kept
+                        self.record(ctx, "lean_gate",
+                                    f"Lean 硬验证通过 {len(lean_kept)}/{_lt} 候选")
+                    if lean_fb:
+                        ctx.audit_reject_feedback = list(
+                            getattr(ctx, "audit_reject_feedback", []) or []
+                        ) + lean_fb
+                        self.record(ctx, "lean_gate",
+                                    f"Lean 硬验证淘汰 {len(lean_fb)} 候选，"
+                                    f"revise 将注入 Lean 反馈")
                 audit_kept, audit_feedbacks = self.audit_gate.audit_candidates(
                     ctx, tier, ctx.candidates)
                 if audit_kept:
@@ -508,7 +587,9 @@ class Orchestrator(BaseAgent):
                     self.record(ctx, "audit_gate",
                                 f"客观审核通过 {len(audit_kept)}/{_audit_total} 候选")
                 if audit_feedbacks:
-                    ctx.audit_reject_feedback = audit_feedbacks
+                    ctx.audit_reject_feedback = list(
+                        getattr(ctx, "audit_reject_feedback", []) or []
+                    ) + audit_feedbacks
                     self.record(ctx, "audit_gate",
                                 f"客观审核淘汰 {len(audit_feedbacks)} 候选，"
                                 f"revise 将注入审核反馈")
@@ -562,7 +643,8 @@ class Orchestrator(BaseAgent):
             # verify 已投过票，放弃复核不损失主验证，只少一层 deep 深查。
             if (tier == 'deep'
                     and getattr(ctx, '_best_cluster', None) is not None
-                    and not ctx.gen_time_up()):
+                    and not ctx.gen_time_up()
+                    and self._enhance_window_ok(ctx, "oracle")):
                 self._oracle_review_best(ctx, ver_result, tier_votes)
 
             self._stage_start(ctx, "4.6_adv")
@@ -633,15 +715,21 @@ class Orchestrator(BaseAgent):
             self.formatter.run(ctx)
 
             self._stage_start(ctx, "6.5_audit_gate")
-            # 6.5) AuditGate 最终答案闸门（2026-09-06 去 Lean 化：取代原
-            #      Lean 最终闸门——平台无 Lean，原闸门每答案只付 5-21s 空转）。
-            #      对 formatter 选中的 1 个最终答案做 Level0-2 审核
-            #      （程序硬核验 0 LLM；rubric/反例默认关，开测需配置）。
+            # 6.5) 最终答案闸门（2026-09-06 晚：Lean/AuditGate 双后端路由）。
+            #      Lean 环境可用 → LeanGate.gate_final_answer：证明题整题 verify、
+            #      非证明题 verify_answer（norm_num/ring 答案锚定核验，5-21s），
+            #      proof_invalid/unknown → 拒绝换候选（老师 9/2：Lean 一定不能跳过；
+            #      9/3：无法验证/未知必须默认拒绝，不许裸奔）；
+            #      Lean 不可用 → AuditGate.gate_final_answer（Level0 程序硬核验等，
+            #      平台 AI 判分兜底，与去 Lean 期完全一致）。
             #      验不过 → 换候选（按答案与 final 不同的顺序试 ≤2 个）。
             # gate_final_answer 内部已自护：空答案放行、time_remaining<15s
             # 或 budget.skip 才跳过；rubric 高置信 B 才打回（宁 unknown 不误杀）。
-            if (getattr(self.config, 'enable_audit_gate', True)
+            _gate_lean = self._lean_active()
+            if ((_gate_lean or getattr(self.config, 'enable_audit_gate', True))
                     and ctx.final_response):
+                _gk = "lean_gate" if _gate_lean else "audit_gate"
+                _gate = self.lean_gate if _gate_lean else self.audit_gate
                 try:
                     # 2026-09-03 老师：不到 1200s 且审核判错就**不放过**，
                     # 一直换候选重做、时间到 1200s 才放行 —— 该"不放过"规则自
@@ -664,17 +752,19 @@ class Orchestrator(BaseAgent):
                         if getattr(_c, "answer", "") == ctx.final_response:
                             best_reasoning = getattr(_c, "reasoning", "") or ""
                             break
-                    g_ok = self.audit_gate.gate_final_answer(
+                    g_ok = _gate.gate_final_answer(
                         ctx, tier, ctx.final_response, best_reasoning)
                     _tried = 0
                     _last_feedback = ""
                     while (not g_ok
                            and _t3.time() < _rework_deadline - 5
                            and (_max_rework is None or _tried < _max_rework)):
-                        # 取最近一条 AuditGate 拒绝反馈（写 ctx.audit_gate）
-                        for _entry in reversed(ctx.audit_gate or []):
+                        # 取最近一条闸门拒绝反馈（写 ctx.lean_gate / ctx.audit_gate；
+                        # lean 的拒绝 verdict=proof_invalid/unknown，audit 的=reject）
+                        for _entry in reversed(getattr(ctx, _gk, []) or []):
                             if (_entry.get("step") == "final_gate"
-                                    and _entry.get("verdict") == "reject"):
+                                    and _entry.get("verdict")
+                                    in ("reject", "proof_invalid", "unknown")):
                                 _last_feedback = (_entry.get("feedback")
                                                   or _entry.get("reason") or "")[:400]
                                 break
@@ -684,7 +774,7 @@ class Orchestrator(BaseAgent):
                                 f"[审核闸门反馈] 上一候选 (#{_tried+1}) "
                                 f"未通过客观审核：{_last_feedback}"
                             ]
-                        self.record(ctx, "audit_gate",
+                        self.record(ctx, _gk,
                                     f"审核拒候选 #{_tried+1}（本档位重做剩余 "
                                     f"{int(_rework_deadline - _t3.time())}s）继续换/重做")
                         # 换下一候选（按置信度）试；候选换尽后 → 让 Solver 读
@@ -708,7 +798,7 @@ class Orchestrator(BaseAgent):
                             # 剩余 <180s 时无法保证完成 → 不再打回，提交当前答案碰运气。
                             if _t3.time() < _rework_deadline - 180:
                                 self.record(
-                                    ctx, "audit_gate",
+                                    ctx, _gk,
                                     "所有候选未过客观审核，触发 Solver 读反馈重新生成"
                                     f"（revise_feedback 已含 {_tried+1} 条审核定位）")
                                 try:
@@ -730,44 +820,44 @@ class Orchestrator(BaseAgent):
                                         _tried += 1
                                         _fresh = ctx.candidates[-1]
                                         ctx.final_response = _fresh.answer
-                                        g_ok = self.audit_gate.gate_final_answer(
+                                        g_ok = _gate.gate_final_answer(
                                             ctx, tier, _fresh.answer,
                                             getattr(_fresh, "reasoning", "") or "")
                                         if g_ok:
                                             self.record(
-                                                ctx, "audit_gate",
+                                                ctx, _gk,
                                                 f"Solver 读审核反馈重生成的候选 "
                                                 f"#{_fresh.id} 过闸门，采用")
                                         continue  # 未过则回到 while 顶部继续
                                 except Exception as _e2:  # noqa: BLE001
-                                    self.record(ctx, "audit_gate",
+                                    self.record(ctx, _gk,
                                                 f"审核反馈重生成异常: {str(_e2)[:120]}")
-                            self.record(ctx, "audit_gate",
+                            self.record(ctx, _gk,
                                         "重生成后仍无候选过审核或时间不足，停")
                             break
                         # 2026-09-04：换候选=再验 1 次，剩余 <35s 时打完
                         # 就到墙边，不再打回，直接提交当前答案（避免撞 1200s 无答案）。
                         if _rework_deadline - _t3.time() < 35:
-                            self.record(ctx, "audit_gate",
+                            self.record(ctx, _gk,
                                         f"剩余 {int(_rework_deadline - _t3.time())}s "
                                         "不足完成换候选验证，停")
                             break
                         _tried += 1
                         ctx._gate_tried = list(getattr(ctx, "_gate_tried", []) or []) + [_next.id]
                         ctx.final_response = _next.answer
-                        g_ok = self.audit_gate.gate_final_answer(
+                        g_ok = _gate.gate_final_answer(
                             ctx, tier, _next.answer,
                             getattr(_next, "reasoning", "") or "")
                         if g_ok:
-                            self.record(ctx, "audit_gate",
+                            self.record(ctx, _gk,
                                         f"换候选 #{_next.id} 过审核闸门，采用其答案")
                     if not g_ok:
                         ctx.gate_rejected = True
-                        self.record(ctx, "audit_gate",
+                        self.record(ctx, _gk,
                                     f"{tier} 档审核重做达上限仍拒（{_tried} 次换候选/重生成），"
                                     "当前答案标 rejected 放行")
                 except Exception as _e:  # noqa: BLE001  闸门异常绝不阻断
-                    self.record(ctx, "audit_gate",
+                    self.record(ctx, _gk,
                                 f"审核闸门异常，降级放行: {str(_e)[:120]}")
 
             self.pacer.end(tier=tier, soft=getattr(ctx, "soft_budget", None))
@@ -1043,6 +1133,29 @@ class Orchestrator(BaseAgent):
         )
         return decision
 
+    def _enhance_window_ok(self, ctx: TaskContext, tag: str) -> bool:
+        """4.5 Oracle / 4.6 对抗：可弃验证增强的剩余时间窗口检查。
+
+        单次复核 LLM 调用最坏 ~360s（LLMClient 180s 超时 ×2 次重试）且
+        不可打断——放行会把 6.5 final_gate 的 verify_reserve 烧穿（冒烟 v2
+        实证：oracle 365s / 对抗 372s → 6.5 仍 time_critical、compile_valid 0）。
+        增强属可弃：要求剩余时间 ≥ est(默认360) + critical_tail + 30s 缓冲，
+        否则跳过直进 6.5（宁少一层深查，不饿死最终闸门）。
+        verify_enhance_est_seconds=0 关闭护栏（= 旧行为）。
+        """
+        est = float(getattr(self.config, "verify_enhance_est_seconds", 360.0))
+        if est <= 0:
+            return True
+        rem = ctx.time_remaining()
+        need = est + float(ctx.critical_tail_seconds) + 30.0
+        ok = rem >= need
+        if not ok:
+            self.record(ctx, "control",
+                        f"验证增强 {tag} 跳过：剩余 {rem:.0f}s < 需 {need:.0f}s"
+                        f"（est {est:.0f} + critical {ctx.critical_tail_seconds:.0f}"
+                        f" + 30），保 6.5 终局")
+        return ok
+
     def _adversarial_probe(self, ctx: TaskContext, tier: str) -> bool:
         """对抗式验证（#16）：正向通过后主动证伪，抓正向漏检的错误。
 
@@ -1073,6 +1186,12 @@ class Orchestrator(BaseAgent):
                 return False
             if getattr(ctx.state, 'emergency', False) or ctx.gen_time_up():
                 self.record(ctx, "adversarial", "时间紧张，跳过对抗式审查")
+                return False
+            # 2026-09-07 增强窗口护栏：剩余时间不足（est + critical_tail + 30）
+            # 时跳过——对抗审查单次 LLM 最坏 ~360s 不可打断，放行会把 6.5
+            # final_gate 的 verify_reserve 烧穿（冒烟 v2：4.6_adv=372s → 6.5
+            # time_critical、compile_valid 0）。可弃增强，宁跳过保 6.5 终局。
+            if not self._enhance_window_ok(ctx, "adversarial"):
                 return False
 
             result = self.adv_verifier.probe(ctx, rep, tier=tier)
@@ -1229,9 +1348,26 @@ class Orchestrator(BaseAgent):
             "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
             "dag_review": getattr(ctx, "dag_review_report", None) or {},
             "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
+            # ③' 骨架评审事件流 + 求解前 DAG 强制门事件流（2026-09-08 补：
+            #    两机制 record 只进 ctx.trace 且 trace 不落盘 → 冒烟 10 题事后
+            #    查不到门是否触发/重规划几轮。现从 trace 提取进 diag，同
+            #    value_attack 模式。skeleton_review/dag_review 是最终态报告，
+            #    这里是逐轮事件（通过/重规划/放行/预算耗尽），互为补充。）
+            "skeleton_review_events": [str(t.get("content", ""))[:200]
+                                       for t in (getattr(ctx, "trace", None) or [])
+                                       if isinstance(t, dict)
+                                       and t.get("step") == "skeleton_review"],
+            "dag_replan_events": [str(t.get("content", ""))[:200]
+                                  for t in (getattr(ctx, "trace", None) or [])
+                                  if isinstance(t, dict)
+                                  and t.get("step") == "dag_replan"],
             # ④ 子目标求解（结构化轨迹）
             "subgoal_trace": getattr(ctx, "subgoal_trace", None) or [],
             "subgoal_merge_plan": (getattr(ctx, "subgoal_merge_plan", "") or "")[:300],
+            # ④'' S4-lite 独立性指标（老师 9/6：子目标数/依赖边/平均入度/上下文注入量）
+            "subgoal_stats": getattr(ctx, "subgoal_stats", None) or {},
+            "subgoal_ctx_inject_chars": int(
+                getattr(ctx, "subgoal_ctx_inject_chars", 0) or 0),
             "lemma_repo": list(getattr(ctx, "lemma_repo", None) or [])[:20],
             # ④' C-lite 数值攻击（2026-09-03 审核补：原本只 record 进 trace，
             # 而 trace 不落盘 → v17 事后完全查不到是否执行。现在进 diag。）
@@ -1239,11 +1375,42 @@ class Orchestrator(BaseAgent):
                              for t in (getattr(ctx, "trace", None) or [])
                              if isinstance(t, dict)
                              and t.get("step") == "value_attack"],
+            # ⑦'' calc 工具审计（2026-09-09 P1-2：<calc> 求值 WARN/ERROR = 工具
+            # 失败/模型自算降级点，自算率 = 该事件数 / 计算点数，A/B 核心指标）
+            "calc_fallback": [{"expr": str(t.get("expr", ""))[:100],
+                               "reason": str(t.get("reason", ""))[:100]}
+                              for t in (getattr(ctx, "trace", None) or [])
+                              if isinstance(t, dict)
+                              and t.get("step") == "calc_fallback"][:20],
+            # ⑦''' calc 强制打回审计（2026-09-09 P1-1：心算打回是否真触发——
+            # solver 主链定向重问 / 子目标 L0C 重解 / 二次裸算标注，全部可观测）
+            "calc_rewrite": [str(t.get("content", ""))[:120]
+                             for t in (getattr(ctx, "trace", None) or [])
+                             if isinstance(t, dict)
+                             and t.get("step") == "solver_calc_rewrite"][:20],
+            "calc_tool_mode": [str(t.get("content", ""))[:120]
+                            for t in (getattr(ctx, "trace", None) or [])
+                            if isinstance(t, dict)
+                            and t.get("step") == "calc_tool_mode"][:20],
+            "calc_tool_calls": [str(t.get("content", ""))[:120]
+                              for t in (getattr(ctx, "trace", None) or [])
+                              if isinstance(t, dict)
+                              and t.get("step") == "calc_tool_call"][:20],
+            "subgoal_l0c": [str(t.get("content", ""))[:120]
+                            for t in (getattr(ctx, "trace", None) or [])
+                            if isinstance(t, dict)
+                            and t.get("step") == "subgoal_l0c"][:20],
+            "subgoal_naked_twice": sum(
+                1 for t in (getattr(ctx, "trace", None) or [])
+                if isinstance(t, dict) and t.get("step") == "subgoal_step"
+                and "二次裸算" in str(t.get("content", ""))),
             # ⑤ 检测链 AuditGate（2026-09-06 去 Lean 化顶替 lean_gate；
-            #    Level0-3 多级瀑布记录：候选过滤 / 最终答案门禁 / 理解确认）
+            #    Level0-3 多级瀑布记录：候选过滤 / 最终答案门禁 / 理解确认；
+            #    2026-09-06 晚 Lean 双通道恢复后，lean 不可用时的兜底记录）
             "audit_gate": [e for e in (getattr(ctx, "audit_gate", None) or [])][:60],
-            # ⑤' 遗留兼容键（lean_gate 已不执行，恒空；旧日志/analyze_errors 兼容）
-            "lean_gate": list(getattr(ctx, "lean_gate", None) or [])[:60],
+            # ⑤' Lean 双通道记录（2026-09-06 晚恢复：lean 环境可用时
+            #     LeanGate/LeanPreVerifier 的候选过滤与最终闸门写这里，材料证据链）
+            "lean_gate": [e for e in (getattr(ctx, "lean_gate", None) or [])][:60],
             # ⑥ 候选/验证/自纠错
             "n_candidates": len(getattr(ctx, "candidates", None) or []),
             "n_verdicts": len(getattr(ctx, "verdicts", None) or []),

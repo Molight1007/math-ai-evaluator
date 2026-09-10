@@ -418,3 +418,59 @@ class DeterministicChecker:
 
 # 常见整型变量名（采样时采整数，贴近数论/组合题语境）
 _INT_VARIABLES: frozenset = frozenset({"n", "m", "k", "i", "j", "p", "q"})
+
+
+# ============================================================
+# 2026-09-10 L1：精确代入核验（与上面的浮点采样通道并列）
+# ------------------------------------------------------------
+# verify_by_substitution 走的是"随机采样 + 浮点容差"，适合核恒等式；
+# 而"模型给关系式、题面给具体数值"这种场景要求**精确**比对（1e-4 容差会把
+# 2.0001 判成 2）。这里补一条精确通道：代入 → Fraction 精确值 → 精确判等。
+# 严格宁漏勿误：任一侧无法精确数值化 → unknown（绝不误杀）。
+# ============================================================
+
+
+def verify_answer_exact(expr: str, answer: str, mapping: dict | None = None) -> dict:
+    """精确代入核验：把 mapping 代入 expr，与 answer 做**精确**数值判等。
+
+    与 verify_by_substitution 的分工：那条通道核"等式/恒等式"（采样+容差），
+    这条通道核"关系式 + 具体取值 → 具体答案"（代入+精确）。
+
+    Returns:
+        {"verdict": "pass"|"fail"|"unknown", "evidence": str,
+         "value": str|None, "method": str}
+        - pass/fail 只在**双方都精确**时给出；否则一律 unknown。
+    """
+    try:
+        from .calc_tool import safe_eval_subst, to_exact_number
+    except ImportError:  # 提交包（submit/）路径兜底
+        try:
+            from calc_tool import safe_eval_subst, to_exact_number
+        except ImportError:
+            return {"verdict": "unknown", "evidence": "calc_tool 不可用",
+                    "value": None, "method": "exact_subst"}
+    if not expr or not str(expr).strip():
+        return {"verdict": "unknown", "evidence": "表达式为空",
+                "value": None, "method": "exact_subst"}
+    if not mapping:
+        return {"verdict": "unknown", "evidence": "无可用变量取值",
+                "value": None, "method": "exact_subst"}
+    want = to_exact_number(answer)
+    if want is None:
+        return {"verdict": "unknown", "evidence": f"答案非精确数值: {str(answer)[:40]}",
+                "value": None, "method": "exact_subst"}
+    got_s = safe_eval_subst(expr, mapping)
+    if got_s.startswith(("WARN:", "ERROR:")):
+        return {"verdict": "unknown", "evidence": f"代入求值未成功: {got_s[:80]}",
+                "value": None, "method": "exact_subst"}
+    got = to_exact_number(got_s)
+    if got is None:                      # 代入后是近似值/无理式 → 不精确判等
+        return {"verdict": "unknown", "evidence": f"代入结果是近似/符号值: {got_s[:60]}",
+                "value": got_s, "method": "exact_subst"}
+    if got == want:
+        return {"verdict": "pass",
+                "evidence": f"精确代入一致: {expr} → {got_s}",
+                "value": got_s, "method": "exact_subst"}
+    return {"verdict": "fail",
+            "evidence": f"精确代入不一致: {expr} → {got_s}，与答案 {answer} 不符",
+            "value": got_s, "method": "exact_subst"}

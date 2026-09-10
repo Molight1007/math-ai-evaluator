@@ -80,6 +80,24 @@ class AgentConfig:
 
     # ---- calc_tool 确定性计算（2026-09-01，治 value_wrong）----
     enable_calc_tool: bool = True      # 提示词引导 <calc> 标记 + 输出精确求值回填
+    # 2026-09-09 P1-1（老师拍板"计算必须用工具"）：行级**裸数值断言**
+    # （如 `25*4 = 100`，两侧无字母/中文、无 <calc> 来源）→ 判定心算/自算，
+    # 带反馈打回重写一次（方程/结论式含变量放行，不打断推导）。默认关待 A/B。
+    calc_mandatory: bool = False
+    # 2026-09-09 用户洞察：原生工具调用试点（同智能体调 WebSearch 逻辑）——
+    # 模型生成 tool_call calc_eval → 执行 calc_tool → 回传 → 继续；默认关待验证
+    tool_calc_enabled: bool = False
+    # 2026-09-10 L1（用户 9/10 + 李平老师建议）：**答案级工具自洽核验**——
+    # 最终答案是纯数值、却没有任何 <calc> 工具来源（心算产物）→ 定向重问一次，
+    # 要求把得出答案的算式写成 <calc>；仅在重问结果**带工具来源**时采纳。
+    # 零后悔（失败/未改善一律保留原输出）。默认关待 A/B（题均 +1 次 LLM 调用）。
+    answer_selfcheck_enabled: bool = False
+    # 2026-09-10 L2（用户 9/10 思路 + 李平老师 9/9 建议）：**独立符号建模复核**——
+    # 让模型当"数学问题拆解助手"，只把给定数值抽象成变量并输出目标量表达式
+    # （禁止自算），由 calc_tool 精确代入求真值，与主链答案比对；不一致则打回
+    # 一次，仅当新答案落回该真值才采纳。每题最多 1 次调用。默认关待 A/B。
+    symbolic_crosscheck_enabled: bool = False
+    symbolic_max_tokens: int = 512
 
     # 解析
     extraction_mode: str = "auto"      # auto | last_line | regex
@@ -134,6 +152,7 @@ class AgentConfig:
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
     self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
+    improve_min_remaining: float = 300.0  # 3.3 改进停手预留（距生成软截止 < 此值不再开新候选；0=关，治 alg-060 3.3=640s 烧穿）
     # 易错点记忆注入（2026-09-06 A 档轻量经验，prompts/error_lessons.py）：
     # 命中题型/关键词时把历史易错自查清单拼进初始生成与 revise 提示，防重复踩坑。
     # 默认开（本地评测生效）；A/B 对照可 --override enable_error_lessons=False。
@@ -157,6 +176,13 @@ class AgentConfig:
     adversarial_min_confidence: float = 0.5
     adversarial_max_tokens: int = 640
     adversarial_max_reasoning: int = 2400
+    # ---- 验证增强链时间护栏（2026-09-07：治 4.5_oracle / 4.6_adv 烧穿 6.5）----
+    # 冒烟 v2 实证：3.3/3.6 止损省下的时间被 4.5 Oracle(365s)/4.6 对抗(372s)
+    # 单次 300s+ 不可打断的复核吸收 → 6.5 Lean 终局仍 time_critical、0 绿点。
+    # 4.5/4.6 是可弃增强：放行前要求剩余时间 ≥ 本值 + critical_tail + 30s 缓冲
+    # （deep 需 ~450s / standard ~510s），否则跳过直进 6.5——宁少一层深查，
+    # 不饿死最终闸门。设 0 = 关闭护栏（旧行为）。对齐 LLMClient 180s×2 重试上限。
+    verify_enhance_est_seconds: float = 360.0
 
     # ---- 难题深度求解通道（v2.5）----
     # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
@@ -200,6 +226,28 @@ class AgentConfig:
     # AgentConfig（sub_goal_solver getattr 兜底 750），现补全可配。
     subgoal_stage_budget_sec: float = 750.0     # deep 档子目标阶段预算
     subgoal_stage_budget_sec_std: float = 450.0  # standard/fast 档子目标阶段预算
+    # 2026-09-06 老师建议（子目标独立性/最小上下文）：子目标上下文注入模式。
+    # "deps"（默认）= 按 depends_on 只注入直接依赖结果，无依赖子目标零前序上下文
+    # （可独立、可并行校验、不被无关中间量污染）；"all" = 旧行为全量前序注入。
+    subgoal_ctx_mode: str = "deps"
+    # P2（2026-09-09 老师：计算/推理子目标类型化）：DAG 子目标打标 calc_kind
+    # （terminal=纯计算型 / inline=推理型，规则启发，字段总是进 trace 可观测）。
+    # router 开启后：terminal 走专用模板（只给表达式→<calc> 回填即结论）+
+    # 轻校验（结果须回填形态）。默认关待 A/B。
+    subgoal_calc_router: bool = False
+    # 2026-09-06 老师建议（S1-lite 0-LLM 校验前移）：子目标结果自带 lean 代码片时
+    # 做本地编译校验（L1，仅 deep 档 + lean 环境可用，0 LLM 5-21s，禁网纯本地）。
+    # 异常/环境缺失一律放行，绝不阻断；False = 跳过 L1 只留 L0 截断检查（A/B 对照）。
+    enable_subgoal_lean_check: bool = True
+    # 子目标交叉核对（2026-09-08 老师建议3）——merge 前不让子目标间矛盾
+    # 静默流入最终合并。两方向独立开关，可单开/同开做 A/B：
+    #  A 确定性冲突闸（0 LLM）：汇总 <calc> 回填 + <check> + L2 断言，
+    #    同名 LHS 出现不同常数（x=1 vs x=2）→ 矛盾注入 merge 提示词强制裁决。
+    #    抓显式冲突；抓不到隐含矛盾（alg-060：xy=25 与 D=2 不共变量名，纯规则必漏）。
+    #  B LLM 交叉核对轮（merge 前 +1 次小调用 1-2K token，60-110s 级）：
+    #    各子目标结论行单独抽出集中裁决，能看隐含矛盾（不保证）。
+    subgoal_conflict_gate: bool = False     # A 确定性冲突闸（0 LLM）
+    subgoal_crosscheck_llm: bool = False    # B LLM 交叉核对轮（+1 调用）
     accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
     # 结构化 bug report 驱动的修正（论文依据：IMO 2025 验证-精炼流水线）
     # 验证器改为产出「分类 + 原文定位」的结构化错因，注入 revise 步骤。
@@ -214,16 +262,38 @@ class AgentConfig:
     deep_critical_tail_seconds: float = 60.0  # deep 档再收紧，把时间用得更尽
     deep_quota_ratio: float = 0.25            # deep 档全卷占比上限（>25% 会导致全卷超时）
 
-    # ---- 检测链（2026-09-06 去 Lean 化；平台无 Lean 可执行文件，历史归因实证）----
-    # 原 Lean 硬验证（lean_gate）与前置形式化（lean_pre_verifier）由多级
-    # AuditGate 检测链取代：Level0 程序硬核验 → Level1 反例搜索 → Level2
+    # ---- 检测链（2026-09-06：AuditGate 为主；晚间恢复 Lean 双通道）----
+    # AuditGate 多级检测链：Level0 程序硬核验 → Level1 反例搜索 → Level2
     # LLM rubric 判分 → Level3 playoff。硬否决优先、宁 unknown 不误杀、只审不答。
-    # lean 系配置字段随代码迁移 tools/lean_local/（本地证据链工具专用），
-    # 不再出现在平台配置（遗留 kwarg 经 ReasoningAgent 白名单过滤自动丢弃）。
-    enable_audit_gate: bool = True          # 检测链总开关（顶替 enable_lean_verify）
+    # Lean 硬验证通道（2026-09-06 晚，lean-toolchain 工具仓离线可跑后恢复）：
+    # Lean 环境可用 → 2.6 preverify / 3.6 候选 / 6.5 最终闸门走 LeanGate 硬验证
+    # （证明题整题 verify、非证明题 verify_answer），Lean 不可用/异常自动回落
+    # AuditGate（AI 判分链），本地评测与平台两种环境同一份代码都正确。
+    enable_audit_gate: bool = True          # AuditGate 检测链总开关（lean 不可用时兜底）
+    # ---- Lean 双通道开关（2026-09-06 晚恢复；9/6 去 Lean 化前字段全量回归）----
+    enable_lean_verify: bool = True         # Lean 通道总开关（配合环境探测，无 Lean 自动回落 AuditGate）
+    enable_lean_preverify: bool = True      # 2.6 题目前置形式化（题目转 Lean 声明校验理解，deep 档）
+    lean_preverify_tiers: tuple = ("deep",)  # preverify 适用档位
+    preverify_max_rounds: int = 2           # preverify 编译失败重试上限（强制重新审题）
+    preverify_timeout: float = 60.0         # preverify 单次编译/转化超时（秒）
+    lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
+    lean_gate_nonproof: bool = False        # 非证明题候选级 Lean（默认关省时；6.5 最终答案仍 verify_answer）
+    lean_gate_strict: bool = False          # Lean unknown 时严格拒绝（True 保守拒，默认放行保分）
+    lean_gate_unknown_stop: int = 2         # 候选级连续 N 个 unknown 止损（0=关；治证明题整题 verify 空转 563s）
+    lean_timeout: float = 60.0              # Lean 单次编译超时（秒）
+    lean_backend: str = "bridge"            # bridge(lake env lean) | mcp(lean-lsp-mcp)；env LEAN_BACKEND 优先
+    lean_executable: str = ""               # lean.exe 绝对路径（空=自动探测：LEAN_EXE env>elan>vendor/lean-toolchain）
+    lean_project_dir: str = ""              # 带 Mathlib 的 lake 工程目录（空=自动探测）
+    theorem_memory_enable: bool = False     # 跨题定理记忆（9/6 关闭维持；LeanGate 写入按此开关）
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径
     # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
     use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
+    # ---- 求解前 DAG 强制门（#34；2026-09-08 起默认关闭）----
+    # 45 题实证：门"拦得住、修不好"（21/45 触发重写，净正确率贡献≈0，
+    # 总耗时 +23%、触发组人均 +245s）。默认去掉前置强制评审-重写循环，
+    # 蓝图直接进子目标求解；后置 replan（候选入池后、预算允许时）仍由
+    # enable_dag_replan 独立控制。需 A/B 复测门效果时显式置 True。
+    dag_replan_gate: bool = False
     # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
     # 蓝图生成后先提交 LLM 审查子目标是否不适定 / 难度>=原题；有问题重生成再确认，
     # 通过后才进语法审核。默认开启（老师明确要求）。LLM 失败/预算不足降级放行不阻断。
@@ -376,6 +446,8 @@ class ReasoningAgent:
             "verifier_voting_times", "verifier_temperature",
             "enable_domain_hint", "enable_question_type", "extraction_mode",
             "enable_calc_tool",  # 2026-09-01 calc_tool 确定性计算
+            "calc_mandatory",  # 2026-09-09 P1-1 裸数值断言打回（计算必须走工具）
+            "tool_calc_enabled",  # 2026-09-09 原生工具调用试点（calc_eval）
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
             "by_enable_fast_path", "use_scoring",
@@ -388,6 +460,8 @@ class ReasoningAgent:
             # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
             # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
             "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
+            # 求解前 DAG 强制门独立开关（2026-09-08：默认关=去掉门）
+            "dag_replan_gate",
             # 骨架编排层评审（老师 9/2 建议：求解前规划质量门，2026-09-02）
             "enable_skeleton_review", "skeleton_review_max_rounds",
             # 难题深度求解通道
@@ -401,6 +475,16 @@ class ReasoningAgent:
             "enable_collaborative_deep", "collab_max_rounds",
             # 子目标阶段预算（P1 按档拆分）
             "subgoal_stage_budget_sec", "subgoal_stage_budget_sec_std",
+            # 子目标上下文注入模式（老师 9/6：deps 最小依赖 | all 全量，A/B）
+            "subgoal_ctx_mode",
+            # P2 子目标类型路由（老师 9/9：计算型 terminal / 推理型 inline）
+            "subgoal_calc_router",
+            # 子目标级 0-LLM lean 代码片编译校验（S1-lite L1，deep 档+lean 可用）
+            "enable_subgoal_lean_check",
+            # 子目标交叉核对（老师 9/8 建议3：A 确定性冲突闸 0-LLM / B LLM 交叉核对轮）
+            "subgoal_conflict_gate", "subgoal_crosscheck_llm",
+            # L2 子目标数值/代数断言 Lean 验证（2026-09-08 去门后新钩子）
+            "enable_numeric_lean_verify", "lean_numeric_max_per_q",
             # 时间预算（2026-08-28 新增：让动态预算真正生效）
             "critical_tail_seconds", "deep_critical_tail_seconds",
             "deep_quota_ratio",
@@ -409,7 +493,7 @@ class ReasoningAgent:
             # 结构化 bug report 反馈
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
-            "enable_self_improve", "self_improve_max",
+            "enable_self_improve", "self_improve_max", "improve_min_remaining",
             # 易错点记忆注入（2026-09-06 A 档轻量经验）
             "enable_error_lessons",
             # Step 4 bug report 复核
@@ -418,8 +502,16 @@ class ReasoningAgent:
             "enable_adversarial_verify", "adversarial_tiers",
             "adversarial_min_confidence", "adversarial_max_tokens",
             "adversarial_max_reasoning",
+            "verify_enhance_est_seconds",
             # 检测链（2026-09-06 去 Lean 化；顶替原 Lean 硬验证开关）
             "enable_audit_gate",
+            # Lean 双通道（2026-09-06 晚恢复：lean-toolchain 离线可用后接入）
+            "enable_lean_verify", "enable_lean_preverify", "lean_preverify_tiers",
+            "preverify_max_rounds", "preverify_timeout",
+            "lean_gate_all_proofs", "lean_gate_nonproof", "lean_gate_strict",
+            "lean_gate_unknown_stop",
+            "lean_timeout", "lean_backend", "lean_executable", "lean_project_dir",
+            "theorem_memory_enable",
             # lemma 记忆
             "lemma_storage_path",
         ):

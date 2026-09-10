@@ -73,6 +73,10 @@ def test_generation_steps_all_gated_by_verify_only():
         assert idx >= 0, f"找不到生成步骤锚点：{needle}（代码可能重构，请更新测试）"
         # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符
         back = 700 if needle == "self.solver.run(ctx)" else 400
+        # audit_candidates：2026-09-06 晚 Lean 双通道恢复后其前方插入了
+        # lean_gate.apply 分支（约 15 行），verify_only 门禁行被推远 → 窗口 1200
+        if needle == "self.audit_gate.audit_candidates(":
+            back = 1200
         window = src[max(0, idx - back):idx + len(needle)]
         # solver.run 是主采样，被独立 if 包裹（if not ctx.state.verify_only:）
         if needle == "self.solver.run(ctx)":

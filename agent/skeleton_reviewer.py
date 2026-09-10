@@ -218,7 +218,9 @@ class SkeletonReviewerAgent(BaseAgent):
             if not isinstance(v, dict):
                 continue
             verdict = str(v.get("verdict", "ok")).lower().strip()
-            if verdict not in ("ok", "ill_posed", "not_simplifying"):
+            # 2026-09-08：第三维度 direction_wrong（蓝图结论方向/约束覆盖错误）
+            if verdict not in ("ok", "ill_posed", "not_simplifying",
+                               "direction_wrong"):
                 verdict = "ok"
             verdicts[nid] = SkeletonVerdict(
                 node_id=nid,

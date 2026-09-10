@@ -16,6 +16,7 @@
 
 import json
 import logging
+import os
 import re
 import time
 
@@ -29,6 +30,8 @@ try:
         SUBGOAL_STEP_USER_TEMPLATE,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
+        SUBGOAL_CROSSCHECK_SYSTEM,
+        SUBGOAL_CROSSCHECK_USER_TEMPLATE,
     )
     from prompts.policy import get_domain_hint
     from utils.extract import extract_final_answer, smart_fallback_answer
@@ -41,6 +44,8 @@ except ImportError:
         SUBGOAL_STEP_USER_TEMPLATE,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
+        SUBGOAL_CROSSCHECK_SYSTEM,
+        SUBGOAL_CROSSCHECK_USER_TEMPLATE,
     )
     from submit.prompts.policy import get_domain_hint
     from submit.utils.extract import extract_final_answer, smart_fallback_answer
@@ -49,26 +54,61 @@ except ImportError:
 # calc_tool（2026-09-04 下沉）：与 Solver 主链同款确定性计算器。
 # 子目标步骤/合并原先完全靠模型心算（无 <calc> 纪律、无回填），
 # 是数值错的高发且无防线处。此处导入与 solver.py:39-45 同构。
+# 2026-09-09 P1：追加 find_naked_numeric_asserts（裸数值断言/心算痕迹检测）
+# 与 audit_calc_fallbacks（工具失败审计，P1-2）。
 try:
-    from .calc_tool import resolve_all_calcs
+    from .calc_tool import (
+        resolve_all_calcs,
+        find_naked_numeric_asserts,
+        audit_calc_fallbacks,
+    )
 except ImportError:  # 提交包（submit/）路径兜底
     try:
-        from calc_tool import resolve_all_calcs
+        from calc_tool import (
+            resolve_all_calcs,
+            find_naked_numeric_asserts,
+            audit_calc_fallbacks,
+        )
     except ImportError:
         resolve_all_calcs = None
+        find_naked_numeric_asserts = None
+        audit_calc_fallbacks = None
 
 logger = logging.getLogger("MathPilot")
 
-# 计算纪律引导（与 solver._CALC_GUIDE 同文案，2026-09-04 下沉子目标/合并）。
+# 计算纪律引导（与 solver 主链同文案，2026-09-04 下沉子目标/合并；
+# 2026-09-08 扩容：新函数 + 三态结果 + 符号断链处理引导）。
 # 追加到 STEP/MERGE 的 system 提示词（不追加 user 末尾——v2.10 教训：
 # 收尾结构后追加会诱发模型"续写模式"）。
 _CALC_GUIDE = (
+    "\n\n**你不是计算器**：遇到任何需要数值或运算的环节，你的第一反应是写出要算的**表达式**并交给 <calc>，不要心里算出结果（禁止心算）。系统回填精确值后你基于它继续推理。节奏示范：“求 1 到 10 的和”→写 <calc>sum(k,1,10)</calc>→回填 [计算] sum(k,1,10) = 55→引用 55；“25×4+1”→写 <calc>25*4+1</calc>，禁止直接写“= 101”。复杂计算拆成 ≤3 个 <calc>（每步一个表达式），不要一步吞一大串。\n"
     "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
-    "<calc>1/2+1/3</calc>、<calc>3*7-1</calc>），系统会自动精确求值并回填结果。"
-    "涉及数值计算时务必使用该标记，不要心算。\n"
-    "**<calc> 与 </calc> 之间必须且只能是纯数学表达式**"
-    "（数字、+ - * / ** % //、括号、函数 comb/perm/fact/gcd/lcm/abs），"
-    "禁止出现任何中文、文字解释、句号或换行——出现非表达式字符会直接导致计算失败。"
+    "<calc>1/2+1/3</calc>、<calc>sqrt(45)</calc>、<calc>integral((1-x)^n,x,0,1)</calc>、<calc>sum(k^2,k,1,n)</calc>），"
+    "系统会自动求值并回填结果。涉及数值计算时务必使用该标记，不要心算。\n"
+    "**<calc> 与 </calc> 之间必须且只能是数学表达式**"
+    "（数字/字母符号 x n k…、+ - * / **（或 ^）% //、括号、函数 "
+    "fact/comb/perm/gcd/lcm/abs/sqrt/floor/ceil/min/max/ln/log/exp/"
+    "integral(f,x[,a,b]) 积分、sum(f,x,a,b) 求和（可省略变量）、pi 常量（回填≈近似））；隐式乘 2(x+1)/2x 自动识别，分式分母含变量请写 1/(2*x)形式。禁止出现中文、文字解释或换行。<calc> 只接受**单个数学表达式**：不要写代码/多语句/赋值（a=7 或跨行）、不要调 simplify()/solve() 等命令——要化简 x+1 就写 <calc>x+1</calc> 由系统自动回填。\n"
+    "回填结果形态：①精确值（整数/分数/精确根式如 3*sqrt(5)）可直接信任；"
+    "②符号化简式（含变量如 1/(n+1)、x**2-1）是 SymPy 化简的恒等式，可核对符号推导"
+    "（含变量者落地数值时请代入具体值再 <calc> 自检）；"
+    "③带 ≈ 的近似值（sqrt 无平方因子、ln、exp 等）只能核对量级，不是精确结论；"
+    "④以 WARN: 开头表示该表达式超出工具能力（三角 sin/cos 等无通用精确值、符号整除取模、化简超时）——"
+    "**禁止拿它硬算或当作已确认结论**：请代入具体数值用 <calc> 自检（如 <calc>(2+3)**2</calc>），"
+    "三角等特殊角请写精确式（sin(pi/6)=1/2、cos(pi/4)=sqrt(2)/2），一般角把断言写成 <check> 或 lean example 交编译器验算；自然常数 e 请写 exp(1)。若在 deep 档且断言可形式化，"
+    "可把关键代数等式写成 ```lean example ... := by ring/norm_num ``` 代码块，"
+    "系统会用本地 Lean 编译器自动核验。"
+)
+
+
+
+# P2（2026-09-09）：纯计算子目标专用 system 段——模型零计算面：只给表达式，
+# 工具回填即结论（不写过程/不手写等号结果/不拆步骤）。
+_TERMINAL_GUIDE = (
+    "\n\n【本子目标为纯计算子目标】期望输出是单个数值/表达式。请**只**在"
+    "【本步结果】给出一个 <calc>表达式</calc>（例如 <calc>comb(50,3)*2**10</calc>、"
+    "<calc>sum(k^2,k,1,n)</calc>、<calc>integral((1-x)^n,x,0,1)</calc>），"
+    "系统回填的精确值即本步结论。不要写推理过程、不要手写等号结果、不要拆分步骤。"
 )
 
 
@@ -134,6 +174,27 @@ class SubGoalSolverAgent(BaseAgent):
                             break  # 该 { 不是合法 JSON 起点，继续找下一个
                 j += 1
         return None
+
+    # ---------- P2 子目标类型路由（2026-09-09 老师：计算/推理类型化）----------
+    # calc_kind: "terminal"=整体计算型子目标（期望输出=单个数值/表达式 → 专用
+    # 模板只翻译表达式，工具回填即结论，模型零计算面）；"inline"=推理/证明型
+    # （步骤级 <calc> 截断）。规则启发先行，宁 inline 勿误 terminal（防把推理
+    # 子目标截成表达式翻译）。字段总是打标进 trace（0 成本可观测分布）；
+    # 专用模板/校验由 config.subgoal_calc_router 控制（默认关待 A/B）。
+    _TERM_ACTION_KW = ("代入", "求和", "化简", "展开", "求值", "积分",
+                       "乘积", "计算", "算得")
+
+    @staticmethod
+    def _calc_kind_of(sg_type: str, title: str, expected_output: str) -> str:
+        blob = f"{title} {expected_output}".strip()
+        if sg_type == "compute":
+            if any(k in blob for k in SubGoalSolverAgent._TERM_ACTION_KW):
+                return "terminal"
+            eo = (expected_output or "").strip()
+            # expected_output 为短数值/表达式形态（数字/负号/等号/左括号开头）
+            if eo and len(eo) <= 60 and (eo[0].isdigit() or eo[0] in "-=("):
+                return "terminal"
+        return "inline"
 
     @staticmethod
     def _parse_subgoal_plan(raw: dict, max_subgoals: int = 6) -> list[dict] | None:
@@ -221,6 +282,9 @@ class SubGoalSolverAgent(BaseAgent):
                 "depends_on": [d for d in deps_raw
                                if isinstance(d, int) and d in seen_ids],
                 "expected_output": expected_output,
+                # P2（2026-09-09）：计算/推理类型化标签（宁 inline 勿误 terminal）
+                "calc_kind": SubGoalSolverAgent._calc_kind_of(
+                    sg_type, title, expected_output),
                 "result": "",
             })
         return parsed if parsed else None
@@ -305,13 +369,17 @@ class SubGoalSolverAgent(BaseAgent):
         merge_strategy = plan_data.get("merge_strategy", "")
         problem_analysis = plan_data.get("problem_analysis", {})
 
+        _sg_stats = self._subgoal_stats(subgoals)
+        ctx.subgoal_stats = _sg_stats   # S4-lite：落 ctx 供 _collect_diag 进结果文件（A/B 对照）
         self.record(ctx, "subgoal", f"子目标规划完成: {len(subgoals)} 个子目标",
                     subgoal_titles=[sg["title"] for sg in subgoals],
-                    merge_strategy=merge_strategy)
+                    merge_strategy=merge_strategy,
+                    subgoal_stats=_sg_stats)
 
         # 阶段二：逐步求解每个子目标
         subgoal_plan_summary = self._format_plan_summary(subgoals, merge_strategy)
         results_map = {}  # subgoal_id → result_text
+        _ctx_inject_chars = 0  # S4-lite 指标：累计前序注入字符数（近似上下文量）
 
         for sg in subgoals:
             # 2026-09-06：升级 gen_time_up——只查 is_time_critical（=deadline-120/60s）
@@ -329,7 +397,20 @@ class SubGoalSolverAgent(BaseAgent):
                             "强制收尾 merge")
                 break
 
-            prev_results = self._format_previous_results(results_map, subgoals)
+            # 2026-09-06 老师建议：子目标独立性 + 最小上下文依赖。
+            # subgoal_ctx_mode = "deps"（默认）：按 depends_on 只注入直接依赖结果，
+            # 无依赖子目标零前序上下文（可独立/并行，不被无关中间量污染）；
+            # = "all"：回退旧行为全量前序注入（A/B 对照/兜底）。
+            _ctx_mode = str(getattr(
+                self.config, "subgoal_ctx_mode", "deps") or "deps").lower()
+            if _ctx_mode == "all":
+                prev_results = self._format_previous_results(
+                    results_map, subgoals)
+            else:
+                prev_results = self._format_dep_results(
+                    results_map, subgoals, sg)
+            _ctx_inject_chars += len(prev_results or "")
+            ctx.subgoal_ctx_inject_chars = _ctx_inject_chars  # 每步累计（预算中断也留痕）
             step_result = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results)
             # 2026-09-02 老师方案 B：蓝图评审 OK 但子目标失败 → 重做子目标
             # （不重画蓝图）。一次失败常是瞬时 LLM 错误/预算抖动，带已解
@@ -339,7 +420,12 @@ class SubGoalSolverAgent(BaseAgent):
             if step_result.startswith("[子目标") and _stage_left() > 120:
                 self.record(ctx, "subgoal",
                             f"子目标 #{sg['id']}「{sg['title']}」失败，带上下文重试一次")
-                prev_results2 = self._format_previous_results(results_map, subgoals)
+                if _ctx_mode == "all":
+                    prev_results2 = self._format_previous_results(
+                        results_map, subgoals)
+                else:
+                    prev_results2 = self._format_dep_results(
+                        results_map, subgoals, sg)
                 retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results2)
                 if retry and not retry.startswith("[子目标"):
                     step_result = retry
@@ -347,6 +433,69 @@ class SubGoalSolverAgent(BaseAgent):
                 self.record(ctx, "subgoal",
                             f"子目标 #{sg['id']}「{sg['title']}」失败，"
                             f"阶段预算剩余 {_stage_left():.0f}s 不足，放弃重试，强制收尾")
+
+            # S1-lite（2026-09-06 老师建议）：子目标级 0-LLM 校验前移——
+            # 便宜且确定的校验先跑（截断/lean 代码片编译），过了才认结果，
+            # 不让脏结果流进 merge 与后续子目标（验证-精炼下沉到子目标级）。
+            # 校验全部 0-LLM；失败且预算足 → 带反馈重解一次；仍失败用原结果。
+            if (not step_result.startswith("[子目标")
+                    and not ctx.gen_time_up() and _stage_left() > 90):
+                _hint = self._subgoal_light_check(ctx, sg, step_result)
+                if _hint:
+                    self.record(
+                        ctx, "subgoal_step",
+                        f"子目标 #{sg['id']}「{sg['title']}」0-LLM 校验未过: "
+                        f"{_hint[:80]}，带反馈重解一次")
+                    retry3 = self._solve_subgoal(
+                        ctx, sg, subgoal_plan_summary, prev_results,
+                        extra_hint=_hint)
+                    if retry3 and not retry3.startswith("[子目标"):
+                        # 重解结果仍疑似占位（二次空转）→ 显式失败标记，
+                        # 让 merge 明确知道该子目标无产出，不再用原占位糊弄。
+                        if (retry3 != step_result
+                                and self._looks_placeholder(retry3)):
+                            step_result = (
+                                f"（子目标 #{sg['id']} 重解后仍为空转占位，"
+                                "未产出有效结论；合并时请忽略并基于其余子目标求解）")
+                        else:
+                            step_result = retry3
+                            # P1-1 二次校验（2026-09-09：漏洞2修复——重解后仍
+                            # 裸算 = 模型拒用工具，仅记录并标注，不无限重试）
+                            if (find_naked_numeric_asserts is not None
+                                    and getattr(self.config, "calc_mandatory",
+                                                False)
+                                    and find_naked_numeric_asserts(step_result)):
+                                self.record(
+                                    ctx, "subgoal_step",
+                                    f"子目标 #{sg['id']} 重解后仍含未工具化数值"
+                                    "运算（二次裸算，保留结果并标注）")
+                                step_result = (
+                                    f"（该步含未用 <calc> 工具的计算结果，未经"
+                                    f"系统确认）{step_result}")
+                    else:
+                        self.record(
+                            ctx, "subgoal_step",
+                            f"子目标 #{sg['id']} 校验重解失败/超时，用原结果兜底")
+                        if self._looks_placeholder(step_result):
+                            step_result = (
+                                f"（子目标 #{sg['id']} 求解失败未产出有效结论，"
+                                "请基于其余子目标完成合并）")
+            # 2026-09-08：剥 <check> 验证标签（去标签留内容）——校验已在上面
+            # 消费过 <check> 断言，存盘/注入下游（merge/lemma/后续子目标）时
+            # 不得再带协议标记，防污染提示词与最终答案。
+            step_result = self._strip_check_tags(step_result)
+            # P1-1 兜底标注（2026-09-09：trace 前最后闸，绕过 light_check 全部
+            # 前置条件——若裸数值断言仍进入结果，标注"未经系统确认"供 merge 与
+            # 分析可见；不阻断流程只留痕）
+            if (find_naked_numeric_asserts is not None
+                    and getattr(self.config, "calc_mandatory", False)
+                    and not step_result.startswith("（该步含未用")
+                    and find_naked_numeric_asserts(step_result)):
+                self.record(ctx, "subgoal_step",
+                            f"子目标 #{sg['id']} trace 前仍含裸数值断言，兜底标注")
+                step_result = (
+                    f"（该步含未用 <calc> 工具的计算结果，未经系统确认）"
+                    f"{step_result}")
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
             # v2.9：结构化输出每步子目标的过程与中间结果
@@ -355,6 +504,7 @@ class SubGoalSolverAgent(BaseAgent):
                 "title": sg["title"],
                 "description": sg["description"],
                 "type": sg["type"],
+                "calc_kind": sg.get("calc_kind", "inline"),
                 "depends_on": sg["depends_on"],
                 "expected_output": sg["expected_output"],
                 "result": step_result,
@@ -415,7 +565,9 @@ class SubGoalSolverAgent(BaseAgent):
             revised=False,
         )
         ctx.candidates.append(candidate)
-        self.record(ctx, "subgoal", "子目标求解完成，已生成候选解答")
+        self.record(ctx, "subgoal", "子目标求解完成，已生成候选解答",
+                    subgoal_stats=self._subgoal_stats(subgoals),
+                    ctx_inject_chars=_ctx_inject_chars)
         # -------- #34 阶段四：DAG 评审 + 整树重生成 --------
         # 老师要求："dag 框架错了要重新构建"。判定标准（DagReviewer）：
         # - reject >= 3 个（绝对阈值）
@@ -634,6 +786,17 @@ class SubGoalSolverAgent(BaseAgent):
             dag = self._skeleton_review_loop(ctx, dag, planner)
             if dag is None:
                 return None
+        # 2026-09-08 求解前 DAG 强制评审门——默认关闭（dag_replan_gate=False）。
+        # 45 题实证：门"拦得住、修不好"（21/45 触发强制重写、净正确率贡献≈0、
+        # 总耗时 +23%、触发组人均 +245s），重写对方向性错误无济于事（comb-058
+        # 差1 / geo-068 思路偏，重写 2 轮达硬上限仍错）。蓝图评审-重写循环的
+        # 时间让给子目标求解与数值验证。A/B 复测时显式置 dag_replan_gate=True。
+        # 门代码与 Lean 升级逻辑保留（_dag_replan_gate / _lean_dag_logic_check），
+        # 不开时不产生任何调用开销。
+        if getattr(self.config, "dag_replan_gate", False):
+            dag = self._dag_replan_gate(ctx, dag)
+            if dag is None:
+                return None
         plan = dag.to_subgoal_plan()
         if not plan.get("subgoals"):
             logger.warning("Blueprint DAG 无可用叶子子目标")
@@ -689,9 +852,330 @@ class SubGoalSolverAgent(BaseAgent):
                     f"骨架评审达硬上限 {max_rounds} 轮，采用末轮骨架")
         return dag
 
+    # ---------- 求解前 DAG 强制评审门（2026-09-08 改进建议1）----------
+    def _dag_replan_gate(self, ctx, dag, max_rounds: int = 2):
+        """求解前 DAG 强制评审门：拒绝率>40% 的蓝图不许带病进求解。
+
+        蓝图经骨架评审通过后、转子目标求解前，再用 DagReviewer 评审一次
+        （results_map={} 时按结构评审：启发式循环/粒度过粗 + LLM 评估叶子
+        与分解节点）。should_replan（reject≥5 或 比例≥40% 或评审降级）
+        → **强制**进入带反馈重规划循环（子树局部重写 → 整树重生成），
+        直到评审通过或达硬上限/预算耗尽——不允许带着高拒绝率蓝图推进求解。
+        错题实证：comb-032 48%、geo-051 50%、nt-031 41.7%、nt-037 47.6%、
+        nt-077 45%、nt-096 60% 的蓝图审查已亮红灯并建议重规划，但实际
+        修订轮数=0（后置 replan 受 stage budget 限制 + 修复结果从不落盘）。
+
+        与候选入池后的 _review_and_maybe_replan（事后兜底）区别：
+        - 本门在求解前，replan 产生的新 DAG 真正被消费（转 plan 求解）；
+          旧方法即使 replan 成功也不写回 ctx.blueprint → 白跑。
+        - 预算耗尽 / 评审降级且无 reject 明细 → 放行原 DAG（质量门不阻断）。
+        返回最终 DAG（已写回 ctx.blueprint）。
+        """
+        from .dag_reviewer import DagReviewerAgent
+        if dag is None:
+            return None
+        if isinstance(dag, dict):
+            from .blueprint_planner import BlueprintDAG
+            try:
+                dag = BlueprintDAG.from_dict(dag)
+            except Exception as exc:  # noqa: BLE001
+                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
+                return None
+        if not dag.nodes:
+            return dag
+        rounds = int(getattr(self.config, "dag_replan_max_rounds",
+                             max_rounds) or max_rounds)
+        rounds = max(1, rounds)
+        reviewer = DagReviewerAgent(self.client, self.config)
+        planner = None  # 惰性导入（仅需 replan 时才建）
+        for round_idx in range(rounds):
+            if ctx.gen_time_up():
+                self.record(ctx, "dag_replan",
+                            f"求解前评审门预算耗尽（round={round_idx}），放行当前蓝图")
+                break
+            report = reviewer.review(ctx, dag, results_map={})
+            # 门升级（2026-09-08）：Lean 逻辑层检测。仅当本轮评审已出现 reject
+            # 信号（report.reject_count > 0）时，在首轮触发一次 Lean 声明编译：
+            # - 编译失败的节点（含 LLM 漏判的叶子）硬升级为 reject —— Lean 抓
+            #   可判定的逻辑/类型层错误（符号未定义/自引用/类型错/不成良构命题）；
+            # - 方向/语义错误仍完全由 LLM 评审判，本检测绝不降低任何 reject；
+            # - 成本受控：每题至多 1 次（见 _lean_dag_logic_check 守卫），
+            #   无 reject 信号（评审直接放行）的题零 Lean 开销。
+            # 2026-09-08 修复：**accept 叶子优先、reject 补位**。实测 reject 节点
+            # 多为操作类陈述（"令 y=0…"/"平移分割…"/"建坐标系…"），无法闭合
+            # 形式化 → 翻译模型按"宁缺毋滥"全给空串，整组 Lean 检查作废；且
+            # reject 节点已被 LLM 判错（Lean 升级只是补证据）。真正增量在
+            # "LLM 放行的叶子被 Lean 抓住"——故名额先给叶子，reject 仅补位。
+            if (round_idx == 0 and report.reject_count > 0
+                    and not ctx.is_time_critical()):
+                cap = max(1, int(getattr(self.config, "dag_lean_max_nodes",
+                                         6) or 6))
+                leaves = [nid for nid in report.accepted_nodes()
+                          if nid in dag.nodes
+                          and not dag.nodes[nid].children]
+                cand = list(leaves[:cap])
+                if len(cand) < cap:
+                    cand += [nid for nid in report.rejected_nodes()
+                             if nid not in cand][:cap - len(cand)]
+                lean_fails = self._lean_dag_logic_check(ctx, dag, cand)
+                if lean_fails:
+                    upgraded = self._merge_lean_rejects(report, lean_fails)
+                    if upgraded:
+                        self.record(ctx, "dag_replan",
+                                    "求解前 Lean 逻辑错误升级 reject: "
+                                    + ",".join(upgraded))
+            if not report.should_replan():
+                self.record(ctx, "dag_replan",
+                            f"求解前 DAG 评审通过（round={round_idx + 1}），进入子目标求解")
+                break
+            # 评审降级且无明确 reject（LLM 预算跳过）→ 不盲重构，放行
+            if report.degraded and report.reject_count == 0:
+                self.record(ctx, "dag_replan",
+                            "求解前评审降级（无 reject 明细），放行当前蓝图")
+                break
+            if planner is None:
+                from .blueprint_planner import BlueprintPlannerAgent
+                planner = BlueprintPlannerAgent(self.client, self.config)
+            rejected = report.rejected_nodes()
+            hints = report.merge_from_hints()
+            feedback = hints.split("\n") if hints else []
+            # Lean 逻辑诊断并入重规划反馈（若本轮有升级）
+            lean_lines = []
+            for _r in report.results.values():
+                if not _r.is_reject:
+                    continue
+                for _iss in _r.issues:
+                    _t = str(_iss)
+                    if _t.startswith("lean_logic_error"):
+                        lean_lines.append(
+                            f"[{_r.node_id}] Lean 逻辑检查: "
+                            f"{_t[len('lean_logic_error:'):].strip()}")
+                        break
+            if lean_lines:
+                feedback = lean_lines + feedback
+            if not feedback:
+                feedback.append(
+                    "请重新审视蓝图拆解：结论族须覆盖题目全部约束、不引入"
+                    "题目未允许的假设，子目标须可独立求解且比原题简单")
+            new_dag = None
+            if rejected:
+                lca = dag._lca(rejected)
+                if lca is not None and lca != dag.root_id:
+                    try:
+                        new_dag = planner.regenerate_subtree(
+                            ctx, prior_dag=dag, rejected_ids=rejected,
+                            feedback_lines=feedback)
+                    except Exception as exc:  # noqa: BLE001
+                        self.record(ctx, "dag_replan", f"子树重写异常: {exc}")
+                        new_dag = None
+            if new_dag is None:
+                try:
+                    new_dag = planner.regenerate_with_feedback(
+                        ctx, prior_dag=dag, feedback_lines=feedback)
+                except Exception as exc:  # noqa: BLE001
+                    self.record(ctx, "dag_replan", f"整树重生成异常: {exc}")
+                    new_dag = None
+            if new_dag is None:
+                self.record(ctx, "dag_replan",
+                            f"求解前第 {round_idx + 1}/{rounds} 轮重规划失败，"
+                            "保留当前蓝图进入求解（重规划信号已记入 diag）")
+                break
+            dag = new_dag
+            self.record(ctx, "dag_replan",
+                        f"求解前 DAG 第 {round_idx + 1}/{rounds} 轮重规划: "
+                        f"{len(dag.nodes)} 节点, root={dag.root_id}")
+        else:
+            self.record(ctx, "dag_replan",
+                        f"求解前评审门达硬上限 {rounds} 轮，采用末轮蓝图进入求解")
+        ctx.blueprint = dag.to_dict()
+        return dag
+
+    # ---------- 求解前门 Lean 逻辑层检测（2026-09-08 门升级，见 _dag_replan_gate）---
+    def _lean_dag_logic_check(self, ctx: TaskContext, dag,
+                              node_ids) -> dict:
+        """Lean 作为「逻辑错误」机器检测器：把节点陈述翻译成 Lean Prop
+        并编译（声明模式 allow_sorry）。返回 {node_id: 首条诊断}。
+
+        可判定层：语句无法良构形式化 / 符号未定义 / 类型错 / 自引用 /
+        不成闭合命题。方向与语义错误**不在此列**（仍由 DagReviewer LLM 判）。
+
+        成本受控（勿拖累解题预算——上轮 45 题教训）：
+        - 每题至多被调用 1 次（gate 首轮、且有 reject 信号时）；
+        - 节点数 ≤ dag_lean_max_nodes（默认 6）；
+        - 时间紧迫 / Lean 环境不可用 / 无 lake 工程 / LLM 翻译失败 → 一律
+          返回 {}（记一条事件后静默放行，绝不阻断、绝不误判整图）。
+        """
+        try:
+            if not getattr(self.config, "dag_replan_lean_check", True):
+                return {}
+            if not node_ids:
+                return {}
+            if ctx.is_time_critical() or ctx.gen_time_up():
+                return {}
+            from tools.lean_local.lean_bridge import LeanBridge
+            from tools.lean_local.lean_bridge import _trash_lean_file
+            from tools.lean_local.lean_bridge import _mathlib_import_block
+            bridge = LeanBridge(self.client, self.config)
+            if not bridge.lean_available:
+                self.record(ctx, "dag_replan",
+                            "求解前 Lean 逻辑检查跳过（Lean 环境不可用）")
+                return {}
+            work_dir = bridge._lean_project_dir or ""
+            if not work_dir:
+                self.record(ctx, "dag_replan",
+                            "求解前 Lean 逻辑检查跳过（无 lake 工程）")
+                return {}
+            cap = max(1, int(getattr(self.config, "dag_lean_max_nodes", 6) or 6))
+            targets = [nid for nid in node_ids
+                       if nid in dag.nodes][:cap]
+            if not targets:
+                return {}
+            stmts = {nid: (dag.nodes[nid].statement or "")[:300]
+                     for nid in targets}
+            from prompts.dag_lean_check import (
+                DAG_LEAN_CHECK_SYSTEM, DAG_LEAN_CHECK_USER_TEMPLATE)
+            from utils.prefill import prefill_messages, stitch
+            user_msg = DAG_LEAN_CHECK_USER_TEMPLATE.format(
+                problem=(ctx.problem or "")[:1200],
+                statements=json.dumps(stmts, ensure_ascii=False))
+            _PREFILL = '{"'
+            resp = self.llm(ctx, prefill_messages(
+                [{"role": "system", "content": DAG_LEAN_CHECK_SYSTEM},
+                 {"role": "user", "content": user_msg}],
+                _PREFILL), 0.0, 16384)
+            if resp:
+                resp = stitch(_PREFILL, resp)
+            exprs = self._parse_lean_expr_map(resp, targets)
+            if not exprs:
+                self.record(ctx, "dag_replan",
+                            "求解前 Lean 逻辑检查跳过（节点翻译为空/不可解析）")
+                return {}
+            # 组装单文件：import 头（兼容部分编译布局，用 _mathlib_import_block）
+            # + 每节点一行 example（匿名声明）；行号即节点映射。
+            head_lines = [ln for ln in _mathlib_import_block().split("\n")]
+            code_lines = list(head_lines)
+            if code_lines and code_lines[-1].strip():
+                code_lines.append("")
+            line_of: dict = {}
+            for nid in targets:
+                expr = exprs.get(nid, "")
+                if not expr:
+                    continue
+                expr = expr.strip()
+                if not expr:
+                    continue
+                code_lines.append(f"example : ({expr}) := by sorry")
+                line_of[nid] = len(code_lines)
+            if not line_of:
+                return {}
+            code = "\n".join(code_lines)
+            fname = (f"daglogic_{os.getpid()}_"
+                     f"{int(time.time() * 1000) % 1000000}.lean")
+            result = bridge._compile(code, work_dir, lean_filename=fname,
+                                     allow_sorry=True)
+            try:
+                _trash_lean_file(work_dir, fname)
+            except Exception:  # noqa: BLE001
+                pass
+            if not result or result.get("ok"):
+                # 编译全过（节点均可良构形式化）也留痕，便于评测区分
+                # "Lean 检查已执行但无逻辑错误" 与 "检查根本没触发"
+                self.record(ctx, "dag_replan",
+                            f"求解前 Lean 逻辑检查通过 {len(line_of)} 节点（无编译错误）")
+                return {}
+            err_text = str(result.get("error", ""))
+            return self._map_lean_errors(err_text, line_of)
+        except Exception as exc:  # noqa: BLE001  任何异常：降级放行，绝不阻断
+            # 2026-09-08 排查：原仅 logger.debug → 评测零痕迹，无法区分
+            # "检查未执行" 与 "执行中异常被吞"。升级为 record 留痕（防静默失效）。
+            logger.debug("求解前 Lean 逻辑检查异常（放行）: %s: %s",
+                         type(exc).__name__, exc)
+            self.record(ctx, "dag_replan",
+                        f"求解前 Lean 逻辑检查异常（放行）: "
+                        f"{type(exc).__name__}: {str(exc)[:120]}")
+            return {}
+
+    @staticmethod
+    def _parse_lean_expr_map(resp, targets) -> dict:
+        """解析翻译 LLM 的 JSON 输出 → {nid: expr}；失败/空返回 {}。"""
+        if not resp:
+            return {}
+        text = str(resp).strip()
+        # 剥 markdown 围栏
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            raw = json.loads(text[start:end + 1])
+        except (TypeError, ValueError):
+            raw = None
+        if not isinstance(raw, dict):
+            return {}
+        out = {}
+        for nid in targets:
+            val = raw.get(nid)
+            if isinstance(val, str) and val.strip():
+                out[nid] = val.strip()
+        return out
+
+    @staticmethod
+    def _map_lean_errors(err_text: str, line_of: dict) -> dict:
+        """把 Lean 编译错误文本按行号映射回节点。行号在首个 example 之前
+        （import/文件级错误）→ 视为环境问题，返回 {}（不误判节点）。"""
+        if not err_text or not line_of:
+            return {}
+        min_line = min(line_of.values())
+        node_fail: dict = {}
+        msg_of_line: dict = {}
+        for m in re.finditer(r":(\d+):(\d+):\s*(error|warning):\s*([^\n]*)",
+                             err_text):
+            line = int(m.group(1))
+            if m.group(3) == "error" and line not in msg_of_line:
+                msg_of_line[line] = m.group(4).strip()
+        if any(line < min_line for line in msg_of_line):
+            return {}                      # 文件级/import 错误 → 环境问题
+        for nid, line in line_of.items():
+            msg = msg_of_line.get(line)
+            if msg:
+                node_fail[nid] = msg[:160]
+        return node_fail
+
+    @staticmethod
+    def _merge_lean_rejects(report, lean_fails: dict) -> list:
+        """Lean 编译失败的节点硬升级为 reject（含 LLM 漏判/未评的），
+        返回本轮新升级的 node_id 列表。已 reject 的节点保持不动。"""
+        from .dag_reviewer import DagReviewResult
+        ups = []
+        for nid, err in lean_fails.items():
+            issue = f"lean_logic_error: {err}"
+            r = report.results.get(nid)
+            if r is None:
+                report.results[nid] = DagReviewResult(
+                    node_id=nid, verdict="reject", quality_score=0.2,
+                    issues=[issue],
+                    reconstruction_hint=(
+                        "该节点陈述存在可判定的形式化逻辑错误（Lean 编译失败），"
+                        "请修正陈述中的符号/量词/类型错误或改换可形式化的表述"),
+                    heuristic_only=False)
+                ups.append(nid)
+            elif not r.is_reject:
+                r.verdict = "reject"
+                try:
+                    r.quality_score = min(float(r.quality_score or 0.0), 0.3)
+                except (TypeError, ValueError):
+                    r.quality_score = 0.3
+                if issue not in list(r.issues):
+                    r.issues.append(issue)
+                ups.append(nid)
+        return ups
+
     # ---------- 阶段二：逐步求解 ----------
     def _solve_subgoal(self, ctx: TaskContext, sg: dict,
-                       plan_summary: str, prev_results: str) -> str:
+                       plan_summary: str, prev_results: str,
+                       extra_hint: str = "") -> str:
         """求解单个子目标，返回结果文本。
 
         v2.7：计算类子目标（compute/derive）求解后用 AnswerOracle 做客观
@@ -701,6 +1185,10 @@ class SubGoalSolverAgent(BaseAgent):
         v2.10（2026-08-29）：use_lemma_accumulation 开启时，把已求得的
         引理列表注入子目标提示词（"已建立的结论"），让后续子目标直接复用，
         避免重复推导（D6 引理积累钥匙的真正落地点）。
+
+        v2.11（2026-09-06 老师建议）：extra_hint 承载 0-LLM 校验（S1-lite）
+        的失败反馈——截断/Lean 代码片编译错误，随重解请求带回，让模型
+        带反馈修正后重新给出【本步结果】（验证-精炼下沉到子目标级）。
         """
         # 引理注入：已求得的子目标结论作为"前置引理"提供。
         # **必须放在提示词中部（最终指令之前），不能追加在末尾**——
@@ -729,8 +1217,16 @@ class SubGoalSolverAgent(BaseAgent):
             subgoal_description=sg["description"],
             subgoal_expected_output=sg["expected_output"],
         )
+        # v2.11：0-LLM 校验反馈（S1-lite）追加在提示词末尾；只有校验真没过才带
+        # （空串 = 通过）。不追加在开头/中部，避免改变模板收尾结构（2026-08-29
+        # 教训：提示词收尾被破坏会让模型进入续写模式、泄漏占位符）。
+        if extra_hint:
+            user_msg = user_msg + (
+                f"\n\n[本步结果校验反馈] {extra_hint}\n"
+                f"请修正后重新给出【本步结果】。"
+            )
 
-        step_result = self._call_step(ctx, user_msg)
+        step_result = self._call_step(ctx, user_msg, sg=sg)
 
         # 每步 oracle 校验：仅对计算类子目标（预期数值/表达式结果）做客观检查
         # 2026-09-03 老师：子目标是**简化求解**的，不是复杂化的。实测 deep 档
@@ -750,7 +1246,7 @@ class SubGoalSolverAgent(BaseAgent):
                     f"\n\n[上一步结果客观校验未通过] {oracle_fb}\n"
                     f"请修正错误后重新给出【本步结果】。"
                 )
-                retry_result = self._call_step(ctx, retry_msg)
+                retry_result = self._call_step(ctx, retry_msg, sg=sg)
                 if retry_result and not retry_result.startswith("[子目标"):
                     return retry_result
         return step_result
@@ -784,7 +1280,8 @@ class SubGoalSolverAgent(BaseAgent):
         if entry not in ctx.lemma_repo:
             ctx.lemma_repo.append(entry)
 
-    def _call_step(self, ctx: TaskContext, user_msg: str) -> str:
+    def _call_step(self, ctx: TaskContext, user_msg: str,
+                     sg: dict | None = None) -> str:
         """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。
 
         2026-09-04 calc 纪律下沉：system 追加 <calc> 计算引导（与 solver 主链
@@ -794,7 +1291,12 @@ class SubGoalSolverAgent(BaseAgent):
         if (resolve_all_calcs is not None
                 and getattr(self.config, 'enable_calc_tool', True)):
             _step_system = SUBGOAL_STEP_SYSTEM + _CALC_GUIDE
-        resp = self.llm(
+        # P2（2026-09-09）：纯计算子目标 → 追加专用协议段（system 级，
+        # 不动 user 模板收尾结构，防续写模式）
+        if (sg is not None and sg.get("calc_kind") == "terminal"
+                and getattr(self.config, "subgoal_calc_router", False)):
+            _step_system = _step_system + _TERMINAL_GUIDE
+        resp = self._maybe_tool_llm(
             ctx,
             prefill_messages(
                 [
@@ -814,7 +1316,13 @@ class SubGoalSolverAgent(BaseAgent):
         # （在提取【本步结果】之前，让精确结果参与结果提取；与 solver 同序）
         if (resolve_all_calcs is not None
                 and getattr(self.config, 'enable_calc_tool', True)):
-            resp = resolve_all_calcs(resp)[0]
+            resp, _resolved = resolve_all_calcs(resp)
+            # P1-2（2026-09-09）：工具失败审计留痕（WARN:/ERROR: 回填）
+            if audit_calc_fallbacks is not None:
+                for _ex, _rs in audit_calc_fallbacks(_resolved):
+                    self.record(ctx, "calc_fallback",
+                                f"<calc>{_ex}</calc> → {_rs}",
+                                expr=_ex, reason=_rs)
 
         # 提取「本步结果」部分
         result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
@@ -837,6 +1345,802 @@ class SubGoalSolverAgent(BaseAgent):
                          type(exc).__name__, exc)
         return ""
 
+    # ------------------------------------------------------------------
+    # S1-lite：子目标级 0-LLM 校验前移（2026-09-06 老师建议）
+    # ------------------------------------------------------------------
+    # 老师：lean 校验服务很多要排优先级；子目标宜独立、上下文少 → 校验可前移。
+    # 落地形态（全部 0-LLM、秒级~21s、异常/环境缺失一律放行，绝不阻断）：
+    #   L0  截断/空结果检查（全档，0 成本）——治"答案腰斩"型错误（L2 截断修复下沉）；
+    #   L0P 占位/空转检测（全档，0 成本）——2026-09-07 禁网冒烟实证：PB-002 SG#2
+    #       ='（无）'、SG#4='（子目标4 已求解）'、alg-060 SG#1='[计算] 1 = 1'，
+    #       LLM 空转输出既非空也非截断、不带 lean 代码 → 旧 L0/L1 全放行流入 merge。
+    #       短结果里出现占位词 / 重言式回填 → 视为未真正求解，带反馈重解。
+    #   L1 Lean 代码片编译校验（仅 deep 档 + lean 环境可用，0 LLM 5-21s）——
+    #     子目标结果若自带 lean 代码（```lean ... ``` 或 import 块），本地编译
+    #     抓语法/类型错，禁网下纯本地（lean-lsp-mcp 禁网已验证 0 出网）。
+    #     注：2026-09-07 冒烟实测子目标结果多为短结论行、极少带 lean fence，
+    #     L1 触发面天然小；价值主要在 L0P 的占位拦截，L1 仅作兜底保留。
+    # 不做：LLM 翻译整段子目标结果去 lean 化（翻译成本与整题 6.5 校验重复，列赛后）。
+
+    _LEAN_FENCE = re.compile(
+        r"```(?:lean4?|lean)?\s*\n(.*?)```", re.DOTALL)
+
+    # L0P：短结果占位词（≤50 字符内命中才算，长结果里的行文不判）。
+    # 只收高置信空转形态（宁漏勿误伤：如"方程无解""待定系数"是真结论）。
+    # 2026-09-08：`[计算] X = X` 型**平凡 calc 回填**单列判据（见下）——
+    # 旧注释担心 `[计算] 191/192 = 191/192` 是真分数验证无法与空转区分；
+    # 但回填格式是 `[计算] expr = result`，**result 与 expr 逐字相同**意味着
+    # 模型只是把结论原样丢给 <calc>（<calc>191/192</calc> 无任何运算发生），
+    # 属 alg-060 SG#1='[计算] 1 = 1' 同型空转，可可靠判定。真运算（如
+    # <calc>comb(50,3)</calc> → [计算] comb(50,3) = 19600）result≠expr 不受影响。
+    _PLACEHOLDER_RE = re.compile(
+        r"（无）|（略）|暂无|占位|空转|未求解|未给出"
+        r"|子目标\s*\d+\s*已(?:求解|完成|给出)"
+        r"|^同上$|^见上$"
+    )
+    # `[计算] X = X` 切分（左右各自归一后比较，见 _looks_placeholder）。
+    # 2026-09-08 二次升级：SymPy 符号化简回填带空格（`1/(n + 1)`）或幂记号
+    # 差异，旧 `\1` 逐字反引用会漏判"符号复读空转"（模型把 1/(n+1) 原样丢给
+    # <calc> 当自证）；改为切出左右两侧后**去空白归一比较**——真运算
+    # （comb(50,3) → 19600、integral 结果、sqrt(45) → 3*sqrt(5)）两侧不同，
+    # 不受影响；无运算的复读（1/(n+1)=1/(n+1)、0=0）可靠拦截。
+    _TRIVIAL_CALC_RE = re.compile(
+        r"^\[计算\]\s*(?P<left>.+?)\s*=\s*(?P<right>.+?)\s*$", re.DOTALL)
+
+    @classmethod
+    def _looks_placeholder(cls, result: str) -> bool:
+        """短结果占位/空转检测：占位词命中 或 平凡 calc 回填（无运算发生）。"""
+        if not result:
+            return False
+        text = result.strip()
+        # 平凡 calc 回填：整体就是一行 `[计算] X = X`（结果≤120 字符内判定）
+        if len(text) <= 120:
+            m = cls._TRIVIAL_CALC_RE.match(text)
+            if m and m.group("left").strip():
+                left = re.sub(r"\s+", "", m.group("left")).replace("^", "**")
+                right = re.sub(r"\s+", "", m.group("right")).replace("^", "**")
+                if left == right:          # 去空白后两侧相同 = 无运算发生
+                    return True
+        if len(text) > 50:            # 长结果视为有内容，不做占位词判定
+            return False
+        return bool(cls._PLACEHOLDER_RE.search(text))
+
+    @classmethod
+    def _extract_lean_code(cls, result: str) -> str:
+        """从子目标结果提取 lean 代码片（fence 或裸 import 块）；无则空串。"""
+        if not result:
+            return ""
+        m = cls._LEAN_FENCE.search(result)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+        # 无 fence：整段以 import 开头（疑似裸 lean 代码）时收整段
+        head = result.strip()[:80]
+        if head.startswith("import ") or head.startswith("import\n"):
+            return result.strip()
+        return ""
+
+    def _subgoal_light_check(self, ctx: TaskContext, sg: dict,
+                             result: str) -> str:
+        """子目标结果 0-LLM 校验，返回反馈文本（空=通过）。异常全部放行。"""
+        try:
+            if not result or not result.strip():
+                return "【本步结果】为空，请给出完整结果。"
+            # L0P 占位/空转检测（全档，0 LLM）——2026-09-07 冒烟实证拦截项
+            if self._looks_placeholder(result):
+                return ("【本步结果】疑似占位/空转：仅给出“（无）”“已求解”等占位词，"
+                        "或把结论原样丢给 <calc> 自证（如“[计算] 1 = 1”这类"
+                        "表达式与结果相同的重言回填，没有任何运算发生）。"
+                        "请真正求解：给出基于题目条件的推导与数值/表达式结论，"
+                        "并用 <calc> 完成实际运算。")
+            # L0C 裸数值断言打回（2026-09-09 P1-1，仅 calc_mandatory 开启）：
+            # 行级纯数值运算（`25*4 = 100`，两侧无变量/中文、无 <calc> 来源）
+            # = 心算/自算痕迹 → 带反馈重解一次（方程/结论式含变量放行）。
+            if (find_naked_numeric_asserts is not None
+                    and getattr(self.config, "calc_mandatory", False)):
+                _naked = find_naked_numeric_asserts(result)
+                if _naked:
+                    self.record(ctx, "subgoal_l0c",
+                                f"L0C 打回裸数值断言: {_naked[0][:80]}")
+                    return ("【本步结果】含未用 <calc> 工具的数值运算（计算必须由"
+                            "系统工具完成，**禁止心算——即使你确信数值正确也必须"
+                            "让系统计算确认**）：`" + _naked[0][:60] +
+                            "`。请把该行改写为 …<calc>表达式</calc>… 让系统回填"
+                            "精确结果后继续。")
+            # P2（2026-09-09）：纯计算子目标（terminal）轻校验——router 开启时
+            # 结果必须已由 <calc> 回填或显式自算标注，防 terminal 走回推理/心算。
+            if (sg.get("calc_kind") == "terminal"
+                    and getattr(self.config, "subgoal_calc_router", False)):
+                _head = result.strip()[:60]
+                if not (result.startswith(("[计算]", "[自算]", "（子目标", "[子目标"))
+                        or "<calc>" in result):
+                    return ("【本子目标为纯计算子目标】请只给出一个 "
+                            "<calc>表达式</calc>，系统回填的精确值即本步结论；"
+                            f"当前结果（{_head}）不是回填形态，请改写为单个表达式。")
+            # L0 截断检查（全档，0 LLM）
+            from utils.extract import is_truncated_answer as _trunc
+            if _trunc(result):
+                return ("【本步结果】被截断（超出输出上限），"
+                        "请压缩推理、只保留结论与关键计算，完整给出【本步结果】。")
+        except Exception:  # noqa: BLE001
+            pass
+        # L1 lean 代码片编译（仅 deep 档 + lean 可用；禁网纯本地）
+        try:
+            if str(getattr(ctx, "tier", "") or "") != "deep":
+                return ""
+            if not getattr(self.config, "enable_subgoal_lean_check", True):
+                return ""
+            code = self._extract_lean_code(result)
+            if not code:
+                return ""
+            from tools.lean_local.lean_bridge import LeanBridge
+            from tools.lean_local.lean_bridge import _trash_lean_file
+            bridge = LeanBridge(self.client, self.config)
+            if not bridge.lean_available:
+                return ""
+            work_dir = bridge._lean_project_dir or ""
+            if not work_dir:
+                return ""          # 无 lake 工程 → 不尝试（避免直编找不到 Mathlib）
+            fname = f"sg_check_{int(time.time() * 1000) % 1000000}.lean"
+            r = bridge._compile(code, work_dir, lean_filename=fname)
+            try:
+                _trash_lean_file(work_dir, fname)
+            except Exception:  # noqa: BLE001
+                pass
+            if not r.get("ok"):
+                err = str(r.get("error", ""))[:200]
+                return (f"本步给出的 Lean 代码编译失败（{err}）。"
+                        "请修正代码（或改用数学表述，不必强制给 Lean）。")
+        except Exception as exc:  # noqa: BLE001  校验失败放行，绝不阻断
+            logger.debug("子目标 0-LLM 校验异常（放行）: %s: %s",
+                         type(exc).__name__, exc)
+        # L2/L3 数值断言验证（2026-09-08 去门后新钩子）：
+        # L3 协议版优先——模型 <check> 显式声明的等式（sympy 判 + Lean 背书）；
+        # L2 提取式兜底——无 <check> 时 0-LLM 提取纯数值/整式断言。
+        # 失败 = 计算未通过验证 → 反馈带真值让 LLM 带错重解。0-LLM 构造；
+        # 无数值断言零成本；异常/语法不支持一律放行不误报；每题限额防烧预算。
+        try:
+            _nv_fb = self._check_assert_verify(ctx, result)
+            if not _nv_fb:
+                _nv_fb = self._numeric_lean_verify(ctx, result)
+            if _nv_fb:
+                return _nv_fb
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
+
+    # ---------- L2 数值/代数断言 Lean 验证（2026-09-08）----------
+    _L2_EXPR_CHARS = re.compile(r"^[0-9a-zA-Z^*/+\-() ]+$")
+
+    def _extract_lean_assert_pairs(self, result: str) -> list:
+        """从子目标结果提取可 Lean 验证的等式断言。
+
+        返回 [(lean_l, lean_r, kind)]，kind: "num"(ℚ norm_num) | "poly"(ℤ ring)。
+        宁缺毋滥：只收两侧均为纯数值表达式（kind=num）或同一单变量整式
+        （kind=poly，无除号）的断言；含多变量/除号/分数指数/LaTeX → 丢弃。
+        """
+        if not result:
+            return []
+        text = str(result)
+        # 剥 LaTeX 内联/显示定界符
+        text = re.sub(r"\\[a-zA-Z]+", " ", text)     # 去 \frac \sqrt 等命令
+        text = text.replace("{", " ").replace("}", " ")
+        text = text.replace("$", " ")
+        text = text.replace("\\", " ")
+        out = []
+        for seg in text.split("\n"):
+            if "=" not in seg:
+                continue
+            parts = [p.strip() for p in seg.split("=")]
+            for i in range(len(parts) - 1):
+                L, R = parts[i], parts[i + 1]
+                # R 取到行尾（连环等号时一次只取相邻两段，宁可少验）
+                L, R = L.strip(), R.strip()
+                if not (1 <= len(L) <= 70 and 1 <= len(R) <= 70):
+                    continue
+                if not (self._L2_EXPR_CHARS.match(L)
+                        and self._L2_EXPR_CHARS.match(R)):
+                    continue
+                # ^ 指数必须是非负整数（避免 13^(2/3) 这类 Lean 语法不支持）
+                if re.search(r"\^[^0-9(]|\^$", L) or re.search(r"\^[^0-9(]|\^$", R):
+                    continue
+                # 宁缺毋滥：函数调用形态（g(0)/f(1)/sin(x)）与隐式乘
+                # （2x / xx / x(3)）在 Lean 中不合法 → 一律丢弃不构造
+                if (re.search(r"[a-zA-Z]\(", L) or re.search(r"[a-zA-Z]\(", R)
+                        or re.search(r"\d[a-zA-Z]", L) or re.search(r"\d[a-zA-Z]", R)):
+                    continue
+                letters = sorted(set(re.findall(r"[a-zA-Z]", L + R)))
+                if not letters:
+                    # 纯数值（可含负号/分数/幂）→ ℚ norm_num
+                    out.append((L, R, "num"))
+                elif len(letters) == 1:
+                    v = letters[0]
+                    if "/" in (L + R):
+                        continue              # 除号 → 非整式，ring 不适用
+                    # 变量须独立出现（两侧不被其他字母邻接，如 xx 简写）
+                    if (re.search(r"[a-zA-Z]" + v, L)
+                            or re.search(v + r"[a-zA-Z]", L)
+                            or re.search(r"[a-zA-Z]" + v, R)
+                            or re.search(v + r"[a-zA-Z]", R)):
+                        continue
+                    out.append((L, R, "poly", v))
+                # 多变量 → 跳过
+        # 去重（保持序）
+        seen, uniq = set(), []
+        for t in out:
+            key = tuple(t[:2])
+            if key not in seen:
+                seen.add(key)
+                uniq.append(t)
+        return uniq[:3]                       # 单次最多 3 条断言
+
+    @staticmethod
+    def _fix_lean_mul(expr: str) -> str:
+        """把 NL 隐式乘转 Lean 显式 *：)(、)字母/数字、数字( → 显式乘。
+
+        相邻括号/字母/数字在 Lean 里是函数应用（语法错或语义错），
+        norm_num/ring 场景一律应视为乘号。
+        """
+        e = expr.strip()
+        # 数字后紧跟左括号：2(x+1) → 2 * (x+1)（^ 后括号不动：2^(3) 罕见，宁可不转）
+        e = re.sub(r"(?<=[0-9])\(", " * (", e)
+        # 右括号后紧跟 ( / 字母 / 数字：)( → ) * (、)x → ) * x、)2 → ) * 2
+        e = re.sub(r"\)(?=[0-9a-zA-Z(])", ") * ", e)
+        # 折叠可能产生的重复乘号（"* * "）
+        e = re.sub(r"\*\s*\*", "*", e)
+        e = re.sub(r"\(\s*\*\s*\(", "(", e)
+        return e.strip()
+
+    def _numeric_lean_verify(self, ctx: TaskContext, result: str) -> str:
+        """L2 数值断言 Lean 验证，返回反馈文本（空=通过/无可验断言/放行）。"""
+        if not getattr(self.config, "enable_numeric_lean_verify", False):
+            return ""
+        if ctx.gen_time_up():
+            return ""
+        meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+        cnt = int(meta.get("numeric_lean_count", 0) or 0)
+        cap = max(1, int(getattr(self.config, "lean_numeric_max_per_q", 2) or 2))
+        if cnt >= cap:
+            return ""
+        pairs = self._extract_lean_assert_pairs(result)
+        if not pairs:
+            return ""
+        from tools.lean_local.lean_bridge import LeanBridge
+        from tools.lean_local.lean_bridge import _trash_lean_file
+        from tools.lean_local.lean_bridge import _mathlib_import_block
+        bridge = LeanBridge(self.client, self.config)
+        if not bridge.lean_available:
+            return ""
+        work_dir = bridge._lean_project_dir or ""
+        if not work_dir:
+            return ""
+        code_lines = [ln for ln in _mathlib_import_block().split("\n")]
+        if code_lines and code_lines[-1].strip():
+            code_lines.append("")
+        line_of = {}
+        for idx, (L, R, kind, *rest) in enumerate(pairs):
+            # 隐式乘（)(、)字母/数字、数字( ）→ 显式 *（Lean 中相邻即应用）
+            L = self._fix_lean_mul(L)
+            R = self._fix_lean_mul(R)
+            if kind == "num":
+                decl = f"example : ({L} : ℚ) = ({R} : ℚ) := by norm_num"
+            else:
+                v = rest[0]
+                decl = f"example ({v} : ℤ) : {L} = {R} := by ring"
+            code_lines.append(decl)
+            line_of[idx] = len(code_lines)
+        code = "\n".join(code_lines)
+        fname = f"sgnum_{os.getpid()}_{int(time.time() * 1000) % 1000000}.lean"
+        try:
+            r = bridge._compile(code, work_dir, lean_filename=fname,
+                                allow_sorry=True)
+        finally:
+            try:
+                _trash_lean_file(work_dir, fname)
+            except Exception:  # noqa: BLE001
+                pass
+        meta["numeric_lean_count"] = cnt + 1
+        if not r or r.get("ok"):
+            return ""
+        err_text = str(r.get("error", ""))
+        # 行号 → 断言映射；文件级错误（行号 < 首条 example）视为环境问题放行
+        min_line = min(line_of.values())
+        node_fail: dict = {}
+        msg_of_line: dict = {}
+        for m in re.finditer(r":(\d+):(\d+):\s*(error|warning):\s*([^\n]*)",
+                             err_text):
+            line = int(m.group(1))
+            if m.group(3) == "error" and line not in msg_of_line:
+                msg_of_line[line] = m.group(4).strip()
+        if msg_of_line and min(msg_of_line) < min_line:
+            return ""                          # import/文件级 → 环境问题
+        for idx, ln in line_of.items():
+            msg = msg_of_line.get(ln)
+            if msg:
+                node_fail[idx] = msg[:120]
+        if not node_fail:
+            return ""
+        # 命中 ≥1 条断言：组装反馈（最多报 2 条）
+        lines = []
+        for idx in sorted(node_fail)[:2]:
+            L, R = pairs[idx][0], pairs[idx][1]
+            diag = node_fail[idx]
+            lines.append(
+                f"断言「{L} = {R}」未通过 Lean 验证"
+                + (f"（{diag}）" if diag else ""))
+        return ("【Lean 数值验证未通过】本步含以下计算断言，编译器未能确认成立，"
+                "请逐条复核并修正数值/表达式后重新给出【本步结果】："
+                + "；".join(lines) + "。"
+                "（若表达式本身含 Lean 不支持的记号，请改写为等价的标准形式）")
+
+    # ---------- L3 <check> 协议断言验证（2026-09-08 协议版）----------
+    # 模型在【本步结果】用 <check>LHS = RHS</check> 显式声明待验证等式 →
+    # 提取零歧义（解决提取式 2.8% 覆盖率问题）。判定：sympy 精确判定为主
+    # （expand/simplify，确定性无浮点误差）→ 判"不成立"的再交 Lean
+    # norm_num/ring 编译背书（mcp 后端）双确认 → 反馈带标准化简结果
+    # （可行动），杜绝"只知道错、不知道对什么"的裸诊断。
+    _CHECK_RE = re.compile(r"<check>(.*?)</check>", re.DOTALL)
+
+    def _extract_check_asserts(self, result: str) -> list:
+        """提取 <check> 协议断言 → [(L, R)]（宁缺毋滥）。"""
+        if not result:
+            return []
+        out = []
+        for m in self._CHECK_RE.finditer(str(result)):
+            body = m.group(1).strip()
+            if not body or len(body) > 160 or "=" not in body:
+                continue
+            parts = [p.strip() for p in body.split("=")]
+            if len(parts) != 2:                    # 多 = → 丢弃
+                continue
+            L, R = parts
+            if not (1 <= len(L) <= 70 and 1 <= len(R) <= 70):
+                continue
+            if not (self._L2_EXPR_CHARS.match(L)
+                    and self._L2_EXPR_CHARS.match(R)):
+                continue
+            if (re.search(r"[a-zA-Z]\(", L) and not re.search(
+                    r"^(sin|cos|tan|log|ln|exp|sqrt|abs|floor|ceil|min|max)\(",
+                    L)):
+                continue                          # 函数调用形态（sin 等除外）
+            out.append((L, R))
+        seen, uniq = set(), []
+        for t in out:
+            if t not in seen:
+                seen.add(t)
+                uniq.append(t)
+        return uniq[:4]
+
+    @staticmethod
+    def _strip_check_tags(text: str) -> str:
+        """剥 <check>...</check> 验证标签：去标签保留内部内容（数学等式文本无害）。
+
+        仅当标签完整闭合时剥除；不闭合的残留 <check> 一并删除防泄漏。
+        """
+        if not text or "<check>" not in text:
+            return text
+        t = re.sub(r"<check>(.*?)</check>", r"\1", str(text), flags=re.DOTALL)
+        # 兜底：未闭合/孤立标签删除
+        t = t.replace("<check>", "").replace("</check>", "")
+        return t
+
+    @staticmethod
+    def _pow_to_python(s: str) -> str:
+        """裸 ^ → **（先保护已有 **）。"""
+        s = s.replace("**", "@@P@@")
+        s = re.sub(r"\^", "**", s)
+        return s.replace("@@P@@", "**")
+
+    def _sympy_judge(self, L: str, R: str):
+        """sympy 判定 L=R。返回 ("pass"|"fail"|"unknown", 说明/真值串)。
+
+        判据（防误报红线）：
+        - **赋值式跳过**：任一侧是单个未知变量（x = 5、s = 265/247）→
+          这是"求解结果"而非"恒等断言"，无 ground truth 可验 → unknown
+          放行（2026-09-08 smoke10 实证：模型大量用 <check>x = 值</check>
+          声明赋值结果，误当恒等断言会误报把对的改错）；
+        - 整式/数值（无除号无函数）→ expand(L-R)==0 才 pass；非 0 差为常数
+          或含自由变量 → fail（多项式不恒等=断言错，无限域可靠）；
+        - 含除号/函数 → 仅 simplify(L-R) 为 0 → pass、为非零常数 → fail，
+          非常数一律 unknown（放行，绝不误报）。
+        """
+        try:
+            from utils.sympy_tools import _try_parse
+        except Exception:  # noqa: BLE001
+            return "unknown", ""
+        try:
+            # 赋值式跳过：一侧是单个变量 v 且另一侧**不含 v**（x = 5、s = 265/247）
+            # 才是"求解结果"；若另一侧也含 v（如 (x^2-1)/(x-1) = x）则是恒等
+            # 断言，仍正常判定。
+            _Lt, _Rt = L.strip(), R.strip()
+            if (re.fullmatch(r"[a-zA-Z]", _Lt) and _Lt not in R) or (
+                    re.fullmatch(r"[a-zA-Z]", _Rt) and _Rt not in L):
+                return "unknown", ""
+            L2, R2 = self._pow_to_python(L), self._pow_to_python(R)
+            a, _ = _try_parse(L2)
+            b, _ = _try_parse(R2)
+            if a is None or b is None:
+                return "unknown", ""
+            import sympy as _sp
+            has_frac = ("/" in L2 + R2) or bool(re.search(
+                r"(sqrt|sin|cos|tan|log|ln|exp|abs|floor|ceil)\(", L2 + R2))
+            if has_frac:
+                d = _sp.simplify(a - b)
+                if d == 0:
+                    return "pass", ""
+                if d.is_number and d != 0:
+                    return "fail", f"左式实际值应为 {_sp.simplify(a)}"
+                return "unknown", ""
+            d = _sp.expand(a - b)
+            if d == 0:
+                return "pass", ""
+            # 整式差非 0：确定性不恒等 → fail（语义化说明供反馈）
+            if d.free_symbols:
+                return "fail", f"两侧展开后相差 {_sp.simplify(d)}，并非恒等"
+            return "fail", f"左式实际值应为 {_sp.simplify(a)}"
+        except Exception:  # noqa: BLE001
+            return "unknown", ""
+
+    def _check_assert_verify(self, ctx: TaskContext, result: str) -> str:
+        """<check> 协议验证入口，返回反馈文本（空=通过/无断言/放行）。"""
+        if not getattr(self.config, "enable_numeric_lean_verify", False):
+            return ""
+        if ctx.gen_time_up():
+            return ""
+        meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+        cnt = int(meta.get("numeric_lean_count", 0) or 0)
+        cap = max(1, int(getattr(self.config, "lean_numeric_max_per_q", 2) or 2))
+        if cnt >= cap:
+            return ""
+        pairs = self._extract_check_asserts(result)
+        if not pairs:
+            return ""
+        fails = []                                 # (L, R, 说明)
+        for L, R in pairs:
+            v, info = self._sympy_judge(L, R)
+            if v == "fail":
+                fails.append((L, R, info))
+        if not fails:
+            return ""
+        # Lean 背书（只对疑似错的断言编译，双确认防 sympy 边缘误报）
+        confirmed = self._lean_backup_fails(fails)
+        if not confirmed:
+            return ""
+        meta["numeric_lean_count"] = cnt + 1
+        lines = []
+        for L, R, info in confirmed:
+            if info:
+                lines.append(f"断言「{L} = {R}」不成立（{info}）")
+            else:
+                lines.append(f"断言「{L} = {R}」不成立（两侧并不恒等）")
+        return ("【计算断言未通过验证】你声明的等式未通过客观验证（SymPy 精确"
+                "判定 + Lean 编译器双重确认），请修正该步计算后重新给出【本步"
+                "结果】：" + "；".join(lines) + "。")
+
+    # P4（2026-09-09 老师"描述即完成/零代码"）：疑似错断言 → 生成**多条策略
+    # 尝试**声明（norm_num/norm_num1/ring/ring_nf/nlinarith/omega/grind/aesop
+    # 按形态选择），一次编译，组内任一策略闭合 → 剔除（防 sympy 误报）；
+    # 组内全部失败 → 双确认该断言不成立。
+    _SYNTAX_ERR_KW = ("unknown identifier", "unexpected token",
+                      "unknown constant", "invalid")
+
+    def _build_auto_proof(self, fails: list):
+        """为疑似错断言构建多策略 Lean 声明（P4）。
+
+        返回 (code_lines, group_of)：group_of[i] = fails[i] 各策略声明行号；
+        形态不支持（含除号的变量式/超 3 变量）→ 该断言无组（调用方宁放行）。
+        num = 纯数值（ℚ norm_num 系 + ring）；poly = 无除号整式（ℤ 策略族）。
+        """
+        try:
+            from tools.lean_local.lean_bridge import _mathlib_import_block
+        except Exception:  # noqa: BLE001
+            return None
+        code_lines = [ln for ln in _mathlib_import_block().split("\n")]
+        if code_lines and code_lines[-1].strip():
+            code_lines.append("")
+        group_of: dict = {}
+        for i, _it in enumerate(fails):
+            L, R = str(_it[0]), str(_it[1])
+            Lx, Rx = self._fix_lean_mul(L), self._fix_lean_mul(R)
+            vars_ = sorted(set(re.findall(r"[a-zA-Z]", L + R)))
+            if not vars_:
+                head = f"example : ({Lx} : ℚ) = ({Rx} : ℚ)"
+                decls = ["by norm_num", "by norm_num1", "by ring"]
+            elif "/" not in (L + R) and len(vars_) <= 3:
+                binds = " ".join(f"({v} : ℤ)" for v in vars_)
+                head = f"example {binds} : {Lx} = {Rx}"
+                decls = ["by ring", "by ring_nf", "by nlinarith",
+                         "by omega", "by grind", "by aesop"]
+            else:
+                continue                       # Lean 无法背书 → 宁放行
+            lines = []
+            for d in decls:
+                code_lines.append(f"{head} := {d}")
+                lines.append(len(code_lines))
+            group_of[i] = lines
+        if not group_of:
+            return None
+        return code_lines, group_of
+
+    def _lean_backup_fails(self, fails: list) -> list:
+        """对疑似错的断言做 Lean 多策略编译背书（P4 自动证明链）。
+
+        返回双确认的 (L, R, info) 子集；组内任一策略闭合（该行无 error）
+        → 剔除（防 sympy 误报）；组内全部策略失败（每行均有 error）→ 确认
+        不成立。Lean 不可用/文件级错误/断言含语法不支持记号 → 宁放行不反馈。
+        """
+        try:
+            from tools.lean_local.lean_bridge import LeanBridge
+            from tools.lean_local.lean_bridge import _trash_lean_file
+            built = self._build_auto_proof(fails)
+            if not built:
+                return []
+            code_lines, group_of = built
+            bridge = LeanBridge(self.client, self.config)
+            if not bridge.lean_available:
+                return []
+            work_dir = bridge._lean_project_dir or ""
+            if not work_dir:
+                return []
+            code = "\n".join(code_lines)
+            fname = (f"sgcheck_{os.getpid()}_"
+                     f"{int(time.time() * 1000) % 1000000}.lean")
+            try:
+                r = bridge._compile(code, work_dir, lean_filename=fname,
+                                    allow_sorry=True)
+            finally:
+                try:
+                    _trash_lean_file(work_dir, fname)
+                except Exception:  # noqa: BLE001
+                    pass
+            if not r or r.get("ok"):
+                return []                            # 全部通过 → sympy 误报
+            err_text = str(r.get("error", ""))
+            first_decl = min(v[0] for v in group_of.values())
+            msg_of_line = {}
+            for m in re.finditer(
+                    r":(\d+):(\d+):\s*error:\s*([^\n]*)", err_text):
+                line = int(m.group(1))
+                if line not in msg_of_line:
+                    msg_of_line[line] = m.group(3).strip()
+            if msg_of_line and min(msg_of_line) < first_decl:
+                return []                            # import/文件级 → 环境问题
+            confirmed = []
+            for i, lines in group_of.items():
+                errs = [msg_of_line[ln] for ln in lines if ln in msg_of_line]
+                if len(errs) < len(lines):
+                    continue                         # ≥1 策略闭合 → sympy 误报
+                if any(any(k in e for k in self._SYNTAX_ERR_KW)
+                       for e in errs):
+                    continue                         # 语法类失败 → 不可信，放行
+                confirmed.append(fails[i])
+            return confirmed
+        except Exception:  # noqa: BLE001  异常一律放行（不误报）
+            return []
+
+
+    # ---------- ③ 子目标交叉核对（2026-09-08 老师建议3）----------
+    # 老师建议："子目标交叉核对机制"——不同子目标对同一量给出互相矛盾的结论
+    # 时，系统要能发现并打回，而不是让矛盾静默流入最终合并（如 alg-060 型）。
+    # 落地两方向（独立开关，可单开/同开做 A/B）：
+    #   A 确定性冲突闸（0 LLM，subgoal_conflict_gate）：
+    #     汇总全题子目标结果里的 <calc> 回填（[计算] X = v）+ <check> 协议断言
+    #     + L2 已提取等式断言，同名单变量 LHS 出现**可判定不同的常数**值
+    #     （x=1 vs x=2）→ 判显式矛盾，merge 提示词强制裁决后才许合并。
+    #     已知盲区：隐含矛盾（alg-060：xy=25 与 D=2 不共用同一变量名，纯规则
+    #     必漏）；非单变量 LHS（x^2=4 含 ± 分支）、近似舍入差异 → 宁漏勿误报。
+    #   B LLM 交叉核对轮（merge 前 +1 次小调用，subgoal_crosscheck_llm）：
+    #     把各子目标结论行单独抽出交给 LLM 集中裁决矛盾——能看隐含矛盾
+    #     （alg-060 这型有机会看出，不保证）。预算不足自动跳过，不阻断 merge。
+    _LHS_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    # 行内 [计算] 回填（允许前缀自然语言，如 "解得 [计算] x = 1"）：
+    # RHS 截断到行尾或中英文句读/分号，防吞掉后续文字。
+    _CALC_INLINE_RE = re.compile(
+        r"\[计算\]\s*([^=\n，。；;,]+?)\s*=\s*([^\n，。；;,]+)")
+    # 松散 ident = const 片段（纯文本结论 "解得 x = 1"）：前 2 个非空字符
+    # 命中情形/条件标记（当/若/情形/情况/分支…）→ 跳过，防分支讨论误报。
+    _LOOSE_EQ_RE = re.compile(
+        r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^\s，。；;,+)(]+)")
+    _CASE_MARK = set("当若情形况分")
+
+    @staticmethod
+    def _lookback_case_mark(text: str, pos: int) -> bool:
+        """LHS 前 2 个非空白字符是否含情形/条件标记（当/若/情形…）。"""
+        i = pos - 1
+        n = 0
+        while i >= 0 and n < 2:
+            ch = text[i]
+            if not ch.isspace():
+                if ch in SubGoalSolverAgent._CASE_MARK:
+                    return True
+                n += 1
+            i -= 1
+        return False
+
+    def _collect_claims(self, result: str) -> list:
+        """从子目标结果汇总确定性等式断言 [(L, R)]（去重）。
+
+        四来源并集：①<calc> 回填落地行/行内 `[计算] X = v`
+        （resolve_all_calcs 格式，允许自然语言前缀）；②<check>…=…</check>
+        协议块（L3）；③L2 提取式等式断言（_extract_lean_assert_pairs，
+        宁缺毋滥）；④松散 `X = 常数` 文本片段（"解得 x = 1"），带情形/
+        条件标记（当/若/情形…）的前缀跳过，防分支讨论误报。合并去重。
+        """
+        pairs: list = []
+        if not result:
+            return pairs
+        text = str(result)
+        for m in self._CALC_INLINE_RE.finditer(text):
+            L = m.group(1).strip().rstrip("= ")
+            R = m.group(2).strip()
+            if L and R:
+                pairs.append((L, R))
+        for L, R in self._extract_check_asserts(text):
+            pairs.append((L, R))
+        for L, R, *_rest in self._extract_lean_assert_pairs(text):
+            pairs.append((L, R))
+        # 松散源只在**不含** [计算]/<check> 标记的行上跑（避免与专用源重复，
+        # 且函数调用形 RHS（sqrt(…)）会在左括号处被截断成假断言）。
+        for ln in text.split("\n"):
+            if "[计算]" in ln or "<check>" in ln:
+                continue
+            for m in self._LOOSE_EQ_RE.finditer(ln):
+                if self._lookback_case_mark(ln, m.start()):
+                    continue
+                L, R = m.group(1).strip(), m.group(2).strip()
+                if L and R:
+                    pairs.append((L, R))
+        seen, uniq = set(), []
+        for p in pairs:
+            if p not in seen:
+                seen.add(p)
+                uniq.append(p)
+        return uniq
+
+    @staticmethod
+    def _rhs_const(s: str):
+        """RHS 解析为常数则返回 sympy 值对象，否则 None（变量式/不可解析）。
+
+        符号化字符串（`^`/`**` 幂、分数、根式）交给 sympy；带自由符号或
+        解析失败 → None（不做常量比较，宁漏勿误报）。
+        """
+        try:
+            from utils.sympy_tools import _try_parse
+        except Exception:  # noqa: BLE001
+            return None
+        try:
+            a, _ = _try_parse(s.replace("^", "**"))
+        except Exception:  # noqa: BLE001
+            return None
+        if a is None:
+            return None
+        try:
+            if getattr(a, "free_symbols", None):
+                return None
+        except Exception:  # noqa: BLE001
+            return None
+        return a
+
+    def _cross_conflicts(self, subgoals: list[dict],
+                         results_map: dict[int, str]) -> list:
+        """确定性冲突闸（0 LLM）：同名单变量被给出不同常数 → 返回矛盾清单。
+
+        判同值用 sympy 精确差化简（0.5 与 1/2、3*sqrt(5) 与 sqrt(45) 视为
+        同值不报警）；同值不同写法不误报。返回人类可读行（空=无冲突）。
+        """
+        try:
+            import sympy as _sp
+        except Exception:  # noqa: BLE001
+            return []
+        claims: list = []
+        for sg in subgoals:
+            sid = sg.get("id")
+            text = (results_map.get(sid) or sg.get("result") or "")
+            for L, R in self._collect_claims(text):
+                claims.append((sid, L, R))
+        if not claims:
+            return []
+        var_map: dict = {}          # LHS规范化名 -> [(sid, 值对象, R原文)]
+        for sid, L, R in claims:
+            Lc = re.sub(r"\s+", "", str(L))
+            if not self._LHS_IDENT_RE.match(Lc):
+                continue            # 复合 LHS（x^2 / x+1 / S(1)…）不做常量冲突判定
+            v = self._rhs_const(str(R))
+            if v is None:
+                continue
+            var_map.setdefault(Lc, []).append((sid, v, str(R).strip()))
+        conflicts: list = []
+        for Lc, lst in var_map.items():
+            groups: list = []       # 值分组（sympy 差化简判同）
+            for sid, v, Rs in lst:
+                for g in groups:
+                    try:
+                        if _sp.simplify(g[0][1] - v) == 0:
+                            g.append((sid, v, Rs))
+                            break
+                    except Exception:  # noqa: BLE001  化简失败按不同值处理（宁报）
+                        pass
+                else:
+                    groups.append([(sid, v, Rs)])
+            if len(groups) < 2:
+                continue
+            # 只报**跨子目标**冲突：同一步内对同一量出现多值多为分支枚举
+            # （"x=1 或 x=2"）或自我修正，不构成本机制目标（merge 自带矛盾
+            # 检查兜底）；跨子目标对同一量的不同常数才是真正流毒信号。
+            for g in groups:
+                g.sort(key=lambda t: (str(t[0]), len(t[2])))
+            base = min(groups, key=lambda g: (str(g[0][0]), len(g[0][2])))
+            base_sid, _b_v, b_r0 = base[0]
+            other = None
+            for g in groups:
+                if g is base:
+                    continue
+                cand = [t for t in g if t[0] != base_sid]
+                if cand:
+                    other = cand[0]
+                    break
+            if other is None:
+                continue            # 所有不同取值都出自同一子目标 → 不报
+            o_sid, _o_v, o_r = other
+            conflicts.append(
+                f"「{Lc}」在子目标 #{base_sid} 中取 {b_r0}，"
+                f"而在子目标 #{o_sid} 中取 {o_r}——同一变量不能同时成立，"
+                "必有至少一方错误（含推导/抄写错误），需裁决修正")
+        return conflicts[:6]          # 单次最多报 6 条，防提示词膨胀
+
+    def _llm_crosscheck(self, ctx: TaskContext, subgoals: list[dict],
+                        results_map: dict[int, str],
+                        plan_summary: str) -> str:
+        """LLM 交叉核对轮：merge 前 +1 次小调用，返回矛盾裁决报告。
+
+        只裁决矛盾（不求解/不合并/不给答案）；调用失败或预算不足返回空串
+        （空串=未跑/无输出，由调用方与"未发现矛盾"区分）。~1-2K token。
+        """
+        if ctx.gen_time_up():
+            return ""
+        concl_lines = []
+        for sg in subgoals:
+            sid = sg.get("id")
+            text = (results_map.get(sid) or sg.get("result") or "")
+            text = re.sub(r"\s+", " ", str(text)).strip()
+            if not text:
+                continue
+            title = re.sub(r"\s+", " ", str(sg.get("title") or "")).strip()
+            concl_lines.append(f"# 子目标 {sid}"
+                               + (f"「{title}」" if title else "")
+                               + f"：{text[:200]}")
+        if not concl_lines:
+            return ""
+        user_msg = SUBGOAL_CROSSCHECK_USER_TEMPLATE.format(
+            problem=(str(getattr(ctx, "problem", "") or "")[:800]),
+            subgoal_plan_summary=(str(plan_summary or "")[:600]),
+            subgoal_conclusions="\n".join(concl_lines),
+        )
+        try:
+            t0 = time.time()
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system",
+                         "content": SUBGOAL_CROSSCHECK_SYSTEM},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "【矛盾列表】",
+                ),
+                0.0, 2048,
+            )
+            if resp:
+                resp = stitch("【矛盾列表】", resp)
+            self.record(ctx, "subgoal_crosscheck",
+                        f"LLM 交叉核对轮耗时 {time.time() - t0:.0f}s"
+                        + ("" if resp else "，返回空（不注入矛盾提示）"))
+            return resp or ""
+        except Exception as exc:  # noqa: BLE001  失败不阻断 merge
+            logger.debug("LLM 交叉核对轮异常（跳过）: %s: %s",
+                         type(exc).__name__, exc)
+            return ""
+
+
     # ---------- 阶段三：合并 ----------
     def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
                        plan_summary: str, results_map: dict[int, str],
@@ -845,48 +2149,221 @@ class SubGoalSolverAgent(BaseAgent):
 
         2026-09-04 calc 纪律下沉：合并阶段若需汇总计算（各子目标结果代入/
         化简求值），同样强制 <calc> 标记并由系统回填，杜绝 merge 心算错。
+        2026-09-08 改进建议3+6：①蓝图最终结论注入 user 模板（merge 输出
+        必须与蓝图结论对齐，防 alg-009/053/068 输出端数值漂移）；②merge 产出
+        空转/占位/平凡 calc 回填（如 [计算] 0 = 0）时带反馈重试一次（alg-009
+        merge 计划 = "[计算]0=0" 仍照常入候选的教训）。
+        2026-09-08 老师建议3 交叉核对：merge 前先跑子目标交叉核对
+        （A 确定性冲突闸 0-LLM + B LLM 交叉核对轮 +1 调用，各自独立开关），
+        发现的矛盾强制注入 merge 提示词要求逐条裁决——不让子目标间矛盾
+        静默流入最终合并（alg-060 型显式/隐含矛盾）。
         """
         all_results = self._format_all_results(results_map, subgoals)
+        # 蓝图最终结论（root 节点 statement）：取 ctx.blueprint，兼容 dict/list 两种形态
+        blueprint_conclusion = self._blueprint_conclusion(ctx)
         user_msg = SUBGOAL_MERGE_USER_TEMPLATE.format(
             problem=ctx.problem,
             subgoal_plan_summary=plan_summary,
+            blueprint_conclusion=blueprint_conclusion,
             all_results=all_results,
             merge_strategy=merge_strategy or "将各子目标结果按逻辑顺序组合，得出原题的最终答案。",
         )
+        # ③ 子目标交叉核对（2026-09-08 老师建议3）：合并前先核对，矛盾强制
+        # 注入提示词要求逐条裁决（A 0-LLM 确定性冲突闸 + B LLM 交叉核对轮）。
+        # 二者独立开关可单开/同开 A/B；任何一步失败/预算不足都不阻断 merge。
+        conflict_note = ""
+        try:
+            enable_gate = bool(getattr(
+                self.config, "subgoal_conflict_gate", False))
+            enable_xllm = bool(getattr(
+                self.config, "subgoal_crosscheck_llm", False))
+            if enable_gate or enable_xllm:
+                parts = []
+                if enable_gate:
+                    cfl = self._cross_conflicts(subgoals, results_map)
+                    if cfl:
+                        parts.append(
+                            "【确定性冲突闸】系统自动核对各子目标对同一变量"
+                            "的取值，发现以下显式矛盾（同名 LHS 出现不同常数"
+                            "值，数学上不可能同时成立）：\n"
+                            + "\n".join("  - " + c for c in cfl))
+                        self.record(
+                            ctx, "subgoal_crosscheck",
+                            f"确定性冲突闸: 发现 {len(cfl)} 处同名不同值矛盾")
+                    else:
+                        self.record(
+                            ctx, "subgoal_crosscheck",
+                            "确定性冲突闸: 未发现显式矛盾")
+                if enable_xllm:
+                    rep = self._llm_crosscheck(
+                        ctx, subgoals, results_map, plan_summary)
+                    if rep and rep.strip():
+                        # 剥掉"未发现矛盾"类措辞后仍有实质内容 → 视为报了
+                        # 矛盾（防"除上述外未发现矛盾"混合措辞漏注入）
+                        _resid = re.sub(
+                            r"未发现(?:明显|任何)?矛盾|无矛盾|没有矛盾",
+                            "", rep, flags=re.IGNORECASE)
+                        if len(_resid.strip()) <= 40:
+                            self.record(
+                                ctx, "subgoal_crosscheck",
+                                "LLM 交叉核对轮: 未发现矛盾")
+                        else:
+                            parts.append(
+                                "【LLM 交叉核对】独立评审轮对各子目标结论的"
+                                "矛盾裁决报告：\n" + rep.strip()[:800])
+                            self.record(
+                                ctx, "subgoal_crosscheck",
+                                f"LLM 交叉核对轮: 报告潜在矛盾"
+                                f"（{rep.strip()[:80]!r}）")
+                if parts:
+                    conflict_note = (
+                        "\n\n【⚠ 系统交叉核对结果（最高优先级，必须先处理）】"
+                        "合并前已发现子目标结论间存在潜在矛盾。你必须在"
+                        "【矛盾检查】中**逐条裁决**：指出冲突双方各自的主张、"
+                        "依据原题条件与 <calc> 数值复核判定哪一方错误、给出"
+                        "修正后的取值；若实为不同对象/不同分支并不冲突，请"
+                        "逐条说明理由。**禁止不处理矛盾就直接输出【最终答案】"
+                        "。**\n" + "\n".join(parts))
+        except Exception as exc:  # noqa: BLE001  交叉核对失败不阻断 merge
+            logger.debug("子目标交叉核对异常（跳过）: %s: %s",
+                         type(exc).__name__, exc)
+        if conflict_note:
+            user_msg = user_msg + conflict_note
         _merge_system = SUBGOAL_MERGE_SYSTEM
         if (resolve_all_calcs is not None
                 and getattr(self.config, 'enable_calc_tool', True)):
             _merge_system = SUBGOAL_MERGE_SYSTEM + _CALC_GUIDE
 
-        # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
-        resp = self.llm(
-            ctx,
-            prefill_messages(
-                [
-                    {"role": "system", "content": _merge_system},
-                    {"role": "user", "content": user_msg},
-                ],
-                "【最终答案】",
-            ),
-            0.2, 32768,
-        )
-        if resp:
-            resp = stitch("【最终答案】", resp)
-        if resp is None:
-            return self._fallback_from_last_subgoal(subgoals)
+        for attempt in range(2):
+            # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": _merge_system},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "【最终答案】",
+                ),
+                0.2, 32768,
+            )
+            if resp:
+                resp = stitch("【最终答案】", resp)
+            if resp is None:
+                if attempt == 0:
+                    self.record(ctx, "subgoal_merge",
+                                "合并 LLM 调用失败，带反馈重试一次")
+                    user_msg = user_msg + (
+                        "\n\n[上一轮合并未返回有效文本] 请完整输出"
+                        "【矛盾检查】【结论合并】【最终答案】。")
+                    continue
+                return self._fallback_from_last_subgoal(subgoals)
 
-        # 2026-09-04 calc_tool 回填（先于答案提取，与 solver/_call_step 同序）
-        if (resolve_all_calcs is not None
-                and getattr(self.config, 'enable_calc_tool', True)):
-            resp = resolve_all_calcs(resp)[0]
+            # 2026-09-04 calc_tool 回填（先于答案提取，与 solver/_call_step 同序）
+            if (resolve_all_calcs is not None
+                    and getattr(self.config, 'enable_calc_tool', True)):
+                resp, _resolved = resolve_all_calcs(resp)
+                # P1-2（2026-09-09）：merge 内工具失败审计留痕（WARN:/ERROR:）
+                if audit_calc_fallbacks is not None:
+                    for _ex, _rs in audit_calc_fallbacks(_resolved):
+                        self.record(ctx, "calc_fallback",
+                                    f"<calc>{_ex}</calc> → {_rs}",
+                                    expr=_ex, reason=_rs)
+                # P1-1（2026-09-09，calc_mandatory）：回填后仍有裸数值断言
+                # （心算痕迹）→ 打回重写一次（attempt 0 限定，防死循环）
+                if (attempt == 0
+                        and find_naked_numeric_asserts is not None
+                        and getattr(self.config, "calc_mandatory", False)):
+                    _naked = find_naked_numeric_asserts(resp)
+                    if _naked:
+                        self.record(
+                            ctx, "subgoal_merge",
+                            f"merge 含未用 <calc> 的数值运算（{_naked[0][:50]}），"
+                            "打回重试")
+                        user_msg = user_msg + (
+                            "\n\n[上一轮合并含未用 <calc> 工具的数值运算："
+                            f"{_naked[0][:80]}]\n计算必须用 <calc> 标记由系统回填"
+                            "精确结果，禁止心算。请改写后重新合并输出。")
+                        continue
 
-        # 优先提取「最终答案」
-        answer = extract_final_answer(resp)
-        if answer:
-            return answer
-        return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals)
+            # 优先提取「最终答案」
+            answer = extract_final_answer(resp)
+            if answer:
+                # 2026-09-08：merge 空转（占位词 / [计算] X = X 平凡回填）→
+                # 不允许带着空转结论入候选，带反馈重试一次
+                if self._looks_placeholder(answer):
+                    if attempt == 0:
+                        self.record(
+                            ctx, "subgoal_merge",
+                            f"合并输出为空转/占位（{answer[:60]}），带反馈重试")
+                        user_msg = user_msg + (
+                            f"\n\n[上一轮合并输出为空转：{answer[:120]}]\n"
+                            "你没有真正合并各子目标结果。请：①逐条做矛盾检查；"
+                            "②基于各子目标结果与蓝图结论真实推导；"
+                            "③用 <calc> 完成汇总计算后在【最终答案】给出结论。")
+                        continue
+                    return self._fallback_from_last_subgoal(subgoals)
+                return answer
+            if attempt == 0:
+                self.record(ctx, "subgoal_merge",
+                            "合并未提取到【最终答案】，带反馈重试一次")
+                user_msg = user_msg + (
+                    "\n\n[上一轮未找到【最终答案】段] 请在末尾用【最终答案】"
+                    "明确给出结论（一个数值/表达式/集合），不要只给过程。")
+                continue
+            return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals)
+        return self._fallback_from_last_subgoal(subgoals)
+
+    @staticmethod
+    def _blueprint_conclusion(ctx: TaskContext) -> str:
+        """从 ctx.blueprint 提取 root 节点结论文本（供 merge 输出对齐）。
+
+        兼容 dict（{root_id, nodes}) 与 list（nodes 为 [ {...} ]）两种形态；
+        提取失败返回占位文本（不阻断 merge）。
+        """
+        try:
+            bp = getattr(ctx, "blueprint", None)
+            if not bp:
+                return "（无——按题目与子目标规划合并）"
+            if not isinstance(bp, dict):
+                return "（无——按题目与子目标规划合并）"
+            root_id = bp.get("root_id") or ""
+            nodes = bp.get("nodes") or []
+            if isinstance(nodes, dict):
+                node = nodes.get(root_id) if root_id else None
+            else:  # list 形态：[{"id":..., "statement":...}, ...]
+                node = None
+                for n in nodes:
+                    if isinstance(n, dict) and n.get("id") == root_id:
+                        node = n
+                        break
+            stmt = (node or {}).get("statement") if isinstance(node, dict) else ""
+            if stmt and str(stmt).strip():
+                return str(stmt).strip()[:400]
+            return "（蓝图无显式最终结论——按题目与子目标规划合并）"
+        except Exception:  # noqa: BLE001  提取失败不阻断 merge
+            return "（无——按题目与子目标规划合并）"
 
     # ---------- 辅助方法 ----------
+    @staticmethod
+    def _subgoal_stats(subgoals: list[dict]) -> dict:
+        """S4-lite 独立性指标（老师 9/6：减少子目标数、降低上下文依赖）。
+
+        返回 n_subgoals / dep_edges（依赖边总数）/ avg_indegree（平均入度，
+        越小独立性越高，0 = 全独立）/ dep_free（零依赖子目标数）。
+        进 diag 供 A/B 对照（S2 deps 模式是否真降了上下文与依赖）。
+        """
+        n = len(subgoals)
+        edges = sum(len(sg.get("depends_on") or []) for sg in subgoals)
+        dep_free = sum(
+            0 if (sg.get("depends_on") or []) else 1 for sg in subgoals)
+        return {
+            "n_subgoals": n,
+            "dep_edges": edges,
+            "avg_indegree": round(edges / n, 2) if n else 0.0,
+            "dep_free": dep_free,
+        }
+
     @staticmethod
     def _format_plan_summary(subgoals: list[dict], merge_strategy: str) -> str:
         """格式化子目标规划摘要（用于后续步骤提示）"""
@@ -904,7 +2381,7 @@ class SubGoalSolverAgent(BaseAgent):
     @staticmethod
     def _format_previous_results(results_map: dict[int, str],
                                  subgoals: list[dict]) -> str:
-        """格式化已求解的子目标结果"""
+        """格式化已求解的子目标结果（全量前序，subgoal_ctx_mode="all" 时用）"""
         if not results_map:
             return "（尚无前置结果）"
         lines = []
@@ -912,6 +2389,24 @@ class SubGoalSolverAgent(BaseAgent):
             if sg["id"] in results_map:
                 lines.append(f"  子目标 #{sg['id']}「{sg['title']}」结果: {results_map[sg['id']]}")
         return "\n".join(lines) if lines else "（尚无前置结果）"
+
+    @staticmethod
+    def _format_dep_results(results_map: dict[int, str],
+                            subgoals: list[dict], sg: dict) -> str:
+        """按 depends_on 只注入**直接依赖**的结果（老师 9/6 建议：子目标独立性、
+        最小上下文依赖）。无依赖 / 依赖未解出 → 返回空串（零前序上下文），
+        让独立子目标可并行、不被无关中间量污染。id 缺失容错：依赖未解出跳过。
+
+        与 _format_previous_results 的区别：后者把**所有**已解子目标都塞进
+        提示词（O(n²) 上下文膨胀）；本函数只带声明依赖的少数几条。
+        """
+        deps = [d for d in (sg.get("depends_on") or []) if d in results_map]
+        if not deps:
+            return ""
+        title_map = {s.get("id"): (s.get("title") or "") for s in subgoals}
+        lines = [f"  子目标 #{d}「{title_map.get(d, '')}」结果: {results_map[d]}"
+                 for d in deps]
+        return "\n".join(lines)
 
     @staticmethod
     def _format_all_results(results_map: dict[int, str],

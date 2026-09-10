@@ -132,6 +132,9 @@ def _clean_answer(text: str) -> str:
     if boxed is not None:
         text = boxed
         text = text.strip()
+    # 2026-09-08：\cdot 归一为 *（须先于空格删除，否则 '\cdot x' 删空格后变
+    # '\cdotx' 无法替换）——005 实测 pred '\boxed{-\ln 2 \cdot x + y + z + 1 = 0}'
+    text = text.replace("\\cdot", "*")
     text = text.replace("$", "").replace(" ", "")
     for cmd in _LAYOUT_CMDS:
         text = text.replace(cmd, "")
@@ -170,6 +173,12 @@ def _norm_candidate(text: str) -> str:
             _tail_m2 = re.search(r"(?:为任意常数|为常数|恒为|，c\s*[∈i]n?)\s*[^，,;；]*$", text)
             if _tail_m2:
                 text = text[:_tail_m2.start()].rstrip("，,;；、 ") or text
+    # 2026-09-08：剥尾部"参数域说明"括号——084 实测 pred
+    # 'Q(x)=c(x-1)^2(x-4)(x+2) \quad (c \in \mathbb{C})'：\quad 已被 _clean_answer
+    # 剥除，剩 '(c\in\mathbb{C})' 尾巴导致与 gold（无该说明）不匹配。
+    _dom = re.search(r"\(\s*(?:[A-Za-z]\s*)?(?:\\?in|∈)[^)]*\)\s*$", text)
+    if _dom:
+        text = text[:_dom.start()].rstrip("，,;；、 ") or text
     return _laTeX_to_py_frac(text)
 
 
@@ -377,6 +386,9 @@ def answers_match(pred: str, gold: str) -> bool:
     # （087 实况：数学答对（Lean answer_valid）却被格式判错，最可惜）
     if _match_divisibility(pred, gold_f):
         return True
+    # 无解/题设矛盾语义（2026-09-08）：一元_003 实况（详见 _match_no_solution）
+    if _match_no_solution(pred, gold):
+        return True
     # 推导文本：提取 '= X' 结论逐个匹配
     for cand in _extract_equals_candidates(pred):
         cand_f = _norm_candidate(cand)
@@ -386,7 +398,41 @@ def answers_match(pred: str, gold: str) -> bool:
             return True
         if _match_divisibility(cand, gold_f):
             return True
+    # gold 是完整解题过程（长文本）时，取其中"即/故/因此…=结论"句比较
+    # （2026-09-08）——多元_005 实况：gold 是过程（含最终行 '-ln2*x+y+z+1=0'），
+    # 判分器拿整段过程当答案比，模型切平面正确却被判 expr_wrong。
+    if _match_gold_process_tail(pred_f, gold, gold_f):
+        return True
     return False
+
+
+def _match_gold_process_tail(pred_f: str, gold: str, gold_f: str) -> bool:
+    """gold 是长解题过程时，取末句"结论连接词…之后"的表达式与 pred 比较。
+
+    仅在 gold 明显是过程（>100 字符且含多个等号句）且 pred 已归一为含 '=' 的
+    短结论时启用。结论连接词按优先级找（也就是/即 > 综上/因此/所以/故），取
+    最后一个连接词之后到句末的完整段（005 实况：末句含 '…即-ln2*x+y+z+1=0'，
+    其后的整段正是最终答案）。
+    """
+    if not pred_f or len(gold) < 100 or "=" not in pred_f:
+        return False
+    sentences = [s for s in re.split(r"[。；\n]", gold) if "=" in s]
+    if not sentences:
+        return False
+    tail = sentences[-1]
+    pos = -1
+    for kw in ("也就是", "即", "综上", "因此", "所以", "故"):
+        i = tail.rfind(kw)
+        if i > pos:
+            pos = i
+            kw_len = len(kw)
+    if pos < 0:
+        return False
+    cand = tail[pos + kw_len:].strip().rstrip("。.,，;；:： ")
+    cand_f = _norm_candidate(cand)
+    if not cand_f or cand_f == gold_f:
+        return False
+    return _matches_one(pred_f, cand_f)
 
 
 # 2026-09-02 晚：整除语义匹配——'divisible by 2 or 3' → 'n=2k,n=3k'
@@ -423,14 +469,18 @@ def _match_stripped_func_prefix(pred_f: str, gold_f: str) -> bool:
 
 
 def _match_divisibility(pred: str, gold_f: str) -> bool:
-    """把 'divisible by X or Y' 转成 gold 常见形式 'n=Xk,n=Yk' 比较。"""
+    """把 'divisible by X or Y' / 中文'被 X 整除' 转成 gold 常见形式 'n=Xk,n=Yk' 比较。"""
     if not pred:
         return False
     # 剥 LaTeX 包装（\text{...}/\boxed{...} 等）再扫——087 实测 pred 是
     # \boxed{\text{all ... n \text{ divisible by } 2 \text{ or } 3}}
     clean = re.sub(r"\\(?:text|mathrm|boxed|mbox)\{([^}]*)\}", r"\1", pred)
     clean = clean.replace("{", "").replace("}", "").replace("\\", "")
+    # 英文：divisible by X or Y；中文：被 X 或 Y 整除 / X、Y 的倍数（087 实测
+    # pred='所有被 2 或 3 整除的正整数'，纯中文，英文正则扫不到）
     m = _DIVISIBLE_RE.search(clean)
+    if not m:
+        m = re.search(r"被\s*([0-9、和及或与,，\s]+?)\s*(?:整除|除尽)", clean)
     if not m:
         return False
     nums = re.findall(r"\d+", m.group(1))
@@ -439,6 +489,30 @@ def _match_divisibility(pred: str, gold_f: str) -> bool:
     cand = ",".join(f"n={d}k" for d in nums)
     cand_f = _norm_candidate(cand)
     return bool(cand_f) and _matches_one(cand_f, gold_f)
+
+
+# 2026-09-08："无解/题设矛盾"语义匹配——一元_003 实测 pred='题目条件矛盾，不存在满足
+# 条件的函数，f'(1) 不存在' vs gold='题目条件矛盾，无法确定'：数学结论一致（题设不自洽），
+# 仅措辞不同。规则（保守）：双方都出现无解语义词才判等，且 pred 不含 ≥3 位数字（防把
+# "某值为 123 时无解"这类带具体答案的描述误放）。
+_NO_SOLUTION_WORDS = ("矛盾", "无解", "不存在", "无法确定", "无满足", "无这样的", "条件不一致", "不合题意")
+
+
+def _match_no_solution(pred: str, gold: str) -> bool:
+    if not pred or not gold:
+        return False
+    p = re.sub(r"\s+", "", pred)
+    g = re.sub(r"\s+", "", gold)
+
+    def has_no_solution(s: str) -> bool:
+        return any(w in s for w in _NO_SOLUTION_WORDS)
+
+    if not (has_no_solution(p) and has_no_solution(g)):
+        return False
+    # pred 里带 ≥3 位具体数字 → 可能混入具体答案，不放行（留给数值匹配层）
+    if re.search(r"\d{3,}", p):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -851,6 +925,15 @@ def main():
     parser.add_argument("--use_proof", type=str, default=None, choices=["true", "false"], help="use_proof_channel（证明题专用通道）")
     parser.add_argument("--use_blueprint", type=str, default=None, choices=["true", "false"], help="use_blueprint（蓝图分解）")
     parser.add_argument("--enable_dag_replan", type=str, default=None, choices=["true", "false"], help="enable_dag_replan（DAG 动态评审+重生成闭环）")
+    # 2026-09-08：求解前 DAG 强制门独立开关（默认关=去掉门）
+    parser.add_argument("--dag_replan_gate", type=str, default=None, choices=["true", "false"], help="dag_replan_gate（求解前 DAG 强制评审门，默认 false）")
+    # 2026-09-08：L2 子目标数值/代数断言 Lean 验证（lean-lsp-mcp norm_num/ring）
+    parser.add_argument("--enable_numeric_lean_verify", type=str, default=None, choices=["true", "false"], help="enable_numeric_lean_verify（子目标数值断言 Lean 验证）")
+    parser.add_argument("--lean_numeric_max_per_q", type=int, default=None, help="lean_numeric_max_per_q（每题数值 Lean 验证限额，默认 2）")
+    # 2026-09-09 P1/P2：计算强制纪律 + 子目标类型路由（A/B 开关）
+    parser.add_argument("--calc_mandatory", type=str, default=None, choices=["true", "false"], help="calc_mandatory（裸数值断言打回=计算必须走工具）")
+    parser.add_argument("--subgoal_calc_router", type=str, default=None, choices=["true", "false"], help="subgoal_calc_router（计算型子目标 terminal 专用路径）")
+    parser.add_argument("--tool_calc_enabled", type=str, default=None, choices=["true", "false"], help="tool_calc_enabled（原生 calc_eval 工具调用试点）")
     parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     args = parser.parse_args()
@@ -893,6 +976,19 @@ def main():
         overrides["use_blueprint"] = args.use_blueprint == "true"
     if args.enable_dag_replan is not None:
         overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
+    if args.dag_replan_gate is not None:
+        overrides["dag_replan_gate"] = args.dag_replan_gate == "true"
+    if args.enable_numeric_lean_verify is not None:
+        overrides["enable_numeric_lean_verify"] = \
+            args.enable_numeric_lean_verify == "true"
+    if args.lean_numeric_max_per_q is not None:
+        overrides["lean_numeric_max_per_q"] = args.lean_numeric_max_per_q
+    if args.calc_mandatory is not None:
+        overrides["calc_mandatory"] = args.calc_mandatory == "true"
+    if args.subgoal_calc_router is not None:
+        overrides["subgoal_calc_router"] = args.subgoal_calc_router == "true"
+    if args.tool_calc_enabled is not None:
+        overrides["tool_calc_enabled"] = args.tool_calc_enabled == "true"
     if args.use_fast_path is not None:
         overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:

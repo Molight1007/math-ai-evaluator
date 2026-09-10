@@ -386,7 +386,8 @@ _REFUSAL_PATTERNS: list[re.Pattern] = [
 
 
 _INCOMPLETE_TAIL_RE = re.compile(
-    r"(?:最终答案|答案|结果|故|解|解集|通解|特解)[：:是为\s]*$")
+    r"(?:最终答案|答案|结果|故|解集|通解|特解)[：:是为\s]*$"
+    r"|(?:^|[；;。！!？?，,])\s*解[：:是为\s]*$")
 _LATEX_HALF_RE = re.compile(r"[\\^]\s*\{?\s*$")
 _LATEX_BEGIN_RE = re.compile(r"\\begin\{[^}]+\}\s*$")
 

@@ -118,7 +118,13 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 4096,
         stream: bool = False,
-    ) -> str:
+        tools: Optional[list] = None,
+    ):
+        """
+        2026-09-09：新增 tools 支持（原生工具调用试点）——透传 tools 到 API；
+        模型返回 tool_calls 时返回完整 assistant 消息 dict（供工具循环读取），
+        否则保持原文本返回（兼容既有调用方）。
+        """
         """
         发送 chat completion 请求，返回模型回复文本。
 
@@ -149,6 +155,8 @@ class LLMClient:
         }
         if stream:
             payload["stream"] = True
+        if tools is not None:
+            payload["tools"] = tools
 
         last_error = None
         for attempt in range(self.max_retries + 1):
@@ -165,6 +173,18 @@ class LLMClient:
                         content = _consume_stream(resp, logger, self.model, max_tokens)
                         return content
                     data = resp.json()
+                    # 2026-09-09：模型请求工具调用 → 返回完整 assistant 消息
+                    # （含 tool_calls），由调用方工具循环读取；普通回答仍取文本
+                    try:
+                        _msg = (data.get("choices") or [{}])[0].get("message") or {}
+                        if "tool_calls" in _msg and _msg["tool_calls"]:
+                            return {
+                                "role": "assistant",
+                                "content": _msg.get("content") or "",
+                                "tool_calls": _msg["tool_calls"],
+                            }
+                    except Exception:  # noqa: BLE001
+                        pass
                     content = _extract_content(data)
                     # 真实截断信号：非流式响应的 finish_reason（部分代理可能缺失）
                     fr = None
