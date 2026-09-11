@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 import time
 from typing import Any, Dict, List, Mapping, Optional, Union
@@ -76,6 +77,22 @@ def _strip_thinking_process(text: str) -> str:
     return text
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_MAX_TOKENS = 4096
+
+# ============================================================
+# 限流专项退避（2026-09-11）
+# ------------------------------------------------------------
+# 依据 Bug清单_团队提交de90cedc_0911.md §5：服务端 `-20048 请求过于频繁`
+# 实测 176 次，且 5 个 revise 候选并发发起 → 纯指数退避（1/2/4s）且无抖动，
+# 等于没有退避，还会同步撞墙、自激放大。
+# 现：限流单独给更大基数 + 抖动（并发的重试因此错峰）+ 上限。
+# 注意：服务端限流标识在 `raise_for_status()` 的异常串里**看不到**，
+# 必须从 `exc.response.text` 取（本文件下方 except 已补取）。
+# ============================================================
+_RETRY_BACKOFF = 2.0          # 普通故障退避基数（秒）
+_RETRY_BACKOFF_RATE = 8.0     # 限流场景退避基数（秒）
+_RETRY_BACKOFF_MAX = 24.0     # 单次退避上限（秒）
+_RETRY_JITTER = 0.5           # 抖动比例：wait += U(0, wait*JITTER)
+_RATE_LIMIT_MARKERS = ("-20048", "429", "too many requests", "请求过于频繁", "rate limit")
 
 ChatMessage = Dict[str, Any]
 ChatResponse = Union[str, ChatMessage]
@@ -173,7 +190,26 @@ class InternChatClient:
                 return content or reasoning or ""
             except Exception as exc:  # noqa: BLE001 - keep sample robust and simple.
                 last_error = exc
+                # 2026-09-11：HTTP 响应体必须显式取出 —— 服务端限流标识
+                # `-20048 请求过于频繁` 只在 body 里，不在 raise_for_status()
+                # 的异常串里。此前既看不到限流、也无从针对性退避。
+                _body = ""
+                _resp = getattr(exc, "response", None)
+                try:
+                    if _resp is not None:
+                        _body = (_resp.text or "")[:300]
+                except Exception:  # noqa: BLE001
+                    _body = ""
+                _low = ("%s %s" % (exc, _body)).lower()
+                _is_rate = any(mk in _low for mk in _RATE_LIMIT_MARKERS)
                 if attempt + 1 < self.retry:
-                    time.sleep(2**attempt)
+                    base = _RETRY_BACKOFF_RATE if _is_rate else _RETRY_BACKOFF
+                    wait = min(base * (2 ** attempt), _RETRY_BACKOFF_MAX)
+                    wait += random.uniform(0.0, wait * _RETRY_JITTER)
+                    print("[llm_client] 重试 %d/%d（%s，退避 %.1fs）: %s"
+                          % (attempt + 1, self.retry,
+                             "限流" if _is_rate else "故障", wait,
+                             str(last_error)[:160]))
+                    time.sleep(wait)
 
         raise RuntimeError(f"Chat completion failed after {self.retry} attempts: {last_error}")

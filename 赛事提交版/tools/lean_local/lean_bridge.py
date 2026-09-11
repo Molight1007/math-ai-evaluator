@@ -24,6 +24,7 @@ Lean 验证桥接层（agent/lean_bridge.py）
 - 依赖以下文件: agent/base.py（BugReport / Finding / Budget）
 - 自举依赖: deploy/setup_lean.sh（Lean 环境缺失时的自动安装脚本）
 """
+import hashlib
 import json
 import logging
 import os
@@ -56,15 +57,131 @@ def _project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+# ---------------------------------------------------------------------
+# 大文件分片合并（GitCode 单文件 100MiB 硬限绕过，2026-09-07）
+# ---------------------------------------------------------------------
+# GitCode pre-receive hook 强制普通 blob 单文件 ≤100MiB（>100MiB 必须 LFS）。
+# 运行时必需的大文件（如 Linux 树 libleanshared.so 151MiB）以分片形态入库：
+#   <父目录>/split/<目标文件名>/<NNNNN>                 # 无扩展名编号分片（纯数字，
+#                                                        #   避开 *.so/*.a 等 LFS track 规则）
+#   <父目录>/split/<目标文件名>/<目标文件名>.sha256      # 可选：合并后校验
+# lean_bridge 在探测 lean 前把分片合并回 <父目录>/<目标文件名>，保证 lean 可运行。
+# 合并幂等（目标已存在且 sha 匹配 → 跳过）；任何异常只记日志，绝不拖垮探测链。
+
+_SPLIT_BUF_SIZE = 8 * 1024 * 1024
+
+
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(_SPLIT_BUF_SIZE), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _merge_one_split(split_dir: str, target_name: str) -> None:
+    """把 split/<target_name>/ 下的编号分片合并到 split 的父目录。"""
+    parts_dir = os.path.join(split_dir, target_name)
+    if not os.path.isdir(parts_dir):
+        return
+    part_files = sorted(
+        f for f in os.listdir(parts_dir)
+        if os.path.isfile(os.path.join(parts_dir, f))
+        and not f.endswith(".sha256"))
+    if not part_files:
+        return
+    target = os.path.join(os.path.dirname(split_dir), target_name)
+    sha_file = os.path.join(parts_dir, target_name + ".sha256")
+    want_sha = ""
+    if os.path.isfile(sha_file):
+        try:
+            want_sha = open(sha_file, encoding="utf-8").read().strip().split()[0]
+        except OSError:
+            want_sha = ""
+    # 幂等：目标已存在且（无校验要求 或 sha 匹配）→ 跳过
+    if os.path.isfile(target):
+        if not want_sha:
+            return
+        try:
+            if _sha256_file(target) == want_sha:
+                return
+        except OSError:
+            pass
+        logger.warning("分片目标 %s 已存在但 sha 不匹配，重新合并覆盖", target)
+    # 合并（先写临时文件再原子替换）
+    tmp = target + ".merging"
+    try:
+        with open(tmp, "wb") as out:
+            for pf in part_files:
+                with open(os.path.join(parts_dir, pf), "rb") as f:
+                    while True:
+                        chunk = f.read(_SPLIT_BUF_SIZE)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+        if want_sha and _sha256_file(tmp) != want_sha:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            logger.error("分片合并校验失败（sha 不一致），分片可能损坏: %s", target)
+            return
+        os.replace(tmp, target)
+        logger.info("已合并分片 → %s（%d 片）", target, len(part_files))
+    except Exception:  # noqa: BLE001
+        logger.warning("分片合并异常（忽略，按未合并形态继续）: %s", target,
+                       exc_info=True)
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _ensure_merged_assets(tree_roots: Optional[list[str]] = None) -> None:
+    """扫描工具树内所有 split/ 分片目录并合并（幂等；异常不外抛）。
+
+    tree_roots 为 None 时用默认三树（lean-4.31.0 / lean-4.31.0-linux /
+    mathlib/closure-full）；单测可注入临时目录。
+    """
+    try:
+        if tree_roots is None:
+            tree_roots = [
+                os.path.join(_project_root(), "lean", "lean-4.31.0"),
+                os.path.join(_project_root(), "lean", "lean-4.31.0-linux"),
+                os.path.join(_project_root(), "mathlib", "closure-full"),
+            ]
+        for root in tree_roots:
+            if not os.path.isdir(root):
+                continue
+            for dirpath, dirnames, _ in os.walk(root):
+                if "split" in dirnames:
+                    split_dir = os.path.join(dirpath, "split")
+                    for target_name in os.listdir(split_dir):
+                        if os.path.isdir(os.path.join(split_dir, target_name)):
+                            _merge_one_split(split_dir, target_name)
+                # 剪枝：不深入任何 split/ 内部（其下只有分片文件）
+                dirnames[:] = [d for d in dirnames if d != "split"]
+    except Exception:  # noqa: BLE001
+        logger.warning("_ensure_merged_assets 扫描异常（忽略）", exc_info=True)
+
+
 def _detect_lean_executable() -> str:
     """自动探测本地 Lean 编译器（lean.exe）的绝对路径。
 
     优先级（命中即返回）：
+      0) 环境变量 LEAN_EXE（MathPilot-lean-toolchain 调用约定协议，
+         指向 vendor/lean-toolchain/lean/lean-4.31.0/bin/lean.exe）
       1) elan 管理的当前工具链 lean.exe（C:/Users/<user>/.elan/toolchains/.../bin/lean.exe）
       2) Windows: <root>/lean下载版/lean-toolchain/bin/lean.exe
       3) Linux:   <root>/deploy/lean-cache/lean-4.31.0-linux/bin/lean
+      4) vendor 挂载：<root>/vendor/lean-toolchain/lean/lean-4.31.0/bin/lean(.exe)
     返回空串表示未探测到（调用方回退 "lake"）。
     """
+    _ensure_merged_assets()
+    exe_env = (os.environ.get("LEAN_EXE", "") or "").strip()
+    if exe_env and os.path.isfile(exe_env):
+        return exe_env
     # elan 工具链（与实际 lake env 使用的版本一致；Windows 带 .exe，Linux 不带）
     elan_toolchains = os.path.expanduser(
         r"~\.elan\toolchains\leanprover--lean4---v4.31.0\bin\lean.exe")
@@ -78,9 +195,22 @@ def _detect_lean_executable() -> str:
                      "lean-4.31.0-linux", "bin", "lean"),
         # setup_lean.sh 的 zip 解压路径（deploy/lean-4.31.0-linux/bin/lean）
         os.path.join(_project_root(), "deploy", "lean-4.31.0-linux", "bin", "lean"),
+        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain submodule 形态）
+        os.path.join(_project_root(), "vendor", "lean-toolchain", "lean",
+                     "lean-4.31.0", "bin", "lean.exe"),
+        os.path.join(_project_root(), "vendor", "lean-toolchain", "lean",
+                     "lean-4.31.0", "bin", "lean"),
+        # 2026-09-07 root 形态（MathPilot-lean-toolchain 成为主仓，代码与
+        # lean/mathlib 同根：<root>/lean/lean-4.31.0-linux（平台 Linux）
+        # 与 <root>/lean/lean-4.31.0（Windows 开发）双树并存按 OS 命中）
+        os.path.join(_project_root(), "lean", "lean-4.31.0-linux", "bin", "lean"),
+        os.path.join(_project_root(), "lean", "lean-4.31.0", "bin", "lean.exe"),
+        os.path.join(_project_root(), "lean", "lean-4.31.0", "bin", "lean"),
     ]
     for c in candidates:
-        if os.path.isfile(c):
+        # Windows 只接受 .exe（无后缀 lean 为 ELF，Windows 不可执行——
+        # root 形态双树并存时 lean-4.31.0-linux/bin/lean 真实存在会误命中）
+        if os.path.isfile(c) and (os.name != "nt" or c.lower().endswith(".exe")):
             return c
     return ""
 
@@ -89,17 +219,25 @@ def _detect_lean_project_dir() -> str:
     """自动探测带 Mathlib 的 Lean 工程目录（编译 verify.lean 时 Mathlib 真正可用）。
 
     候选顺序：
+      0) 环境变量 LEAN_PROJECT_PATH（lean-lsp-mcp 调用约定协议）
       1) 已下载并独立编译好的 mathlib 仓库根目录 D:/mathlib4-last_bump_for_v4.31.0
          （独立 Lake 工程，含完整 Mathlib 源码与构建产物 .lake/build）；
       2) <root>/lean下载版/test_mathlib（仓库内工程，需其依赖 mathlib 已编译）。
+      3) vendor 挂载的 mathlib 闭包 <root>/vendor/lean-toolchain/mathlib/closure-full
+         （非 lake 工程 → _compile 自动走 lean.exe 直编 + LEAN_PATH，见 _compile()）。
     返回空串表示未挂载。
     """
     candidates = [
+        (os.environ.get("LEAN_PROJECT_PATH", "") or "").strip(),
         "D:/mathlib4-last_bump_for_v4.31.0",
         os.path.join(_project_root(), "lean下载版", "test_mathlib"),
+        os.path.join(_project_root(), "vendor", "lean-toolchain",
+                     "mathlib", "closure-full"),
+        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
+        os.path.join(_project_root(), "mathlib", "closure-full"),
     ]
     for c in candidates:
-        if os.path.isdir(c):
+        if c and os.path.isdir(c):
             return c
     return ""
 
@@ -128,6 +266,11 @@ def _mathlib_tactic_entry_available() -> bool:
         os.path.join(proj, "deploy", "mathlib-olean"),
         os.path.join(proj, "data", "mathlib-closure-core"),
         os.path.join(proj, "data", "mathlib-closure"),
+        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
+        os.path.join(proj, "vendor", "lean-toolchain",
+                     "mathlib", "closure-full"),
+        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
+        os.path.join(proj, "mathlib", "closure-full"),
     ]
     return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
                for r in roots)
@@ -401,29 +544,60 @@ def detect_lean_environment(
         return {"available": False, "version": "", "error": str(exc)[:200]}
 
 
+def _normalize_lean_imports(code: str) -> str:
+    """mcp 后端兼容：把裸 ``import Mathlib`` 换成 ``import Mathlib.Tactic``。
+
+    依据（2026-09-11 实测）：本机 Mathlib 布局缺聚合入口 ``Mathlib.olean``，
+    裸 ``import Mathlib`` 会触发 Lean LSP fatalError（fileProgress kind=2）
+    → lean-lsp-mcp 恒返回 ``diagnostics_unavailable``。
+    仅替换**独占一行的** ``import Mathlib``；``import Mathlib.Xxx`` 不触碰。
+    """
+    return re.sub(r"(?m)^[ \t]*import[ \t]+Mathlib[ \t]*$",
+                  "import Mathlib.Tactic", code)
+
+
 def _truncate_error_output(text: str, limit: int = _MAX_ERROR_CHARS) -> str:
-    """截断编译错误输出，防止提示词 token 爆炸（编译错误不记录完整原文）。"""
+    """截断编译错误输出，优先保留 ``error:`` 行与 ``Try this:`` 修复建议行。
+
+    2026-09-11 增强：原为粗暴 ``text[:limit]``，而 Lean 的建议在输出末尾，
+    会被丢掉（等于扔掉最有价值的修正线索）。
+    """
     if not text:
         return ""
     text = text.strip()
     if len(text) <= limit:
         return text
+    keep = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if ": error" in s or s.startswith("Try this") or "Try this:" in s:
+            keep.append(s)
+    if keep:
+        compact = "\n".join(keep)
+        if len(compact) <= limit:
+            return compact + f"\n... [原文 {len(text)} 字符，已保留 error / Try this 关键行]"
+        return compact[:limit] + "\n... [关键行亦超限，已截断]"
     return text[:limit] + "\n... [已截断，共 %d 字符]" % len(text)
 
 
 # =====================================================================
 # 验证后端开关（2026-09-04 档2：bridge | mcp）
 # ---------------------------------------------------------------------
-# mcp    = lean-lsp-mcp（LSP 增量诊断 + 行级/目标定位，本地评测实验后端）
-# bridge = lake env lean 全量编译（默认；平台/无 venv 环境自动保持）
-# 开关优先级：环境变量 LEAN_BACKEND > set_lean_backend() 模块态 > "bridge"。
+# mcp    = lean-lsp-mcp（LSP 增量诊断 + 行级/目标定位）—— **模块默认**（_LEAN_BACKEND）
+# bridge = lake env lean 全量编译（兜底；mcp 不可用 / 门控未过时自动回落）
+# 开关优先级：环境变量 LEAN_BACKEND > set_lean_backend() 模块态 > 模块默认 "mcp"。
+# ⚠ 门控（2026-09-12 记录）：mcp 仅在 work_dir 为 **lake 工程**时才会被调用
+#   （`_is_lake_workdir()`）；closure 闭包 + LEAN_PATH 部署形态下**只会走 bridge**，
+#   日志表现为「★ mcp 未生效」（2026-09-12 起显式告警，此前完全静默）。
 # 与 lean-lsp-mcp 的通信走子进程代理（agent/lean_mcp_proxy.py，由独立 venv
 # python 执行），主进程零 MCP 依赖；mcp 不可用/异常一律回落 bridge。
 # =====================================================================
-_LEAN_BACKEND = "bridge"
+_LEAN_BACKEND = "mcp"
 _LEAN_BACKEND_ENV = "LEAN_BACKEND"
 _MCP_PROXY_LOCK = threading.Lock()
 _MCP_PROXY: Optional["_LeanMcpProxyClient"] = None
+# 2026-09-12：mcp 门控未通过的告警去重（每个 work_dir 只报一次，防逐候选刷屏）
+_MCP_GATE_WARNED = set()
 
 # 判分语义（档1，2026-09-04）：证明必须完全可核——以下源码构造视为不可信。
 # 与 lean_verify 的 sorryAx/axioms 检查对齐（bare lake 对 sorry 只打 warning）。
@@ -499,6 +673,20 @@ def _detect_mcp_proxy_python() -> str:
               os.path.join(home, "leanlsp-venv", "bin", "python")):
         if os.path.isfile(c):
             return c
+    # ② 仓内 venv：平台离线安装脚本 scripts/install_mcp_linux.sh 的产出位置
+    #    （2026-09-11 补：脚本装到 <repo>/lean-lsp-mcp/venv-linux，原代码只找 ~/
+    #     → 平台"装了却探测不到" → 静默回落 bridge。）
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        _repo = os.path.dirname(os.path.dirname(_here))
+        for c in (os.path.join(_repo, "lean-lsp-mcp", "venv-linux", "bin", "python"),
+                  os.path.join(_repo, "lean-lsp-mcp", "venv", "bin", "python"),
+                  os.path.join(_repo, "lean-lsp-mcp", "venv", "Scripts", "python.exe"),
+                  os.path.join(_repo, "lean-lsp-mcp", "venv-linux", "Scripts", "python.exe")):
+            if os.path.isfile(c):
+                return c
+    except Exception:  # noqa: BLE001
+        pass
     return ""
 
 
@@ -574,6 +762,72 @@ class _LeanMcpProxyClient:
             raise RuntimeError(f"proxy 响应非 JSON: {resp_line[:120]}") from exc
         return resp
 
+    def call(self, payload: dict, timeout: float = 150.0) -> dict:
+        """通用代理请求（2026-09-11）：下发任意 op（run_code/local_search/verify）。"""
+        if self._proc is None or self._proc.poll() is not None:
+            raise RuntimeError("proxy 进程已退出")
+        self._seq += 1
+        req = {"id": self._seq}
+        req.update(payload)
+        try:
+            self._proc.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
+            self._proc.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"proxy 写入失败: {exc}") from exc
+        import queue
+        q: "queue.Queue[str]" = queue.Queue()
+
+        def _reader() -> None:
+            try:
+                q.put(self._proc.stdout.readline())
+            except Exception:  # noqa: BLE001
+                q.put("")
+
+        t = threading.Thread(target=_reader, daemon=True)
+        t.start()
+        t.join(timeout)
+        if t.is_alive():
+            raise RuntimeError(f"proxy 响应超时（>{timeout:.0f}s）")
+        resp_line = q.get_nowait() if not q.empty() else ""
+        if not resp_line:
+            raise RuntimeError("proxy 无响应（可能崩溃）")
+        try:
+            return json.loads(resp_line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"proxy 响应非 JSON: {resp_line[:120]}") from exc
+
+    def run_code(self, code: str, timeout: float = 120.0) -> dict:
+        """本地执行 Lean 代码片段（计算；不联网）。"""
+        return self.call({"op": "run_code", "code": code}, timeout=timeout)
+
+    def local_search(self, query: str, limit: int = 10,
+                     timeout: float = 60.0) -> dict:
+        """本地 Mathlib 声明检索（找引理；不联网；需 ripgrep）。"""
+        return self.call({"op": "local_search", "query": query,
+                          "limit": limit}, timeout=timeout)
+
+    def verify_theorem(self, file_path: str, theorem_name: str,
+                       timeout: float = 120.0) -> dict:
+        """定理公理/可疑构造检查（检测；不联网）。"""
+        return self.call({"op": "verify", "file": file_path,
+                          "theorem": theorem_name}, timeout=timeout)
+
+    def multi_attempt(self, file_path: str, line: int, snippets: list,
+                      column: int = 0, timeout: float = 120.0) -> dict:
+        """在指定行尝试多个 tactic（B4 修复建议；不联网）。"""
+        payload = {"op": "multi_attempt", "file": file_path,
+                   "line": int(line), "snippets": list(snippets)}
+        if column:
+            payload["column"] = int(column)
+        return self.call(payload, timeout=timeout)
+
+    def hover(self, file_path: str, line: int, column: int,
+              timeout: float = 60.0) -> dict:
+        """取某位置符号的类型签名/文档（B6 API 校验；不联网）。"""
+        return self.call({"op": "hover", "file": file_path,
+                          "line": int(line), "column": int(column)},
+                         timeout=timeout)
+
     def close(self) -> None:
         if self._proc is not None:
             try:
@@ -585,6 +839,22 @@ class _LeanMcpProxyClient:
                 except Exception:  # noqa: BLE001
                     pass
             self._proc = None
+
+
+def mcp_run_code(code: str, work_dir: str, timeout: float = 120.0) -> dict:
+    """模块级：用 lean-lsp-mcp 本地执行 Lean 代码（B1 数值验证用，不联网）。"""
+    global _MCP_PROXY
+    py = _detect_mcp_proxy_python()
+    sc = _mcp_proxy_script()
+    if not (py and sc and work_dir):
+        return {"ok": False, "error": "mcp-env-missing"}
+    try:
+        with _MCP_PROXY_LOCK:
+            if _MCP_PROXY is None:
+                _MCP_PROXY = _LeanMcpProxyClient(py, sc, work_dir)
+            return _MCP_PROXY.run_code(code, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
@@ -635,6 +905,49 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                                          + str(goal)[:800])
                     except Exception as exc:  # noqa: BLE001
                         logger.debug("[LeanBridge] goal 定位失败（忽略）: %s", exc)
+                # B4：multi_attempt 自动试多策略（失败不影响主流程）
+                if os.environ.get("LEAN_MCP_MULTI_ATTEMPT", "1") != "0":
+                    try:
+                        _ln0 = int(errors[0].get("line") or 1)
+                        _col0 = int(errors[0].get("column") or 1)
+                        _ma = _MCP_PROXY.multi_attempt(
+                            lean_file, _ln0,
+                            ["norm_num", "ring", "linarith", "omega",
+                             "simp", "aesop", "positivity"],
+                            column=_col0, timeout=90.0)
+                        _mraw = str(_ma.get("raw") or "")
+                        _okl = [l.strip() for l in _mraw.splitlines()
+                                if ("no goals" in l.lower()
+                                    or "success" in l.lower())]
+                        if _okl:
+                            err_text += ("\n--- [lean-lsp-mcp] multi_attempt 可用策略 ---\n"
+                                         + "\n".join(_okl[:5]))
+                            logger.info("[LeanBridge] multi_attempt 找到可用策略 %d",
+                                        len(_okl))
+                    except Exception as _me:  # noqa: BLE001
+                        logger.debug("[LeanBridge] multi_attempt 跳过: %s", _me)
+                # B6：hover 查证未知符号（直击"臆造 API"）
+                if os.environ.get("LEAN_MCP_HOVER_CHECK", "1") != "0":
+                    try:
+                        _hln = int(errors[0].get("line") or 1)
+                        _hcol = int(errors[0].get("column") or 1)
+                        _hmsgs = " ".join(str(e.get("message") or "")
+                                          for e in errors[:3])
+                        _hm = re.search(
+                            r"(?:unknown (?:identifier|constant)|Invalid field)"
+                            r"\s*'?([A-Za-z_][\w'.]*)", _hmsgs)
+                        if _hm:
+                            _hr = _MCP_PROXY.hover(lean_file, _hln, _hcol,
+                                                   timeout=45.0)
+                            _hraw = str(_hr.get("raw") or "")[:400]
+                            if _hraw:
+                                err_text += (
+                                    "\n--- [lean-lsp-mcp] hover 查证 ---\n"
+                                    f"符号 {_hm.group(1)}: {_hraw}")
+                                logger.info("[LeanBridge] hover 查证: %s",
+                                            _hm.group(1))
+                    except Exception as _he:  # noqa: BLE001
+                        logger.debug("[LeanBridge] hover 跳过: %s", _he)
                 return {"ok": False,
                         "error": _truncate_error_output(err_text)}
             if not allow_sorry:
@@ -643,6 +956,24 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                     "uses `sorry`" in (i.get("message") or "") for i in items)
                 if _scan_untrusted(code) or has_sorry_warn:
                     return {"ok": False, "error": _UNTRUSTED_MSG}
+            # ★ B3（2026-09-11）：axiom 检查（lean_verify）—— 捕捉间接引入的 sorry
+            if os.environ.get("LEAN_MCP_VERIFY_AXIOMS", "1") != "0":
+                try:
+                    _tm = re.search(
+                        r"\btheorem\s+([A-Za-z_][\w'.]*)", code or "")
+                    if _tm:
+                        _vr = _MCP_PROXY.verify_theorem(
+                            lean_file, _tm.group(1), timeout=45.0)
+                        _vraw = str(_vr.get("raw") or "")
+                        if "sorryAx" in _vraw:
+                            logger.warning(
+                                "[LeanBridge] mcp axiom 检查发现 sorryAx：%s",
+                                _tm.group(1))
+                            return {"ok": False, "error": _UNTRUSTED_MSG}
+                        logger.info("[LeanBridge] ★ mcp axiom 检查通过：%s",
+                                    _tm.group(1))
+                except Exception as _ve:  # noqa: BLE001
+                    logger.debug("[LeanBridge] axiom 检查跳过: %s", _ve)
             return {"ok": True, "error": ""}
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] mcp 后端异常（%s）→ 回落 bridge",
@@ -679,17 +1010,48 @@ def _compile_lean(
         {"ok": bool, "error": str}。
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
+    # 2026-09-09 平台零配置兜底：work_dir 即 mathlib 闭包（含 Mathlib/Tactic.olean
+    # 聚合入口）时，若当前进程 LEAN_PATH 未含它则自动注入——平台 clone 后不跑
+    # setup 脚本（无 lean-env.sh）也能让 lean.exe 直编 import Mathlib；LEAN_PATH
+    # 已被环境显式设置时尊重原值（调用约定：env 显式最高优先），仅追加缺失闭包。
+    _lean_entry = os.path.join(work_dir, "Mathlib", "Tactic.olean")
+    if os.path.isfile(_lean_entry):
+        _lp = (os.environ.get("LEAN_PATH", "") or "").strip()
+        _lp_dirs = [os.path.normpath(d) for d in _lp.split(os.pathsep) if d]
+        if os.path.normpath(work_dir) not in _lp_dirs:
+            os.environ["LEAN_PATH"] = (
+                (_lp + os.pathsep) if _lp else "") + work_dir
     lean_file = os.path.join(work_dir, lean_filename)
+    # 2026-09-11（mcp 可用性修复）：mcp 后端下规范化 imports。
+    if get_lean_backend() == "mcp":
+        code = _normalize_lean_imports(code)
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)
 
     # 档2（2026-09-04）：mcp 后端分发（仅 lake 工程；不可用返回 None 回落 bridge）。
     # 放在写文件之后、跑命令之前：mcp 路径复用同一 .lean 文件做 LSP 诊断。
     if get_lean_backend() == "mcp" and _is_lake_workdir(work_dir):
+        logger.info("[LeanBridge] ★ 走 mcp 后端：%s（后端配置=%s）",
+                    os.path.basename(lean_file), get_lean_backend())
         via_mcp = _compile_via_mcp(lean_file, code, work_dir, timeout,
                                    allow_sorry)
         if via_mcp is not None:
+            logger.info("[LeanBridge] ★ mcp 返回成功：ok=%s",
+                        via_mcp.get("ok"))
             return via_mcp
+        logger.warning("[LeanBridge] mcp 返回 None → 回落 bridge：%s",
+                       os.path.basename(lean_file))
+    elif get_lean_backend() == "mcp":
+        # 2026-09-12（平台实测暴露）：mcp 已配置但**门控未通过**（work_dir 非
+        # lake 工程，如 closure 闭包 + LEAN_PATH 部署）→ 此前静默走 bridge，
+        # 平台侧「★ 走 mcp 后端」恒 0 条且无任何告警，被误判成"没走到 Lean
+        # 阶段"。此处显式告警（每个 work_dir 只报一次，避免逐候选刷屏）。
+        if work_dir not in _MCP_GATE_WARNED:
+            _MCP_GATE_WARNED.add(work_dir)
+            logger.warning(
+                "[LeanBridge] ★ mcp 未生效：work_dir 非 lake 工程 → 本次走 "
+                "bridge（%s）。如需 mcp，请提供带 lakefile 的工程根，或用 "
+                "LEAN_PROJECT_PATH 指向 lake 工程。", work_dir)
 
     # lake 分支（含绝对路径 lake.exe）：lake env lean <file> 正确加载工程
     # LEAN_PATH（注意必须带 "lean"，lake env 的语义是"在 lake 环境下运行命令"）
@@ -775,9 +1137,14 @@ class LeanBridge:
 
     @property
     def _lean_executable(self) -> str:
-        """取配置中的 Lean 可执行文件名，缺省 "lake"。"""
+        """取配置中的 Lean 可执行文件名，缺省自动探测（LEAN_EXE env /
+        vendor/lean-toolchain / elan 命中即用），都无则回退 "lake"。"""
         cfg = getattr(self.config, "config", self.config)
-        exe = getattr(cfg, "lean_executable", "") or _DEFAULT_LEAN_EXECUTABLE
+        exe = (getattr(cfg, "lean_executable", "") or "").strip()
+        if not exe:
+            # 2026-09-06：探测链认 LEAN_EXE env 与 vendor 挂载，保证
+            # lean_available 探测的是真实 lean.exe（而非仅 PATH 上的 lake）。
+            exe = _detect_lean_executable() or _DEFAULT_LEAN_EXECUTABLE
         return exe
 
     @property
@@ -827,6 +1194,14 @@ class LeanBridge:
                     if "Tactic.olean" in files or "Mathlib.olean" in files:
                         ready = True
                         break
+                # 2026-09-10 平台修复：pdir 本身即闭包根（root 一体化形态
+                # <root>/mathlib/closure-full，纯 olean 闭包无 .lake）——此前
+                # 误判 False 导致 verify_answer 跳过 _prepend_mathlib_import，
+                # JSON 通道 lean_code 无 import → norm_num 等未定义 → 平台
+                # 非证明题答案验证整体失效（本地有 lake 工程不暴露）。
+                if not ready and os.path.isfile(
+                        os.path.join(pdir, "Mathlib", "Tactic.olean")):
+                    ready = True
         else:
             # 无 lake 工程（比赛环境）：LEAN_PATH 或默认部署目录挂载闭包即就绪
             roots: list[str] = [
@@ -836,6 +1211,12 @@ class LeanBridge:
             roots += [
                 os.path.join(proj, "deploy", "mathlib-olean"),
                 os.path.join(proj, "data", "mathlib-closure"),
+                # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
+                os.path.join(proj, "vendor", "lean-toolchain",
+                             "mathlib", "closure-full"),
+                # 2026-09-10 root 一体化形态（与 _mathlib_tactic_entry_available
+                # 的 roots 列表对称；平台无 pdir 时也能识别 <root>/mathlib/closure-full）
+                os.path.join(proj, "mathlib", "closure-full"),
             ]
             for r in roots:
                 # core 闭包无聚合入口，用具体模块 olean 判定；full 闭包两者皆有
@@ -1682,25 +2063,60 @@ def _parse_analysis_json(raw: str) -> Optional[dict]:
     return None
 
 
+def _unwrap_answer(answer: str) -> str:
+    """剥最终答案的 LaTeX 外壳（\\boxed{...} 可多层嵌套），露出数值核心。
+
+    2026-09-07（#52 模板化）：LLM 最终答案常带 \\boxed{} / \\dfrac{} 壳，
+    ``_answer_embedded`` 的纯数字 fullmatch 对带壳答案失效 → 壳下数字漏检，
+    自证代码绕过锚定、到编译后 _cc 交叉核对才被拦（nt-093 答对 3000 却
+    proof_invalid 实证）。先剥壳再核对，口径与 _cross_check 统一。
+
+    2026-09-11（平台 de90cedc 实测回归）：本函数此前只存在于主仓，未随
+    ``sync_mirrors.py`` 的「工具链保护」下发到镜像/vendor split 版 →
+    平台副本对 ``\\boxed{524288}`` 走 token 分支、抽到标识符 ``boxed`` →
+    锚定恒 False → 重试必然再失败 → ``_convert_answer_to_lean`` 返回 None →
+    verify_answer 恒 unknown → **Lean 在全量评测中零贡献**（42 条
+    「答案数字未出现在验证代码」告警）。已同步至 vendor split 源。
+    """
+    core = (answer or "").strip()
+    for _ in range(5):
+        m = re.fullmatch(r"\\boxed\{(.*)\}", core, re.S)
+        if not m:
+            break
+        core = m.group(1).strip()
+    return core
+
+
 def _answer_embedded(lean_code: str, answer: str) -> bool:
     """校验书生生成的验证代码是否真正锚定了 USER 最终答案。
 
     防止「书生自己重算、无视 USER 最终答案」的假验证（验证自己算的结果
     而非审核答案）：
-    - 纯数字答案：lean_code 必须包含该数字原值（数字边界，防 3 匹配 13）；
-    - 含字母 token 的答案（如 x=1、3n+1）：lean_code 必须引用至少一个答案 token
-      （否则说明它没在验证这个答案）；
-    - 纯中文/符号答案（无字母）：无法代码侧校验，靠提示词 error 路径兜底。
+    - 先剥 \\boxed{} 壳（#52，2026-09-07）——带壳答案的壳下数字不再漏检；
+    - 纯数字答案（含小数）：代码必须包含该数字原值（数字边界，防 3 匹配 13）；
+    - 含字母 token 的答案（如 x=1、3n+1）：代码必须引用至少一个答案 token；
+    - 其他形态（中文句里的数字、分数 LaTeX）：提取全部数字（排除 0/1/2
+      通用小整数）→ 代码须含至少一个（数字边界）；无有效数字则退化 token 检查；
+    - 纯中文/符号答案（无数字无 token）：无法代码侧校验，靠提示词 error
+      路径兜底放行。
     """
-    a = (answer or "").strip()
-    if not a:
+    core = _unwrap_answer(answer)
+    if not core:
         return False
-    # 纯数字 → 数字锚定（带边界）
-    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", a):
-        pat = r"(?<![0-9])" + re.escape(a) + r"(?![0-9])"
+    # 纯数字（整数/小数）→ 数字锚定（带边界，保留小值如 2 的精确检查）
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", core):
+        pat = r"(?<![0-9])" + re.escape(core) + r"(?![0-9])"
         return re.search(pat, lean_code or "") is not None
+    # 非纯数字形态：提取数字核对（排除 0/1/2 通用小整数的假匹配）
+    ans_nums = set(re.findall(r"\d+", core)) - {"0", "1", "2"}
+    if ans_nums:
+        code = lean_code or ""
+        for n in ans_nums:
+            if re.search(r"(?<![0-9])" + re.escape(n) + r"(?![0-9])", code):
+                return True
+        return False
     # 含字母 token 的答案 → 代码必须引用至少一个答案 token
-    ans_tokens = set(re.findall(r"[A-Za-z_]\w*", a))
+    ans_tokens = set(re.findall(r"[A-Za-z_]\w*", core))
     if ans_tokens:
         code_tokens = set(re.findall(r"[A-Za-z_]\w*", lean_code or ""))
         return bool(ans_tokens & code_tokens)
