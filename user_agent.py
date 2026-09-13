@@ -47,6 +47,50 @@ logger = logging.getLogger("MathPilot")
 
 
 # ============================================================
+# 2026-09-14：子目标结果的「像不像最终答案」判据
+# ------------------------------------------------------------
+# 背景（实测发现）：`_rescue_answer` 的来源②原先**直接把** `subgoal_trace[i].result`
+# 当答案返回，而子目标结果是**中间推导步**，不是最终答案。实况 official112-016
+# 交出去的是：
+#   「（该步含未用 <calc> 的易错运算结果，未经系统确认）|10 - sqrt(9.9)| < 1
+#     19.9 + (10 - sqrt(9.9))^2 = 20」
+# 它避开了「生成失败」占位符，却**伪装成答案**：判分同样是 0，但归因时极易误判成
+# "模型答的"，而且把系统提示串塞进了交给平台的答案字段。
+# ⇒ 只认两种"明确"形态，其余交给直答兜底。
+# ============================================================
+_SG_NOTICE_RE = re.compile(r"^\s*[（(][^）)]{0,120}[）)]\s*")   # 行首提示前缀
+_SG_NOTICE_HINT = ("未经系统确认", "该步含", "未用 <calc>", "系统提示", "未经验证")
+_SG_BOXED_RE = re.compile(r"\\boxed\s*\{([^{}]*)\}")
+_SG_SHORT_VALUE_MAX = 60
+
+
+def _subgoal_answer_candidate(text) -> str:
+    """从子目标结果里取「明确是最终答案」的值；取不到返回 ""。
+
+    只接受：
+      ① 含 `\\boxed{...}`（子目标自己收口的最终值）→ 取括号内内容；
+      ② 剥掉行首提示前缀后是个**短值**（≤60 字符且无换行）。
+    多行推导、带系统提示、过长的一律拒收。
+    """
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    t = text.strip()
+    for _ in range(3):                     # 提示前缀可能叠了多层
+        m = _SG_NOTICE_RE.match(t)
+        if not m:
+            break
+        t = t[m.end():].strip()
+    if not t or any(h in t for h in _SG_NOTICE_HINT):
+        return ""
+    m = _SG_BOXED_RE.search(t)
+    if m:
+        return m.group(1).strip()
+    if len(t) <= _SG_SHORT_VALUE_MAX and "\n" not in t:
+        return t
+    return ""
+
+
+# ============================================================
 # 配置
 # ============================================================
 @dataclass
@@ -202,14 +246,21 @@ class AgentConfig:
     #      少数难题可用；若每题都用满，只能做完 54 题，其余 58 题全部超时计 C。
     #      **平均 578s 才是真正的约束。**
     #   ③ 故本字段必须严格 < 1200，给"模块加载 + Agent 初始化 + 格式化输出"留余量。
-    # 2026-09-13 二轮下调：1150 → **1000**。
-    # 依据：实测 4 题里 `official112-000` **跑了 1201s** ⇒ **越过平台 1200s 硬限**
-    # （平台会终止整个进程组、该题计 C=0 分）。
-    # 跨墙根因：`agent/base.py:619` 的单次 `client.chat` **不可中断** ——
-    # `LLMClient` 超时 180s × 重试 1 次 ⇒ **单次调用最坏可达 360s**，
-    # 而阶段/单题截止点只能在"两次调用之间"生效 ⇒ 上限必须给最后一次调用留足空间。
-    # 取 1200 − 180(单次最坏) − 50(模块加载/收尾) ≈ 970 ⇒ 定为 1000（含少量余量）。
-    max_time_per_question: int = 1000  # 单题壁钟上限（秒）—— 为"不可中断的单次 LLM 调用"留足余量
+    # 2026-09-14 上调：1000 → **1150**（用户要求："1000s 太少"）。
+    # 演化史与依据（三段，务必连着看）：
+    #   · 原值 1150。2026-09-13 二轮下调到 1000，触发点是实测 `official112-000`
+    #     跑了 **1201s**，**越过平台 1200s 硬限**（平台会终止整个进程组、该题计 C=0）。
+    #   · 当时跨墙的根因是 `agent/base.py` 的单次 `client.chat` **不可中断**，
+    #     而 `LLMClient` 超时 180s × **重试 1 次** ⇒ 单次调用最坏 **360s**，
+    #     阶段/单题截止点只能在"两次调用之间"生效，故必须为在途调用留足空间。
+    #   · 2026-09-13 晚已拆掉那个放大器（`utils/llm_client.py`：**超时不再重试**，
+    #     读超时 180→120s）⇒ 单次调用最坏从 **360s 降到 120s**，
+    #     "上限必须压到 1000" 的前提不再成立，故回调到 1150
+    #     （= 平台硬限 1200 − 50s 模块加载/收尾余量，与 `tier_budget.deep` 对齐）。
+    # ⚠ 如实记录仍存的风险：单题上限是**在两次调用之间**判定的，无法中断在途调用
+    #   ⇒ 理论最坏 1150 + 120 = **1270s > 1200s**（相对地，旧配置 1150+360=1510s）。
+    #   缓解：`critical_tail_seconds`（默认 120s）让最后 120s 内不再启动可选步骤。
+    max_time_per_question: int = 1150  # 单题壁钟上限（秒）
     max_total_time_seconds: int = 20700  # Agent 总运行上限（秒）= 6h 硬限(21600) − 4% 余量
 
     # ---- 智能体补充部件配置 ----
@@ -467,9 +518,10 @@ class AgentConfig:
             # 这正是"把时间花在刀刃上"的执行路径。
             # ⚠ 这三个值是**档位帽（上限）**，不是每题的实发预算：实发由
             # PaperPacer.budget_for() 按全卷余量动态决定（有余量才给满）。
-            self.tier_budget = {"fast": 300.0, "standard": 750.0, "deep": 1000.0}
-            # ⚠ 2026-09-13 二轮：deep 1150 → **1000**，与 max_time_per_question 对齐
-            # （依据见该字段注释：000 实测 1201s 越墙，须为不可中断的单次 LLM 调用留余量）。
+            self.tier_budget = {"fast": 300.0, "standard": 750.0, "deep": 1150.0}
+            # 2026-09-14：deep 1000 → **1150**，与 `max_time_per_question` 重新对齐
+            # （后者从 1000 回调到 1150，理由见该字段注释：超时不再重试后，
+            #  单次在途调用最坏只有 120s，"必须压到 1000"的前提已消失）。
 
 
 # ============================================================
@@ -767,13 +819,21 @@ class ReasoningAgent:
         for _a in ((diag.get("pick_diag") or {}).get("cand_answers") or []):
             if isinstance(_a, str) and not self._is_degraded_answer(_a):
                 return _a.strip()
-        # ② 子目标中间结果（可能形如 "x = 21" 或纯值，取"最后一个可用"的）
+        # ② 子目标中间结果 —— ⚠ 2026-09-14 修复：**只接受"明确是最终答案"的取值**。
+        # 原实现直接返回 `subgoal_trace[i].result`，实测 016 交出的是一段
+        # "中间推导 + 系统提示前缀"，伪装成答案（判分 0，且污染归因）。
+        # 现在交给 `_subgoal_answer_candidate` 做形态校验，不合格就跳到来源③。
         for _sg in (diag.get("subgoal_trace") or []):
             if not isinstance(_sg, dict):
                 continue
-            _r = _sg.get("result")
-            if isinstance(_r, str) and _r.strip() and not self._is_degraded_answer(_r):
-                return _r.strip()
+            _c = _subgoal_answer_candidate(_sg.get("result"))
+            # ⚠ 形态校验通过后**还必须过内容校验**：`_subgoal_answer_candidate` 只判
+            #   "像不像答案的形态"（boxed / 短单行），拒绝语类短串（如
+            #   `[子目标求解失败]`、`无法求解`）形态上是"短单行"、能骗过它。
+            #   2026-09-14 由集成探针实测抓到：漏这一步时场景 A 会交出
+            #   `[子目标求解失败]` —— 等于把占位符问题原样搬了个位置。
+            if _c and not self._is_degraded_answer(_c):
+                return _c
         # ③ 直答
         try:
             ans = self._fallback_solve(problem)

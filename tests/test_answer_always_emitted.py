@@ -249,3 +249,58 @@ class TestRescueFailureDoesNotLeakPlaceholder(unittest.TestCase):
         a = self._agent({"final_response": "无解", "trace": [], "diag": {}},
                         lambda **kw: "7")
         self.assertEqual(a.solve("求值")["final_response"], "无解")
+
+
+class TestSubgoalResidueMustLookLikeAnAnswer(unittest.TestCase):
+    """**2026-09-14 修复回归**：来源②不得把「子目标中间推导」当答案交出去。
+
+    实况 official112-016 的 `predicted` 逐字等于 `diag.subgoal_trace[1].result`：
+        （该步含未用 <calc> 的易错运算结果，未经系统确认）|10 - sqrt(9.9)| < 1
+        19.9 + (10 - sqrt(9.9))^2 = 20
+    ⇒ 它避开了「生成失败」占位符，却**伪装成答案**（判分同为 0，归因时还会误判成
+    "模型答的"，并把系统提示串塞进提交给平台的答案字段）。
+    """
+
+    # 真实数据，勿改（回归锚点）
+    REAL_016_RESULT = ("（该步含未用 <calc> 的易错运算结果，未经系统确认）"
+                       "|10 - sqrt(9.9)| < 1\n19.9 + (10 - sqrt(9.9))^2 = 20")
+
+    def test_real_016_fragment_is_rejected(self) -> None:
+        from user_agent import _subgoal_answer_candidate
+        self.assertEqual(_subgoal_answer_candidate(self.REAL_016_RESULT), "")
+
+    def test_short_value_is_accepted(self) -> None:
+        from user_agent import _subgoal_answer_candidate
+        self.assertEqual(_subgoal_answer_candidate("20460"), "20460")
+        self.assertEqual(_subgoal_answer_candidate("x = 21"), "x = 21")
+
+    def test_boxed_value_is_accepted(self) -> None:
+        from user_agent import _subgoal_answer_candidate
+        self.assertEqual(_subgoal_answer_candidate(r"所以 \boxed{21}"), "21")
+        # 带提示前缀 + boxed：剥前缀后仍应取出
+        self.assertEqual(
+            _subgoal_answer_candidate("（该步未经系统确认）\\boxed{21}"), "21")
+
+    def test_multiline_derivation_is_rejected(self) -> None:
+        from user_agent import _subgoal_answer_candidate
+        self.assertEqual(_subgoal_answer_candidate("a = 1\nb = 2\nc = 3"), "")
+        self.assertEqual(_subgoal_answer_candidate(""), "")
+        self.assertEqual(_subgoal_answer_candidate(None), "")
+
+    def test_long_single_line_is_rejected(self) -> None:
+        from user_agent import _subgoal_answer_candidate
+        self.assertEqual(_subgoal_answer_candidate("x" * 120), "")
+
+    def test_rescue_skips_junk_subgoal_and_uses_direct_solve(self) -> None:
+        """只有垃圾子目标结果时，应跳过它、走直答，而不是把它当答案。"""
+        from user_agent import ReasoningAgent
+        a = object.__new__(ReasoningAgent)
+        a.orchestrator = SimpleNamespace(run=lambda p, m: {
+            "final_response": PLACEHOLDER, "trace": [],
+            "diag": {"subgoal_trace": [{"result": self.REAL_016_RESULT}]},
+        })
+        a.config = SimpleNamespace(max_answer_tokens=64)
+        a.client = SimpleNamespace(chat=lambda **kw: "【最终答案】: 21")
+        out = a.solve("求值")
+        self.assertEqual(out["final_response"], "21")
+        self.assertNotIn("未经系统确认", out["final_response"])

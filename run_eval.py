@@ -775,7 +775,10 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # 2026-09-04 平台教训（14.29% 归因）：放开单题时限 → 时间爆炸 → 64 题被
     # 时间墙切掉 invalid。改回比赛档 1200s（deep 档上限）——超时截断宁可 invalid
     # 也不拖垮整卷。
-    "max_time_per_question": 1200,
+    # 2026-09-14：1200 → **1150**，与提交配置 `user_agent.py::AgentConfig
+    # .max_time_per_question`（同为 1150）对齐 —— 本文件的一贯要求是"本地评测必须
+    # 与平台一致，否则'本地验证通过'不代表'比赛限时下可复现'"。
+    "max_time_per_question": 1150,
     # ---- 对齐 user_agent.py:101 / :105 / :106 ----
     "max_workers": 3,
     # 9/4：平台不限 token → 本地 override 同步放开（防截断腰斩；上探 65536 对齐 AgentConfig）
@@ -794,7 +797,7 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # 历史：540→900 是配合 54000s 不限时总池的放宽，违背比赛时间模拟，
     # 已回退。分时桶实测 >700s 档正确率 0%——多给时间不换正确率，
     # standard 540s 足够覆盖 450s 内能解对的快题。
-    "tier_budget": {"fast": 120.0, "standard": 540.0, "deep": 1200.0},
+    "tier_budget": {"fast": 120.0, "standard": 540.0, "deep": 1150.0},
     # ---- 全卷调度：本地 45 题小卷（2026-09-02 三次修正：恢复比赛折算）----
     # 用户要求：测试时间限制必须符合比赛要求，不能"不限时"。
     # 折算口径（题·秒守恒）：平台 112 题卷 target 21000s × 并发 3 =
@@ -1115,7 +1118,7 @@ def main():
     parser.add_argument("--max_time_per_question", type=int, default=None,
                         help="单题壁钟上限秒（诊断用；不传=1200 比赛口径）")
     parser.add_argument("--tier_budget", type=str, default=None,
-                        help="三档预算 'fast,standard,deep'（诊断用；不传=120,540,1200）")
+                        help="三档预算 'fast,standard,deep'（诊断用；不传=120,540,1150）")
     parser.add_argument("--paper_target_time", type=int, default=None,
                         help="全卷墙钟目标秒（诊断用；放大后 PaperPacer 不再收紧单题预算）")
     args = parser.parse_args()
