@@ -210,6 +210,9 @@ class Verdict:
     raw: str = ""               # 原始投票返回文本（verifier 使用）
     score: dict | None = None   # 评分模式的详细分数（verifier 使用）
     deterministic: dict | None = None  # 确定性验证旁证/否决证据（verifier 使用，0 LLM 预算）
+    abstain: bool = False       # 弃权票（verifier 使用）：LLM 调用失败/输出无法解析
+                                # → 属"基础设施/格式故障"，不是"答案错误"。
+                                # 聚合时剔出 total_votes 分母，避免把故障当反证。
 
 
 @dataclass
@@ -488,7 +491,11 @@ class TaskContext:
 
     def total_time_remaining(self) -> float:
         """返回Agent总剩余时间（秒）"""
-        if self.total_deadline == 0.0:
+        # 2026-09-12 定型前审核：与 time_remaining() 统一「伪 epoch」护栏。
+        # 原先只挡 `== 0.0`，未挡测试 fixture 的伪 epoch（如 9999.0）→
+        # is_total_timed_out() 恒 True，而同一个 ctx 上 time_remaining()
+        # 却返回 inf，属"同一实体内两套矛盾口径"（会上演'某机制永远触发'）。
+        if self.total_deadline == 0.0 or self.total_deadline < 10**8:
             return float("inf")
         import time
         return self.total_deadline - time.time()
@@ -712,9 +719,11 @@ class BaseAgent(ABC):
             # 在 system 层自动注入工具使用说明（不改调用方 user 结构）。
             _tool_hint = (
                 "\n\n【可用工具】你有函数 calc_eval(expr)：调用外部精确计算器"
-                "（支持 + - * / ^ 组合数 comb 求和 sum 积分 integral 开方 sqrt 等，"
-                "返回精确/符号/近似结果）。任何需要数值或精确计算的环节都应调用"
-                "它获取结果、基于返回结果继续，禁止心算。"
+                "（支持 + - * / ^ 组合数 comb 求和 sum 积分 integral 开方 sqrt "
+                "对数 log·ln 指数 exp 等，返回精确/符号/近似结果）。"
+                "**易错运算（开方/根式、对数 log·ln、指数 exp 与自然常数 e、"
+                "组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π）必须"
+                "调用它获取结果、基于返回结果继续，禁止心算**；简单加减乘除可自算。"
                 "例如需要 comb(50,3)*2**10 时，调用 calc_eval(expr='comb(50,3)*2**10')。"
                 "若返回 WARN/ERROR 说明表达式有问题，修正后重试调用。"
             )
@@ -728,6 +737,17 @@ class BaseAgent(ABC):
             n_calls = 0
             last_text = None
             for _round in range(max_rounds):
+                # 2026-09-12 修复（时间护栏）：工具循环此前**完全绕过** `llm()` 的
+                # 时间守卫与 max_tokens_cap，循环内不查 ctx 剩余时间 ——
+                # `max_rounds=3` × 单次 client timeout(180s) 最坏 540s，异常再回落
+                # `self.llm` 又 180s，足以烧穿单题预算（历史"工具循环撞 timeout
+                # 再花 180s"的根因）。时间不足时直接停手并返回已有文本，
+                # **不再回落**（回落等于再等一轮）。
+                if (ctx is not None and hasattr(ctx, "gen_time_up")
+                        and ctx.gen_time_up()):
+                    if last_text and last_text.strip():
+                        return last_text
+                    return None
                 try:
                     resp = self.client.chat(
                         messages=msgs,

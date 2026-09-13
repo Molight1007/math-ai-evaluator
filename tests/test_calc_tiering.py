@@ -23,12 +23,12 @@ HARD_LINES = [
     "comb(50,3) = 19600",
     "log(100) = 2",
     "ln(2) = 0.693",
-    "2^10 = 1024",
+    "2^30 = 1073741824",
     "12! = 479001600",
     "e^2 = 7.389",
     "sum(k,1,10) = 55",
     "\\sqrt{45} = 6.708",
-    "2**10 = 1024",
+    "2**100 = 1267650600228229401496703205376",
     "sin(pi/6) = 0.5",
     "log_2(8) = 3",
     "log_{10}(100) = 2",
@@ -53,6 +53,12 @@ EASY_LINES = [
     # 裸 e 作变量（非自然常数）—— 2026-09-12 修复：曾因无条件挖掉裸 e 而误判
     "e = 5",
     "e + 1 = 6",
+    # 2026-09-13 用户裁决：幂按规模分档 ——「加减乘除、平方这些基本计算都可以
+    # （让模型自己）算」，故小幂（平方/小次方）的裸断言不再回收（原在 HARD_LINES）。
+    # 大幂（2^30 / 2**100 / 10**20 / 0.05^12）仍留在 HARD_LINES。
+    "2^10 = 1024",
+    "2**10 = 1024",
+    "7**2 = 49",
 ]
 
 
@@ -77,10 +83,15 @@ def test_has_hard_op_strict_ignores_latex_superscript():
     # 整段扫描：LaTeX 符号上标 x^{2} / n^{k} 不算高危（代数式而非心算数值）
     assert has_hard_op("设 x^{2}+y^{2}=1") is False
     assert has_hard_op("设 n^{k} 为幂次") is False
-    # 数字底数的幂、函数调用、单字母组合数 → 算
-    assert has_hard_op("由 2^{10} 得 1024") is True
+    # 2026-09-13 用户裁决：幂两档统一按规模分档 —— 数字底数的小幂同样放行
+    assert has_hard_op("由 2^{10} 得 1024") is False
+    assert has_hard_op("由 2**10 得 1024") is False
+    # 数字底数的**大**幂、函数调用、单字母组合数 → 算
+    assert has_hard_op("由 2^{100} 得 1.27e30") is True
     assert has_hard_op("代入 sqrt(2) 得 1.414") is True
     assert has_hard_op("组合数 C(50,3) 得 19600") is True
+    # strict 档保留的护栏：符号底数的 ** 仍算（与 x^{2} 的放行不同）
+    assert has_hard_op("代数式 x**2 + y**2 = 1") is True
     # 纯四则整段 → 放行
     assert has_hard_op("相加得 25*4 = 100") is False
 

@@ -197,7 +197,14 @@ def compute_determinant(matrix_str: str) -> Optional[str]:
     try:
         cleaned = matrix_str.strip()
         if cleaned.startswith("[["):
-            matrix_list = eval(cleaned, {"__builtins__": {}}, {})
+            # 2026-09-12 定型前审核修复（安全）：原实现为
+            #   eval(cleaned, {"__builtins__": {}}, {})
+            # 该"空 builtins"隔离可被经典手法逃逸（().__class__.__bases__[0]
+            # .__subclasses__() 链取出任意类并调用），而 matrix_str 来自模型输出
+            # → 属可执行任意代码的漏洞。改用 ast.literal_eval：只接受字面量，
+            # 覆盖 [[1,2],[3,4]]、[[1+1,2],[3,4]] 等既有用法，无逃逸面。
+            import ast as _ast
+            matrix_list = _ast.literal_eval(cleaned)
             mat = sp.Matrix(matrix_list)
         else:
             cleaned = re.sub(r'\\begin\{.*?matrix\}', '', cleaned)

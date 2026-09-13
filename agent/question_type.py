@@ -60,15 +60,119 @@ def _count_option_marks(text: str) -> int:
             continue
         # 3) 括号式标记 (a) 后紧跟字母/数字/括号/右括号（如 f(a))、(b-a)f(f(a))）
         #    → 数学调用/嵌套，不是选项
+        # 2026-09-10：补闭合括号 ) ] } ）】——LaTeX 分式 $\frac{g(a)-g(b)}{a-b}$
+        # 里 "g(b)}" 的 "}" 原不在集合内，导致 official112-009 被误判选择题。
         if m.group(0).strip().endswith((")", "）", "]", "】")):
             nxt = text[m.end():m.end() + 1]
-            if nxt and (nxt.isalnum() or nxt in "([{（)"):
+            if nxt and (nxt.isalnum() or nxt in "([{（)]}）】"):
                 continue
         n += 1
     return n
 
-# 填空题空白占位：___ / ＿ / 【空】 / ()
-_UNDERSCORE_BLANK_RE = re.compile(r"_{2,}|＿{2,}|\[空\]|【空】")
+# ---------------------------------------------------------------------------
+# 客观题选项检测 v2（2026-09-12，按 official112 客观题标定）
+# ---------------------------------------------------------------------------
+# 背景：v1 的 `_count_option_marks` 依赖「标记前导必须是空白/左括号」+
+# 「标记后不能跟数学符号」，在比赛卷上漏检 6 道真选择题（087/098/102/103/
+# 106/107，实测全部被判成"解答题"，特化策略与选项清单都没生效）：
+#   · 中文连排选项 `A.长期趋势B.季节变动C.循环变动D.不规则变动E.随机变动`
+#     —— 选项之间无空白，B/C/D/E 的前导是汉字 → 全部漏检（102/103/106/107）；
+#   · LaTeX 列表选项 `\item[A.] … \item[B.] …`（087）→ 被"\item 分点"规则整段丢弃；
+#   · 选项后紧跟数学式 `A. $\kappa(A)=\sqrt{…}$`（098）→ 被"反斜杠开头即数学"
+#     规则过滤，计数不足 3。
+#
+# v2 判据换成「有序字母序列」，比逐标记过滤鲁棒得多：
+#   ① 只认**大写** A–E（小写 (a)/(b) 是数学正文与分点枚举，直接排除）；
+#   ② 分隔符只认 `.` `．` `、`——右括号 `)` 形态（数学调用 `\kappa(A)`、
+#      `f(B)`）因此天然排除，不需要额外的数学符号白名单；
+#   ③ 同一字母重复出现 → 视为题面重复列项，取最新位置而不重开序列；
+#   ④ 字母必须**严格递增**且相邻标记间距 < 400 字符（避免跨段落误配）；
+#   ⑤ 与 v1 取 max（只增不减）：v2 只可能"补回"漏检，不会让原本命中的选题
+#      丢掉命中，把误判风险限制在新增路径上，便于回归定位。
+_OPTION_MARK_V2_RE = re.compile(r"(?<![A-Za-z0-9])([A-E])\s*([\.．、])")
+
+# 同一选项序列内相邻标记允许的最大字符间距
+_OPTION_SEQ_MAX_GAP = 400
+
+
+def _option_sequence_marks(text: str) -> list[tuple[int, str]]:
+    """返回最长「有序选项序列」的 ``[(位置, 字母), ...]``；无序列返回 ``[]``。
+
+    序列 = 字母严格递增、相邻间距 < ``_OPTION_SEQ_MAX_GAP`` 的最长标记段。
+    例：`A.甲B.乙C.丙D.丁` → `[(0,'A'),(4,'B'),(8,'C'),(12,'D')]`；
+    `\\kappa(A)=\\sqrt{|A|}` → `[]`（右括号形态不认，孤立大写字母也不成序列）。
+    """
+    marks = [(m.start(), m.group(1)) for m in _OPTION_MARK_V2_RE.finditer(text or "")]
+    if not marks:
+        return []
+    best: list[tuple[int, str]] = []
+    cur: list[tuple[int, str]] = []
+    for pos, lab in marks:
+        if not cur:
+            cur = [(pos, lab)]
+            continue
+        prev_pos, prev_lab = cur[-1]
+        if lab == prev_lab:
+            cur[-1] = (pos, lab)          # 重复列项，跟随最新位置
+            continue
+        if lab > prev_lab and pos - prev_pos <= _OPTION_SEQ_MAX_GAP:
+            cur.append((pos, lab))
+            continue
+        if len(cur) > len(best):
+            best = cur
+        cur = [(pos, lab)]
+    if len(cur) > len(best):
+        best = cur
+    return best
+
+
+def _option_sequence_length(text: str) -> tuple[int, list[str]]:
+    """返回 ``(去重后选项字母数, 有序字母序列)``。"""
+    best = _option_sequence_marks(text)
+    labels = [lab for _pos, lab in best]
+    return len(set(labels)), labels
+
+
+# 填空题空白占位：___ / ＿ / 【空】 / () / \((\quad)\)
+# 2026-09-12：补 `\(\quad\)` 形态——official112-086 的三个空写成 `$(\quad)$`，
+# 原判据不命中 → 被判"解答题"，特化的"按空序逗号分隔"输出规范没生效。
+_UNDERSCORE_BLANK_RE = re.compile(r"_{2,}|＿{2,}|\[空\]|【空】|\\underline\{\s*\}")
+# `(\quad)` / `（\quad）` 形态（可带 $ 包裹）；**不可**裸认 `\quad`——该命令是
+# 排版间隔符，正文里极常见（084 的 `\quad (c \in \mathbb{C})`），裸认会大面积误判。
+_QUAD_BLANK_RE = re.compile(r"\$?\s*[（(]\s*\\quad\s*[）)]\s*\$?")
+
+# ---------------------------------------------------------------------------
+# 主任务信号（2026-09-10，按 official112 比赛卷标定）
+# ---------------------------------------------------------------------------
+# 背景：原实现用「子串命中」判证明题（"prove" in low / "proof" in low），
+# 在比赛卷上会系统性误判——比赛题常以
+#     "determine, with proof, the largest number n ..."   (official112-028)
+#     "... determine the moment ... or prove that such a moment does not
+#      necessarily exist"                                  (official112-034)
+#     "find (with proof) the amount that Winnie wins"      (official112-061)
+# 这类**求值题附带证明要求**的形态出现，"proof / prove" 只是修饰语，主任务
+# 仍是求一个结果。误判后果不小：is_proof 直接决定 Lean 走「整题形式化证明」
+# 还是「答案级核验」，判错 = 走错验证通道（实测这 3 题被判证明题后触发
+# 6 候选整题 verify，全 unknown 后 verify_stop 止损，白烧约 2 分钟预算）。
+#
+# 新规则：证明题 = 命中「证明型主任务句式」**且**未命中「求值型主任务」。
+# 注意禁止用裸词 proof / prove —— 那正是本次误判的根因。
+
+# 求值型主任务信号：题面在要一个结果（数值 / 集合 / 表达式 / 区间）。
+# 中文用 求(?!证) 排除「求证」（否则所有中文求证题会被否决）。
+_SOLVE_TASK_RE = re.compile(
+    r"\b(?:find|compute|determine|calculate|evaluate|what\s+is)\b"
+    r"|求(?!证)|计算|求解|等于多少",
+    re.I,
+)
+
+# 证明型主任务信号：必须是「要求证明」的句式，而非 proof 这类裸词。
+_PROOF_TASK_RE = re.compile(
+    r"证明(?!题)|求证|试证"
+    r"|\bprove\s+(?:that|the\s+following|or\s+disprove|it)\b"
+    r"|\bshow\s+that\b|\bdemonstrate\s+that\b",
+    re.I,
+)
 
 
 def classify_question_type(problem: str) -> str:
@@ -80,26 +184,45 @@ def classify_question_type(problem: str) -> str:
     text = problem or ""
     low = text.lower()
 
-    # 1) 选择题：选项标记 ≥2 个 / 选项关键词（信号最专一）
+    # 1) 选择题：选项标记 ≥3 个 / 选项关键词（信号最专一）
     # 2026-09-01：标记数 ≥2 才判选择题。数学正文里的 (b-a) / (a, b) / (a)f /
     # \item[(a)] 均被排除（见 _is_option_mark），杜绝 PB 证明题 39/60 误判。
-    if (_count_option_marks(text) >= 2) or any(
+    # 2026-09-10（official112 标定）：阈值 2 → 3。实测 2 个标记仍会被数学
+    # 正文/步骤枚举触发两例误判：
+    #   official112-009 的 $\frac{g(a)-g(b)}{a-b}$ —— "g(b)}" 后接右花括号，
+    #                    旧过滤只查"后接字母/左括号"，漏掉闭合括号；
+    #   official112-045 的两步说明 "(a) Bob ... (b) Ali ..."，是步骤枚举不是选项。
+    # 比赛卷真选择题均为 3~4 选项（094/109/110 等实测 ≥3），≥3 可完全区分；
+    # 显式选项关键词（选择/选项/选出…）路径不受影响。
+    # 2026-09-12（official112 客观题专项）：补 v2「有序字母序列」判据，与 v1 取
+    # max（只增不减）。v2 修回 6 道被漏判为"解答题"的真选择题（087/098/102/103/
+    # 106/107），详见 _OPTION_MARK_V2_RE 上方注释；v1 原判据与阈值一字未动，
+    # 历史防误判收益（PB 证明题 39/60 误判）完整保留。
+    _v2_n, _v2_labels = _option_sequence_length(text)
+    _opt_n = max(_count_option_marks(text), _v2_n)
+    if _opt_n >= 3 or any(
         k in low for k in ("选择", "选项", "选出", "单选", "多选", "下列选项中", "正确的选项")
     ):
         return QT_CHOICE
 
-    # 2) 证明题
-    if any(k in low for k in ("证明", "求证", "试证", "prove", "proof", "show that", "verify that")):
+    # 2) 证明题（任务型判定，2026-09-10 按 official112 标定重写）
+    #    原实现：any(k in low for k in ("证明","求证","试证","prove","proof",
+    #    "show that","verify that")) —— 子串命中即判证明题。在比赛卷上会误判
+    #    "with proof" / "or prove that ..." 形态的**求值题**（028/034/061）。
+    #    新实现：命中证明型主任务句式，且未被求值型主任务否决。
+    if _PROOF_TASK_RE.search(text) and not _SOLVE_TASK_RE.search(text):
         return QT_PROOF
 
     # 3) 判断题
     if any(k in low for k in ("判断", "对错", "正误", "对还是错", "true or false", "是否正确")):
         return QT_JUDGE
 
-    # 4) 填空题
-    if _UNDERSCORE_BLANK_RE.search(text) or any(
-        k in low for k in ("填空", "填入", "填上", "blank")
-    ):
+    # 4) 填空题 / 多空题
+    # 2026-09-12：补 `(\quad)` 空形态——official112-086 是"三个空 + 一个是否判断"
+    # 的三段型客观题（gold 形态 `域, 次数, 是`），原判据不命中被判"解答题"，
+    # 按空序逗号分隔的输出规范因此没生效。
+    if (_UNDERSCORE_BLANK_RE.search(text) or _QUAD_BLANK_RE.search(text)
+            or any(k in low for k in ("填空", "填入", "填上", "blank"))):
         return QT_FILL
 
     # 5) 解答题（兜底）
@@ -107,25 +230,124 @@ def classify_question_type(problem: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Lean 适用性判定（2026-09-10，按 official112 比赛卷标定）
+# ---------------------------------------------------------------------------
+# 用户要求：**所有题都要用到 Lean 检测机制，除非非常简单的题**。
+# 但有一类题 Lean 结构上无从核验——答案是"非数学对象"：
+#   · 选项字母：答案是 A / AB / BCD / A,B,C,D,E
+#   · 判断题值：答案是 正确 / 错误
+#   · 概念文字：答案是 "标准差" / "移动平均法、时间序列分解法"
+# 对这类题，Lean 只能产出 unknown，白烧一次编译 + 翻译（约 21s+）。
+#
+# official112 全 112 题标定实测：
+#   豁免 18 道（选项 12 / 判断 2 / 概念文字 4），Lean 覆盖其余 94 道；
+#   误伤（把该跑的题豁免掉）0 道；漏判 1 道（099：题面含偏微分方程，
+#   被判为可形式化——**宁可多跑一道也不错杀数学题**，代价仅一次失败编译）。
+#
+# 判据与 classify_question_type 的证明题否决分开维护：这里的求值信号更宽
+# （含 how many / number of / for which / 是多少 等），只用于"要不要上 Lean"，
+# 不参与题型归类，避免把带这些措辞的证明题误判成解答题。
+
+# 求值型信号（宽口径）：题面要求一个结果 → 答案应为数学对象。
+_ASK_RESULT_RE = re.compile(
+    r"\b(?:find|compute|determine|calculate|evaluate|what\s+is|what\s+are"
+    r"|how\s+many|how\s+much|number\s+of|value\s+of|for\s+which|which\s+values?"
+    r"|give)\b"
+    r"|求(?!证)|计算|求解|等于多少|是多少|有多少|多少个",
+    re.I,
+)
+
+# 明确数学运算符（**不含裸数字**：列表编号「10．」这种会误触发）
+_MATH_OP_RE = re.compile(r"[\^=]|\\frac|\\sqrt|\\int|\\sum|\\cdot|\\times|[+*/<>]")
+
+# 宽松选项标记：A. / B、 / C）...(选项连排无空格也能识别）
+_LOOSE_OPTION_RE = re.compile(r"[A-E][\.、．)）]\s*\S")
+
+# 客观题 / 概念题豁免阈值：选项标记 ≥3 个即视为客观题（比赛卷真选择题均 ≥3）
+_OBJECTIVE_OPTION_MIN = 3
+
+
+def lean_applicable(problem: str, question_type: str = "") -> tuple[bool, str]:
+    """判断本题是否适用 Lean 形式化核验，返回 ``(是否适用, 不适用原因)``。
+
+    不适用（答案不是数学对象，Lean 无从形式化）：
+        1. 题型为选择题 / 判断题；
+        2. 题面含 ≥3 个选项标记（含选项连排的无空格形态）；
+        3. 题面既不要求一个结果、也不含任何明确数学运算符（概念/描述题）。
+    其余一律适用 —— 即"除非常简单的题之外，都要用 Lean"。
+    """
+    text = problem or ""
+    # ① 客观题：答案必然是字母或判断值
+    if question_type in (QT_CHOICE, QT_JUDGE):
+        return False, "objective_type"
+    # ② 选项连排（如 A.甲B.乙C.丙D.丁）——宽松计数；2026-09-12 起并入 v2
+    #    有序序列判据，二者取大（同理只增不减：只会让更多客观题被豁免 Lean，
+    #    不会让原本豁免的题跑回 Lean 白烧编译时间）。
+    _v2_n, _ = _option_sequence_length(text)
+    if max(len(_LOOSE_OPTION_RE.findall(text)), _v2_n) >= _OBJECTIVE_OPTION_MIN:
+        return False, "objective_options"
+    # ③ 要求一个结果 → 答案是数学对象
+    if _ASK_RESULT_RE.search(text):
+        return True, ""
+    # ④ 虽无求值措辞，但题面含明确数学运算符 → 仍可能是数学题（不俗杀）
+    if _MATH_OP_RE.search(text):
+        return True, ""
+    # ⑤ 纯文字题（概念/描述/填空），答案不是数学对象
+    return False, "non_math"
+
+
+# ---------------------------------------------------------------------------
 # 差异化策略提示（注入求解 prompt）
 # ---------------------------------------------------------------------------
 _TYPE_HINTS: dict[str, str] = {
+    # 2026-09-12 客观题特化（official112 实测：15 道客观题基线仅对 4 道）。
+    # 三条纪律直接对应实测错因：
+    #   · 漏项 —— 093 只答 C（漏 E）、103 漏 E：根因是"选项连排/被截断"，
+    #     检测层已修（E 项现能解析出），这里再强制"清点选项总数 + 判完复核"；
+    #   · 单选惯性 —— 题面问"哪些是正确的"（多选）却只给一个字母；
+    #   · 判真无依据 —— 只给结论不给反例，复查时无法自纠。
     QT_CHOICE: (
-        "\n[题型策略] 本题为选择题。请先逐个分析选项，"
-        "必要时将候选选项代入原题条件进行逆推验证以排除错误项，"
-        "最终答案只输出选项字母（如 A / B / C / D）。"
+        "\n\n**【客观题特化解法 · 选择题 · 必须逐步执行】**\n"
+        "1. **先清点选项**：从 A 起连续数到最后一个字母，逐一确认共几项"
+        "（选项可能连排在同一行、或写在 LaTeX 列表里，**E 项最容易被漏读**）；\n"
+        "2. **逐项独立判真**：对**每一个选项**单独判定真假。判为假时必须给出"
+        "**具体反例或构造**（反例优先于文字论证）；判为真时给出可核验的理由"
+        "（定义/定理原文，或代入计算）；\n"
+        "3. **★ 角色 / 方向核对（最易错，必须列映射表）**：当选项形如“X 变为 Y”"
+        "“由 A 得到 B”“增大↔减小”“左端↔右端”“系数↔常数项”“约束↔目标”"
+        "“前件↔后件”等**对应关系**时，**先把原对象的每个元素与变换后元素列成"
+        "映射表**（逐项对应），再核对该选项的表述是否与映射表一致；"
+        "**严禁凭“大体相关 / 看起来对”判定为正确**；\n"
+        "4. **按问法定项数**：题面问“哪些 / 正确的是”时，**所有**为真的选项都要"
+        "选上——判完全部选项后**回头复核一遍**，禁止答出第一个正确项就收手；"
+        "只有问“哪一项”时才单选；\n"
+        "5. **输出格式**：最终答案只输出选项字母，**连写**、不要逗号/空格/顿号、"
+        "不要任何解释（正确示例：`AB`、`BCD`、`ABCDE`），写在 \\boxed{} 内。"
     ),
     QT_JUDGE: (
-        "\n[题型策略] 本题为判断题。请判断命题正误；"
-        "若依据不足以完全确定，可基于最合理的推断给出判断，不要留空。"
+        "\n\n**【客观题特化解法 · 判断题 · 必须逐步执行】**\n"
+        "1. **先提取核心断言**：明确被判断的对象、属性/关系、以及量词范围"
+        "（全部还是存在）；\n"
+        "2. **绝对化措辞 → 优先找反例**：断言含“一定 / 必然 / 都 / 只能 / 唯一 / "
+        "任何 / 所有 / 不可能 / 必定”时，先尝试构造反例；**找到反例即判“错误”**"
+        "（反例要具体，不能只写“不一定”）；\n"
+        "3. **无反例则回定义核对**：逐条比对教材定义 / 定理原文，不要凭直觉、"
+        "印象或类比下结论；特别注意“方向性”陷阱"
+        "（增大↔减小、有偏↔无偏、有效↔一致 之间不可互换）；\n"
+        "4. **输出格式**：最终答案只输出 **正确** 或 **错误** 两个词之一"
+        "（不要写 √ × T F 对 错 是 否 真 假），写在 \\boxed{} 内。"
     ),
     QT_PROOF: (
         "\n[题型策略] 本题为证明题。请逐步严格证明，每一步标注依据，"
         "并对关键步骤进行反复校验，确保逻辑严密、无跳步。"
     ),
     QT_FILL: (
-        "\n[题型策略] 本题为填空题。请推导/计算出确切结果填入空白处，"
-        "最终答案只输出结果本身。"
+        "\n\n**【客观题特化解法 · 填空/多空题 · 必须逐步执行】**\n"
+        "1. 按题面给出的空（或分问）的**先后顺序**逐一求解，每个空只给结果本身；\n"
+        "2. 多个空的结果**用逗号在同一行依次分隔**（示例：`X, 8, 是`）；"
+        "问“是 / 否”的空就直接写“是”或“否”；\n"
+        "3. 不要写“设…=”“所以”“因此”之类的推导前缀，也不要重复题目已给的符号说明；\n"
+        "4. **输出格式**：全部空的结果写在同一行，逗号分隔，整体放进 \\boxed{}。"
     ),
     QT_SOLUTION: (
         "\n[题型策略] 本题为解答题。请完整求解，"
@@ -140,45 +362,95 @@ def get_question_type_hint(qtype: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 答案形态要求（B0 批次，2026-09-13）
+# ---------------------------------------------------------------------------
+# ★ 为什么**必须前置注入到生成阶段**（而不是事后闸门重问）：
+#   事后闸门挂在 formatter（流程**最后一个阶段**），实测 003/015/074 三题
+#   全部落到"时间不足一次重问，跳过" —— 因为 deadline 被 tier_budget 收紧到
+#   1800s，而题目跑到 formatter 时已耗 1700–2400s，剩余必然 < 120s。
+#   ⇒ 末端重问在时间上不可行（比赛 1200s 硬限更不可能）。
+#   ⇒ 形态要求应在**规划/求解时**就写进 prompt，零额外时间成本。
+_ASKS_ALL_RE = re.compile(
+    r"find\s+all|determine\s+all|all\s+possible|求.{0,12}所有|求.{0,12}全部|"
+    r"所有\s*可能|全部\s*可能", re.IGNORECASE)
+_ASKS_RANGE_RE = re.compile(
+    r"范围|区间|取值范围|充要条件|必要条件|充分条件", re.IGNORECASE)
+
+
+def answer_form_requirement(problem: str, qtype: str = "") -> str:
+    """按题面推导「答案形态要求」文本（无要求时返回空串）。
+
+    覆盖台账 B0 两个可救模式：
+      ① 求所有 → **必须枚举**（003 只给 `2026` 漏 `2030`）
+      ② 求具体值 → **禁止条件式**（064 给 `m is even` 而非 `4`）
+
+    ⚠ 选择题**直接返回空**：其答案形态（字母连写、选项数对齐）由
+    `objective_injection`（客观题特化）负责，两套要求同时注入会互相干扰
+    —— 例如把 093 的答案 `CE` 要求成"具体数值"。
+    """
+    t = problem or ""
+    if not t:
+        return ""
+    if qtype == QT_CHOICE:
+        return ""
+    if _ASKS_ALL_RE.search(t):
+        return (
+            "\n\n**【答案形态要求 · 必须遵守】**\n"
+            "本题问『所有 / 全部』的取值：最终答案**必须逐项枚举出全部解**，"
+            "用逗号分隔（正确示例：`2026, 2030`）。\n"
+            "· **禁止**只给出其中一个值；\n"
+            "· **禁止**用 `≥ / ≤ / 任意 / for all` 等条件式代替枚举；\n"
+            "· 收尾前必须自问一句『是否存在第二个解族 / 另一支解？』"
+            "并确认已穷尽所有可能。"
+        )
+    if not _ASKS_RANGE_RE.search(t):
+        return (
+            "\n\n**【答案形态要求 · 必须遵守】**\n"
+            "本题要求**具体数值或具体对象**（不是取值范围、不是充要条件）：\n"
+            "· 最终答案必须是一个明确的值，或明确的对象列表；\n"
+            "· **禁止**用 `≥ / ≤ / is even / for all / 任意` 等条件式"
+            "或性质描述代替具体值。"
+        )
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # 选择题选项提取（用于逆推验证）
 # ---------------------------------------------------------------------------
-_OPTION_SPLIT_RE = re.compile(
-    r"(?:[（(]\s*([A-Da-d])\s*[）)]|([A-Da-d])\s*[\.、:：])\s*"
-)
-
-
 def extract_options(problem: str) -> list[tuple[str, str]]:
-    """从选择题题干提取选项文本，返回 [(标签, 内容), ...]。
+    """从选择题题干提取选项文本，返回 ``[(标签, 内容), ...]``。
 
-    支持形态：A. xxx / (A) xxx / A、xxx / A）xxx，选项间以换行或分号分隔。
-    提取失败返回空列表（不阻塞主流程，模型仍能看到完整题干）。
+    2026-09-12 重写：改用与题型判定同源的「有序字母序列」定位选项，修掉三类
+    实测漏检（这些漏检直接造成模型"漏选 E"与选项碎片）：
+
+      · **连排无分隔**：`A.长期趋势B.季节变动C.循环变动D.不规则变动E.随机变动`
+        —— 旧实现依赖 `选项/下列` 关键词定位起点，起点之后才切分，E 项也因
+        正则写死 `[A-D]` 而被丢（103/106/107）；
+      · **选项连排且无换行**：内容切分到"行尾/分号"截止，E 项被并进 D 的内容里
+        （103 实测 `D.不规则变动E.随机变动`）；
+      · **选项内嵌数学**：旧 `_OPTION_SPLIT_RE` 会把 `\\kappa(A)` 这类调用当成
+        `(A)` 选项标记，098 实测切出 8 个碎片。
+
+    支持 5 个选项（A–E）。提取失败返回空列表（不阻塞主流程，模型仍能看到完整题干）。
     """
     text = problem or ""
-    if not _OPTION_MARK_RE.search(text):
+    if not text:
         return []
-
-    # 找到选项起始位置：优先从"选项"关键词后，其次从第一个选项标记后
-    start = 0
-    m_kw = re.search(r"(?:选项|下列|以下|选出)", text)
-    if m_kw:
-        start = m_kw.end()
-
-    segment = text[start:]
+    marks = _option_sequence_marks(text)
+    if len(marks) < 2:
+        return []
     opts: list[tuple[str, str]] = []
-    # 逐项匹配：标签 + 内容（到下一个标签/换行/分号截止）
-    for m in _OPTION_SPLIT_RE.finditer(segment):
-        label = (m.group(1) or m.group(2)).upper()
-        content_start = m.end()
-        # 内容到下一个选项标记或行尾/分号截止
-        nxt = _OPTION_SPLIT_RE.search(segment, content_start)
-        end = nxt.start() if nxt else len(segment)
-        content = segment[content_start:end].strip()
-        # 去掉行尾残留分隔符
-        content = re.split(r"[\n；;]", content)[0].strip()
+    for i, (pos, label) in enumerate(marks):
+        m = _OPTION_MARK_V2_RE.match(text, pos)
+        content_start = m.end() if m else pos + 1
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
+        content = text[content_start:end]
+        # LaTeX 列表残留（`\item[A.]` 剥掉标记后多一个 `]`）
+        content = content.lstrip("]）) \t")
+        # 到行尾/分号截止（同行连排时无换行，保留完整内容）
+        content = re.split(r"[\n；;]", content)[0].strip().rstrip("，,；;")
         if content:
             opts.append((label, content))
-        if len(opts) >= 8:  # 安全上限
-            break
     return opts
 
 
@@ -191,3 +463,29 @@ def format_options(problem: str) -> str:
     for label, content in opts:
         lines.append(f"{label}. {content}")
     return "\n".join(lines)
+
+
+def objective_injection(problem: str, qtype: str, tactic_on: bool = True) -> str:
+    """客观题注入文本（选项清单 + 特化解法纪律）；非客观题返回空串。
+
+    统一入口：**三条生成路径共用**——主求解（solver）、子目标主路径 2.7 的规划、
+    子目标逐步求解与 merge 合并（sub_goal_solver）。子目标主路径对所有档位默认
+    先行（``enable_subgoal_main_path`` 默认 True），客观题的答案完全可能由该路径
+    产出，只在 solver 里注入等于没注入（"机制触发 ≠ 效果提升"的老坑）。
+
+    注入位置约定：**必须拼在"题目"占位符内部**，不得追加到提示词末尾——历史
+    教训（algebra-075）显示末尾追加会破坏提示词收尾结构，让模型进入续写模式并
+    泄漏 `[续写]` 占位符，把答对的题变成错的。
+    """
+    if qtype not in (QT_CHOICE, QT_JUDGE, QT_FILL):
+        return ""
+    parts: list[str] = []
+    if qtype == QT_CHOICE:                 # 选项清单属"输入信息补全"，始终注入
+        opts = format_options(problem)
+        if opts:
+            parts.append(opts)
+    if tactic_on:                          # 特化解法纪律受开关控制
+        hint = get_question_type_hint(qtype)
+        if hint:
+            parts.append(hint)
+    return "".join(parts)

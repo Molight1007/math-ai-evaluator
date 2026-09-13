@@ -653,6 +653,31 @@ _REASONING_FRAGMENT_WORDS = [
 ]
 
 
+def _has_unbalanced_math_delims(text: str) -> bool:
+    """LaTeX 数学定界符配对检查（2026-09-11）。
+
+    #006 实况（Bug清单_团队提交de90cedc_0911.md §6）：答案抽取在非数值题上
+    退化成**截断的推理正文**——`假设 \\( A(0) = 0 \\)，代入 \\( p = 1 \\) 和 \\( q`
+    （39 字符，句子中间硬断）。这类串同时造成两种危害：
+      ① 提交内容本身不可判分（必错）；
+      ② 被当作锚串喂给 Lean，污染 `_answer_embedded` 判定。
+
+    只做**成对**检查：任一成对定界符数量为奇数（或 `$` 为奇数）即判不平衡。
+    两侧都不出现时（纯文本/纯表达式答案）不算不平衡，不影响既有通过率。
+    返回 True 表示存在未闭合定界符 → 应视为无效答案。
+    """
+    if not text:
+        return False
+    if len(re.findall(r"\\\(", text)) != len(re.findall(r"\\\)", text)):
+        return True
+    if len(re.findall(r"\\\[", text)) != len(re.findall(r"\\\]", text)):
+        return True
+    # 行内 $（排除转义 \$）
+    if len(re.findall(r"(?<!\\)\$", text)) % 2 != 0:
+        return True
+    return False
+
+
 def _clean_extracted_answer(text: str) -> str:
     """清理提取的答案文本；若清理后仍呈推理片段特征则返回空串"""
     if not text:
@@ -668,6 +693,9 @@ def _clean_extracted_answer(text: str) -> str:
     text = re.sub(r"^\d+[.)](?=\s|$)", "", text).strip()
     # 推理片段特征检测：以引导词开头 → 非独立答案
     if _looks_like_reasoning_fragment(text):
+        return ""
+    # 结构完整性检测：LaTeX 定界符未配对 = 截断的推理正文（#006 实况）
+    if _has_unbalanced_math_delims(text):
         return ""
     # 保留下划线、反斜杠、花括号等数学符号
     return text.strip()

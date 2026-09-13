@@ -154,13 +154,21 @@ class _Stub:
 
 
 class _Ctx:
-    def __init__(self, timeup=True, problem="计算 2*10+5 的值"):
+    def __init__(self, timeup=True, problem="计算 2*10+5 的值", remain=None):
         self._timeup = timeup
         self.problem = problem
         self.question_type = ""
+        self._remain = remain          # 2026-09-13：非 None 时走"剩余预算"判定
 
     def gen_time_up(self):
         return self._timeup
+
+    def time_remaining(self):
+        # remain 未给 ⇒ 抛异常，令生产代码退回 gen_time_up() 判定，
+        # 从而保持既有测试的语义逐字不变（它们只桩了 gen_time_up）。
+        if self._remain is None:
+            raise AttributeError("remain not provided")
+        return float(self._remain)
 
 
 def test_selfcheck_disabled_is_noop():
@@ -175,9 +183,10 @@ def test_selfcheck_disabled_is_noop():
 def test_selfcheck_skips_when_tool_provenance_exists():
     from agent.solver import SolverAgent
     stub = _Stub(True)
-    resp = "推导 [计算] 2*10+5 = 25\n【最终答案】25"
+    # 2026-09-12 计算分档：须含高危算子（sqrt）才进本关卡判定范围
+    resp = "推导 [计算] sqrt(625) = 25\n【最终答案】25"
     out = SolverAgent._maybe_answer_selfcheck(
-        stub, _Ctx(timeup=False), resp, "25", [("2*10+5", "25")])
+        stub, _Ctx(timeup=False), resp, "25", [("sqrt(625)", "25")])
     assert out == (resp, "25")
     assert stub.events == []          # 有工具来源 → 放行，不重问
 
@@ -195,12 +204,54 @@ def test_selfcheck_skips_non_numeric_answer():
 def test_selfcheck_respects_time_wall():
     from agent.solver import SolverAgent
     stub = _Stub(True)
-    resp = "心算得 25\n【最终答案】25"
+    # 2026-09-12 计算分档：resp 须含高危算子（sqrt）才进本关卡判定范围
+    resp = "心算得 sqrt(625) = 25\n【最终答案】25"
     # 时间到 → 记录事件但不重问（返回原输出）
     out = SolverAgent._maybe_answer_selfcheck(
         stub, _Ctx(timeup=True), resp, "25", [])
     assert out == (resp, "25")
     assert any(k == "answer_selfcheck" for k, _ in stub.events)
+
+
+def test_selfcheck_skips_pure_arithmetic_answer():
+    """2026-09-12 计算分档：解答全程纯四则（无高危算子）→ 不要求工具来源。"""
+    from agent.solver import SolverAgent
+    stub = _Stub(True)
+    resp = "先算 25*4 = 100，再 100-75 = 25\n【最终答案】25"
+    out = SolverAgent._maybe_answer_selfcheck(
+        stub, _Ctx(timeup=False), resp, "25", [])
+    assert out == (resp, "25")
+    assert not any(k == "answer_selfcheck" for k, _ in stub.events)
+    assert any(k == "answer_selfcheck_skip" for k, _ in stub.events)
+
+
+def test_selfcheck_uses_remaining_budget_not_gen_wall():
+    """2026-09-13：时间判定由「生成侧软截止」改为「剩余总预算 >=300s」。
+
+    背景（实测驱动）：三轮冒烟（v1/v2/v5）在 010 上都记为"生成侧时间到，跳过
+    重问"，而该机制是当时唯一能纠正错答案的途径（Lean 的 answer_valid 在题面
+    无 ≥3 位数字时会退化为自证放行）。故改为按剩余总预算判定。
+    """
+    from agent.solver import SolverAgent
+    resp = "心算得 sqrt(625) = 25\n【最终答案】25"
+    # 生成侧已到（gen_time_up=True），但剩余预算充足 → 仍应定向重问
+    stub = _Stub(True)
+    out = SolverAgent._maybe_answer_selfcheck(
+        stub, _Ctx(timeup=True, remain=400.0), resp, "25", [])
+    assert out == (resp, "25")
+    msg = [m for k, m in stub.events if k == "answer_selfcheck"]
+    assert msg, "应记录 answer_selfcheck 事件"
+    assert "跳过重问" not in msg[0], msg
+    assert "定向重问" in msg[0], msg
+    assert "400" in msg[0], msg
+
+    # 剩余确实不足（200s < 300s）→ 跳过重问，且打标记供 6.5 闸门联动
+    stub2 = _Stub(True)
+    ctx2 = _Ctx(timeup=False, remain=200.0)
+    SolverAgent._maybe_answer_selfcheck(stub2, ctx2, resp, "25", [])
+    assert getattr(ctx2, "selfcheck_unverified_answer", "") == "25"
+    msg2 = [m for k, m in stub2.events if k == "answer_selfcheck"]
+    assert msg2 and "跳过重问" in msg2[0], msg2
 
 
 # ----------------------------------------------------- 5) L2 符号建模（纯函数）

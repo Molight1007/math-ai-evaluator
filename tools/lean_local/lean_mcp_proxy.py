@@ -68,8 +68,32 @@ _BLACKHOLE_PROXY = "http://127.0.0.1:9"   # 死端口：连接立即被拒（快
 
 
 def _server_env() -> dict:
-    """构造传给 lean-lsp-mcp server 的环境（默认禁网；ALLOW_NET=1 放行）。"""
+    """构造传给 lean-lsp-mcp server 的环境（默认禁网；ALLOW_NET=1 放行）。
+
+    2026-09-11 追加：若仓库内置 ripgrep（`<proxy 同目录>/bin/rg` 或
+    `<仓库>/lean-lsp-mcp/bin/rg`），自动加入 PATH —— 供 `lean_local_search`
+    （**本地**检索，不联网）使用。找不到也不影响其他能力（优雅降级）。
+    """
     env = dict(os.environ)
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        # 逐级向上找 bin/ 或 lean-lsp-mcp/bin/（兼容主仓与镜像的不同层级）
+        _cands = [os.path.join(_here, "bin")]
+        _p = _here
+        for _ in range(4):
+            _parent = os.path.dirname(_p)
+            if not _parent or _parent == _p:
+                break
+            _p = _parent
+            _cands.append(os.path.join(_p, "lean-lsp-mcp", "bin"))
+            _cands.append(os.path.join(_p, "bin"))
+        for _cand in _cands:
+            if (os.path.isfile(os.path.join(_cand, "rg"))
+                    or os.path.isfile(os.path.join(_cand, "rg.exe"))):
+                env["PATH"] = _cand + os.pathsep + env.get("PATH", "")
+                break
+    except Exception:  # noqa: BLE001
+        pass
     allow = (os.environ.get(_ALLOW_NET_ENV, "") or "").strip().lower()
     if allow in ("1", "true", "yes"):
         return env
@@ -132,7 +156,71 @@ def _iter_requests():
 
 async def _handle(session, req) -> None:
     rid = req.get("id")
+    # 2026-09-11：多操作路由（向后兼容：无 op 视为 diagnostics）。
+    #   op=diagnostics  文件诊断（原行为）
+    #   op=run_code     本地执行 Lean 代码片段（计算）—— 不联网
+    #   op=local_search 本地 Mathlib 声明检索（找引理）—— 不联网
+    #   op=verify       定理公理/源码可疑构造检查（检测）—— 不联网
+    # 全部为本地 LSP 能力；远程检索类工具（leansearch/loogle/...）仍由
+    # LEAN_MCP_DISABLED_TOOLS 禁用，保证比赛环境（无外网）可运行。
+    op = str(req.get("op") or "diagnostics").strip().lower()
     try:
+        if op == "run_code":
+            code = str(req.get("code") or "")
+            r = await session.call_tool("lean_run_code", {"code": code})
+            txt = _text(r.content)
+            try:
+                d = json.loads(txt)
+            except (json.JSONDecodeError, ValueError):
+                d = {}
+            raw_items = d.get("diagnostics") or d.get("items") or []
+            norm = [{"severity": i.get("severity", "info"),
+                     "message": i.get("message", ""),
+                     "line": i.get("line"), "column": i.get("column")}
+                    for i in raw_items if isinstance(i, dict)]
+            _reply({"id": rid, "ok": bool(d.get("success", not norm)),
+                    "items": norm, "goal": None,
+                    "raw": txt[:1500],
+                    "error": "" if d.get("success", not norm) else txt[:300]})
+            return
+        if op == "local_search":
+            args = {"query": str(req.get("query") or "")}
+            lim = req.get("limit")
+            if lim:
+                args["limit"] = int(lim)
+            r = await session.call_tool("lean_local_search", args)
+            _reply({"id": rid, "ok": True, "items": [], "goal": None,
+                    "error": "", "raw": _text(r.content)[:3000]})
+            return
+        if op == "verify":
+            args = {"file_path": str(req.get("file") or ""),
+                    "theorem_name": str(req.get("theorem") or "")}
+            r = await session.call_tool("lean_verify", args)
+            _reply({"id": rid, "ok": True, "items": [], "goal": None,
+                    "error": "", "raw": _text(r.content)[:3000]})
+            return
+        if op == "multi_attempt":
+            # B4（2026-09-11）：对目标行自动尝试多个 tactic，返回各自 goal state
+            args = {"file_path": str(req.get("file") or ""),
+                    "line": int(req.get("line") or 1),
+                    "snippets": list(req.get("snippets") or [])}
+            if req.get("column"):
+                args["column"] = int(req["column"])
+            r = await session.call_tool("lean_multi_attempt", args)
+            _reply({"id": rid, "ok": True, "items": [], "goal": None,
+                    "error": "", "raw": _text(r.content)[:4000]})
+            return
+        if op == "hover":
+            # B6（2026-09-11）：取某位置符号的类型签名/文档（API 校验）
+            r = await session.call_tool("lean_hover_info", {
+                "file_path": str(req.get("file") or ""),
+                "line": int(req.get("line") or 1),
+                "column": int(req.get("column") or 1)})
+            _reply({"id": rid, "ok": True, "items": [], "goal": None,
+                    "error": "", "raw": _text(r.content)[:3000]})
+            return
+
+        # ---- 默认：文件诊断 ----
         fpath = req.get("file", "")
         if not fpath or not os.path.isfile(fpath):
             _reply({"id": rid, "ok": False,

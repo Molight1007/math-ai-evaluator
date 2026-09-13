@@ -175,12 +175,33 @@ class CompileViaMcpTest(unittest.TestCase):
                                  _PROJ, 60.0, allow_sorry=False)
         self.assertFalse(r["ok"])
 
-    def test_goal_appended_on_first_error(self):
+    def test_goal_not_appended_by_default(self):
+        """新契约：空 env 下 goal 富集**不**执行。
+
+        依据：2026-09-13 起 goal/multi_attempt/hover 默认关，理由见
+        ``lean_bridge.py`` 对应开关处的注释（这三段只影响错因文本质量、
+        verdict=ok 已定，不改变候选淘汰；实测 3 候选一波耗 480s 却全部 unknown）。
+        """
         p1, p2, client = self._stub_proxy(
             items=[{"severity": "error", "message": "linarith failed",
                     "line": 5, "column": 3}],
             goal="⊢ x ≤ 1")
         with p1, p2, mock.patch.dict(os.environ, {}):
+            r = _compile_via_mcp("C:/p/v.lean", "code", _PROJ, 60.0,
+                                 allow_sorry=False)
+        self.assertFalse(r["ok"])
+        # 默认关：goal 富集不执行 → 无 [lean-lsp-mcp] 段，仅 1 次主诊断 request
+        self.assertNotIn("[lean-lsp-mcp]", r["error"])
+        self.assertEqual(client.request.call_count, 1)
+
+    def test_goal_appended_when_enabled(self):
+        """保留可开回能力：显式 LEAN_MCP_GOAL_LOC=1 时 goal 富集恢复执行。"""
+        p1, p2, client = self._stub_proxy(
+            items=[{"severity": "error", "message": "linarith failed",
+                    "line": 5, "column": 3}],
+            goal="⊢ x ≤ 1")
+        with p1, p2, mock.patch.dict(
+                os.environ, {"LEAN_MCP_GOAL_LOC": "1"}):
             r = _compile_via_mcp("C:/p/v.lean", "code", _PROJ, 60.0,
                                  allow_sorry=False)
         self.assertFalse(r["ok"])

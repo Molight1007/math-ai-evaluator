@@ -207,6 +207,74 @@ def _cross_check_problem_numbers(problem: str, lean_code: str) -> bool:
         return True
 
 
+def _cross_check_problem_symbols(problem: str, lean_code: str) -> bool:
+    """按**题面变量符号**交叉核对 —— 数字核对失效时的兜底防线。
+
+    背景（2026-09-13 实测定位）：`_cross_check_problem_numbers` 在「题面无 ≥3 位
+    数字」时返回 None，调用方退化为「答案数字核对」；而当答案的数字只有 0/1/2 时
+    （如答案就是 `0`），原逻辑 `not ans_nums - {"0","1","2"}` 恒为 True ⇒ **直接
+    放行**。实测 010（题面全是一位数、答案 0）因此把
+    `example : (0:ℚ) = 0 := by norm_num` 这类**恒真自证**判为 answer_valid。
+
+    本函数补上兜底：从题面抽取**变量符号**，要求验证代码至少引用其中 2 个。
+    真验证代码必然引用题目变量（`∀ p q r s : ℝ, ...`）；只验 X=X 的自证代码不会。
+    返回 False = 疑似自证。
+    """
+    try:
+        body = problem or ""
+        # 题面中的单字母变量（LaTeX 记法常见形式）；排除单字母命令名与噪声
+        cands = re.findall(r"(?<![A-Za-z\\])([a-zA-Z])(?![A-Za-z0-9])", body)
+        noise = {"e", "i", "d", "n", "x", "a"}   # e/i/d 多为命令名或虚数；x/a 过于通用
+        syms = {c for c in cands if c not in noise}
+        if len(syms) < 2:
+            return True                     # 题面无可核对符号 ⇒ 不误伤
+        code = lean_code or ""
+        hit = [s for s in syms
+               if re.search(r"(?<![A-Za-z])" + re.escape(s) + r"(?![A-Za-z])", code)]
+        return len(hit) >= 2
+    except Exception:  # noqa: BLE001  核对失败宁可放行（不误伤）
+        return True
+
+
+def _to_exact_number_safe(v: Any) -> Optional[str]:
+    """把答案串转成 Lean 可用的**精确数值字面量**（本地实现，不 import agent.*）。
+
+    为什么不复用 `agent.calc_tool.to_exact_number`：`agent` 依赖 `tools`，
+    反向导入会引入循环依赖（本项目已因循环导入出过 Lean 通道被静默禁用的事故）。
+    保守实现：只接受纯数值 / 简单分数 / `\\boxed{}` 包裹的数值；其余返回 None
+    （调用方据此放弃系统验算，不影响原有判定）。
+    """
+    s = (v or "").strip()
+    if not s:
+        return None
+    # 剥外壳：\boxed{...} / $...$ / 括号 / 逗号分隔符
+    s = re.sub(r"\\boxed\s*\{([^{}]*)\}", r"\1", s)
+    s = re.sub(r"\\(?:d|t)?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"(\1)/(\2)", s)
+    s = s.strip("$ \t{}()[]，,。.、")
+    # 含 ASCII 字母（数学变量 / 函数名，如 2*x+y）⇒ 非纯数值答案，保守放弃。
+    # 否则会从 "2*x+y" 里抠出 "2" 构造出错误命题（实测发现）。
+    if re.search(r"[A-Za-z]", s):
+        return None
+    m = re.fullmatch(r"[-+]?\d+(?:\.\d+)?(?:\s*/\s*[-+]?\d+(?:\.\d+)?)?", s)
+    if not m:
+        m2 = re.search(r"[-+]?\d+(?:\.\d+)?(?:\s*/\s*[-+]?\d+(?:\.\d+)?)?", s)
+        if not m2:
+            return None
+        s = m2.group(0)
+    s = s.replace(" ", "")
+    if "/" in s:
+        a, b = s.split("/", 1)
+        try:
+            from fractions import Fraction
+            f = Fraction(a) / Fraction(b)
+        except Exception:  # noqa: BLE001
+            return None
+        if f.denominator == 1:
+            return str(f.numerator)
+        return "((%d : ℚ) / (%d : ℚ))" % (f.numerator, f.denominator)
+    return s
+
+
 def _prepend_mathlib_import(code: str) -> str:
     """归一化代码的 Mathlib import（兼容本地部分编译布局）。
 
@@ -1414,9 +1482,15 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 2026-09-13：本次调用计时入账（这是唯一可信的 MCP 耗时口径；
             # 此前全仓无埋点，耗时要靠日志时间戳反推）
             _t0 = time.monotonic()
+            # 2026-09-13 时间预算收敛：地板 150s → 90s。
+            # 依据：实测 "LeanGate: 并行预取 3 个候选耗时 480.4s（K=3）"，
+            # 而 diag.lean_gate 显示 6 个候选全部 verdict=unknown —— 说明
+            # 经常撞 150s 地板却一个都没确认/淘汰，纯属浪费（单题硬时限 1200s）。
+            # 降地板只省时间、不改变 verdict；保守起见不降到 20s（真编译确需时间）。
+            # lean_timeout 默认 60.0（user_agent.py:346）⇒ 实际为 max(90, 90)=90s。
             try:
                 resp = _px.request(lean_file,
-                                   timeout=max(timeout + 60.0, 150.0))
+                                   timeout=max(timeout + 30.0, 90.0))
             except BaseException:
                 _mcp_note(time.monotonic() - _t0, False)
                 raise
@@ -1441,7 +1515,12 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                 # 定位增强：首个错误行取 goal state（elaboration 后秒回），
                 # 喂给 _analyze_error 提升错因质量（003/009/053 型中段错）
                 gl = errors[0].get("line")
-                if gl and os.environ.get("LEAN_MCP_GOAL_LOC", "1") != "0":
+                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+                # 依据：本段结果只 append 到 err_text（:1519-1520），而 err_text
+                # 仅用于 :1570-1571 的 {"ok":False,...} 返回；本段位于 if errors:
+                # （:1502）内部 ⇒ ok=False 已定，它只影响 _analyze_error 的错因
+                # 文本质量，**不改变候选是否被淘汰**。省一次 goal 调用（timeout=45s）。
+                if gl and os.environ.get("LEAN_MCP_GOAL_LOC", "0") != "0":
                     try:
                         gresp = _px.request(
                             lean_file, timeout=45.0, goal_line=int(gl),
@@ -1455,7 +1534,11 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                 # ★ B4（2026-09-11）：编译失败时用 multi_attempt 自动试多策略。
                 # 价值：把"Lean 判你错"升级为"Lean 给出可行改法"——直接补上
                 # "检测到了但模型不会改"的缺口。失败不影响主流程（静默跳过）。
-                if os.environ.get("LEAN_MCP_MULTI_ATTEMPT", "1") != "0":
+                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+                # 依据：本段结果只 append 到 err_text（:1540-1541），同 :1502 内
+                # 部 ⇒ ok=False 已定，只影响错因文本质量，**不改变候选淘汰**。
+                # 省一次 multi_attempt（timeout=90s，是三者中最贵的一项）。
+                if os.environ.get("LEAN_MCP_MULTI_ATTEMPT", "0") != "0":
                     try:
                         _ln0 = int(errors[0].get("line") or 1)
                         _col0 = int(errors[0].get("column") or 1)
@@ -1477,7 +1560,11 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                         logger.debug("[LeanBridge] multi_attempt 跳过: %s", _me)
                 # ★ B6（2026-09-11）：对「未知标识符 / invalidField」用 hover 查该符号的
                 # 真实信息并回填 —— 直击 preverify 之「臆造 API」主因（如 Finset.Nodup）。
-                if os.environ.get("LEAN_MCP_HOVER_CHECK", "1") != "0":
+                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+                # 依据：本段结果只 append 到 err_text（:1562-1565），同 :1502 内
+                # 部 ⇒ ok=False 已定，只影响 _analyze_error 的错因文本质量，
+                # **不改变候选淘汰**。省一次 hover（timeout=45s）。
+                if os.environ.get("LEAN_MCP_HOVER_CHECK", "0") != "0":
                     try:
                         _hln = int(errors[0].get("line") or 1)
                         _hcol = int(errors[0].get("column") or 1)
@@ -2082,6 +2169,65 @@ class LeanBridge:
                 return None
         return lean_code
 
+    def _verify_answer_by_system(self, reasoning: str,
+                                 answer: str) -> Optional[bool]:
+        """**系统侧命题验算** —— 命题不由 LLM 自由发挥，避免"自证放行"。
+
+        背景（2026-09-13 定位）：`verify_answer` 原路径让 LLM 把「答案+推理」写成
+        `example : <命题> := by <tactic>`，而 **Lean 只能验证"命题可证"，无法验证
+        "命题是否等于题目"**。LLM 只要写恒真式（如 `example : (0:ℚ) = 0`）就必然
+        通过 ⇒ 错误答案被判 answer_valid（实测 010 命中）。
+
+        本方法改为：从推理里提取**已带工具标记的算式**（`<calc>...</calc>` 或
+        `[计算] ... = ...`），由**系统**构造命题「(算式) = (候选答案数值)」并编译：
+          · 编译通过 → True  （答案与自身计算一致，强证据）
+          · 编译失败 → False （答案与自己的计算矛盾 ⇒ 答案必错，强信号）
+          · 无法提取算式 → None（**不影响**原有判定，纯增量）
+
+        设计原则：**只增加拦截力，不降低原有能力**（返回 None 时调用方按原逻辑走）。
+        """
+        try:
+            want = _to_exact_number_safe(answer)
+            if want is None:
+                return None
+            text = reasoning or ""
+            cands = re.findall(r"<calc>\s*(.*?)\s*</calc>", text, re.S)
+            if not cands:
+                cands = [m.group(1) for m in
+                         re.finditer(r"\[\s*计算\s*\]\s*([^\n=]{2,120})=([^\n]{1,60})",
+                                     text)]
+            exprs = []
+            for c in cands[:4]:
+                e = (c or "").strip()
+                # 取等号左侧作为待验证表达式（右侧是模型自己写的值，不可信）
+                if "=" in e:
+                    e = e.split("=", 1)[0].strip()
+                if e and len(e) <= 160:
+                    exprs.append(e)
+            if not exprs:
+                return None
+            # 逐个尝试：只要有一个算式在 Lean 下精确等于答案，即认定一致
+            for e in exprs:
+                code = (
+                    "import Mathlib.Tactic\n"
+                    "example : (" + e + ") = (" + want + ") := by norm_num\n")
+                if not self._mathlib_ready():
+                    return None
+                project_dir = self._lean_project_dir
+                if not project_dir:
+                    return None
+                lean_file = "sysverify_%d_%d.lean" % (
+                    os.getpid(), int(time.monotonic() * 1e6))
+                comp = self._compile(_prepend_mathlib_import(code), project_dir,
+                                     lean_filename=lean_file, allow_sorry=False)
+                _trash_lean_file(project_dir, lean_file)
+                if comp and comp.get("ok"):
+                    return True
+            # 所有算式都算不出该答案 ⇒ 答案与自身计算矛盾
+            return False
+        except Exception:  # noqa: BLE001  任何异常都不影响原有判定
+            return None
+
     def verify_answer(self, problem: str, reasoning: str, answer: str,
                       domain: str = "", timeout: float = 60.0) -> Optional[BugReport]:
         """答案审核（轻量路径，非证明题）：最终答案 + 关键计算用 norm_num/ring 验证。
@@ -2145,11 +2291,20 @@ class LeanBridge:
                 # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
                 _cc = _cross_check_problem_numbers(problem, lean_code)
                 if _cc is None:
-                    # 题目无 >=3 位数字：用答案侧数字二次核对（answer 内数字须出现在代码）
+                    # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
                     ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
                     code_nums2 = set(re.findall(r"\b(\d{1,})\b", lean_code or ""))
                     common2 = (ans_nums & code_nums2) - {"0", "1", "2"}
-                    _cc = len(common2) >= 1 or not ans_nums - {"0", "1", "2"}
+                    if common2:
+                        _cc = True               # 答案里有区分度的数字已进代码
+                    elif ans_nums - {"0", "1", "2"}:
+                        _cc = False              # 答案有数字却没进代码 ⇒ 自证
+                    else:
+                        # 答案数字无区分度（如答案本身就是 0）——原实现在此**直接放行**
+                        # （`not ans_nums - {"0","1","2"}` 恒为 True），实测被 010 这类
+                        # 题利用：LLM 写 `example : (0:ℚ) = 0 := by norm_num` 即通过。
+                        # 2026-09-13 修复：改用**题面变量符号**核对（真验证必引题目变量）。
+                        _cc = _cross_check_problem_symbols(problem, lean_code)
                 if not _cc:
                     report = BugReport(
                         verdict="proof_invalid",
@@ -2164,6 +2319,30 @@ class LeanBridge:
                             "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
                     logger.warning("[LeanBridge] 答案验证疑似自证，拒绝（代码未引用题目数字）")
                     return report
+                # 2026-09-13 新增：**系统命题验算**（命题由系统构造，非 LLM 自由发挥）。
+                # 动机：Lean 只能验证"命题可证"，无法验证"命题 = 题目"；LLM 写恒真式
+                # 即被判 answer_valid（实测 010：错答案 0 被放行）。此处从推理里提取
+                # 带工具标记的算式，由系统构造「(算式) = (答案数值)」并编译：
+                #   · 编译失败 ⇒ 答案与自身计算矛盾 ⇒ 直接判 proof_invalid（强信号）
+                #   · 通过 / 无法构造 ⇒ 不影响原有判定（纯增量，不降低既有能力）
+                try:
+                    _sys = self._verify_answer_by_system(reasoning, answer)
+                except Exception:  # noqa: BLE001
+                    _sys = None
+                if _sys is False:
+                    _r = BugReport(
+                        verdict="proof_invalid",
+                        findings=[Finding(
+                            location="answer_verify", kind="Critical", severity=5,
+                            desc="最终答案与推理中的**计算结果矛盾**：系统已用 Lean "
+                                 "复算你给出的算式，结果与最终答案不一致。"
+                                 "请重新核对计算并修正答案。")])
+                    setattr(_r, "lean_code", lean_code)
+                    setattr(_r, "suggestion",
+                            "重算该算式，确保最终答案与之逐字一致")
+                    logger.warning(
+                        "[LeanBridge] 系统命题验算不通过：答案与算式矛盾 → 拒绝")
+                    return _r
                 report = BugReport(verdict="answer_valid", findings=[])
                 # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
                 setattr(report, "lean_code", lean_code)
@@ -2179,6 +2358,41 @@ class LeanBridge:
                 comp.get("error", "答案验证编译失败（无详细输出）")
                 if comp else "答案验证编译失败（无详细输出）")
         except Exception as exc:  # noqa: BLE001
+            # 2026-09-13 修复：此处原实现**直接把异常降级为 unknown**，但异常的主因
+            # 是翻译阶段的 LLM 调用超时（LLMClient 180s × 重试 1 次 = 360s），被静默
+            # 吞掉后 6 个候选 verdict 全为 unknown（既不定正确、也不淘汰错误）。
+            # 日志实锤：results/ab_4wrong_0913_open.log:119 →
+            #   "verify_answer 异常（降级 unknown）: LLM call failed after 2 attempts:
+            #    Request timeout after 180s"
+            # 修复思路：异常时先走**不依赖 LLM** 的系统侧命题验算兜底（从 <calc> /
+            # [计算] 算式构造命题直接编译），只有它也给不出结论（None / 再抛异常）
+            # 才保留原有 unknown 降级。
+            try:
+                _sys_fallback = self._verify_answer_by_system(reasoning, answer)
+            except Exception:  # noqa: BLE001
+                _sys_fallback = None
+            if _sys_fallback is True:
+                # 与上方正常路径的 answer_valid 分支（:2346-2348）返回结构保持一致
+                _ok_report = BugReport(verdict="answer_valid", findings=[])
+                setattr(_ok_report, "lean_code", locals().get("lean_code", None))
+                logger.warning(
+                    "[LeanBridge] 翻译异常，但系统侧命题验算通过 → 兜底 answer_valid")
+                return _ok_report
+            if _sys_fallback is False:
+                # 与上方正常路径的 proof_invalid 分支（:2333-2345）返回结构保持一致
+                _bad_report = BugReport(
+                    verdict="proof_invalid",
+                    findings=[Finding(
+                        location="answer_verify", kind="Critical", severity=5,
+                        desc="最终答案与推理中的**计算结果矛盾**：系统已用 Lean "
+                             "复算你给出的算式，结果与最终答案不一致。"
+                             "请重新核对计算并修正答案。")])
+                setattr(_bad_report, "lean_code", locals().get("lean_code", None))
+                setattr(_bad_report, "suggestion",
+                        "重算该算式，确保最终答案与之逐字一致")
+                logger.warning(
+                    "[LeanBridge] 翻译异常，但系统侧命题验算判定答案与算式矛盾 → 拒绝")
+                return _bad_report
             logger.warning("[LeanBridge] verify_answer 异常（降级 unknown）: %s", exc)
             return BugReport(verdict="unknown", findings=[])
 

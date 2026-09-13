@@ -158,6 +158,21 @@ def _norm_candidate(text: str) -> str:
     # 先剥尾注会破坏 \boxed{ 的 } 闭合（084 v11 实测 \text{ 其中 } 被剥后
     # 剩 \boxed{Q... 未闭合 → 壳剥不掉）。
     text = _clean_answer(text)
+    # 2026-09-12 修复：gold 常以**行内数学定界符**包裹（如 `\( BCD \)`），
+    # 若未脱落会与模型的裸答案判不等——official112-094 实况：
+    # pred `\boxed{BCD}` norm 后 `BCD`，gold `\( BCD \)` norm 后 `\(BCD\)`
+    # → 数学完全相同却判 expr_wrong。离线量化：官方 112 题 +0.9pp（1 题由错转对）。
+    # 幂等、只剥最外层、最多 3 层，避免误伤内含 `$` 的答案。
+    for _ in range(3):
+        _dm = (re.match(r"^\\\(\s*(.*?)\s*\\\)$", text, re.S)
+               or re.match(r"^\\\[\s*(.*?)\s*\\\]$", text, re.S))
+        if _dm:
+            text = _dm.group(1).strip()
+            continue
+        if len(text) > 1 and text.startswith("$") and text.endswith("$"):
+            text = text[1:-1].strip()
+            continue
+        break
     # 2026-09-03：剥中文说明尾注——084 实测 pred 'Q(x)=c(x-1)^2(x+2)(x-4)，
     # 其中 c∈C 为任意常数'（数学等价却判 format_unresolved）。注意 $ 是 LaTeX
     # 美元符不是行尾锚。
@@ -330,6 +345,30 @@ def _matches_one(pred_f: str, gold_f: str) -> bool:
     return False
 
 
+def _letter_combo_match(pred_f: str, gold_f: str) -> bool:
+    """选项字母组合的两种写法互通：`A, B` ↔ `AB`（集合比较，顺序无关）。
+
+    2026-09-12 新增。背景：提示词要求「多值答案用逗号分隔」后，模型把多选题
+    答案写成 `A, B` / `B, C, D`，而 gold 是连写的 `AB` / `BCD` → 原本判对的题
+    **由对转错**（088/094 实况）。二者语义相同，应判等。
+
+    安全边界（宁漏勿误）：
+      - 两侧归一化后必须**都是纯字母**（可含逗号/顿号/空格分隔），且长度 ≤6；
+      - 因此 `Q(5^{1/4},i)`、`L^*v=...` 这类含符号/数字的答案**不会**进入本路径；
+      - 结果是集合相等（`A,B` == `BA`），符合多选题语义。
+    """
+    try:
+        a = re.sub(r"[^A-Za-z]", "", str(pred_f or "")).upper()
+        b = re.sub(r"[^A-Za-z]", "", str(gold_f or "")).upper()
+        if not a or not b or len(a) > 6 or len(b) > 6:
+            return False
+        if a.isalpha() is False or b.isalpha() is False:
+            return False
+        return set(a) == set(b)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _option_letter_match(pred_f: str, gold_f: str) -> bool:
     """选项类答案匹配（2026-09-02，Q2 假阴性修复）。
 
@@ -382,12 +421,20 @@ def answers_match(pred: str, gold: str) -> bool:
     # 选项类答案：'A' ↔ 'A.绝对收敛' / '绝对收敛' ↔ 'A.绝对收敛'（2026-09-02）
     if _option_letter_match(pred_f, gold_f):
         return True
+    # 选项字母组合两种写法互通：`A, B` ↔ `AB`（2026-09-12，088/094 由对转错修复）
+    if _letter_combo_match(pred_f, gold_f):
+        return True
     # 语义等价（2026-09-02 晚）：'n divisible by 2 or 3' ↔ gold 'n=2k,n=3k'
     # （087 实况：数学答对（Lean answer_valid）却被格式判错，最可惜）
     if _match_divisibility(pred, gold_f):
         return True
     # 无解/题设矛盾语义（2026-09-08）：一元_003 实况（详见 _match_no_solution）
     if _match_no_solution(pred, gold):
+        return True
+    # 多值答案集合匹配（2026-09-10）：集合括号/省略号写法归一 + 元素顺序无关 + 多项式重排
+    # （official112 实况：005 `1,2,\ldots,1235` ↔ `\{1,2,\dots,1235\}`、
+    #   006 三个函数仅顺序与书写不同，数学完全等价却被判 expr_wrong）
+    if _multi_value_match(pred_f, gold_f):
         return True
     # 推导文本：提取 '= X' 结论逐个匹配
     for cand in _extract_equals_candidates(pred):
@@ -540,6 +587,101 @@ _STEP_MARK = re.compile(r'步骤\s*\d|Step\s*\d|解\s*[：:]|综上|由此可知
 _MD_HEADER = re.compile(r'^#+\s*')
 
 
+def _normalize_ellipsis(s: str) -> str:
+    """统一省略号写法：\\dots / \\ldots / … → ...（official112-005 实况差异）"""
+    return s.replace("\\ldots", "...").replace("\\dots", "...").replace("…", "...")
+
+
+def _strip_set_braces(s: str) -> str:
+    """剥离集合花括号：\\left\\{1,2\\right\\} / \\{1,2\\} / {1,2} → 1,2"""
+    s = s.replace("$", "").strip()
+    s = re.sub(r"\\left\s*\\?[{}]", "", s)
+    s = re.sub(r"\\right\s*\\?[{}]", "", s)
+    s = s.replace("\\{", "").replace("\\}", "")
+    s = s.strip()
+    if s.startswith("{") and s.endswith("}"):
+        s = s[1:-1]
+    return s.strip()
+
+
+def _split_multi(s: str) -> List[str]:
+    """多值答案拆分（逗号分隔）；元素数 ≥2 才有意义（调用方保证）。
+
+    _norm_candidate 会把 LaTeX 空格 `,\\ ` 压成 `,\\`，故需剥元素前导反斜杠
+    （official112-006 实况：拆出 '\\A(x)=1-x'）。
+    """
+    s = _strip_set_braces(_normalize_ellipsis(s))
+    return [p.lstrip("\\").strip() for p in s.split(",") if p.lstrip("\\").strip()]
+
+
+def _poly_equal(a: str, b: str) -> bool:
+    """符号等价（含隐式乘法 `2x` → `2*x`、`x^{2}` → `x**(2)`）。
+
+    注意：不走 safe_simplify（它返回带空格的字符串，如 '2 x + 1'，再喂给
+    sympy 会 SympifyError），直接用 sympy.sympify 解析后作差化简。
+    仅用于多值元素判定，异常即返回 False（不影响原判分）。
+    """
+    try:
+        import re as _re
+        import sympy as sp
+    except Exception:
+        return False
+
+    def _prep(t: str) -> str:
+        t = t.replace("$", "").strip()
+        t = _re.sub(r"\^\{([^{}]*)\}", r"**(\1)", t)   # x^{2} → x**(2)
+        t = t.replace("^", "**")                        # x^2 → x**2
+        t = _re.sub(r"(?<![A-Za-z0-9_.])(\d)([A-Za-z])", r"\1*\2", t)  # 2x → 2*x
+        return t
+
+    try:
+        pa = sp.sympify(_prep(a))
+        pb = sp.sympify(_prep(b))
+        # 保护：Tuple/集合等非标量表达式不作差（避免 deprecated 的 Mul(Tuple) 路径）
+        if not isinstance(pa, sp.Expr) or not isinstance(pb, sp.Expr):
+            return False
+        return bool(sp.simplify(pa - pb) == 0)
+    except Exception:
+        return False
+
+
+def _item_match(a: str, b: str) -> bool:
+    """多值元素匹配：原样匹配 → 等式两侧分别匹配（允许左右互换）→ 多项式等价。"""
+    if _matches_one(a, b):
+        return True
+    if "=" in a and "=" in b:
+        al, _, ar = a.partition("=")
+        bl, _, br = b.partition("=")
+        if (_item_match(al, bl) and _item_match(ar, br)):
+            return True
+        if (_item_match(al, br) and _item_match(ar, bl)):
+            return True
+    return _poly_equal(a, b)
+
+
+def _multi_value_match(pred_f: str, gold_f: str) -> bool:
+    """多值答案集合匹配：元素数量相同 + 一一对应（顺序无关）。
+
+    保守约束（避免误判）：两侧都必须拆出 ≥2 个元素且数量一致，且每个元素
+    都能找到未占用的匹配对象；任一条件不满足即返回 False（不改变原判分结果）。
+    """
+    g_items = _split_multi(gold_f)
+    p_items = _split_multi(pred_f)
+    if len(g_items) < 2 or len(p_items) < 2 or len(g_items) != len(p_items):
+        return False
+    used = [False] * len(p_items)
+    for gi in g_items:
+        hit = False
+        for i, pi in enumerate(p_items):
+            if not used[i] and _item_match(gi, pi):
+                used[i] = True
+                hit = True
+                break
+        if not hit:
+            return False
+    return True
+
+
 def _strip_latex_cmds(text: str) -> str:
     r"""去掉 LaTeX 命令名，但保留自由变量字母。
 
@@ -568,9 +710,12 @@ def _classify_error(pred: str, gold: str) -> str:
     """
     p = (pred or "").strip()
     g = (gold or "").strip()
+    # 裸 `\boxed` / `\boxed{}`（无内容）应判为空输出（official112-011 实况：
+    # pred='\boxed' 被误归 expr_wrong，掩盖了"答案未产出"这一事实）
+    p_probe = re.sub(r"\\boxed\b", "", p).strip()
 
     # 1) 空输出 / 只剩定界符 → 解析或截断 bug
-    if not p or _EMPTY_DELIM.match(p):
+    if not p_probe or _EMPTY_DELIM.match(p_probe):
         return "empty_output"
     pf = _norm_candidate(p)
     gf = _norm_candidate(g)
@@ -663,7 +808,16 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "paper_target_time": 8438,
     # 前置验证最多 2 次尝试（原默认 2 轮 = 3 次，每次 21s 编译 + LLM 调用，
     # 单题可烧掉 3-5 分钟；preverify 是「检查理解」不是「写论文」，1 轮足够）
-    "preverify_max_rounds": 1,
+    # 2026-09-11：#13 前置验证修复——轮数 1→2（即最多 3 轮尝试）。
+    # 依据：112 题实测 13 题 preverify fail，全部是「形式化代码编译错误」
+    # （臆造 API/类型不匹配/语法错/引用未定义谓词），而原配置仅 2 轮机会；
+    # 配合 prompt 增补的「常见错误规避」清单，给修正留出足够轮次。
+    "preverify_max_rounds": 2,
+    # 2026-09-11（B1 独立化）：启用"子目标数值断言的 Lean 核验"。
+    # 此前该开关默认 False → B1 只能靠 P2 数值化间接触发，覆盖面过窄（实测 0/10）。
+    # 打开后由 _numeric_lean_verify 对子目标里的数值断言做 Lean 复核
+    # （走当前后端 mcp；每题次数受 lean_numeric_max_per_q 限制，默认 2 → 成本可控）。
+    "enable_numeric_lean_verify": True,
 }
 
 
@@ -924,7 +1078,17 @@ def main():
     parser.add_argument("--revise_rounds", type=int, default=None, help="max_revise_rounds（自纠错回环轮数）")
     parser.add_argument("--use_proof", type=str, default=None, choices=["true", "false"], help="use_proof_channel（证明题专用通道）")
     parser.add_argument("--use_blueprint", type=str, default=None, choices=["true", "false"], help="use_blueprint（蓝图分解）")
-    parser.add_argument("--enable_dag_replan", type=str, default=None, choices=["true", "false"], help="enable_dag_replan（DAG 动态评审+重生成闭环）")
+    # 2026-09-13：为 A/B 对比新增两个开关（此前只能改代码才能切换）。
+    # 背景：`3.3_improve`(单Agent自审自改) 与 `3.4_collab`(三Agent协作改进)
+    # 语义重叠，需要实测"哪个更高效"才能决定舍去哪一个。
+    parser.add_argument("--enable_self_improve", type=str, default=None,
+                        choices=["true", "false"],
+                        help="enable_self_improve（3.3 Step2 无条件自改进）")
+    parser.add_argument("--enable_collaborative_deep", type=str, default=None,
+                        choices=["true", "false"],
+                        help="enable_collaborative_deep（3.4 deep档三Agent协作）")
+    parser.add_argument("--enable_dag_replan", type=str, default=None, choices=["true", "false"],
+                        help="enable_dag_replan（DAG 动态评审+重生成闭环）")
     # 2026-09-08：求解前 DAG 强制门独立开关（默认关=去掉门）
     parser.add_argument("--dag_replan_gate", type=str, default=None, choices=["true", "false"], help="dag_replan_gate（求解前 DAG 强制评审门，默认 false）")
     # 2026-09-08：L2 子目标数值/代数断言 Lean 验证（lean-lsp-mcp norm_num/ring）
@@ -932,13 +1096,28 @@ def main():
     parser.add_argument("--lean_numeric_max_per_q", type=int, default=None, help="lean_numeric_max_per_q（每题数值 Lean 验证限额，默认 2）")
     # 2026-09-09 P1/P2：计算强制纪律 + 子目标类型路由（A/B 开关）
     parser.add_argument("--calc_mandatory", type=str, default=None, choices=["true", "false"], help="calc_mandatory（裸数值断言打回=计算必须走工具）")
+    parser.add_argument("--calc_hard_only", type=str, default=None, choices=["true", "false"], help="calc_hard_only（计算分档：只强制易错算子 [根号/对数/组合数/幂/e…] 走工具，纯四则可自算）")
     parser.add_argument("--subgoal_calc_router", type=str, default=None, choices=["true", "false"], help="subgoal_calc_router（计算型子目标 terminal 专用路径）")
     parser.add_argument("--tool_calc_enabled", type=str, default=None, choices=["true", "false"], help="tool_calc_enabled（原生 calc_eval 工具调用试点）")
     # 2026-09-10 L1/L2：计算核验关卡（默认关，A/B 用）
     parser.add_argument("--answer_selfcheck_enabled", type=str, default=None, choices=["true", "false"], help="answer_selfcheck_enabled（L1：数值答案无 <calc> 工具来源 → 定向重问）")
     parser.add_argument("--symbolic_crosscheck_enabled", type=str, default=None, choices=["true", "false"], help="symbolic_crosscheck_enabled（L2：独立符号建模求真值 → 与答案比对，不符则打回）")
+    # 2026-09-12 符号化方程求解通道：模型只交方程（组）+ 目标，数值由本地工具算
+    parser.add_argument("--symbolic_solve_enabled", type=str, default=None, choices=["true", "false"], help="symbolic_solve_enabled（数值剥离→模型符号建模→工具求解，模型不参与计算）")
+    parser.add_argument("--symbolic_solve_feedback", type=str, default=None, choices=["true", "false"], help="symbolic_solve_feedback（工具值与答案分歧时回传工具结果给模型定稿）")
+    parser.add_argument("--symbolic_solve_adopt", type=str, default=None, choices=["true", "false"], help="symbolic_solve_adopt（方案④：工具求解成功后答案直接取工具值，模型不参与计算）")
     parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
+    # ---- 2026-09-13 诊断模式：时间限制放开（默认不传 = 保持比赛口径，行为不变）----
+    # 用途：服务端高延迟时（实测单次 LLM 60–180s），比赛口径会让每题被"预算不足"
+    # 中途截断（budget_skips 飙升），**看不到完整的失败路径**。诊断跑分时放开，
+    # 只为定位"错在哪一步"；⚠ 放宽口径的成绩**不得对外报数**。
+    parser.add_argument("--max_time_per_question", type=int, default=None,
+                        help="单题壁钟上限秒（诊断用；不传=1200 比赛口径）")
+    parser.add_argument("--tier_budget", type=str, default=None,
+                        help="三档预算 'fast,standard,deep'（诊断用；不传=120,540,1200）")
+    parser.add_argument("--paper_target_time", type=int, default=None,
+                        help="全卷墙钟目标秒（诊断用；放大后 PaperPacer 不再收紧单题预算）")
     args = parser.parse_args()
 
     if args.list_banks:
@@ -979,6 +1158,11 @@ def main():
         overrides["use_blueprint"] = args.use_blueprint == "true"
     if args.enable_dag_replan is not None:
         overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
+    if args.enable_self_improve is not None:
+        overrides["enable_self_improve"] = args.enable_self_improve == "true"
+    if args.enable_collaborative_deep is not None:
+        overrides["enable_collaborative_deep"] = \
+            args.enable_collaborative_deep == "true"
     if args.dag_replan_gate is not None:
         overrides["dag_replan_gate"] = args.dag_replan_gate == "true"
     if args.enable_numeric_lean_verify is not None:
@@ -988,6 +1172,8 @@ def main():
         overrides["lean_numeric_max_per_q"] = args.lean_numeric_max_per_q
     if args.calc_mandatory is not None:
         overrides["calc_mandatory"] = args.calc_mandatory == "true"
+    if args.calc_hard_only is not None:
+        overrides["calc_hard_only"] = args.calc_hard_only == "true"
     if args.subgoal_calc_router is not None:
         overrides["subgoal_calc_router"] = args.subgoal_calc_router == "true"
     if args.tool_calc_enabled is not None:
@@ -997,10 +1183,26 @@ def main():
         overrides["answer_selfcheck_enabled"] = args.answer_selfcheck_enabled == "true"
     if args.symbolic_crosscheck_enabled is not None:
         overrides["symbolic_crosscheck_enabled"] = args.symbolic_crosscheck_enabled == "true"
+    # 2026-09-12 符号化方程求解通道
+    if args.symbolic_solve_enabled is not None:
+        overrides["symbolic_solve_enabled"] = args.symbolic_solve_enabled == "true"
+    if args.symbolic_solve_feedback is not None:
+        overrides["symbolic_solve_feedback"] = args.symbolic_solve_feedback == "true"
+    if args.symbolic_solve_adopt is not None:
+        overrides["symbolic_solve_adopt"] = args.symbolic_solve_adopt == "true"
     if args.use_fast_path is not None:
         overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:
         overrides["max_total_calls"] = args.max_total_calls
+    # 2026-09-13 诊断模式：时间限制放开
+    if args.max_time_per_question is not None:
+        overrides["max_time_per_question"] = args.max_time_per_question
+    if args.tier_budget:
+        _tb = [float(x) for x in args.tier_budget.split(",")]
+        if len(_tb) == 3:
+            overrides["tier_budget"] = {"fast": _tb[0], "standard": _tb[1], "deep": _tb[2]}
+    if args.paper_target_time is not None:
+        overrides["paper_target_time"] = args.paper_target_time
 
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,

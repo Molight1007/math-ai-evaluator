@@ -61,6 +61,7 @@ try:
         resolve_all_calcs,
         find_naked_numeric_asserts,
         audit_calc_fallbacks,
+        collect_calc_results,
     )
 except ImportError:  # 提交包（submit/）路径兜底
     try:
@@ -68,23 +69,52 @@ except ImportError:  # 提交包（submit/）路径兜底
             resolve_all_calcs,
             find_naked_numeric_asserts,
             audit_calc_fallbacks,
+            collect_calc_results,
         )
     except ImportError:
         resolve_all_calcs = None
         find_naked_numeric_asserts = None
         audit_calc_fallbacks = None
+        collect_calc_results = None
 
 logger = logging.getLogger("MathPilot")
+
+# 单选信号（2026-09-13）：题干出现这些**明确指向唯一答案**的措辞时，
+# 选择题按"单选"汇总（取唯一/最优），否则按多选（全取判真项）。
+# ⚠ 不可用“下列正确的是”判断单选——087/093/094 都是该措辞却为**多选**，
+#   096 也是该措辞却为**单选**；只有下列措辞才可靠。
+_SINGLE_CHOICE_RE = re.compile(
+    r"哪一项|哪一种|哪一类|哪一个|最为?合适|最恰当|最符合|最适合"
+    r"|分别是?|定义是|通常采用|应采用|应选择|最好采用")
 
 # 计算纪律引导（与 solver 主链同文案，2026-09-04 下沉子目标/合并；
 # 2026-09-08 扩容：新函数 + 三态结果 + 符号断链处理引导）。
 # 追加到 STEP/MERGE 的 system 提示词（不追加 user 末尾——v2.10 教训：
 # 收尾结构后追加会诱发模型"续写模式"）。
 _CALC_GUIDE = (
-    "\n\n**你不是计算器**：遇到任何需要数值或运算的环节，你的第一反应是写出要算的**表达式**并交给 <calc>，不要心里算出结果（禁止心算）。系统回填精确值后你基于它继续推理。节奏示范：“求 1 到 10 的和”→写 <calc>sum(k,1,10)</calc>→回填 [计算] sum(k,1,10) = 55→引用 55；“25×4+1”→写 <calc>25*4+1</calc>，禁止直接写“= 101”。复杂计算拆成 ≤3 个 <calc>（每步一个表达式），不要一步吞一大串。\n"
+    "\n\n**【计算纪律 · 分档执行】**\n"
+    "· **易错运算 → 必须写 <calc>表达式</calc> 交系统精确求值（严禁心算）**："
+    "开方/根式 sqrt、对数 ln（log 即自然对数，其他底请用换底写成 ln 之比）、"
+    "指数 exp 与自然常数 e（写 exp(1)）、组合数 comb(n,k)、排列 perm(n,k)、"
+    "阶乘 ! 或 fact(n)、幂运算 ** 或 ^、取模 mod、求和 sum(f,x,a,b)、"
+    "积分 integral(f,x[,a,b])、圆周率 pi。"
+    "注意**工具只认这些函数名**：组合数写 comb（勿写 C(n,k)/choose/ncr）、"
+    "排列写 perm（勿写 P(n,k)/npr）、阶乘写 fact 或 n!；\n"
+    "· **工具能力外 → 换核验方式，不要写 <calc>**：三角函数 sin/cos/tan"
+    "（含反三角 asin/acos/atan、双曲 sinh 等）、求积 prod/product、以 2/10 为底"
+    "的对数 log2/log10、开立方 cbrt/root **均不在工具能力内**（写了只会拿到 "
+    "WARN、白费一轮）：特殊角请**直接写精确式**（sin(pi/6)=1/2、"
+    "cos(pi/4)=sqrt(2)/2），一般角与求积请把断言写成 <check> 或 "
+    "```lean example``` 交编译器验算，禁止拿心算近似当精确结论；\n"
+    "· **简单四则 → 你可以自己算**：整数/小数的加、减、乘、除与括号、比较，"
+    "直接写出结果即可，不必包 <calc>（包了也无害）。\n"
+    "**节奏示范**：“求组合数 C(50,3)”→写 <calc>comb(50,3)</calc>→回填 "
+    "[计算] comb(50,3) = 19600→引用 19600；“把 sqrt(45) 化为最简根式”→写 "
+    "<calc>sqrt(45)</calc>→回填 3*sqrt(5)；“25×4+1”→纯四则，可直接写 = 101。"
+    "易错计算拆成 ≤3 个 <calc>（每步一个表达式），不要一步吞一大串。\n"
     "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
-    "<calc>1/2+1/3</calc>、<calc>sqrt(45)</calc>、<calc>integral((1-x)^n,x,0,1)</calc>、<calc>sum(k^2,k,1,n)</calc>），"
-    "系统会自动求值并回填结果。涉及数值计算时务必使用该标记，不要心算。\n"
+    "<calc>sqrt(45)</calc>、<calc>integral((1-x)^n,x,0,1)</calc>、<calc>sum(k^2,k,1,n)</calc>），"
+    "系统会自动求值并回填结果。涉及上述易错运算时务必使用该标记，不要心算。\n"
     "**<calc> 与 </calc> 之间必须且只能是数学表达式**"
     "（数字/字母符号 x n k…、+ - * / **（或 ^）% //、括号、函数 "
     "fact/comb/perm/gcd/lcm/abs/sqrt/floor/ceil/min/max/ln/log/exp/"
@@ -99,6 +129,39 @@ _CALC_GUIDE = (
     "可把关键代数等式写成 ```lean example ... := by ring/norm_num ``` 代码块，"
     "系统会用本地 Lean 编译器自动核验。"
 )
+
+
+# 2026-09-13 方案 A（用户："把数值给大模型，但不让它计算危险数值"）：
+# 子目标 step / merge 两处的上文（`previous_results` / `all_results` / `lemma_repo`）
+# 里带着**系统已回填**的 [计算] 行，但此前只给模型一句"不得重算"的口头约束，
+# 模型仍要自己在长文本里翻找。此处把那些行**汇总成值清单前置**到 system 侧
+# （与 `_CALC_GUIDE` 同处 system，不动 user 模板收尾结构——v2.10 教训）。
+# 2026-09-13 方案 B：`extra_items` = `ctx.calc_prewarm_block`（生成前预计算产出），
+# 排在回填条目之前 —— 子目标链是最早的生成阶段，预计算值在这里最该被看见。
+_CALC_RESULTS_RULE = (
+    "上述算式结果（由系统精确回填、或生成前预计算的）都是**可信的精确值**："
+    "**原样引用，严禁重新心算、改写、删除，或「顺手验算一遍」**；"
+    "只有当你要在它们之上做**新的**易错运算时，才为新算式另写 <calc>表达式</calc>。"
+)
+
+
+def _calc_results_block(text, extra_items=None) -> str:
+    """把已算出的精确值（回填 + 预计算）汇总成"前置值清单"段。
+
+    **扫不到任何条目 → 返回空串（不注入，不留空标题制造噪音）。**
+    """
+    items = [str(x) for x in (extra_items or [])]
+    if collect_calc_results:
+        for it in collect_calc_results(text):
+            if it not in items:
+                items.append(it)
+    if not items:
+        return ""
+    return (
+        "\n\n**【系统已算出的精确值 —— 直接引用，禁止重算或改写】**\n"
+        + "\n".join(f"- {it}" for it in items)
+        + "\n" + _CALC_RESULTS_RULE
+    )
 
 
 
@@ -380,8 +443,44 @@ class SubGoalSolverAgent(BaseAgent):
         subgoal_plan_summary = self._format_plan_summary(subgoals, merge_strategy)
         results_map = {}  # subgoal_id → result_text
         _ctx_inject_chars = 0  # S4-lite 指标：累计前序注入字符数（近似上下文量）
+        # 2026-09-12 新增（用户要求「原本完成的子目标要记录，不能重头再来」）：
+        # 以**子目标指纹**为键，跨 run() 调用复用已完成结果。
+        # 为何需要：orchestrator 会在 3_solve / 3.5 等阶段**多次**调用本 run()，
+        # 原实现每次都重新规划并**重解全部子目标**（每个都是一次完整 LLM 轮），
+        # 重复烧掉本就吃紧的单题预算（冒烟实测 700-1200s 的主要浪费源之一）。
+        # 关闭 `subgoal_reuse_done` 即回到旧行为（每次全量重解）。
+        _reuse_on = bool(getattr(self.config, "subgoal_reuse_done", True))
+        _done = getattr(ctx, "_subgoal_done", None)
+        if not isinstance(_done, dict):
+            _done = {}
+            try:
+                setattr(ctx, "_subgoal_done", _done)
+            except Exception:  # noqa: BLE001  个别 ctx 实现可能禁写
+                pass
+        _n_reuse = 0
 
         for sg in subgoals:
+            # ★ 复用命中：上一轮已完成的**同一子目标** → 直接取结果，零 LLM 调用。
+            # 指纹用 title+description+type（重新规划后 id 可能重排，语义内容不变）。
+            _fp = "|".join(str(sg.get(_k, "")) for _k in
+                           ("title", "description", "type"))[:240]
+            if _reuse_on and _fp in _done:
+                step_result = _done[_fp]
+                results_map[sg["id"]] = step_result
+                sg["result"] = step_result
+                ctx.subgoal_trace.append({
+                    "id": sg["id"],
+                    "title": sg["title"],
+                    "description": sg["description"],
+                    "type": sg["type"],
+                    "calc_kind": sg.get("calc_kind", "inline"),
+                    "depends_on": sg["depends_on"],
+                    "expected_output": sg["expected_output"],
+                    "result": step_result,
+                    "reused": True,
+                })
+                _n_reuse += 1
+                continue
             # 2026-09-06：升级 gen_time_up——只查 is_time_critical（=deadline-120/60s）
             # 挡不住"750s stage_budget 之外 for-sg 主循环一路烧到临界点"
             # （冒烟 geom-051 2.7=1073s 实证），必须更早停手给验证留预算。
@@ -463,14 +562,14 @@ class SubGoalSolverAgent(BaseAgent):
                             # 裸算 = 模型拒用工具，仅记录并标注，不无限重试）
                             if (find_naked_numeric_asserts is not None
                                     and getattr(self.config, "calc_mandatory",
-                                                False)
+                                                True)
                                     and find_naked_numeric_asserts(step_result)):
                                 self.record(
                                     ctx, "subgoal_step",
                                     f"子目标 #{sg['id']} 重解后仍含未工具化数值"
                                     "运算（二次裸算，保留结果并标注）")
                                 step_result = (
-                                    f"（该步含未用 <calc> 工具的计算结果，未经"
+                                    f"（该步含未用 <calc> 的易错运算结果，未经"
                                     f"系统确认）{step_result}")
                     else:
                         self.record(
@@ -480,6 +579,63 @@ class SubGoalSolverAgent(BaseAgent):
                             step_result = (
                                 f"（子目标 #{sg['id']} 求解失败未产出有效结论，"
                                 "请基于其余子目标完成合并）")
+            # ── 2026-09-12 新增（用户要求）：子目标级"失败二选一"处置 ──────────
+            # 判据（主审定）：
+            #   · **优先「重做该子目标」**：代价 1 次短调用，且**不破坏已完成成果**；
+            #     多数子目标失败是局部性的（算错 / 格式 / 占位）。
+            #   · 仅当重做达上限仍失败，**或**失败原因指向规划本身（依赖前提
+            #     不成立 / 缺少前置条件），才升级为「重规划后续子目标」——
+            #     该操作代价高（后续子目标全部重解），故只在最后才用。
+            #   · 无论如何最终**保留占位兜底放行**，绝不阻断 merge；
+            #     已完成子目标一律保留、不参与重算（见上方 _done 复用）。
+            # 稳妥性：真正的"重规划"**不在此循环内新建实现**，而是把失败原因写入
+            # ctx.revise_feedback、并由上游既有重规划能力（_review_and_maybe_replan
+            # / dag_replan_gate）处理，避免破坏 depends_on 顺序与阶段预算。
+            if (getattr(self.config, "subgoal_adaptive_recover", True)
+                    and not ctx.gen_time_up() and _stage_left() > 150):
+                _failed_now = (self._looks_placeholder(step_result)
+                               or step_result.startswith("[子目标")
+                               or "未产出有效结论" in step_result
+                               or "仍为空转占位" in step_result)
+                if _failed_now:
+                    _tries = int(getattr(ctx, "_sg_recover_tries", 0) or 0)
+                    _plan_err = any(_k in str(step_result) for _k in
+                                    ("依赖", "前提", "缺少", "不成立", "无法确定"))
+                    if _tries < 2 and not _plan_err:
+                        try:
+                            setattr(ctx, "_sg_recover_tries", _tries + 1)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        self.record(
+                            ctx, "subgoal_recover",
+                            f"子目标 #{sg['id']}「{sg['title']}」未产出有效结论 "
+                            f"→ 重做该子目标（第 {_tries + 1}/2 次）")
+                        _retry2 = self._solve_subgoal(
+                            ctx, sg, subgoal_plan_summary, prev_results,
+                            extra_hint=(
+                                "上一次该子目标未产出可用的结论（"
+                                + str(step_result)[:120] +
+                                "）。请**重新推导**本子目标，给出可独立核验的结论；"
+                                "涉及开方/对数/组合数/幂等易错运算必须写成 "
+                                "<calc>表达式</calc> 由系统精确求值。"))
+                        if (_retry2 and not _retry2.startswith("[子目标")
+                                and not self._looks_placeholder(_retry2)):
+                            step_result = _retry2
+                    else:
+                        # 升级：重规划**后续**子目标（只记录 + 交上游，不在循环内新建）
+                        self.record(
+                            ctx, "subgoal_replan_needed",
+                            f"子目标 #{sg['id']} 重做 {_tries} 次仍失败"
+                            + ("（失败指向规划/依赖前提）" if _plan_err else "")
+                            + " → 建议重规划后续子目标")
+                        try:
+                            ctx.revise_feedback = list(
+                                getattr(ctx, "revise_feedback", []) or []) + [
+                                f"子目标 #{sg['id']}「{sg['title']}」反复失败"
+                                f"（{str(step_result)[:80]}）：该子目标的规划粒度或"
+                                "依赖前提可能有误，请重规划后续子目标后重做"]
+                        except Exception:  # noqa: BLE001
+                            pass
             # 2026-09-08：剥 <check> 验证标签（去标签留内容）——校验已在上面
             # 消费过 <check> 断言，存盘/注入下游（merge/lemma/后续子目标）时
             # 不得再带协议标记，防污染提示词与最终答案。
@@ -488,16 +644,18 @@ class SubGoalSolverAgent(BaseAgent):
             # 前置条件——若裸数值断言仍进入结果，标注"未经系统确认"供 merge 与
             # 分析可见；不阻断流程只留痕）
             if (find_naked_numeric_asserts is not None
-                    and getattr(self.config, "calc_mandatory", False)
+                    and getattr(self.config, "calc_mandatory", True)
                     and not step_result.startswith("（该步含未用")
                     and find_naked_numeric_asserts(step_result)):
                 self.record(ctx, "subgoal_step",
                             f"子目标 #{sg['id']} trace 前仍含裸数值断言，兜底标注")
                 step_result = (
-                    f"（该步含未用 <calc> 工具的计算结果，未经系统确认）"
+                    f"（该步含未用 <calc> 的易错运算结果，未经系统确认）"
                     f"{step_result}")
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
+            if _reuse_on:
+                _done[_fp] = step_result     # 写回 ctx，供**后续 run() 调用**复用
             # v2.9：结构化输出每步子目标的过程与中间结果
             ctx.subgoal_trace.append({
                 "id": sg["id"],
@@ -633,7 +791,21 @@ class SubGoalSolverAgent(BaseAgent):
                                     max_replan_rounds) or max_replan_rounds)
         replan_rounds = max(1, replan_rounds)
         for round_idx in range(replan_rounds):
-            if not ctx.budget or not True:
+            # 2026-09-13 循环时间闸（单题上限 1200→3600s 放开后的必备兜底）：
+            # 本循环每轮 = 评审 + 子树/整树重生成（2-3 次 LLM，以生成为主），
+            # 属 LLM 生成类；评审始终不放行时会反复重建 → 必须查生成侧软截止。
+            # 用 gen_time_up()（与同族 _dag_replan_gate:1239 同口径；未设
+            # _gen_deadline 时自动回退 is_time_critical）。到点跳出，保留已产出
+            # 候选，不空转烧穿验证预算。
+            if ctx.gen_time_up():
+                self.record(ctx, "dag_replan",
+                            f"生成侧时间已到，提前退出 DAG 修复循环 "
+                            f"(round={round_idx + 1}/{replan_rounds})")
+                break
+            # 2026-09-12 定型前审核：原为 `if not ctx.budget or not True:`
+            # （`or not True` 恒为 False，`A or False ≡ A`，删除属恒等变换，
+            #  语义与行为完全不变）
+            if not ctx.budget:
                 self.record(ctx, "dag_replan",
                             f"DAG 修复预算不足，提前停止 (round={round_idx + 1})")
                 return False
@@ -684,13 +856,221 @@ class SubGoalSolverAgent(BaseAgent):
                     return True
                 feedback_lines = report2.merge_from_hints().split("\n") \
                     if report2.merge_from_hints() else feedback_lines
-        self.record(ctx, "dag_replan",
-                    f"达到重生成硬上限 {replan_rounds} 轮，停止")
+        else:
+            # 仅"跑满硬上限"这一既有退出路径才记录（同 _dag_replan_gate:1334 的
+            # for...else 惯例）；新增的时间闸 break 提前退出时不冒领此记录。
+            self.record(ctx, "dag_replan",
+                        f"达到重生成硬上限 {replan_rounds} 轮，停止")
         return True
+
+    @staticmethod
+    def _is_value_choice(opts: list) -> bool:
+        """判断是否为「求值选择型」（C 型）：选项都是**短数值/表达式候选**。
+
+        这类题必须**先整体求解、再与选项比对** —— 逐项判定"选项 5 成立吗"
+        是无意义的（选项不是命题，只是候选值）。official112 实测无此类题，
+        但比赛题库可能有，故必须支持。
+
+        判据（保守，宁可漏判不可误判）：每个选项 ①不含中文 ②长度 ≤15 ③含数字。
+        空列表（提取失败）一律返回 False —— 绝不把"没提取到选项"当成求值型。
+        """
+        try:
+            if not opts:
+                return False
+            for _l, _t in (opts or []):
+                _s = (_t or "").strip()
+                if not _s:
+                    return False
+                if re.search(r"[\u4e00-\u9fff]", _s):   # 含中文 → 命题/文字选项
+                    return False
+                if len(_s) > 15:                         # 过长 → 非候选取值
+                    return False
+                if not re.search(r"\d", _s):             # 无数字 → 排除
+                    return False
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _plan_value_choice(self, ctx: TaskContext, opts: list) -> dict:
+        """C 型（求值选择）规划：**先整体求解 → 再与选项比对匹配**。
+
+        与 A/B 型的根本区别：A/B 型的选项是**待判定的命题**，逐项判定即可；
+        C 型的选项是**候选数值**，必须先算出结果，再找出与之相等的选项。
+        """
+        self.record(ctx, "subgoal",
+                    "选择题求值型规划：先整体求解 → 再匹配选项（{} 个选项）"
+                    .format(len(opts)))
+        return {
+            "problem_analysis": {
+                "question_type": "选择题",
+                "subtype": "value_choice",
+                "options": [{"label": l, "text": t} for l, t in opts],
+            },
+            "subgoals": [
+                {
+                    "id": 0,
+                    "title": "整体求解",
+                    "description": (
+                        "**不要**看选项，先独立把题目要求的量算出来。\n"
+                        "要求：写出完整算式与推导，最后一行给出『结果：<值>』。"
+                    ),
+                    "type": "compute",
+                    "depends_on": [],
+                    "expected_output": "结果：<值>",
+                    "result": "",
+                },
+                {
+                    "id": 1,
+                    "title": "匹配选项",
+                    "description": (
+                        "把【整体求解】得到的结果与下面每个选项逐一比对"
+                        "（必要时做数值/符号等价判断）：\n"
+                        + "\n".join("  {}. {}".format(l, t) for l, t in opts)
+                        + "\n最后一行输出『匹配选项：<字母>』；"
+                          "若结果与多个选项等价，则全部写出（如 `AC`）。"
+                    ),
+                    "type": "verify",
+                    "depends_on": [0],
+                    "expected_output": "匹配选项：<字母>",
+                    "result": "",
+                },
+            ],
+            "merge_strategy": (
+                "直接输出【匹配选项】给出的字母（连写，不要逗号/空格/解释）；"
+                "若匹配失败，输出与结果最接近的选项字母。"
+            ),
+        }
+
+    def _plan_choice_by_options(self, ctx: TaskContext) -> dict | None:
+        """选择题专用规划：**每个选项一个独立判定子目标**（2026-09-13 用户要求）。
+
+        为什么不让 LLM 规划：096 实测——提示词里早已写了"逐项独立判真"，但模型
+        仍然直接综合出 `ACD`（漏判 D 单独成立、误判 A/C）⇒ **提示词不具约束力**。
+        故改为代码确定性构造：选项数 N → N 个判定子目标，一个都不能少。
+
+        边界：① 非选择题 → None（走原流程）；② 选项 < 2 → None（判据不足）；
+        ③ 选项数 > max_subgoals → None（交回 LLM 规划，避免被截断丢项）。
+        """
+        try:
+            import os as _os
+            # 独立开关（项目惯例：每项优化一个开关，便于 A/B 与逐项审查）。
+            # 默认 "1" = 启用（用户 2026-09-13 明确要求：选择题每个选项都判断）；
+            # 置 "0" 可一键回退到 LLM 规划。
+            if _os.environ.get("OBJECTIVE_ITEMWISE_PLAN", "1") == "0":
+                return None
+            if getattr(ctx, "question_type", "") != "选择题":
+                return None
+            from .question_type import extract_options
+            opts = extract_options(ctx.problem or "") or []
+            if len(opts) < 2:
+                return None
+            _max_sg = int(getattr(self.config, "max_subgoals", 6) or 6)
+            # 基准子目标(1) + N 个判定子目标(N)；超过上限则回退 LLM 规划
+            if len(opts) + 1 > _max_sg:
+                return None
+            # ---- 题型子类识别（2026-09-13 用户要求：解题逻辑必须随题型而变）----
+            #   A 命题判定型（选项是独立陈述，多选）→ 基准 + 逐项判定 → 全选为真
+            #   B 定义/事实选择型（选项是互斥候选，单选）→ 基准 + 逐项判定 → 取唯一
+            #   C 求值选择型（选项是短数值候选）→ **必须先整体求解**，再与选项比对
+            _q = ctx.problem or ""
+            if self._is_value_choice(opts):
+                return self._plan_value_choice(ctx, opts)
+            _is_single = bool(_SINGLE_CHOICE_RE.search(_q))
+            subgoals = []
+            # ★ 子目标 0：判断基准 —— **只建一次、全员共享**。
+            #   对治用户指出的"ab 项是 cd 项的基础"：若让每个选项各自重新推导基准，
+            #   既浪费又易导致判定口径不一致（判 A 用一套理解、判 C 用另一套）。
+            subgoals.append({
+                "id": 0,
+                "title": "建立判断基准",
+                "description": (
+                    "先**只**建立本题的判断依据，**不要**在这里判定任何选项。\n"
+                    "按题目需要输出以下之一（或多项）：\n"
+                    "· 涉及定义/定理 → 写出相关定义或定理的**完整原文**；\n"
+                    "· 涉及对应关系（“X 变为 Y”“增大/减小”“系数/常数项”"
+                    "“约束/目标”等）→ 写出**完整映射表**，把原对象的每个元素"
+                    "与变换后的元素逐项对应；\n"
+                    "· 涉及计算 → 先算出**核心结果**（写出算式与结果）；\n"
+                    "· 涉及判定标准 → 写出教材/规范中的判定标准原文。\n"
+                    "这段基准是后续所有选项判定的**共同依据**，务必准确、可核验。"
+                ),
+                "type": "derive",
+                "depends_on": [],
+                "expected_output": "判断依据（定义原文 / 映射表 / 核心结果 / 判定标准）",
+                "result": "",
+            })
+            for _i, (_lab, _txt) in enumerate(opts, 1):
+                subgoals.append({
+                    "id": _i,
+                    "title": "判定选项 {}".format(_lab),
+                    "description": (
+                        "基于【建立判断基准】得到的定义原文 / 映射表 / 核心结果，"
+                        "**只**判定选项 {} 这一个选项的陈述是否成立，不要讨论其他选项。\n"
+                        "选项 {}：{}\n\n"
+                        "【判定规范 · 必须遵守】\n"
+                        "A. 先判断该选项属于哪类陈述，再选对应方法：\n"
+                        "   ① 定义/定理类 → 逐词比对定义或定理原文，不得凭印象；\n"
+                        "   ② 计算/等式类 → 代入数值或符号**实际验算**，写出算式；\n"
+                        "   ③ 存在/构造类 → 给出具体构造，或给出明确反例；\n"
+                        "   ④ **对应关系类**（“X 变为 Y”“由 A 得到 B”“增大/减小”"
+                        "“左端/右端”“系数/常数项”“约束/目标”“前件/后件”）→ "
+                        "**必须先列出映射表**，把原对象的每个元素与变换后的元素逐项"
+                        "对应，再核对该选项的表述是否与映射表一致；"
+                        "严禁凭“大体相关 / 看起来对”判为正确。\n"
+                        "B. 含绝对化措辞（一定/必然/都/仅/只能/唯一/所有）时，"
+                        "必须给出**无反例的论证**或**具体反例**，不得只写“不一定”。\n"
+                        "C. 依据必须可核验：写出定义/定理名称或原文，或给出算式/反例。\n\n"
+                        "【输出格式】开头一行写“结论：正确”或“结论：错误”，"
+                        "随后用 1–2 句给出依据。"
+                    ).format(_lab, _lab, _txt),
+                    "type": "verify",
+                    "depends_on": [0],
+                    "expected_output": "选项 {}：正确/错误 + 理由".format(_lab),
+                    "result": "",
+                })
+            self.record(ctx, "subgoal",
+                        "选择题逐项判定规划：{} 个选项 → {} 个判定子目标"
+                        "（代码强制，未走 LLM 规划）".format(len(opts), len(subgoals)))
+            return {
+                "problem_analysis": {
+                    "question_type": "选择题",
+                    "options": [{"label": l, "text": t} for l, t in opts],
+                },
+                "subgoals": subgoals,
+                "merge_strategy": (
+                    ("【单选型】" if _is_single else "【多选型】")
+                    + "逐项汇总（不得跳步）：\n"
+                    + (
+                        "本题问法指向**单选**（“哪一项 / 最合适 / 定义是 / "
+                        "通常采用”等）：在所有『结论：正确』的选项中，选择"
+                        "**最准确、最直接回答题干**的一个；若只有一个判对则直接"
+                        "输出它；若多个判对，输出最贴合题干的那一个，"
+                        "并说明为何排除其余。\n"
+                        if _is_single else
+                        "本题问法指向**多选**（“哪些 / 正确的有”等）：把所有"
+                        "『结论：正确』的选项字母**连写**输出（如 `ABD`），"
+                        "不要逗号/空格。\n"
+                    )
+                    + "复核要求：① 对每个被判『错误』的选项，回看其依据是否真的成立；"
+                      "② 对含绝对化措辞却判『正确』的选项，确认确实无反例；"
+                      "③ **对应关系类选项**（“X 变为 Y”式）必须已完成映射表核对，"
+                      "未核对的不计入正确项；④ **禁止**跳过逐项判定直接给答案。"
+                ),
+            }
+        except Exception as _e:  # noqa: BLE001
+            logger.warning("选择题逐项判定规划失败，回退 LLM 规划: %s", _e)
+            return None
 
     # ---------- 阶段一：规划 ----------
     def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
         """调用 LLM 生成子目标规划 JSON"""
+        # 2026-09-13 用户要求「选择题就每个选项都判断」：选择题**不走 LLM 规划**，
+        # 由代码确定性构造 N 个判定子目标（每选项一个），一个都不漏。
+        # 依据：096 实测——提示词已写"逐项独立判真"，模型仍直接综合出 ACD
+        # （漏判 D、误判 A/C）⇒ 提示词不具约束力，必须**代码强制**。
+        _choice_plan = self._plan_choice_by_options(ctx)
+        if _choice_plan is not None:
+            return _choice_plan
         # #27 Blueprint DAG（LEAP Stage 1）：use_blueprint_dag 开启时先由
         # BlueprintPlanner 生成 AND-OR DAG（依赖驱动分解），再转子目标序列；
         # 生成失败回退到原有 LLM 规划（不损失候选来源）。
@@ -705,6 +1085,27 @@ class SubGoalSolverAgent(BaseAgent):
         # v2.9 遗留：原 Lean 前置形式化注入（formal_spec/formal_gaps/leansearch
         # 定理检索）已随 2026-09-06 去 Lean 化移除——平台无 Lean，注入恒为空。
         problem_text = ctx.problem
+        # 2026-09-12 客观题特化（三处同源注入之①：规划阶段）：
+        # 子目标主路径 2.7 对**所有档位默认先行**（enable_subgoal_main_path 默认
+        # True），客观题的答案完全可能由本路径产出——只在 solver 里注入等于没注入。
+        # 拼接位置固定在"题目"占位符内部，**不追加到提示词末尾**（历史教训
+        # algebra-075：末尾追加破坏收尾结构 → 模型进入续写模式、泄漏占位符）。
+        try:
+            from .question_type import objective_injection as _obj_inj
+            problem_text = problem_text + _obj_inj(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "",
+                bool(getattr(self.config, "objective_tactic_enabled", True)))
+        except Exception:  # noqa: BLE001
+            pass
+        # 2026-09-13 B0：答案形态要求**前置注入**（生成阶段就告知，而非事后重问）。
+        # 依据：事后闸门在 formatter（流程末段）实测全部"时间不足跳过"——
+        # deadline 被 tier_budget 收紧到 1800s，跑到末段必然剩余不足。
+        try:
+            from .question_type import answer_form_requirement as _afr
+            problem_text = problem_text + _afr(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "")
+        except Exception:  # noqa: BLE001
+            pass
 
         user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
             domain_hint=domain_hint,
@@ -1206,8 +1607,18 @@ class SubGoalSolverAgent(BaseAgent):
         # ② 原子目标级 leansearch 独立检索（LeanSearch v2 论文）已随
         # 2026-09-06 去 Lean 化移除——平台无外网/无 Lean，检索恒空转。
 
+        # 2026-09-12 客观题特化（三处同源注入之②：子目标逐步求解）——这是子目标
+        # 链里**真正产出内容**的一步，客观题答案可能直接来自本步结果。
+        _obj_inj = ""
+        try:
+            from .question_type import objective_injection as _oi
+            _obj_inj = _oi(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "",
+                bool(getattr(self.config, "objective_tactic_enabled", True)))
+        except Exception:  # noqa: BLE001
+            _obj_inj = ""
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
-            problem=ctx.problem,
+            problem=(ctx.problem or "") + _obj_inj,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
             lemma_context=lemma_context,
@@ -1291,6 +1702,11 @@ class SubGoalSolverAgent(BaseAgent):
         if (resolve_all_calcs is not None
                 and getattr(self.config, 'enable_calc_tool', True)):
             _step_system = SUBGOAL_STEP_SYSTEM + _CALC_GUIDE
+            # 方案 A：把 user_msg（含 previous_results / lemma_context）里已回填的
+            # [计算] 精确值汇总前置——本步直接引用，不必翻长文、更不必重算。
+            # 方案 B：并把生成前预计算的值（ctx.calc_prewarm_block）一并前置。
+            _step_system = _step_system + _calc_results_block(
+                user_msg, getattr(ctx, "calc_prewarm_block", None))
         # P2（2026-09-09）：纯计算子目标 → 追加专用协议段（system 级，
         # 不动 user 模板收尾结构，防续写模式）
         if (sg is not None and sg.get("calc_kind") == "terminal"
@@ -1433,17 +1849,19 @@ class SubGoalSolverAgent(BaseAgent):
                         "请真正求解：给出基于题目条件的推导与数值/表达式结论，"
                         "并用 <calc> 完成实际运算。")
             # L0C 裸数值断言打回（2026-09-09 P1-1，仅 calc_mandatory 开启）：
-            # 行级纯数值运算（`25*4 = 100`，两侧无变量/中文、无 <calc> 来源）
-            # = 心算/自算痕迹 → 带反馈重解一次（方程/结论式含变量放行）。
+            # 2026-09-12 精准化：只回收**易错运算**的心算痕迹（开方/对数/组合数/
+            # 幂/e/阶乘/三角/取模/求和积分），纯四则（加减乘除）允许自算。
             if (find_naked_numeric_asserts is not None
-                    and getattr(self.config, "calc_mandatory", False)):
+                    and getattr(self.config, "calc_mandatory", True)):
                 _naked = find_naked_numeric_asserts(result)
                 if _naked:
                     self.record(ctx, "subgoal_l0c",
                                 f"L0C 打回裸数值断言: {_naked[0][:80]}")
-                    return ("【本步结果】含未用 <calc> 工具的数值运算（计算必须由"
-                            "系统工具完成，**禁止心算——即使你确信数值正确也必须"
-                            "让系统计算确认**）：`" + _naked[0][:60] +
+                    return ("【本步结果】含未用 <calc> 工具的**易错运算**结果"
+                            "（开方/根式、对数、组合数/阶乘、幂运算、自然常数 e "
+                            "等必须由系统工具完成，**禁止心算——即使你确信数值"
+                            "正确也必须让系统计算确认**；简单加减乘除可自算）：`"
+                            + _naked[0][:60] +
                             "`。请把该行改写为 …<calc>表达式</calc>… 让系统回填"
                             "精确结果后继续。")
             # P2（2026-09-09）：纯计算子目标（terminal）轻校验——router 开启时
@@ -2161,8 +2579,25 @@ class SubGoalSolverAgent(BaseAgent):
         all_results = self._format_all_results(results_map, subgoals)
         # 蓝图最终结论（root 节点 statement）：取 ctx.blueprint，兼容 dict/list 两种形态
         blueprint_conclusion = self._blueprint_conclusion(ctx)
+        # 2026-09-12 客观题特化（三处同源注入之③：merge 合并）——merge 直接产出
+        # 最终答案署名候选，特化纪律必须在这里也在场，否则"检测到了"却"没照做"。
+        _obj_inj_m = ""
+        try:
+            from .question_type import objective_injection as _oi_m
+            _obj_inj_m = _oi_m(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "",
+                bool(getattr(self.config, "objective_tactic_enabled", True)))
+        except Exception:  # noqa: BLE001
+            _obj_inj_m = ""
+        # 2026-09-13 B0：答案形态要求必须在 merge 阶段也在场（merge 直接产出最终答案）
+        try:
+            from .question_type import answer_form_requirement as _afr_m
+            _obj_inj_m += _afr_m(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "")
+        except Exception:  # noqa: BLE001
+            pass
         user_msg = SUBGOAL_MERGE_USER_TEMPLATE.format(
-            problem=ctx.problem,
+            problem=(ctx.problem or "") + _obj_inj_m,
             subgoal_plan_summary=plan_summary,
             blueprint_conclusion=blueprint_conclusion,
             all_results=all_results,
@@ -2233,6 +2668,11 @@ class SubGoalSolverAgent(BaseAgent):
         if (resolve_all_calcs is not None
                 and getattr(self.config, 'enable_calc_tool', True)):
             _merge_system = SUBGOAL_MERGE_SYSTEM + _CALC_GUIDE
+            # 方案 A：各子目标结果（all_results）里已回填的 [计算] 精确值汇总前置，
+            # 合并阶段直接引用（扫不到则空串，不注入）。
+            # 方案 B：并上生成前预计算的值（ctx.calc_prewarm_block）。
+            _merge_system = _merge_system + _calc_results_block(
+                all_results, getattr(ctx, "calc_prewarm_block", None))
 
         for attempt in range(2):
             # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
@@ -2273,17 +2713,19 @@ class SubGoalSolverAgent(BaseAgent):
                 # （心算痕迹）→ 打回重写一次（attempt 0 限定，防死循环）
                 if (attempt == 0
                         and find_naked_numeric_asserts is not None
-                        and getattr(self.config, "calc_mandatory", False)):
+                        and getattr(self.config, "calc_mandatory", True)):
                     _naked = find_naked_numeric_asserts(resp)
                     if _naked:
                         self.record(
                             ctx, "subgoal_merge",
-                            f"merge 含未用 <calc> 的数值运算（{_naked[0][:50]}），"
+                            f"merge 含未用 <calc> 的易错运算（{_naked[0][:50]}），"
                             "打回重试")
                         user_msg = user_msg + (
-                            "\n\n[上一轮合并含未用 <calc> 工具的数值运算："
-                            f"{_naked[0][:80]}]\n计算必须用 <calc> 标记由系统回填"
-                            "精确结果，禁止心算。请改写后重新合并输出。")
+                            "\n\n[上一轮合并含未用 <calc> 的**易错运算**结果："
+                            f"{_naked[0][:80]}]\n该类运算（开方/根式、对数、组合数/"
+                            "阶乘、幂运算、自然常数 e 等）必须用 <calc> 标记由系统"
+                            "回填精确结果，禁止心算；简单加减乘除可自算。"
+                            "请改写后重新合并输出。")
                         continue
 
             # 优先提取「最终答案」

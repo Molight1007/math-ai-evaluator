@@ -48,6 +48,13 @@ logger = logging.getLogger("MathPilot")
 # 安全上限：单题 DAG 节点总数（LEAP 论文子目标规模通常 < 30）
 MAX_DAG_NODES = 50
 
+# 子目标数上限：与 SubGoalSolver LLM 路径的 max_subgoals 保持一致
+# （sub_goal_solver.py:218 `_parse_subgoal_plan(raw, max_subgoals=6)`，
+#  调用处 sub_goal_solver.py:1086 取 `getattr(self.config, "max_subgoals", 6) or 6`）。
+# blueprint 路径此前无上限 ⇒ 实测 n_subgoals p90=9 / max=17，28% 超 6，
+# 多跑 3~11 次串行 32768-token 调用（每步约 86s）。
+MAX_SUBGOALS = 6
+
 
 # ============================================================
 # 数据结构
@@ -131,7 +138,7 @@ class BlueprintDAG:
         return None
 
     # ---------------- 转子目标 ----------------
-    def to_subgoal_plan(self) -> dict:
+    def to_subgoal_plan(self, max_subgoals: int | None = None) -> dict:
         """把 DAG 转成 SubGoalSolver 兼容的子目标规划。
 
         规则：
@@ -139,6 +146,10 @@ class BlueprintDAG:
         - OR 节点 → 取第一个可证 child（策略分支，先尝试主分支）
         - 叶子节点 → 作为原子子目标
         - 输出按拓扑序排列，depends_on 依据 DAG 父子关系
+
+        max_subgoals: 子目标数上限（默认 MAX_SUBGOALS=6，对齐 SubGoalSolver 的
+        config.max_subgoals）。超限**只截数量**，不改顺序与内容：拓扑序下前 n 个
+        子目标的祖先必然也在前 n 个内，故 depends_on 仍然有效。
         """
         if not self.nodes:
             return {"problem_analysis": {}, "subgoals": [], "merge_strategy": ""}
@@ -166,6 +177,14 @@ class BlueprintDAG:
 
         if self.root_id in self.nodes:
             expand(self.root_id)
+
+        # 1.5) 子目标数上限（对齐 SubGoalSolver 的 max_subgoals）
+        _max_sg = int(max_subgoals or MAX_SUBGOALS)
+        if len(order) > _max_sg:
+            logger.warning(
+                "Blueprint 子目标数 %d 超上限 %d，截断 %d 个（仅截数量，顺序/内容不变）",
+                len(order), _max_sg, len(order) - _max_sg)
+            order = order[:_max_sg]
 
         # 2) 构造子目标：拓扑序（父先于子）
         #    用展开顺序近似：expand 是前序 DFS，父节点先于子节点被访问。

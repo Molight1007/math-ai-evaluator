@@ -31,6 +31,7 @@ MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体�
 
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from typing import Any
@@ -77,13 +78,53 @@ class AgentConfig:
     # 题型分类（可选）
     enable_domain_hint: bool = True    # 是否启用领域提示增强
     enable_question_type: bool = True  # 是否启用题型识别（证明/选择/判断/填空/解答）+ 差异化策略
+    # 2026-09-12 客观题特化解法（用户要求"保证检测到题型并采取特化技巧"）：
+    # 选择/判断/填空三类客观题强制注入特化纪律（逐项判真+反例否证+清点选项 /
+    # 绝对化措辞找反例+回定义核对 / 按空序逗号分隔），与"证明题不分流"的既有
+    # 结论互不冲突（那一条针对 IMO 证明题）。回退：设为 False 即恢复旧行为。
+    objective_tactic_enabled: bool = True
 
     # ---- calc_tool 确定性计算（2026-09-01，治 value_wrong）----
     enable_calc_tool: bool = True      # 提示词引导 <calc> 标记 + 输出精确求值回填
     # 2026-09-09 P1-1（老师拍板"计算必须用工具"）：行级**裸数值断言**
     # （如 `25*4 = 100`，两侧无字母/中文、无 <calc> 来源）→ 判定心算/自算，
-    # 带反馈打回重写一次（方程/结论式含变量放行，不打断推导）。默认关待 A/B。
-    calc_mandatory: bool = False
+    # 带反馈打回重写一次（方程/结论式含变量放行，不打断推导）。
+    # 2026-09-12 用户要求「强制、一定、绝对用工具算」→ **默认开启**：
+    # 命中"未用 <calc> 的心算数值断言"即定向重问，要求改写成 <calc>。
+    # 回退：`--calc_mandatory false`（或 config 覆盖）。
+    calc_mandatory: bool = True
+    # 2026-09-12 用户要求「不是不让模型算，而是让易错的根号/组合数/log 走工具」：
+    # True → 打回判据只认**易错算子**（开方/根式、对数、指数与自然常数 e、
+    # 组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π），简单加减乘除
+    # 允许模型自算；False → 恢复"任何数值计算都必须走工具"的旧行为。
+    # 作用点：calc_tool.find_naked_numeric_asserts(hard_only=...) +
+    # solver._maybe_answer_selfcheck 的高危算子门槛。
+    # 回退：`--calc_hard_only false`。
+    calc_hard_only: bool = True
+    # 2026-09-13 用户选定「方案 B：生成前算式预计算」——
+    # 动机：official112-016 单题实测 `calc_tool_calls = []` 且 `calc_fallback = 0`，
+    # 即模型**压根不写 <calc>**，所有"生成后回填"防线全部空转。
+    # True → 在子目标主求解之前先用一次**短调用**（prefill 种子 "<calc>" +
+    # max_tokens=256）让模型列出待精确计算的算式，系统求值后挂到
+    # `ctx.calc_prewarm_block`，随方案 A 的精确值汇总段一并注入后续所有路径。
+    # 默认 True 的依据：仅在档位 ∈ {standard, deep} 且非客观题（选择题/判断题）、
+    # 题面含 `$ \ 数字` 时触发（official112 覆盖率 98/112 = 87.5%）；失败/NONE/
+    # 纯四则一律 graceful，只埋点 calc_prewarm，不阻断。
+    # 设 False 回到旧行为（不做生成前预计算，只保留生成后回填）。
+    # 回退：`--enable_calc_prewarm false`（或 env `CALC_PREWARM=0`）。
+    enable_calc_prewarm: bool = True
+    # 2026-09-12 用户要求「原本完成的子目标要记录，不能重头再来」：
+    # True → 同一题的**已完成子目标结果**跨 run() 调用复用（零 LLM）。
+    # 背景：orchestrator 会在 3_solve / 3.5 等阶段多次调用 sub_goal_solver.run()，
+    # 原实现每次都重新规划 + 重解全部子目标，重复烧掉本就吃紧的单题预算。
+    # 设 False 回到旧行为（每次全量重解）。
+    subgoal_reuse_done: bool = True
+    # 2026-09-12 用户要求：子目标级「失败二选一」处置。
+    # True → 某子目标未产出有效结论时，优先**重做该子目标**（≤2 次）；重做仍失败
+    # 或失败原因指向规划/依赖前提 → 记 subgoal_replan_needed 并写入 revise_feedback
+    # 交上游重规划（不在子目标循环内新建重规划，避免破坏 depends_on 顺序）。
+    # 设 False 回到旧行为（失败即占位放行）。
+    subgoal_adaptive_recover: bool = True
     # 2026-09-09 用户洞察：原生工具调用试点（同智能体调 WebSearch 逻辑）——
     # 模型生成 tool_call calc_eval → 执行 calc_tool → 回传 → 继续；默认关待验证
     tool_calc_enabled: bool = False
@@ -91,13 +132,31 @@ class AgentConfig:
     # 最终答案是纯数值、却没有任何 <calc> 工具来源（心算产物）→ 定向重问一次，
     # 要求把得出答案的算式写成 <calc>；仅在重问结果**带工具来源**时采纳。
     # 零后悔（失败/未改善一律保留原输出）。默认关待 A/B（题均 +1 次 LLM 调用）。
-    answer_selfcheck_enabled: bool = False
+    # 2026-09-12 用户要求「强制用工具算」→ **默认开启**：最终答案为纯数值却没有
+    # <calc> 工具来源（心算产物）即定向重问；**仅当新答案能在工具回填结果中找到
+    # 来源时才采纳**（见 solver._maybe_answer_selfcheck 的 ok 判定）。
+    # 回退：`--answer_selfcheck_enabled false`。
+    answer_selfcheck_enabled: bool = True
     # 2026-09-10 L2（用户 9/10 思路 + 李平老师 9/9 建议）：**独立符号建模复核**——
     # 让模型当"数学问题拆解助手"，只把给定数值抽象成变量并输出目标量表达式
     # （禁止自算），由 calc_tool 精确代入求真值，与主链答案比对；不一致则打回
     # 一次，仅当新答案落回该真值才采纳。每题最多 1 次调用。默认关待 A/B。
     symbolic_crosscheck_enabled: bool = False
     symbolic_max_tokens: int = 512
+    # 2026-09-12 符号化方程求解通道（用户 9/11 需求）：智能体把题面里「显式给定
+    # 的具体数值」剥离存本地，给模型的是**未知数类型**题面；模型只输出方程（组）
+    # + 求解目标，具体数值由本地 SymPy 回代算出 —— **模型不参与任何计算**，
+    # 且"计算方程式交给工具、接收工具返回结果"。
+    # 省时间设计（用户 9/12 硬要求）：剥离/校验/求解全部本地（毫秒~秒级）；
+    # 只加 1 次**短**建模调用；工具值与主链答案一致时 **0 额外调用**，
+    # 仅分歧才追加 1 次短回传；**不新增候选**（不触发下游验证/Lean 额外成本）。
+    symbolic_solve_enabled: bool = False
+    symbolic_solve_max_tokens: int = 384     # 建模输出很短（EQUATIONS + TARGET）
+    symbolic_solve_feedback: bool = True     # 分歧时把工具结果回传模型定稿
+    # 2026-09-12 方案④「把计算从模型手里拿走」：工具求解成功后**答案直接取
+    # 工具值**（模型原先的数值被丢弃），而不是只做事后比对 —— 这样最终答案
+    # 在架构上由本地计算器产生，模型无法心算。设 False 回到"仅比对/回传"旧行为。
+    symbolic_solve_adopt: bool = True
 
     # 解析
     extraction_mode: str = "auto"      # auto | last_line | regex
@@ -110,18 +169,48 @@ class AgentConfig:
                                         # + revise 1 + lean 转换 1 + collab 6 轮
                                         # + sub_goal 规划 1 + N 个子目标 ≈ 25-30 次/题）
 
-    # ---- 时间限制（适配竞赛新规则）----
-    # P0-5 修复：单题预算 300→1200（平台规则允许单题最长 20 分钟，ICMA 同款 1200s。
-    #   此前 300s 对完整 CoT 求解（ICMA 实测中档 77-116s、奥赛 500-552s）是死限，
-    #   导致主求解调用被读超时/预算跳过 → 45 error。总时长由 PaperPacer 动态收紧控制。）
-    # 2026-08-30 #49 预算对齐：竞赛端限时 **6.5h = 23400s**（此前按 6h 配置）。
-    # 三档关系必须满足：paper_target_time < max_total_time_seconds < 平台限时。
-    #   target 21000（5.83h）→ 动态收紧的瞄准点；
-    #   hard   22500（6.25h）→ 硬熔断，给平台留 15min 提交/IO 余量。
-    # 沿用原 6h 配置下的安全比例（target 19500 / 6h = 81%），
-    # 6.5h 下等比为 21060 ≈ 21000，故取 21000。
-    max_time_per_question: int = 1200  # 单题壁钟时间上限（秒，平台允许 20 分钟）
-    max_total_time_seconds: int = 22500  # Agent总运行时间上限（6.25h，平台限 6.5h）
+    # ---- 时间限制（2026-09-13 按实测重设；旧值 1200 / 22500 已废止）----
+    # 【为什么重设】195 题实测（最近三代代码，`results/*.jsonl` 的 `stage_timers`）：
+    #   · deep 档各阶段耗时 **p90 合计 = 2454s**，而旧单题硬顶只有 1200s
+    #     ⇒ 绝大多数难题跑到一半被硬墙砍断（deep p50 实测 1230s，恰好压在墙上）；
+    #   · standard 档 p50=981s / p90=1338s ⇒ 540s 档位帽严重不足；
+    #   · fast 档 p50=681s（设计值仅 120s）⇒ 档位帽形同虚设。
+    # 【为什么能放开】平台侧已确认**不设单题时限**：平台评测日志 `deadline_seconds: 0`，
+    #   且实测整卷跑 8.89h 未被终止。旧注释里"平台单题硬限 20min / ICMA 同款 1200s"
+    #   是跨赛事移植的臆测值 —— 全仓无任何平台下发字段支撑（无 deadline_seconds 解析）。
+    # 【防卡死】放开的前提是"单题内部不卡死"，由三线兜底：
+    #   (a) PaperPacer 全卷动态预算；(b) 每阶段 `_phase_deadline_guard` 上限；
+    #   (c) 各生成循环的 `gen_time_up()` 检查（见 2026-09-13 审计修复）。
+    # 关系仍须满足：paper_target_time < max_total_time_seconds。
+    # ⚠⚠ 2026-09-13 更正（权威出处推翻此前判断）：
+    # 单题 1200s 是**平台硬限**，不是我们能放开的。官方 baseline 仓库
+    # github.com/InternLM/Challenge-Cup-2026 的 README「正式评测的并发、时限与
+    # 计分」原文：
+    #   「每道题的独立进程组有 **1200 秒硬时限**，包含选手模块加载、Agent 初始化
+    #     和 solve 执行。超时后平台会终止整个进程组，不保证执行 finally、退出钩子
+    #     或其它清理逻辑。」
+    #   同节配套：Agent 阶段总硬时限 **6 小时**（不含 Judge）、最多同时运行
+    #   **3 个**独立题目进程、超时/异常/缺失题**计 C 且分母不变**。
+    # 此前"平台不设单题硬限、1200s 系自设"的判断**是错的** —— 错因是：我们代码
+    # 里确实没有解析 deadline_seconds，但平台是**硬杀进程组**，无需下发字段；
+    # "整卷 8.89h 未终止"那组数据来自**本地评测**（本地无平台限制），不能外推。
+    #
+    # 由此的硬结论：
+    #   ① 单题**必须主动**在 1200s 内交卷 —— 超时 = 进程组被杀、finally 不执行、
+    #      答案根本写不出来 ⇒ 该题计 C（0 分）且分母不变；
+    #   ② 全卷 6h × 并发 3 = 64800 题·秒 ÷ 112 题 = **578s/题**。单题 1200s 只对
+    #      少数难题可用；若每题都用满，只能做完 54 题，其余 58 题全部超时计 C。
+    #      **平均 578s 才是真正的约束。**
+    #   ③ 故本字段必须严格 < 1200，给"模块加载 + Agent 初始化 + 格式化输出"留余量。
+    # 2026-09-13 二轮下调：1150 → **1000**。
+    # 依据：实测 4 题里 `official112-000` **跑了 1201s** ⇒ **越过平台 1200s 硬限**
+    # （平台会终止整个进程组、该题计 C=0 分）。
+    # 跨墙根因：`agent/base.py:619` 的单次 `client.chat` **不可中断** ——
+    # `LLMClient` 超时 180s × 重试 1 次 ⇒ **单次调用最坏可达 360s**，
+    # 而阶段/单题截止点只能在"两次调用之间"生效 ⇒ 上限必须给最后一次调用留足空间。
+    # 取 1200 − 180(单次最坏) − 50(模块加载/收尾) ≈ 970 ⇒ 定为 1000（含少量余量）。
+    max_time_per_question: int = 1000  # 单题壁钟上限（秒）—— 为"不可中断的单次 LLM 调用"留足余量
+    max_total_time_seconds: int = 20700  # Agent 总运行上限（秒）= 6h 硬限(21600) − 4% 余量
 
     # ---- 智能体补充部件配置 ----
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
@@ -151,7 +240,9 @@ class AgentConfig:
     # （注入第二段推理预算），再进入验证。论文实测：初始解质量低，此步显著改进。
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
-    self_improve_max: int = 3          # 每题最多自改进候选数（控成本；fast 档跳过）
+    self_improve_max: int = 2          # A3（2026-09-11 降本）：每题最多自改进候选数 3→2。
+    # 依据：3.3 无条件改进实测只有成本没有收益（smoke6_v3：占单题耗时 29~45%、
+    # 总耗时 +34%，正确率 1/6 不变）。配合 A2 条件化（只改有缺陷的候选）进一步压成本。
     improve_min_remaining: float = 300.0  # 3.3 改进停手预留（距生成软截止 < 此值不再开新候选；0=关，治 alg-060 3.3=640s 烧穿）
     # 易错点记忆注入（2026-09-06 A 档轻量经验，prompts/error_lessons.py）：
     # 命中题型/关键词时把历史易错自查清单拼进初始生成与 revise 提示，防重复踩坑。
@@ -197,13 +288,13 @@ class AgentConfig:
     tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
     tier_max_calls: dict = None             # 每档 LLM 调用预算上限
     tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:540, deep:1320}
-    # 2026-08-30 平台实测：112 题 4.65h 完成（6h 限时 78% 利用率），有 1.35h
-    # 空余 → 预算小幅上调换正确率：standard 480→540、deep 1200→1320。
-    # 保留防超时双防线（deep 配额闸 ≤25% + 动态收紧），硬上限 max_total_time 兜底。
-    # 2026-08-30 #49：19500（按 6h 限）→ 21000（按 6.5h 限，占 6.5h 的 81%，
-    # 与 6h 时代的安全比例一致）。必须与 max_total_time_seconds(22500) 保持
-    # 大小关系：target < hard < 平台限时，否则动态收紧会失效被硬熔断抢先。
-    paper_target_time: int = 21000      # 全卷墙钟目标（秒，5.83 小时；原 19500/5.42h）
+    # 2026-09-13 更正后重设：36000（10h，基于错误前提"平台无总时长"）→ **19500**。
+    # 依据：平台全卷硬限 **6 小时 = 21600s**（不含 Judge，见上方权威出处）。
+    # 取 19500 = 6h 的 90%，给 Judge / 提交 IO / 冷启动留约 35 分钟余量。
+    # 摊到全卷：19500 × 并发3 ÷ 112 题 = **522s/题** —— 这是 PaperPacer 的瞄准点，
+    # 低于理论上限 578s（6h × 3 ÷ 112），为"部分题超支"留缓冲。
+    # 必须与 max_total_time_seconds(20700) 保持 target < hard 关系。
+    paper_target_time: int = 19500      # 全卷墙钟目标（秒，5.42 小时 = 6h 硬限的 90%）
     # L1 验证优先（2026-08-31）：剩余时间不足该值时进入 verify_only，
     # 不再生成新候选（solver/续写/自改进/协作/子目标/Lean 门禁全跳过），
     # 把最后的时间留给验证投票 → 治 A_base 30 题里 117 次「验证 None 判错」。
@@ -272,16 +363,31 @@ class AgentConfig:
     enable_audit_gate: bool = True          # AuditGate 检测链总开关（lean 不可用时兜底）
     # ---- Lean 双通道开关（2026-09-06 晚恢复；9/6 去 Lean 化前字段全量回归）----
     enable_lean_verify: bool = True         # Lean 通道总开关（配合环境探测，无 Lean 自动回落 AuditGate）
-    enable_lean_preverify: bool = True      # 2.6 题目前置形式化（题目转 Lean 声明校验理解，deep 档）
+    # 2026-09-12 **按实测数据关闭**：2.6 前置形式化在冒烟中 **5/5 题全部 fail**
+    # （且都用满 2 轮重试），每题白烧 100-150s（其中大部分是"LLM 把题目翻译成
+    # Lean"的耗时，Lean 编译本身仅 3s）。实测结论：模型对题意的理解是正确的，
+    # 失败全在 Lean 语言层面（API 不存在 / 值当类型用 / 语法）⇒ **该环节零产出**。
+    # 注意：关闭它不影响"Lean 参与评测"—— Lean 的价值在 **3.6 候选级淘汰** 与
+    # **6.5 最终答案闸门**（验证完整解答），而非 2.6 的"翻译题目"。
+    # 回退：置 True 即恢复（debris 保留，便于赛后用改进后的提示词重试）。
+    enable_lean_preverify: bool = False     # 2.6 题目前置形式化（题目转 Lean 声明校验理解，deep 档）
+    # 2026-09-12 **按实测数据回退**：曾按用户"lean 一定要用"扩到
+    # ("deep","standard")，但同日冒烟实测（051/010/000 三题）显示前置形式化
+    # **0/3 通过，且三题全部用满 2 轮重试仍 fail**；报错均为 **Lean 代码层面**
+    # （Application type mismatch / expected ';' / failed to synthesize instance），
+    # 而非数学理解错误 ⇒ standard 扩展属**纯耗时无产出**（每题 100-150s），已回退。
+    # 另：2.6 的耗时主要在"LLM 把题目翻译成 Lean"（20-40s/次），Lean 编译本身仅 3s
+    # （日志实测）。deep 档是否保留 preverify，待全量数据再评估。
     lean_preverify_tiers: tuple = ("deep",)  # preverify 适用档位
     preverify_max_rounds: int = 2           # preverify 编译失败重试上限（强制重新审题）
     preverify_timeout: float = 60.0         # preverify 单次编译/转化超时（秒）
     lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
-    lean_gate_nonproof: bool = False        # 非证明题候选级 Lean（默认关省时；6.5 最终答案仍 verify_answer）
+    lean_gate_nonproof: bool = True         # 非证明题候选级 Lean（2026-09-10 打开：用户要求全卷过 Lean，按题适用性豁免客观/概念题）
+    lean_gate_nonproof_deep_only: bool = False  # True=非证明题 Lean 仅 deep 档（时间墙护栏；默认 False=全档）
     lean_gate_strict: bool = False          # Lean unknown 时严格拒绝（True 保守拒，默认放行保分）
     lean_gate_unknown_stop: int = 2         # 候选级连续 N 个 unknown 止损（0=关；治证明题整题 verify 空转 563s）
     lean_timeout: float = 60.0              # Lean 单次编译超时（秒）
-    lean_backend: str = "bridge"            # bridge(lake env lean) | mcp(lean-lsp-mcp)；env LEAN_BACKEND 优先
+    lean_backend: str = "mcp"               # 2026-09-11 修复后默认 mcp：根因=本机缺 `Mathlib.olean` 聚合入口，裸 import Mathlib 触发 fatalError；现已自动规范化为 `import Mathlib.Tactic`，mcp 诊断正常（精确 行:列 + goal，增量秒回）；env LEAN_BACKEND 可覆盖
     lean_executable: str = ""               # lean.exe 绝对路径（空=自动探测：LEAN_EXE env>elan>vendor/lean-toolchain）
     lean_project_dir: str = ""              # 带 Mathlib 的 lake 工程目录（空=自动探测）
     theorem_memory_enable: bool = False     # 跨题定理记忆（9/6 关闭维持；LeanGate 写入按此开关）
@@ -294,10 +400,31 @@ class AgentConfig:
     # 蓝图直接进子目标求解；后置 replan（候选入池后、预算允许时）仍由
     # enable_dag_replan 独立控制。需 A/B 复测门效果时显式置 True。
     dag_replan_gate: bool = False
+    # 2026-09-13 补上**显式声明**（此前**未在 dataclass 声明**，而读取处是
+    # `sub_goal_solver.py:693` 的 `getattr(config, "enable_dag_replan", True)`
+    # ⇒ **恒为 True、恒开且无法配置**，是典型的"静默恒开"）。
+    # 默认关，依据（195 题 `stage_timers` + 45 题专项实测）：
+    #   · 它排在**候选入池之后**（`sub_goal_solver.py:680` 之后），对本题得分
+    #     **无直接影响**，只是"再评审一遍"；
+    #   · **2/3 白跑**："达硬上限 2 轮停止" 94 次 vs "通过评审停止" 46 次；
+    #   · 有该事件的题 p50 = 606s vs 无 = 218s（**差 388s**）；
+    #   · 每轮 `DagReviewer.review` 是**逐节点 LLM**（实测均评审 11.1 节点/题、
+    #     上限 30），过阈值再整树重生成。
+    # 需 A/B 复测时显式置 True 或 `--enable_dag_replan true`。
+    enable_dag_replan: bool = False
     # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
     # 蓝图生成后先提交 LLM 审查子目标是否不适定 / 难度>=原题；有问题重生成再确认，
-    # 通过后才进语法审核。默认开启（老师明确要求）。LLM 失败/预算不足降级放行不阻断。
-    enable_skeleton_review: bool = True
+    # 通过后才进语法审核。LLM 失败/预算不足降级放行不阻断。
+    # ⚠ 2026-09-13 由"默认开启（老师明确要求）"改为默认**关**。
+    # 依据（195 题 / 604 条 `stage_timers` 实测）：
+    #   · 112 题中 **80 题（71%）走满 2 轮仍判 replan、从未收敛**；
+    #   · 2.7 阶段耗时：**0 轮组中位 162s vs 走满 2 轮组 576s（差 250–390s/题）**；
+    #   · 同族 `dag_replan_gate` 已有 45 题实证"拦得住、修不好"——净正确率 ≈0、
+    #     耗时 +23%（正是它被默认关掉的理由）；骨架评审是同一模式，且从未收敛；
+    #   · 每轮 = 1 次 32768-token 评审 + 1 次整树重生成。
+    # 老师原意是"求解前把关"，但实测**不收敛** ⇒ 机制保留、默认关闭；
+    # 需要时置 True（或 `--enable_skeleton_review true`）复测。
+    enable_skeleton_review: bool = False
     skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
     # ---- lemma 记忆（#30，跨题持久化）----
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
@@ -329,15 +456,20 @@ class AgentConfig:
             # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
             self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 100}
         if self.tier_budget is None:
-            # 08-30：standard 480→540（平台时间有空余）。
-            # 2026-08-30 修正：deep **必须 = 1200，不能超过
-            # max_time_per_question（平台单题硬限 20min = 1200s）**。
-            # a2a2871 曾把 deep 抬到 1320，但 orchestrator 的 deadline 用的是
-            # max_time_per_question=1200，1320 那 120s 永远拿不到，
-            # 反而让 PaperPacer 高估可用预算、收紧不足（最坏情况有超时风险）。
-            # 想给难题更多时间应调 deep_quota_ratio（让更多题进 deep），
-            # 而不是抬高单题帽——单题帽受平台规则封顶。
-            self.tier_budget = {"fast": 120.0, "standard": 540.0, "deep": 1200.0}
+            # 2026-09-13 更正后重设（{2000,3200,3600} 基于错误前提，已废止）。
+            # 硬约束回顾：全卷 6h × 并发 3 ÷ 112 题 = **578s/题**；单题平台硬限 1200s。
+            # 档位帽必须让"全卷平均"落在 578s 以内，把有限时间留给少数难题：
+            #   fast     120 → 300   （简单题快速出答案，为难题腾时间）
+            #   standard 540 → 750   （主力档位，约平均线 578s 的 1.3 倍）
+            #   deep    1200 → 1150  （= 单题硬限留加载余量后的值，仅少数题可用）
+            # 加权示意（deep 受 25% 配额限制）：0.25×1150 + 0.55×750 + 0.20×300
+            # ≈ 760s > 578s 平均 ⇒ 卷面会逐步落后 ⇒ 由 PaperPacer 动态收紧回平均线。
+            # 这正是"把时间花在刀刃上"的执行路径。
+            # ⚠ 这三个值是**档位帽（上限）**，不是每题的实发预算：实发由
+            # PaperPacer.budget_for() 按全卷余量动态决定（有余量才给满）。
+            self.tier_budget = {"fast": 300.0, "standard": 750.0, "deep": 1000.0}
+            # ⚠ 2026-09-13 二轮：deep 1150 → **1000**，与 max_time_per_question 对齐
+            # （依据见该字段注释：000 实测 1201s 越墙，须为不可中断的单次 LLM 调用留余量）。
 
 
 # ============================================================
@@ -447,7 +579,20 @@ class ReasoningAgent:
             "enable_domain_hint", "enable_question_type", "extraction_mode",
             "enable_calc_tool",  # 2026-09-01 calc_tool 确定性计算
             "calc_mandatory",  # 2026-09-09 P1-1 裸数值断言打回（计算必须走工具）
+            "calc_hard_only",  # 2026-09-12 计算分档（只强制易错算子走工具）
+            # 2026-09-13 方案 B 生成前算式预计算（不写白名单 ⇒ CLI/kwargs 覆盖
+            # 被静默丢弃，回退开关失效，同 enable_dag_replan 那次的坑）
+            "enable_calc_prewarm",
+            "subgoal_reuse_done",  # 2026-09-12 已完成子目标跨 run() 复用
+            "subgoal_adaptive_recover",  # 2026-09-12 子目标失败二选一（重做/重规划）
             "tool_calc_enabled",  # 2026-09-09 原生工具调用试点（calc_eval）
+            # 2026-09-12 定型前审核修复：以下 5 个键此前**不在白名单** → 尽管
+            # run_eval.py 有对应 argparse，kwargs 覆盖会在 __init__ 里被静默
+            # 丢弃（即文档中写的 `--symbolic_solve_adopt false`、
+            # `--answer_selfcheck_enabled false` 等回退路径**实际无效**）。
+            "answer_selfcheck_enabled", "symbolic_crosscheck_enabled",
+            "symbolic_solve_enabled", "symbolic_solve_feedback",
+            "symbolic_solve_adopt",
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
             "by_enable_fast_path", "use_scoring",
@@ -509,6 +654,7 @@ class ReasoningAgent:
             "enable_lean_verify", "enable_lean_preverify", "lean_preverify_tiers",
             "preverify_max_rounds", "preverify_timeout",
             "lean_gate_all_proofs", "lean_gate_nonproof", "lean_gate_strict",
+            "lean_gate_nonproof_deep_only",
             "lean_gate_unknown_stop",
             "lean_timeout", "lean_backend", "lean_executable", "lean_project_dir",
             "theorem_memory_enable",
@@ -581,6 +727,63 @@ class ReasoningAgent:
             logger.error("fallback_solve failed: %s", e)
             return ""
 
+    # 2026-09-13 晚：答案"不可用"判据。与 `agent/formatter.py`, `agent/orchestrator.py`
+    # 的同名常量同源；**三处必须同步修改**。
+    # ⚠ 口径刻意收窄：**不含** `无解` / `暂无` —— 它们是**合法答案**（「该方程无解」
+    #   就是正确答案），旧版 `formatter._REFUSAL_RE` 里有，但那是"换个候选试试"的
+    #   宽松判据；这里决定的是"要不要推翻答案重新求"，误判会**覆盖正确解**
+    #   （独立验证者实测：唯一候选 answer='无解' 时被覆盖成 '7'）。
+    _DEGRADED_ANSWER_RE = re.compile(
+        r"生成失败|调用受限|拒绝回答|未给出有效解答|无法作答|子目标求解失败|"
+        r"我无法|无法求解|无法解决|不能解决|无法解答",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _is_degraded_answer(cls, text) -> bool:
+        """空答案 / 拒绝语 / 占位符 → True（视为"没有答案"）。"""
+        if not isinstance(text, str) or not text.strip():
+            return True
+        return bool(cls._DEGRADED_ANSWER_RE.search(text))
+
+    def _rescue_answer(self, problem: str, result: dict) -> str:
+        """最终兜底：绕过整条流水线，独立拿一个答案（2026-09-13 晚新增）。
+
+        用户硬要求「无论超没超时都要把答案生成出来」。本方法是最后一道，
+        顺序为：
+          ① 诊断里已产出的**候选答案残料**（`diag.pick_diag.cand_answers`）
+             —— 任何真实答案都比占位符好（占位符在平台必然判错）；
+          ② 子目标求解的**中间结果**（`diag.subgoal_trace[*].result`）——
+             子目标阶段在候选生成之前跑，若它跑过就有值；当候选全失败时，
+             它是唯一还活着的答案来源；
+          ③ `_fallback_solve` 直答（短 prompt + 小 max_tokens，一次调用）。
+        三者都拿不到返回 ""，由 `_validate_output` 写"未给出有效解答。"。
+        """
+        try:
+            diag = result.get("diag") or {}
+        except Exception:  # noqa: BLE001
+            diag = {}
+        # ① 候选答案残料
+        for _a in ((diag.get("pick_diag") or {}).get("cand_answers") or []):
+            if isinstance(_a, str) and not self._is_degraded_answer(_a):
+                return _a.strip()
+        # ② 子目标中间结果（可能形如 "x = 21" 或纯值，取"最后一个可用"的）
+        for _sg in (diag.get("subgoal_trace") or []):
+            if not isinstance(_sg, dict):
+                continue
+            _r = _sg.get("result")
+            if isinstance(_r, str) and _r.strip() and not self._is_degraded_answer(_r):
+                return _r.strip()
+        # ③ 直答
+        try:
+            ans = self._fallback_solve(problem)
+        except Exception as e:  # pragma: no cover
+            logger.error("rescue fallback_solve failed: %s", e)
+            ans = ""
+        if ans and isinstance(ans, str) and not self._is_degraded_answer(ans):
+            return ans.strip()
+        return ""
+
     def _validate_output(self, result: dict) -> dict:
         """返回前强制校验：final_response 非空且可 JSON 序列化。"""
         fr = result.get("final_response", "")
@@ -615,7 +818,43 @@ class ReasoningAgent:
             try:
                 result = self.orchestrator.run(problem, metadata)
                 if result and isinstance(result, dict):
-                    return self._validate_output(result)
+                    result = self._validate_output(result)
+                    # 2026-09-13 晚（用户硬要求「无论超没超时都要把答案生成出来」）：
+                    # 最后一层兜底，**独立于 orchestrator 内部那条链**。
+                    # 依据：4 题实测里 010/016 的 `final_response` 退化成
+                    # `[生成失败] 调用受限或模型拒绝回答`，而 `_validate_output`
+                    # 只查"非空" ⇒ 占位符被原样放行、平台必然判错。
+                    if self._is_degraded_answer(result.get("final_response", "")):
+                        rescued = self._rescue_answer(problem, result)
+                        if rescued:
+                            result["final_response"] = rescued
+                            _tr = result.get("trace")
+                            if isinstance(_tr, list):
+                                _tr.append({
+                                    "agent": "ReasoningAgent",
+                                    "step": "final_rescue",
+                                    "content": "流水线答案不可用 → 最终兜底直答: "
+                                               + rescued[:120],
+                                })
+                        else:
+                            # ⚠ 2026-09-13 晚补齐（独立验证者抓到的缺口）：
+                            # 原实现这里只追加 trace、**不替换 final_response**
+                            # ⇒ `final_response` 仍是那个占位符，直接漏给平台。
+                            # 实测复现：mock orchestrator 返回占位符 + mock 直答超时
+                            # ⇒ exit 的 final_response 仍是
+                            # `[生成失败] 调用受限或模型拒绝回答`。
+                            # 现在三条来源（候选残料 / 子目标结果 / 直答）全耗尽时，
+                            # 写入**明确表示无答案**的终态文本，而不是流水线占位符。
+                            result["final_response"] = "未给出有效解答。"
+                            _tr = result.get("trace")
+                            if isinstance(_tr, list):
+                                _tr.append({
+                                    "agent": "ReasoningAgent",
+                                    "step": "final_rescue",
+                                    "content": "流水线答案不可用且兜底直答失败，"
+                                               "返回终态占位文本",
+                                })
+                    return result
             except Exception as e:  # pragma: no cover
                 logger.error("orchestrator.run failed, fallback to direct backend: %s", e)
 

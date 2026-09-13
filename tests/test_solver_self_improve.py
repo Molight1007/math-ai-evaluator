@@ -115,7 +115,12 @@ class ImproveCandidatesTest(unittest.TestCase):
             policy_temperature=0.3, policy_max_tokens=8192,
             improve_min_remaining=300.0)
         ctx = make_ctx()
-        ctx._gen_deadline = _t.time() + 60   # 距软截止仅 60s < 300s
+        # N1''（2026-09-11）：基准由 _gen_deadline 改为**硬墙 deadline**——
+        # 因为 3.3_improve 排在 2.7/3_solve 之后，用 _gen_deadline(=deadline−480)
+        # 做差必为负 → 恒停手（smoke6_v2 六题 3.3 恒为 0s 的第三层原因）。
+        # 语义仍为"给单候选最坏成本(200-300s)留够余量"。
+        ctx.deadline = _t.time() + 60        # 距硬墙仅 60s < 300s
+        ctx._gen_deadline = _t.time() + 60
         ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
         n = s.improve_candidates(ctx)
         self.assertEqual(n, 0, "预留不足应停手，不再发起 200-300s 的改进调用")
@@ -130,10 +135,11 @@ class ImproveCandidatesTest(unittest.TestCase):
             policy_temperature=0.3, policy_max_tokens=8192,
             improve_min_remaining=300.0)
         ctx = make_ctx()
-        ctx._gen_deadline = _t.time() + 900  # 距软截止充足
+        ctx.deadline = _t.time() + 900       # 距硬墙充足（N1''：基准改 deadline）
+        ctx._gen_deadline = _t.time() + 900
         ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
         n = s.improve_candidates(ctx)
-        self.assertEqual(n, 1, "软截止充足时应正常改进")
+        self.assertEqual(n, 1, "硬墙余量充足时应正常改进")
 
     def test_min_remaining_zero_keeps_old_behavior(self) -> None:
         """improve_min_remaining=0（默认未配置）→ 仅走 gen_time_up 旧逻辑。"""

@@ -199,22 +199,38 @@ def test_safe_eval_err_hints():
 
 
 def test_find_naked_numeric_asserts():
+    """2026-09-12 计算分档（默认 hard_only=True）：只回收**高危算子**裸断言。"""
     from agent.calc_tool import find_naked_numeric_asserts as f
-    # 裸数值断言（心算痕迹）→ 检出
-    assert f("25*4 = 100") == ["25*4 = 100"]
-    assert f("1/2+1/3 = 5/6") == ["1/2+1/3 = 5/6"]
+    # 高危运算的心算痕迹 → 检出（开方/组合数/幂）
+    assert f("sqrt(45) = 6.708") == ["sqrt(45) = 6.708"]
+    assert f("comb(50,3) = 19600") == ["comb(50,3) = 19600"]
+    # 2026-09-13 幂按规模分档后：大幂仍回收，小幂（2^10）允许自算
+    assert f("2^30 - 1 = 1073741823") == ["2^30 - 1 = 1073741823"]
+    assert f("2^10 - 1 = 1023") == []
+    # 纯四则（加减乘除）→ 允许模型自算，不再算裸断言
+    assert f("25*4 = 100") == []
+    assert f("1/2+1/3 = 5/6") == []
     assert f("故 2024 % 17 = 1") == []   # 整行含中文 → 宁漏不检（防打断推导）
-    assert f("2^10 - 1 = 1023")
     # 有工具来源 → 不算裸
-    assert f("[计算] 25*4 = 100") == []
-    assert f("<calc>25*4</calc> = 100") == []
+    assert f("[计算] sqrt(45) = 6.708") == []
+    assert f("<calc>sqrt(45)</calc> = 6.708") == []
     # 方程/结论（含变量）→ 放行
     assert f("x = 2") == []
+    assert f("x^2 = 4") == []            # 含自由变量 → 方程，非心算数值
     assert f("解得 n = 3，代回成立") == []
     assert f("a + b = c") == []
     # 单侧/平凡
-    assert f("= 1023") == ["= 1023"]   # RHS-only 自算结果行 → 检出
-    assert f("5 = 5") == []            # 平凡同式
+    assert f("= 1023") == []             # RHS-only：无算式侧可判高危 → 放行
+    assert f("5 = 5") == []              # 平凡同式
+
+
+def test_find_naked_numeric_asserts_legacy_mode():
+    """hard_only=False 回退旧行为：任何两侧纯数值的 a = b 都算裸断言。"""
+    from agent.calc_tool import find_naked_numeric_asserts as f
+    assert f("25*4 = 100", hard_only=False) == ["25*4 = 100"]
+    assert f("1/2+1/3 = 5/6", hard_only=False) == ["1/2+1/3 = 5/6"]
+    assert f("= 1023", hard_only=False) == ["= 1023"]
+    assert f("解得 n = 3，代回成立", hard_only=False) == []
 
 
 def test_audit_calc_fallbacks():
@@ -231,11 +247,16 @@ def test_audit_calc_fallbacks():
 def test_safe_eval_code_misuse_hints():
     # 2026-09-09 P3 冒烟实证修复：<calc> 误用为代码执行器 → 专门引导文案
     from agent.calc_tool import safe_eval
-    assert "单个数学表达式" in safe_eval("a = 7\nresult = a // 2 + 2")
-    assert "单个数学表达式" in safe_eval("a=7;b=8")
+    # 2026-09-13 策略B：纯赋值块回填末条赋值（单/多目标一视同仁，语义一致）
+    assert safe_eval("a = 7\nresult = a // 2 + 2") == "5"
+    assert safe_eval("a = 7\nb = 8") == "8"            # 多行单目标赋值块
+    assert safe_eval("a=7;b=8") == "8"                 # `;` 分隔同义
     assert "单个数学表达式" in safe_eval("def f(n):\n    return n")   # 多行先命中
     assert "Python 代码" in safe_eval("if x > 0: x + 1 else 0")       # 单行关键字分支
     assert "simplify" in safe_eval("simplify(x+1)") and "没有 simplify" in safe_eval("simplify(x+1)")
+    # 兼容 ≠ 放弃校验：真正非法输入仍拒绝（不因"回填末条赋值"而放行代码执行）
+    assert safe_eval("__import__('os').system('ls')").startswith("ERROR:")
+    assert safe_eval("__import__('os')\nos.system('ls')").startswith("ERROR:")
     # 正常表达式/净化路径不受影响
     assert safe_eval("x+1") == "x + 1"
     assert safe_eval("3*7-1=20").startswith("ERROR:")   # 单等号仍走语法错净化（resolve 层可救回）

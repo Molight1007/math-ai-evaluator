@@ -48,14 +48,11 @@ def _strip_thinking_process(text: str) -> str:
     # 策略3: 提取思维流之后的尾部内容（跳过步骤编号行和 bullet points）
     lines = text.strip().split('\n')
     tail_lines = []
-    found_step = False
     for line in reversed(lines):
         stripped = line.strip()
         if not stripped:
-            if tail_lines:
-                continue
-            else:
-                continue
+            # 2026-09-12 定型前精简：原为 if/else 两分支同体 continue（死分支）
+            continue
         # 跳过步骤标题: "N.  **Title:**"
         if re.match(r'^\d+\.?\s*\*\*', stripped):
             if tail_lines:

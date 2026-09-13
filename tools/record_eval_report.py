@@ -61,34 +61,83 @@ def _clip(s, n=220) -> str:
 
 
 def _clues(row: dict) -> list[str]:
-    """从 diag 提取归因线索（只说有值的，避免噪音）。"""
+    """从 diag 提取结构化归因线索（人话描述，避免打印原始 JSON 片段）。"""
     d = row.get("diag") or {}
     out: list[str] = []
     if not d:
         return ["无诊断数据"]
+
+    # 预算
     bs = int(d.get("budget_skips", 0) or 0)
     if bs:
-        out.append(f"预算跳过 {bs} 次")
+        out.append(f"预算跳过 {bs} 次（单题时限内未跑完所有步骤）")
     if d.get("placeholder"):
-        out.append("子目标占位符（求解失败/被截断）")
+        out.append("出现子目标占位符（求解失败/被截断）")
     tr = d.get("tier")
     if tr:
-        out.append(f"预算档={tr}")
-    for key, label in (("lean_gate", "Lean闸门"), ("audit_gate", "AuditGate"),
-                       ("sketch_audit", "骨架审计"), ("skeleton_review", "骨架评审"),
-                       ("value_attack", "数值攻击"), ("answer_complete", "答案完整性")):
-        v = d.get(key)
-        if v:
-            out.append(f"{label}: {_clip(str(v), 110)}")
-    ss = d.get("subgoal_stats")
-    if isinstance(ss, dict) and ss:
-        out.append("子目标统计: " + _clip(json.dumps(ss, ensure_ascii=False), 140))
-    fg = d.get("formal_gaps")
-    if fg:
-        out.append(f"形式化缺口: {_clip(str(fg), 110)}")
+        out.append(f"预算档位 = {tr}")
+
+    # 理解环节
+    pv = d.get("preverify_trace") or {}
+    if isinstance(pv, dict) and pv.get("verdict"):
+        out.append(f"Lean 前置验证判定 = {pv.get('verdict')}")
+    for x in (d.get("formal_gaps") or [])[:2]:
+        if isinstance(x, dict):
+            out.append(f"形式化缺口[{x.get('kind')}]：{_clip(x.get('detail'), 130)}")
+        else:
+            out.append(f"形式化缺口：{_clip(x, 130)}")
+
+    # 验证环节：Lean 最终闸门（结构化）
+    for g in (d.get("lean_gate") or []):
+        if isinstance(g, dict) and g.get("step") == "final_gate":
+            bits = [f"判定={g.get('verdict')}"]
+            if g.get("degraded"):
+                bits.append(f"降级={g['degraded']}")
+            if g.get("feedback"):
+                bits.append(f"反馈={_clip(g['feedback'], 110)}")
+            out.append("Lean 最终闸门：" + "；".join(bits))
+
+    # 验证环节：AuditGate 汇总
+    ag = [g for g in (d.get("audit_gate") or [])
+          if isinstance(g, dict) and g.get("step") == "candidate_audit"]
+    if ag:
+        vc = Counter((g.get("verdict") or "none") for g in ag)
+        out.append(f"AuditGate 审核 {len(ag)} 条：" +
+                   "，".join(f"{k}={v}" for k, v in vc.most_common()))
+
+    # 数值攻击（直接给反例内容）
+    va = d.get("value_attack")
+    if va:
+        for x in (va if isinstance(va, list) else [va])[:2]:
+            out.append(f"数值攻击：{_clip(x, 150)}")
+
+    # 求解环节
+    st = d.get("subgoal_trace") or []
+    if st:
+        fails = [s for s in st if isinstance(s, dict) and
+                 (not str(s.get("result", "")).strip() or str(s.get("result", "")).startswith("[子目标"))]
+        if fails:
+            out.append(f"子目标 {len(st)} 步，其中 **{len(fails)} 步求解失败**（空/占位）")
+        else:
+            out.append(f"子目标 {len(st)} 步均有输出，但最终结论错（错误在中间推理步骤）")
+    if d.get("calc_tool_calls"):
+        out.append(f"调用了计算工具 {len(d['calc_tool_calls'])} 次")
+    else:
+        out.append("计算工具未被调用")
+
+    # 修订反馈（含错误定位）
+    rf = " ".join(str(x) for x in (d.get("revise_feedback") or [])).strip()
+    if rf:
+        out.append(f"修订反馈：{_clip(rf, 260)}")
+    rr = int(d.get("revise_round") or 0)
+    if rr:
+        out.append(f"触发修订轮数 = {rr}")
+    elif va:
+        out.append("⚠ 已检测到问题，但**未触发修订**（revise_round=0）")
+
     df = d.get("degraded_flags")
     if df:
-        out.append(f"降级标记: {_clip(str(df), 110)}")
+        out.append(f"降级标记 = {df}")
     return out
 
 
@@ -151,7 +200,7 @@ def main() -> None:
     A(f"- 结果文件：`{os.path.abspath(path)}`")
     A(f"- 题量：**{len(rows)}** 题（参与判分 {len(scored)} 题，未判分 {len(rows) - len(scored)} 题）")
     A(f"- 正确率：**{n_correct}/{len(scored)} = {acc:.1f}%**")
-    A(f"- 总墙钟耗时：**{sum(elapsed) / 3600:.2f} h**（{sum(elapsed):.0f}s）；单题均值 {statistics.mean(elapsed):.0f}s / 中位 {statistics.median(elapsed):.0f}s / 最大 {max(elapsed):.0f}s")
+    A(f"- 单题耗时合计：**{sum(elapsed) / 3600:.2f} h**（各题耗时累加，非墙钟）；单题均值 {statistics.mean(elapsed):.0f}s / 中位 {statistics.median(elapsed):.0f}s / 最大 {max(elapsed):.0f}s")
     A("")
     A("## 一、耗时情况")
     A("")

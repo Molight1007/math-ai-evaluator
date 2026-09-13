@@ -61,7 +61,7 @@ def test_calc_tool_exec_basic():
     assert BaseAgent._calc_tool_exec("1/2+1/3") == "5/6"
     assert BaseAgent._calc_tool_exec("sqrt(45)") == "3*sqrt(5)"
     assert BaseAgent._calc_tool_exec("sin(1)").startswith("WARN:")
-    assert BaseAgent._calc_tool_exec("a = 7\nb = 8").startswith("ERROR:")
+    assert BaseAgent._calc_tool_exec("a = 7\nb = 8") == "8"   # 2026-09-13 策略B：纯赋值块回填末条赋值
 
 
 def test_tool_loop_executes_and_continues():
