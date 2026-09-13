@@ -54,12 +54,23 @@ def test_lean_active_config_off(monkeypatch):
     assert orch._lean_active() is False
 
 
-def test_lean_active_modules_missing(monkeypatch):
+def test_lean_active_probe_unavailable_falls_back(monkeypatch):
+    """Lean 环境探测失败 → `_lean_active()` False（回落 AuditGate）。
+
+    2026-09-10 变更说明：`_lean_active()` 首行新增 `_ensure_lean_modules()`
+    「首用自愈」（治循环导入静默禁用），原「模块缺失 → 永久 False」前提
+    不再成立（模块会被重建）。故改为验证真正的回落语义：环境不可用即关闭。
+    另保留 LEAN_VERIFY=0 与 config 关闭两条独立路径的覆盖（见上两个用例）。
+    """
     monkeypatch.setenv("LEAN_VERIFY", "1")
-    orch = _orchestrator(monkeypatch, _make_agent_config(),
-                         lean_module=False)
-    assert orch.lean_gate is None
+    orch = _orchestrator(monkeypatch, _make_agent_config())
+
+    class _FakeBridge:
+        lean_available = False
+
+    orch.lean_gate._bridge = _FakeBridge()
     assert orch._lean_active() is False
+    assert orch._lean_probe is False
 
 
 def test_lean_active_env_on_and_probe_ok(monkeypatch):
@@ -146,8 +157,19 @@ def _mk_cands(n):
                             confidence=0.5) for i in range(n)]
 
 
+def _disable_prefetch(monkeypatch):
+    """关掉候选级并行预取（2026-09-13 新增能力）。
+
+    本组用例锁的是**顺序止损语义**（"连续 N 个 unknown 后不再逐个 verify"）——
+    那是主循环的行为，与预取无关。预取按波提交，天然会多验 ≤K-1 个候选
+    （波宽代价），该行为由 test_apply_parallel_prefetch_same_outcome 单独锁定。
+    """
+    monkeypatch.setenv("LEAN_GATE_PARALLEL", "0")
+
+
 def _gate_with_verify(monkeypatch, verdict="unknown", stop=2, strict=False):
     monkeypatch.setenv("LEAN_VERIFY", "1")
+    _disable_prefetch(monkeypatch)
     from tools.lean_local.lean_gate import LeanGate
     gate = LeanGate(_DummyClient(), _make_agent_config(
         lean_gate_unknown_stop=stop, lean_gate_strict=strict))
@@ -194,6 +216,7 @@ def test_apply_valid_resets_streak(monkeypatch):
     阈值？候选 4 仍验（streak 从 0 数，第 3、4 个 unknown 后候选 5、6 止损）。"""
     calls = {"n": 0, "seq": []}
     monkeypatch.setenv("LEAN_VERIFY", "1")
+    _disable_prefetch(monkeypatch)
     from tools.lean_local.lean_gate import LeanGate
     gate = LeanGate(_DummyClient(), _make_agent_config(
         lean_gate_unknown_stop=2))
@@ -230,3 +253,62 @@ def test_apply_stop_strict_rejects_rest(monkeypatch):
     assert calls["n"] == 2
     assert len(kept) == 0, "strict：验证过与 verify_stop 的 unknown 全拒"
     assert len(fb) == 6, "6 候选全产生拒绝反馈（2 验证 + 4 止损）"
+
+
+# ----------------------------------------------------------------------
+# 2026-09-13：候选级并行预取（LEAN_GATE_PARALLEL / LEAN_MCP_WORKERS）
+#   并发本身不改变任何决策 —— 该用例把"结果等价 + 超验量有界"钉死。
+# ----------------------------------------------------------------------
+def _run_gate(monkeypatch, parallel, verdicts, stop=2, strict=False, n=6):
+    """跑一遍 apply，返回 (调用次数, kept ids, 逐候选 verdict/degraded)。"""
+    monkeypatch.setenv("LEAN_GATE_PARALLEL", "1" if parallel else "0")
+    monkeypatch.setenv("LEAN_VERIFY", "1")
+    monkeypatch.setenv("LEAN_MCP_WORKERS", "3")
+    monkeypatch.setattr("tools.lean_local.lean_gate.mcp_available",
+                        lambda: True, raising=False)
+    from tools.lean_local.lean_gate import LeanGate
+    gate = LeanGate(_DummyClient(), _make_agent_config(
+        lean_gate_unknown_stop=stop, lean_gate_strict=strict))
+    calls = {"n": 0}
+
+    class _FB:
+        lean_available = True
+
+        def verify(self, problem="", reasoning="", domain="", timeout=0):
+            calls["n"] += 1
+            return SimpleNamespace(
+                verdict=verdicts.get(reasoning, "unknown"), findings=[],
+                suggestion="", lean_code="")
+
+    gate._bridge = _FB()
+    ctx = TaskContext(problem="证明题题干", metadata={})
+    ctx.domain = "证明题"
+    kept, fb = gate.apply(ctx, "standard", _mk_cands(n))
+    sig = [(e.get("id"), e.get("verdict"), e.get("degraded"))
+           for e in ctx.lean_gate]
+    return calls["n"], [c.id for c in kept], sig, fb
+
+
+def test_apply_parallel_prefetch_same_outcome(monkeypatch):
+    """并行预取：决策逐候选等价于串行；超验量 ≤ 波宽-1。"""
+    mixed = {"推理0": "proof_valid", "推理1": "proof_invalid",
+             "推理2": "unknown", "推理3": "proof_valid",
+             "推理4": "unknown", "推理5": "proof_invalid"}
+    s = _run_gate(monkeypatch, False, mixed)
+    p = _run_gate(monkeypatch, True, mixed)
+    assert s[1] == p[1], "kept 必须一致"
+    assert s[2] == p[2], "逐候选 verdict/degraded 必须一致"
+    assert s[3] == p[3], "拒绝反馈必须一致"
+    assert s[0] == p[0] == 6, "无止损场景两边都应验满"
+
+    # 全 unknown：串行在第 2 个后止损；并行第一波（K=3）后止损
+    allunk = dict(("推理%d" % i, "unknown") for i in range(6))
+    s = _run_gate(monkeypatch, False, allunk)
+    p = _run_gate(monkeypatch, True, allunk)
+    assert s[1] == p[1], "止损后的 kept 必须一致"
+    assert s[2] == p[2], "止损后的埋点必须一致"
+    assert s[0] == 2, "串行：连续 2 unknown 即止损"
+    from tools.lean_local.lean_bridge import lean_parallelism
+    _k = lean_parallelism()
+    assert p[0] <= 2 + _k - 1, f"并行超验量应 ≤K-1（实际 {p[0]}, K={_k}）"
+    assert p[0] < 6, "并行也必须止损，不得逐候选全验"

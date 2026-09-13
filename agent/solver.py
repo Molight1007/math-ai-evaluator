@@ -18,6 +18,7 @@ from __future__ import annotations
 
 
 import logging
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -37,6 +38,9 @@ from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
 from prompts.symbolic_model import (
     SYMBOLIC_MODEL_SYSTEM, SYMBOLIC_MODEL_USER, SYMBOLIC_JSON_SEED,
+    SYMBOLIC_SOLVE_SYSTEM, SYMBOLIC_SOLVE_USER, SYMBOLIC_SOLVE_SEED,
+    SYMBOLIC_SOLVE_RETRY_SYSTEM, SYMBOLIC_SOLVE_RETRY_USER,
+    SYMBOLIC_FEEDBACK_SYSTEM, SYMBOLIC_FEEDBACK_USER,
 )
 
 try:
@@ -48,15 +52,32 @@ except ImportError:  # 提交包（submit/）路径兜底
         parse_symbolic_payload = None
         evaluate_payload = None
 
+# 2026-09-12 符号化方程求解通道：数值剥离 → 符号建模 → 硬校验 → 工具求解。
+# 模型只交方程，数值一律由本地 SymPy 算出（模型不参与计算）。
+try:
+    from .symbolic_solve import (
+        strip_given_numbers, parse_symbolic_solve, validate_payload,
+        solve_with_tool)
+except ImportError:  # 提交包（submit/）路径兜底
+    try:
+        from symbolic_solve import (
+            strip_given_numbers, parse_symbolic_solve, validate_payload,
+            solve_with_tool)
+    except ImportError:
+        strip_given_numbers = None
+        parse_symbolic_solve = None
+        validate_payload = None
+        solve_with_tool = None
+
 try:
     from .calc_tool import (
         resolve_all_calcs, audit_calc_fallbacks, find_naked_numeric_asserts,
-        to_exact_number)
+        has_hard_op, to_exact_number)
 except ImportError:  # 提交包（submit/）路径兜底
     try:
         from calc_tool import (
             resolve_all_calcs, audit_calc_fallbacks, find_naked_numeric_asserts,
-            to_exact_number)
+            has_hard_op, to_exact_number)
     except ImportError:
         resolve_all_calcs = None
         audit_calc_fallbacks = None
@@ -64,6 +85,8 @@ except ImportError:  # 提交包（submit/）路径兜底
         # _maybe_calc_rewrite 里的 `find_naked_numeric_asserts is None`
         # 会抛 NameError（而非安全跳过）。
         find_naked_numeric_asserts = None
+        # 2026-09-12 计算分档：高危算子痕迹判定（兜底 None = 安全跳过）
+        has_hard_op = None
         to_exact_number = None
 from utils.extract import (
     extract_final_answer,
@@ -189,7 +212,6 @@ class SolverAgent(BaseAgent):
     def _adaptive_count(ctx: TaskContext, default_count: int) -> int:
         """根据题目领域自适应调整候选数量"""
         domain = (ctx.domain or "").lower()
-        problem_len = len(ctx.problem)
         # 难题深度通道：deep 档保持多候选（3 候选，不做缩减）
         if getattr(ctx, 'tier', 'standard') == 'deep':
             return default_count
@@ -199,17 +221,11 @@ class SolverAgent(BaseAgent):
             return max(1, default_count // 3)
         # P0-4 修复：不再为高难度题提高候选数——3 候选 × 3 重试曾耗尽单题
         # 300s 预算导致 45 error。保持 default_count（配置=2），省预算保产出。
-        hard_signals = [
-            problem_len > 500,
-            any(k in domain for k in ("differential_equation", "微分方程")),
-            any(k in domain for k in ("series", "级数")),
-            any(k in domain for k in ("integral", "不定积分", "indefinite_integral",
-                                        "重积分", "曲线积分", "曲面积分")),
-        ]
-        if sum(hard_signals) >= 2:
-            return default_count
-        if any(k in domain for k in ("choice", "fill", "选择", "填空")):
-            return default_count
+        # 2026-09-12 定型前审核精简：此处原本有一段 hard_signals 判定
+        # （题长 / 微分方程 / 级数 / 积分 / 客观题 → 意图给高难题更多候选），
+        # 但上面的 P0-4 修复已取消"难题多给候选"策略，使该块的
+        # **三个分支全部 `return default_count`** —— 计算了 12 行却零效果，
+        # 属典型的"逻辑堆叠后残留"。整块删除（零行为变化）。
         return default_count
 
     @staticmethod
@@ -268,31 +284,44 @@ class SolverAgent(BaseAgent):
     )
 
     # P1-1 主链覆盖（2026-09-09 B：calc_mandatory 只挂子目标链是漏洞——
-    # 主链响应同样含心算数值行）。命中"未用 <calc> 的显式运算断言"→ 定向重问
-    # 一次，要求改写成 <calc> 标记（即使模型确信数值对也必须由系统计算确认）。
+    # 主链响应同样含心算数值行）。
+    # 2026-09-12 精准化（用户要求）：只抓**高危算子**的心算痕迹
+    # （开方/根式、log·ln、exp 与 e、组合数/排列/阶乘、幂运算、三角、取模、
+    # 求和/积分）；纯四则（加减乘除）允许模型自算，不再打断。
+    # 判据 = calc_tool.find_naked_numeric_asserts(hard_only=calc_hard_only)。
     def _maybe_calc_rewrite(self, ctx: TaskContext, resp: str) -> str:
         if (find_naked_numeric_asserts is None
-                or not getattr(self.config, "calc_mandatory", False)):
+                or not getattr(self.config, "calc_mandatory", True)):
             return resp
         try:
-            naked = find_naked_numeric_asserts(resp)
+            _hard_only = bool(getattr(self.config, "calc_hard_only", True))
+            naked = find_naked_numeric_asserts(resp, hard_only=_hard_only)
             if not naked:
+                if _hard_only and find_naked_numeric_asserts(
+                        resp, hard_only=False):
+                    # 埋点：区分"没有数值断言"与"被分档放行的纯四则行"
+                    self.record(ctx, "calc_easy_pass",
+                                "响应仅含纯四则数值断言（加减乘除），按分档放行")
                 return resp
             bad = naked[0]
             self.record(ctx, "solver_calc_rewrite",
-                        f"主链响应含未用 <calc> 的数值运算（{bad[:50]}），定向重问")
+                        f"主链响应含未用 <calc> 的高危运算（{bad[:50]}），定向重问")
             tail = resp[-1200:] if len(resp) > 1200 else resp
             system = (
-                "你是数学解题助手。你上一条输出的数值计算是**心算**的，没有经过"
-                "外部计算工具——这是禁止的。请修正：所有数值计算必须写成 "
-                "<calc>表达式</calc> 标记（如 <calc>comb(50,3)*2**10</calc>、"
-                "<calc>1/2+1/3</calc>），系统会自动精确求值并回填。"
-                "**即使你确信数值正确也必须让系统计算确认，禁止心算。**"
+                "你是数学解题助手。你上一条输出里含有**易错运算**"
+                "（开方/根式、对数 log·ln、指数 exp 与自然常数 e、组合数/排列/"
+                "阶乘、幂运算、三角函数、取模、求和/积分）是**心算**的，没有"
+                "经过外部计算工具——这是禁止的。加减乘除这类简单四则你可以"
+                "自己算，但上述易错运算必须写成 <calc>表达式</calc> 标记"
+                "（如 <calc>comb(50,3)</calc>、<calc>sqrt(45)</calc>、"
+                "<calc>ln(2)</calc>、<calc>2**10</calc>、<calc>e**2</calc>），"
+                "系统会自动精确求值并回填。**即使你确信数值正确也必须让系统"
+                "计算确认，禁止心算易错运算。**"
             )
             user = (
                 f"题目解答片段：\n{tail}\n\n"
                 f"其中以下这一行是心算结果（未用 <calc> 工具）：{bad}\n"
-                "请重写整个解答：把所有数值计算改写成 <calc>…</calc> 标记，"
+                "请重写整个解答：把该类易错运算改写成 <calc>…</calc> 标记，"
                 "其他推理保留，最后仍用【最终答案】给出结论。"
             )
             raw = self._compressed_solve(
@@ -310,22 +339,160 @@ class SolverAgent(BaseAgent):
     # ============================================================
     # 2026-09-10 L1：答案级工具自洽核验（默认关，answer_selfcheck_enabled 开）
     # ------------------------------------------------------------
-    # 共识：数值结论必须由工具产出，禁止心算（"即使确信正确也要算一遍"）。
-    # 本关卡只抓一种**确定**情形：抽取到的最终答案是纯数值，而响应里所有
-    # <calc> 工具结果都不等于它 —— 这个数没有任何工具来源（心算产物）。
+    # 共识（2026-09-12 修订）：**易错运算**（开方/对数/组合数/幂/自然常数 e…）
+    # 的数值结论必须由工具产出，禁止心算；纯四则（加减乘除）允许模型自算。
+    # 本关卡只抓一种**确定**情形：抽取到的最终答案是纯数值、解答中出现过高危
+    # 算子（has_hard_op），而响应里所有 <calc> 工具结果都不等于它 ——
+    # 这个数没有工具来源（心算产物）。
     # 触发后定向重问一次，要求把**得出最终答案的算式**写成 <calc>；
     # 采纳新输出**仅当**其中确实出现了与新答案数值一致的工具结果（有来源）。
     # 其余情况一律保留原输出（零后悔）。
     # ============================================================
+    def _maybe_expression_eval(self, ctx: TaskContext, resp: str,
+                               answer: str) -> tuple[str, str]:
+        """表达式范式（2026-09-12，用户要求「默认生成方程式、不心算」）。
+
+        解析模型输出的两行（见 `_CALC_GUIDE` 第 4 条）：
+            【变量赋值】x=5, y=3
+            【最终表达式】2*x + y
+        把赋值代入表达式 → **用本地 calc_tool 求值** → **答案取工具值**
+        （模型原先写的数值被丢弃，仅在 reasoning 里留痕）。
+
+        设计要点：模型**只负责建模**（设符号、给出算式），数值代入与运算
+        全部由本地完成 —— 与"剥离"通道互补：剥离适用于题面有具体数据的题，
+        本通道适用于参数是变量的题（B 类）。
+        无这两行 / 求值失败 / 开关关闭 → 原样返回（零风险）。
+        """
+        try:
+            if not getattr(self.config, "symbolic_solve_adopt", True):
+                return resp, answer
+            # 2026-09-12 逻辑堆叠治理③：客观题（选择/判断）的答案是选项字母或
+            # 判断值，不是数值 —— 本关"工具代入求值"根本不适用。若模型按
+            # _CALC_GUIDE 误写了【最终表达式】，会把选项答案改写成数值而丢分。
+            _qt = getattr(ctx, "question_type", "") or ""
+            # 2026-09-12 补漏：填空题同属客观题 —— 多空答案形如 `1, 2`，
+            # 被本关覆盖成单个工具值会丢分（选择/判断上一轮已设防，填空漏了）。
+            if _qt in ("选择题", "判断题", "填空题"):
+                return resp, answer
+            if not resp or "【最终表达式】" not in resp:
+                return resp, answer
+            import re as _re3
+            m_e = _re3.search(r"【最终表达式】\s*(.+?)(?:\n|$)", resp)
+            if not m_e:
+                return resp, answer
+            expr = m_e.group(1).strip().strip("$").strip().rstrip("。.")
+            if not expr or len(expr) > 300:
+                return resp, answer
+            assigns: dict = {}
+            m_v = _re3.search(r"【变量赋值】\s*(.+?)(?:\n|$)", resp)
+            if m_v:
+                for part in _re3.split(r"[,，;；、]", m_v.group(1)):
+                    if "=" in part:
+                        _k, _v = part.split("=", 1)
+                        _k = _k.strip().strip("$").strip()
+                        _v = _v.strip().strip("$").strip().rstrip("。.")
+                        if _k and _v:
+                            assigns[_k] = _v
+            # ============================================================
+            # 2026-09-13 修复（q3_mcp 实测实锤）：符号答案不得被数值代入覆盖。
+            # 实况（official112 #001）：gold `2-2m`，模型原答 `\boxed{-2(m-1)}`
+            # —— 二者恒等，**答案是对的**；但响应里同时写了自造的
+            # 【变量赋值】m=3 与【最终表达式】-2*(3-1)，本关遂以工具值 -4
+            # **覆盖**模型答案 → 判 expr_wrong。根因：参数题的答案含自由变量，
+            # 对变量代一个具体值只是"特例"，根本不是题目要的答案。
+            # 判据（零后悔）：模型自己的答案若**不是纯数值**（即符号式/含自由变量）
+            # → 代入求值不可能产出答案 → 弃权，保留模型原答案，交下游既有把关。
+            # 开关 EXPR_EVAL_GROUNDING_GUARD=0 可恢复旧行为（A/B 对照用）。
+            # ============================================================
+            if (os.environ.get("EXPR_EVAL_GROUNDING_GUARD", "1") != "0"
+                    and answer and to_exact_number is not None
+                    and to_exact_number(str(answer)) is None):
+                self.record(
+                    ctx, "expression_eval_skip",
+                    f"表达式范式：模型答案为符号式（{str(answer)[:24]}），"
+                    f"代入求值不适用，弃权保留模型原答案")
+                return resp, answer
+            # 符号 → 数值 代入（整词匹配，避免 x 误伤 exp）
+            sub = expr
+            for _k, _v in assigns.items():
+                sub = _re3.sub(
+                    r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % _re3.escape(_k),
+                    "(%s)" % _v, sub)
+            exec_fn = getattr(self, "_calc_tool_exec", None)
+            if exec_fn is None:
+                return resp, answer
+            raw = str(exec_fn(sub) or "")
+            # 2026-09-12 定型前审核修复：**只采纳纯数值结果**。
+            # 原实现用 findall 抓"最后一个数字"，当工具结果不是纯数值时会抓
+            # 到碎片 —— `3*sqrt(5)`（精确根式）→ 取到 "5"、`2*x+3`（含变量）
+            # → 取到 "3"、`WARN: …12…` → 取到 "12"；而本函数会把该值**直接
+            # 写进【最终答案】**，等于把答案覆盖成一个错数。必须整串是数值才
+            # 采纳，否则零后悔弃权（保留模型原答案）。
+            _val_txt = raw.strip()
+            for _pre in ("≈", "~", "="):
+                _val_txt = _val_txt.lstrip(_pre).strip()
+            if to_exact_number is None or to_exact_number(_val_txt) is None:
+                self.record(ctx, "expression_eval_skip",
+                            f"表达式范式：{expr[:60]} 工具结果非纯数值"
+                            f"（{raw[:40]}），弃权保留模型原答案")
+                return resp, answer
+            val = _val_txt
+            # 2026-09-12 逻辑堆叠治理（定型前审核）：本关已用本地计算器产出答案，
+            # 登记标记让下游**不再重复处理**同一次计算：
+            #   · _maybe_answer_selfcheck 不会再以"看不到 <calc> 工具来源"为由
+            #     打回重问（本关的工具调用不写 <calc> 标记，它无从知晓）；
+            #   · _maybe_symbolic_solve 不会再重复建模/求解一遍并覆盖该答案。
+            # 两者都是"答案取工具值"的同族机制，叠加只会白烧 LLM 时间与互相覆盖。
+            if ctx is not None:
+                try:
+                    setattr(ctx, "_expr_eval_adopted", True)
+                except Exception:  # noqa: BLE001  标记失败不影响主流程
+                    pass
+            self.record(ctx, "expression_eval",
+                        f"表达式范式：{expr[:60]} 代入 {assigns} → {val}"
+                        f"（答案取工具值，模型不参与计算；原答 {str(answer)[:24]}）")
+            # 2026-09-12 逻辑堆叠治理②：resp 里若**已有**最终答案区块，必须
+            # **替换**而不是在末尾追加 —— 否则会留下两个互相矛盾的【最终答案】
+            # 标记，而下游 extract_final_answer 的正则取的是**第一个**（模型的
+            # 心算旧值），本关刚采纳的工具值会被完全架空（已实测该正则行为：
+            # `re.search(r"【最终答案】\s*\n?\s*([\s\S]+)")` 命中首个标记，
+            # 且 first_line 分支直接返回其首行）；reasoning 注入下游时也会歧义。
+            _new_resp = resp
+            if "【最终答案】" in _new_resp:
+                _new_resp = _re3.sub(r"【最终答案】[\s\S]*$",
+                                     "【最终答案】" + str(val), _new_resp)
+            else:
+                _new_resp = _new_resp + "\n\n【最终答案】" + str(val)
+            return _new_resp, val
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[solver] expression_eval 失败，保留原输出: %s",
+                         str(exc)[:120])
+            return resp, answer
+
     def _maybe_answer_selfcheck(self, ctx: TaskContext, resp: str,
                                 answer: str, resolved: list) -> tuple[str, str]:
         try:
             if not getattr(self.config, "answer_selfcheck_enabled", False):
                 return resp, answer
+            # 2026-09-12 逻辑堆叠治理（定型前审核）：答案已由表达式范式（本地
+            # 计算器）产出 —— 本关不再以"看不到 <calc> 来源"为由重复打回，
+            # 否则同一题会白烧一次定向重问（该关的工具调用不写 <calc> 标记）。
+            if ctx is not None and getattr(ctx, "_expr_eval_adopted", False):
+                self.record(ctx, "answer_selfcheck_skip",
+                            "答案已由表达式范式（本地计算器）产出，跳过重复核验")
+                return resp, answer
             if to_exact_number is None or not answer:
                 return resp, answer
             want = to_exact_number(answer)
             if want is None:                    # 非纯数值答案 → 不在本关卡范围
+                return resp, answer
+            # 2026-09-12 计算分档（用户要求）：只有当解答中出现过**高危算子**
+            # （开方/对数/组合数/幂/e/阶乘…）时，才要求最终答案有工具来源；
+            # 全程纯四则（加减乘除）的答案允许模型自算，不再重问。
+            if has_hard_op is not None and not has_hard_op(resp):
+                self.record(ctx, "answer_selfcheck_skip",
+                            "解答未出现高危算子（纯四则），按分档放行心算答案 "
+                            f"{str(answer)[:30]}")
                 return resp, answer
             tool_vals = []
             for _ex, _rs in (resolved or []):
@@ -340,26 +507,28 @@ class SolverAgent(BaseAgent):
             # 先 record 再判时间：A/B 归因需要"机制本可触发但被时间墙挡下"
             # 的证据（否则无法区分"没触发"与"触发了但没重问"）。
             self.record(ctx, "answer_selfcheck",
-                        f"最终答案 {str(answer)[:40]} 无 <calc> 工具来源"
+                        f"最终答案 {str(answer)[:40]} 涉高危运算却无 <calc> 工具来源"
                         + ("（生成侧时间到，跳过重问）" if _timeup else "，定向重问"))
             if _timeup:
                 return resp, answer             # 生成侧时间到 → 不再加开销
             hints = [f"- <calc>{e}</calc> = {r}" for e, r, _g in tool_vals[:5]]
             tail = resp[-1200:] if len(resp) > 1200 else resp
             system = (
-                "你是数学解题助手。你的最终答案是一个数值，但它不是用外部"
-                "计算器（<calc> 标记）算出来的——这违反计算纪律。请修正："
-                "把**得出最终答案的那个算式**写成 <calc>表达式</calc> 标记"
-                "（如 <calc>2*10+5</calc>），系统会自动精确求值并回填。"
-                "禁止心算：即使你确信数值正确，也必须让 <calc> 算出这个数。"
-                "其余推理可保留，最后仍用【最终答案】给出结论。"
+                "你是数学解题助手。你的最终答案涉及**易错运算**（开方/根式、"
+                "对数 log·ln、指数 exp 与自然常数 e、组合数/阶乘、幂运算、"
+                "三角函数等）却是**心算**的，没有经过外部计算器——这违反计算"
+                "纪律。请修正：**只输出**得出该答案的完整计算表达式，写成 "
+                "<calc>表达式</calc>（如 <calc>comb(50,3)*2**10</calc>、"
+                "<calc>sqrt(45)</calc>、<calc>ln(2)</calc>）。"
+                "**不要自己给出数值结果**——系统会精确计算，并把工具算出的值"
+                "作为最终答案。可以写一行简短说明，但不得出现任何未经 <calc> 的数值。"
             )
             user = f"题目解答片段：\n{tail}\n\n"
             if hints:
                 user += ("你已用工具算出的中间结果（注意：它们都不是最终答案）：\n"
                          + "\n".join(hints) + "\n\n")
-            user += ("请重写解答：把得出最终答案的算式写成 <calc>…</calc>，"
-                     "并给出【最终答案】。")
+            user += ("请**只输出**得出最终答案的计算表达式（写在 <calc>…</calc> 内），"
+                     "不要自行给出数值答案。")
             raw = self._compressed_solve(
                 ctx, system, user, temperature=0.0,
                 max_tokens=int(getattr(self.config, 'max_answer_tokens', 4096)),
@@ -376,7 +545,43 @@ class SolverAgent(BaseAgent):
                      for _e, r in (new_resolved or [])
                      if to_exact_number(r) is not None)
             if not ok:
+                # 2026-09-12 用户要求「绝对用工具算」：重问后仍无工具来源 → 不采纳，
+                # 并把"该答案是心算产物"写进 revise_feedback，让下游修订链强制重写，
+                # 避免这类答案静默通过（此前是纯静默 return，无法观测也无法纠正）。
+                self.record(ctx, "answer_selfcheck_fail",
+                            f"重问后仍无 <calc> 工具来源（答案 "
+                            f"{str(new_ans)[:30]}）→ 不采纳")
+                try:
+                    ctx.revise_feedback = list(
+                        getattr(ctx, "revise_feedback", []) or []) + [
+                        f"最终答案 {str(answer)[:30]} 是心算产物、没有 <calc> 工具"
+                        "来源：重写时必须把得出该答案的算式写成 <calc>表达式</calc> "
+                        "由系统精确求值后再给结论"]
+                except Exception:  # noqa: BLE001
+                    pass
                 return resp, answer             # 仍无工具来源 → 不采纳
+            # ★ 2026-09-12 通用表达式通道（覆盖 B 类：不可剥离但需数值计算的题）：
+            # 重问后若模型给出了 <calc>，**答案直接取工具算出的值**，而不是取
+            # 模型自己写的那个数——否则模型仍然"先心算、再补一个 <calc> 装饰"。
+            # 这样即使题面不可剥离（走不了符号化通道），最终数值也由本地计算器产生。
+            _tool_vals = []
+            for _e, _r in (new_resolved or []):
+                _gv = to_exact_number(_r)
+                if _gv is not None:
+                    _tool_vals.append((_e, _gv))
+            if _tool_vals and getattr(self.config, "symbolic_solve_adopt", True):
+                # 2026-09-12 修复（取值口径一致）：应取**与重问后新答案 `new_val`
+                # 相等**的那个工具值。原实现取 `_tool_vals[-1]`（列表最后一个），
+                # 当一次重问里出现多个 `<calc>` 时，会把中间量当成最终答案写回去
+                # —— 与本函数前面 `ok` 判定所用口径（`to_exact_number(r)==new_val`）
+                # 不一致。
+                _te, _tv = next(
+                    ((_e, _v) for _e, _v in reversed(_tool_vals) if _v == new_val),
+                    _tool_vals[-1])
+                self.record(ctx, "answer_selfcheck_adopt",
+                            f"答案改用工具值 {_tv}（表达式 {str(_te)[:40]}；"
+                            f"模型原答 {str(new_ans)[:30]}）")
+                return (_raw2 if _raw2 else raw), str(_tv)
             if new_val != want:
                 self.record(ctx, "answer_selfcheck_fix",
                             f"最终答案经工具核验修正：{str(answer)[:30]} → "
@@ -459,7 +664,8 @@ class SolverAgent(BaseAgent):
                 f"抽象为变量后算出目标量应为 {value}，与你的最终答案不一致。"
                 "请核对：若你的答案错了，请修正推导并给出新答案；"
                 "若你认为独立建模有误，请指出其建模错在哪里，并维持你的答案。"
-                "数值计算必须写成 <calc>表达式</calc>，最后用【最终答案】给出结论。"
+                "涉及易错运算（开方/对数/组合数/幂等）时必须写成 "
+                "<calc>表达式</calc>，最后用【最终答案】给出结论。"
             )
             user = (f"题目：\n{problem[:2000]}\n\n"
                     f"你的解答片段：\n{(resp[-1200:] if len(resp) > 1200 else resp)}\n\n"
@@ -483,6 +689,187 @@ class SolverAgent(BaseAgent):
             return new_raw, new_ans
         except Exception as exc:  # noqa: BLE001  失败保留原输出
             logger.debug("[solver] symbolic crosscheck 失败，保留原输出: %s",
+                         str(exc)[:120])
+            return resp, answer
+
+    # ============================================================
+    # 2026-09-12 符号化方程求解通道（默认关，symbolic_solve_enabled 开）
+    # ------------------------------------------------------------
+    # 用户 9/11 需求：模型根据题目逻辑推导出**方程式类型**的答案，具体数值由
+    # 智能体调用工具执行计算 —— 智能体把数据剥离存本地，给模型的是"未知数
+    # 类型"题面，模型只交方程（组）+ 目标，数值一律由本地 SymPy 回代算出。
+    #
+    # 省时间设计（用户 9/12 硬要求："为模型减少浪费时间而不是加时间"）：
+    #   - 剥离 / 校验 / 求解 **全部本地**（毫秒~秒级，daemon 线程 5s 超时）；
+    #   - 只加 **1 次短建模调用**（≈120 tokens，不是完整求解调用）；
+    #   - 工具值与主链答案**一致** → 记 pass 直接放行，**0 额外调用**；
+    #   - 仅当**分歧**时才追加 1 次短回传（把工具结果交回模型定稿，即
+    #     "将计算方程式给工具并接收工具返回的结果"）；
+    #   - **不新增候选** → 不触发下游验证/Lean 闸门的任何额外成本。
+    # 硬性保证（用户 9/12）：最终答案的数值必须与工具返回一致 —— 模型不参与计算。
+    # ============================================================
+    def _maybe_symbolic_solve(self, ctx: TaskContext, resp: str,
+                              answer: str) -> tuple[str, str]:
+        try:
+            if not getattr(self.config, "symbolic_solve_enabled", False):
+                return resp, answer
+            if (strip_given_numbers is None or parse_symbolic_solve is None
+                    or validate_payload is None or solve_with_tool is None
+                    or to_exact_number is None):
+                return resp, answer
+            if getattr(ctx, "_sym_solve_done", False):
+                return resp, answer
+            # 2026-09-12 逻辑堆叠治理（定型前审核）：答案已由表达式范式（本地
+            # 计算器）产出 —— 不再重复做一次符号建模 + 求解，避免同一答案被
+            # 两条同族机制先后覆盖（谁生效取决于顺序，且白烧一次建模调用）。
+            if getattr(ctx, "_expr_eval_adopted", False):
+                self.record(ctx, "symbolic_solve_skip",
+                            "答案已由表达式范式（本地计算器）产出，跳过重复建模求解")
+                return resp, answer
+            problem = (getattr(ctx, "problem", "") or "").strip()
+            if not problem:
+                return resp, answer
+            # 只对"数值型答案"题目生效（证明题/文字结论不适用）
+            want = to_exact_number(answer)
+            if want is None:
+                return resp, answer
+            try:
+                from .question_type import classify_question_type
+            except ImportError:
+                from question_type import classify_question_type
+            if classify_question_type(problem) == "证明题":
+                return resp, answer
+            if ctx.gen_time_up():
+                self.record(ctx, "symbolic_solve", "跳过：生成侧时间到")
+                return resp, answer
+            setattr(ctx, "_sym_solve_done", True)   # 每题只做一次
+
+            # ① 数值剥离（本地，零 LLM）：题面 → 符号题面 + 本地参数表
+            strip = strip_given_numbers(problem)
+            if strip is None:
+                self.record(ctx, "symbolic_solve_skip",
+                            "题面无「显式给定参数」可剥离，本通道不适用")
+                return resp, answer
+
+            # ② 符号建模（1 次短调用；不合格带**具体原因**重试 1 次）
+            max_tok = int(getattr(self.config, "symbolic_solve_max_tokens", 384))
+            payload, reason, previous = None, "", ""
+            for attempt in range(2):
+                if attempt == 0:
+                    sys_p = SYMBOLIC_SOLVE_SYSTEM
+                    usr_p = SYMBOLIC_SOLVE_USER.format(
+                        problem=strip.problem[:3000])
+                else:
+                    sys_p = SYMBOLIC_SOLVE_RETRY_SYSTEM
+                    usr_p = SYMBOLIC_SOLVE_RETRY_USER.format(
+                        problem=strip.problem[:3000],
+                        previous=(previous or "")[:600], reason=reason)
+                if ctx.gen_time_up():
+                    self.record(ctx, "symbolic_solve", "跳过：建模前生成侧时间到")
+                    return resp, answer
+                raw = self._compressed_solve(
+                    ctx, sys_p, usr_p, temperature=0.0, max_tokens=max_tok,
+                    prefill_seed=SYMBOLIC_SOLVE_SEED,
+                )
+                previous = raw or ""
+                payload = parse_symbolic_solve(previous)
+                ok, reason = validate_payload(payload, strip.params)
+                if ok:
+                    break
+                self.record(ctx, "symbolic_solve_validate_fail",
+                            f"第 {attempt + 1} 次建模不合格：{reason}")
+                if payload is None:
+                    break
+            if payload is None:
+                return resp, answer
+            ok, reason = validate_payload(payload, strip.params)
+            if not ok:
+                self.record(ctx, "symbolic_solve_reject",
+                            f"建模两次不合格，弃权：{reason}")
+                return resp, answer
+
+            # ③/④ 工具求解（本地，零 LLM）：数值回代 → 解方程（组）→ 精确值
+            value, why = solve_with_tool(payload, strip.params)
+            if value is None:
+                self.record(ctx, "symbolic_solve_reject",
+                            f"工具求解未成功：{why}")
+                return resp, answer
+            got = to_exact_number(value)
+            if got is None:
+                self.record(ctx, "symbolic_solve_reject",
+                            f"工具结果非精确数值，弃权：{value}")
+                return resp, answer
+            self.record(ctx, "symbolic_solve_solved",
+                        f"符号建模+工具求解成功：{why}")
+
+            # ★ 2026-09-12 用户要求「把计算从模型手里拿走」（方案④正解）：
+            # **工具求解成功 → 答案直接取工具值**，模型不参与计算。
+            # 原设计只在"一致"时放行、"分歧"时才回传 → 最终答案仍可能是模型
+            # 心算出来的值（工具只是事后核对，没有"接管"计算）。
+            # 现改为：只要本地 SymPy 求出精确值，该值**就是**最终答案，
+            # 模型原先给的数值被丢弃（保留在 reasoning 里供追溯）。
+            # 回退：`--symbolic_solve_adopt false`（恢复"仅比对/回传"旧行为）。
+            if getattr(self.config, "symbolic_solve_adopt", True):
+                _tgt = str(payload.get("target") or "")
+                _note = (f"\n\n【工具精确计算】{_tgt} = {value}"
+                         "（该数值由本地计算器代入求解得出，非模型心算）")
+                new_raw = ((resp or "") + _note) if (resp or "") else _note.strip()
+                self.record(ctx, "symbolic_solve_adopt",
+                            f"答案改用工具精确计算值 {value}"
+                            f"（原答案 {str(answer)[:30]}；模型不参与计算）")
+                return new_raw, value
+
+            if got == want:
+                self.record(ctx, "symbolic_solve_pass",
+                            f"工具值与答案一致（{value}），模型未参与计算")
+                return resp, answer
+
+            # 分歧 → 1 次短回传（可关：symbolic_solve_feedback=0）
+            if not getattr(self.config, "symbolic_solve_feedback", True):
+                self.record(ctx, "symbolic_solve_mismatch",
+                            f"工具值 {value} 与答案 {str(answer)[:30]} 不一致"
+                            "（未回传）")
+                return resp, answer
+            if ctx.gen_time_up():
+                self.record(ctx, "symbolic_solve_mismatch",
+                            f"工具值 {value} 与答案不一致，但生成侧时间到，"
+                            "保留原答案")
+                return resp, answer
+            eqs_txt = "\n".join(payload.get("equations") or []) or "（以 TARGET 为准）"
+            new_raw = self._compressed_solve(
+                ctx, SYMBOLIC_FEEDBACK_SYSTEM,
+                SYMBOLIC_FEEDBACK_USER.format(
+                    problem=problem[:1500], equations=eqs_txt,
+                    target=payload.get("target") or "", value=value),
+                temperature=0.0,
+                max_tokens=int(getattr(self.config, "max_answer_tokens", 4096)),
+            )
+            if not new_raw or len(new_raw.strip()) < 10:
+                self.record(ctx, "symbolic_solve_mismatch",
+                            f"回传结果为空，保留原答案（工具值 {value}）")
+                return resp, answer
+            new_ans = extract_final_answer(new_raw)
+            # 三重保险（防"盲从工具值"造成掉分）：
+            #   ① 模型必须**显式确认建模正确**（ADOPT）；REJECT/无标记一律维持原答案
+            #   ② 新答案的数值必须**正好落在工具值上**（模型不得改动数值）
+            upper = new_raw.upper()
+            if "ADOPT" not in upper:
+                self.record(ctx, "symbolic_solve_keep",
+                            f"模型未确认建模正确"
+                            f"（{'REJECT' if 'REJECT' in upper else '无标记'}）"
+                            f" → 保留原答案（工具值 {value}）")
+                return resp, answer
+            if to_exact_number(new_ans) != got:
+                self.record(ctx, "symbolic_solve_keep",
+                            f"回传后答案未落到工具值 {value} → 保留原答案")
+                return resp, answer
+            self.record(ctx, "symbolic_solve_fix",
+                        f"答案按工具结果修正：{str(answer)[:30]} → {value}")
+            if resolve_all_calcs is not None:
+                new_raw, _ = resolve_all_calcs(new_raw)
+            return new_raw, new_ans
+        except Exception as exc:  # noqa: BLE001  失败保留原输出
+            logger.debug("[solver] symbolic solve 失败，保留原输出: %s",
                          str(exc)[:120])
             return resp, answer
 
@@ -712,10 +1099,36 @@ class SolverAgent(BaseAgent):
         # 2026-09-08 两轮扩容：sqrt/ln/log/exp + integral/符号变量/根式化简。
         if getattr(self.config, 'enable_calc_tool', True):
             _CALC_GUIDE = (
-                "\n\n**你不是计算器**：遇到任何需要数值或运算的环节，你的第一反应是写出要算的**表达式**并交给 <calc>，不要心里算出结果（禁止心算）。系统回填精确值后你基于它继续推理。节奏示范：“求 1 到 10 的和”→写 <calc>sum(k,1,10)</calc>→回填 [计算] sum(k,1,10) = 55→引用 55；“25×4+1”→写 <calc>25*4+1</calc>，禁止直接写“= 101”。复杂计算拆成 ≤3 个 <calc>（每步一个表达式），不要一步吞一大串。\n"
+                "\n\n**【计算纪律 · 分档执行】**\n"
+                "1. **易错运算 → 必须写 <calc>表达式</calc> 交系统精确求值（严禁心算）**："
+                "开方/根式 sqrt、对数 log·ln、指数 exp 与自然常数 e、组合数 comb 或 "
+                "C(n,k)、排列 perm、阶乘 !、幂运算 ** 或 ^、三角函数 sin/cos/tan、"
+                "取模 mod、求和 sum、求积 prod、积分 integral、圆周率 pi。"
+                "这些运算心算极易出错，**即使你确信数值正确也必须交工具确认**；\n"
+                "2. **简单四则 → 你可以自己算**：整数/小数的加、减、乘、除、括号与"
+                "比较，直接写出结果即可，不必包 <calc>（包了也无害）；\n"
+                "3. **由易错运算得出的数值型最终答案，必须能在你前面的 <calc> 记录中"
+                "找到来源**：查不到工具来源的会被系统打回重写（多花一轮时间）；"
+                "纯四则得出的答案不受此限。\n"
+                "4. **★ 易错运算请「先符号、后代入」** —— 与上面的最终答案格式要求"
+                "**不冲突**：你仍须给出**完全求值**的【最终答案】，本项只是**额外**"
+                "提供算式，供系统用精确计算器复核。当最终答案由第 1 条的易错运算得出时，"
+                "请在【最终答案】**之前**先列出这两行：\n"
+                "   ```\n"
+                "   【变量赋值】x=5, y=3           ← 题目中每个量的具体数值，一行列全\n"
+                "   【最终表达式】2*x + y          ← 只含符号的算式，不必自己算\n"
+                "   ```\n"
+                "   系统会代入数值精确求值，用于**校验**你给出的答案：不一致时**以工具值"
+                "为准**（这正是防心算漂移的兜底），一致则你的答案原样保留。简单四则不必"
+                "给这两行。\n"
+                "\n**节奏示范**：“求组合数 C(50,3)”→写 <calc>comb(50,3)</calc>→回填 "
+                "[计算] comb(50,3) = 19600→引用 19600；“把 sqrt(45) 化为最简根式”→写 "
+                "<calc>sqrt(45)</calc>→回填 3*sqrt(5)；“25×4+1”→纯四则，可直接写 = 101。"
+                "易错计算拆成 ≤3 个 <calc>（每步一个表达式），不要一步吞一大串。\n"
                 "\n\n计算环节请用 <calc>表达式</calc> 标记（例如 <calc>comb(50,3)*2**10</calc>、"
                 "<calc>1/2+1/3</calc>、<calc>sqrt(45)</calc>、<calc>integral((1-x)^n,x,0,1)</calc>、<calc>sum(k^2,k,1,n)</calc>），"
-                "系统会自动求值并回填结果。涉及数值计算时务必使用该标记，不要心算。\n"
+                "系统会自动求值并回填结果。涉及上述易错运算时务必使用该标记，不要心算；"
+                "纯四则（加减乘除）可直接写出结果。\n"
                 "**<calc> 与 </calc> 之间必须且只能是数学表达式**"
                 "（数字/字母符号 x n k…、+ - * / **（或 ^）% //、括号、函数 "
                 "fact/comb/perm/gcd/lcm/abs/sqrt/floor/ceil/min/max/ln/log/exp/"
@@ -741,16 +1154,37 @@ class SolverAgent(BaseAgent):
         # 此处改为 `enable_question_type_hint` 控制，**默认关闭**；需要 A/B
         # 对比或回归旧行为时置 True 即可，无需改代码。
         # 注：选择题的选项格式化属"输入信息补全"而非策略分流，故始终保留。
+        # 2026-09-12 客观题特化（用户要求"保证能检测到题型并采取特化解题技巧"）：
+        #   · 客观题（选择 / 判断 / 填空）与证明题的解题流程互斥，给它们注入
+        #     特化纪律不触碰上面"证明题不分流"的既有结论；
+        #   · 实测依据（official112 基线）：15 道客观题仅对 4 道——093/103 漏读
+        #     E 项而缺项、101/111 判断方向反、102/106/110 概念题凭印象作答；
+        #   · 开关 `objective_tactic_enabled`（默认 True）可一键回退旧行为，
+        #     `enable_question_type_hint`（默认 False）仍可全题型强制开启。
         if getattr(ctx, 'question_type', ''):
-            from .question_type import get_question_type_hint, format_options
-            if ctx.question_type == "选择题":
-                opts = format_options(ctx.problem)
-                if opts:
-                    user_content = user_content + opts
-            if getattr(self.config, 'enable_question_type_hint', False):
-                qtype_hint = get_question_type_hint(ctx.question_type)
-                if qtype_hint:
-                    user_content = user_content + qtype_hint
+            from .question_type import objective_injection
+            _is_obj = ctx.question_type in ("选择题", "判断题", "填空题")
+            _hint_on = bool(
+                getattr(self.config, 'enable_question_type_hint', False)
+                or (_is_obj and getattr(self.config, 'objective_tactic_enabled', True))
+            )
+            _inj = objective_injection(ctx.problem, ctx.question_type, _hint_on)
+            if _inj:
+                user_content = user_content + _inj
+            # 埋点：客观题路由证据（题型 / 是否注入特化纪律 / 注入文本长度）。
+            # 目的：让"是否真的走了特化策略"可被事后核验，而不是靠日志反推。
+            try:
+                if isinstance(getattr(ctx, "metadata", None), dict):
+                    ctx.metadata["objective_route"] = {
+                        "type": ctx.question_type,
+                        "hint_injected": bool(_inj),
+                        "injection_len": len(_inj),
+                    }
+                if _is_obj:
+                    logger.info("[客观题路由] 题型=%s 注入=%d字符",
+                                ctx.question_type, len(_inj))
+            except Exception:  # noqa: BLE001
+                pass
 
         base_cid = len(ctx.candidates)
         if temperatures is None:
@@ -884,6 +1318,17 @@ class SolverAgent(BaseAgent):
                                     f"<calc>{_ex}</calc> → {_rs}",
                                     expr=_ex, reason=_rs)
                 resp = self._maybe_calc_rewrite(ctx, resp)
+                # 2026-09-12 修复（机制闭合）：_maybe_calc_rewrite 重写出的
+                # `<calc>` 必须**立即回填**。原实现只在重写**之前**回填过一次，
+                # 重写产生的标记无人求值 → `extract_final_answer` 读到的是未求值
+                # 的标记文本，模型的心算值直接成为答案 —— 即"强制走工具"这一关
+                # 白花一次 LLM 重问，目的完全落空。
+                resp, _re2 = resolve_all_calcs(resp)
+                if audit_calc_fallbacks is not None:
+                    for _ex, _rs in audit_calc_fallbacks(_re2):
+                        self.record(ctx, "calc_fallback",
+                                    f"<calc>{_ex}</calc> → {_rs}",
+                                    expr=_ex, reason=_rs)
             answer = extract_final_answer(resp)
             # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），
             # 先试 rescue 兜底（嵌套 boxed / 中段强模式结论），再取尾部
@@ -904,9 +1349,16 @@ class SolverAgent(BaseAgent):
                     and not ctx.gen_time_up()):
                 answer = self._reask_final_answer(ctx, resp, answer)
             # 2026-09-10 L1：数值答案工具自洽核验（默认关，见 AgentConfig）
+            # ★ 表达式范式（默认形态，9/12 用户要求）：模型只建模（设符号+给算式），
+            # 数值代入与运算由本地完成 → 答案取工具值。放在 selfcheck 之前，
+            # 命中即可省掉一次"打回重写"。
+            resp, answer = self._maybe_expression_eval(ctx, resp, answer)
             resp, answer = self._maybe_answer_selfcheck(ctx, resp, answer, _resolved)
             # 2026-09-10 L2：独立符号建模复核（默认关；每题最多一次）
             resp, answer = self._maybe_symbolic_crosscheck(ctx, resp, answer)
+            # 2026-09-12 符号化方程求解通道（默认关）：模型只交方程（组）+ 目标，
+            # 数值一律由本地 SymPy 回代求出（模型不参与计算），异议时回传工具结果。
+            resp, answer = self._maybe_symbolic_solve(ctx, resp, answer)
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,
@@ -936,9 +1388,34 @@ class SolverAgent(BaseAgent):
                 self.record(ctx, "error_lesson",
                             f"revise 注入历史易错自查清单 {error_lesson_ids(ctx)}")
         count = cap if cap is not None else self.config.revise_sample_times
-        count = max(0, min(count, 6 - len(getattr(ctx, 'candidates', None) or [])))
+        # ⚠ A 修复（2026-09-12）：**候选池满时先腾位，而不是静默 return**。
+        # 依据：6.5 的「拒绝 → 换候选 / 重解」是唯一的纠错回路，但 candidates
+        # 常态就是 6 个 → `6 - len(candidates)` = 0 → count=0 → return
+        # → **最需要重解时反而重解不了**（实测 revise_round 恒为 0，反馈白给）。
+        _room = 6 - len(getattr(ctx, "candidates", None) or [])
+        if _room <= 0 and getattr(ctx, "revise_feedback", None):
+            _keep = list(ctx.candidates or [])[-3:]
+            self.record(ctx, "revise",
+                        f"候选池满（{len(ctx.candidates)} 个）→ 腾位至 3 个，"
+                        f"为重解让出槽位（A 修复 2026-09-12）")
+            ctx.candidates = _keep
+            _room = 6 - len(ctx.candidates)
+        count = max(0, min(count, _room))
+        # B 埋点（2026-09-12）：把「重解到底跑没跑、为什么没跑」全部记下来——
+        # 此前三处静默路径（候选满 / 时间不足 / 反馈空）无法区分，
+        # 导致「反馈给了模型却仍答错」无法定位。
         if count <= 0:
+            self.record(ctx, "revise",
+                        f"重解**未启动**：可用槽位 {count}"
+                        f"（候选 {len(getattr(ctx, 'candidates', None) or [])} 个、"
+                        f"反馈 {len(getattr(ctx, 'revise_feedback', None) or [])} 条、"
+                        f"cap={cap}）")
             return
+        self.record(ctx, "revise",
+                    f"重解**启动**：count={count}、"
+                    f"反馈 {len(ctx.revise_feedback)} 条、"
+                    f"revise_round={getattr(ctx, 'revise_round', 0)}、"
+                    f"报文首 {str(feedback_text)[:80]}")
 
         base_cid = len(ctx.candidates)
 
@@ -1000,6 +1477,17 @@ class SolverAgent(BaseAgent):
                                     f"<calc>{_ex}</calc> → {_rs}",
                                     expr=_ex, reason=_rs)
                 resp = self._maybe_calc_rewrite(ctx, resp)
+                # 2026-09-12 修复（机制闭合）：_maybe_calc_rewrite 重写出的
+                # `<calc>` 必须**立即回填**。原实现只在重写**之前**回填过一次，
+                # 重写产生的标记无人求值 → `extract_final_answer` 读到的是未求值
+                # 的标记文本，模型的心算值直接成为答案 —— 即"强制走工具"这一关
+                # 白花一次 LLM 重问，目的完全落空。
+                resp, _re2 = resolve_all_calcs(resp)
+                if audit_calc_fallbacks is not None:
+                    for _ex, _rs in audit_calc_fallbacks(_re2):
+                        self.record(ctx, "calc_fallback",
+                                    f"<calc>{_ex}</calc> → {_rs}",
+                                    expr=_ex, reason=_rs)
             answer = extract_final_answer(resp)
             if not answer or len(answer) > 300:
                 answer = rescue_final_answer(resp)[0]
@@ -1035,10 +1523,32 @@ class SolverAgent(BaseAgent):
         跳过已 self_improved=True 的候选（防"对同一候选循环调用 Step2"，
         论文 SU-01 不递归入队失败精炼，对齐此约束）。
         """
+        def _needs_improve(c) -> bool:
+            """A2（2026-09-11）：只在候选「看起来有问题」时才自改进。
+
+            依据：smoke6_v3 实测「无条件改进」只有成本没有收益 ——
+            3.3 占单题 29~45% 耗时（总耗时 +34%），而正确率 1/6 完全不变，
+            且 098 被从正确答案改错。故改为**条件触发**：仅当候选存在
+            明显缺陷（答案缺失/过短、推理被截断、推理过短）才值得花一次调用。
+            开关：SELF_IMPROVE_CONDITIONAL（默认 1；设 0 = 恢复无条件旧行为，便于 A/B）。
+            """
+            if os.environ.get("SELF_IMPROVE_CONDITIONAL", "1") == "0":
+                return True
+            _ans = str(getattr(c, "answer", "") or "").strip()
+            _rs = str(getattr(c, "reasoning", "") or "")
+            if not _ans or len(_ans) < 2:                     # ① 答案缺失/过短
+                return True
+            if any(k in _rs for k in ("...", "[已截断]", "未完成", "待续")):
+                return True                                    # ② 推理被截断
+            if len(_rs) < 400:                                 # ③ 推理过短（未充分展开）
+                return True
+            return False                                       # 看起来完整 → 不改
+
         cands = [c for c in ctx.candidates
                  if getattr(c, "reasoning", "")
                  and not c.reasoning.startswith("[")
-                 and not getattr(c, "self_improved", False)]
+                 and not getattr(c, "self_improved", False)
+                 and _needs_improve(c)]
         limit = int(getattr(self.config, "self_improve_max", 3))
         targets = cands[:limit]
         if not targets:
@@ -1047,12 +1557,16 @@ class SolverAgent(BaseAgent):
         n_ok = 0
         _imp_min_remaining = float(
             getattr(self.config, "improve_min_remaining", 0.0) or 0.0)
-        _gdl = float(getattr(ctx, "_gen_deadline", 0.0) or 0.0)
         for cand in targets:
             # 2026-09-06：升级 gen_time_up——仅 is_time_critical 会在单候选
             # 300s 级 LLM 调用前放行最后 1-2 个候选，烧穿剩余预算（冒烟
             # nt-031 3.3=595s / algebra-003 3.3=325s 实证），须按生成侧软截止停。
-            if ctx.gen_time_up():
+            # N1''（2026-09-11 修正）：**改回硬墙口径**。原因：外层（orchestrator）
+            # 已判定 3.3 该跑（用 time_remaining 门槛放行），但 3.3 排在 2.7/3_solve
+            # 之后，而 gen_time_up() 用的是 _gen_deadline(=deadline−480s)=720s——
+            # 走到这里必然已越过 → 内层立刻 break → 外层放行被作废（smoke6_v2
+            # 六题 3.3 恒为 0s 的最终原因）。改为只防"逼近 1200s 硬墙"。
+            if ctx.is_time_critical():
                 break
             # 2026-09-07（A，冒烟 alg-060 3.3=640s 烧穿实证）：单候选改进
             # 是一次 200-300s 不可打断的 LLM 调用——仅靠 gen_time_up（=烧到
@@ -1060,13 +1574,18 @@ class SolverAgent(BaseAgent):
             # 6.5 终局 Lean/Audit 闸门 time_critical 饿死。
             # 预留 single-call 最坏成本：距生成软截止不足 improve_min_remaining
             # （默认 300s）即停手不再开新候选，把验证预算完整留给 4_verify+6.5。
-            if (_imp_min_remaining > 0 and _gdl >= 10**8
-                    and _gdl - time.time() < _imp_min_remaining):
+            # N1''（2026-09-11 修正）：**基准改为硬墙 deadline，而非 _gen_deadline**。
+            # 原因同 L37：_gen_deadline(720s) 是"生成类"的统一截止，3.3 走到这里
+            # 必然已越过，用它做差会出现负值 → 恒 break（第三层拦截，实测默认
+            # improve_min_remaining=300 时 100% 触发）。改用 deadline(1200s) 起算，
+            # 语义仍是"给单候选最坏成本留够余量"，但不会在 3.3 处必然失败。
+            _hd = float(getattr(ctx, "deadline", 0.0) or 0.0)
+            if (_imp_min_remaining > 0 and _hd >= 10**8
+                    and _hd - time.time() < _imp_min_remaining):
                 self.record(ctx, "paper_pacer",
-                            f"Step2 自改进停手：距生成软截止 "
-                            f"{_gdl - time.time():.0f}s < "
+                            f"Step2 自改进停手：距硬墙 {_hd - time.time():.0f}s < "
                             f"{_imp_min_remaining:.0f}s（单候选最坏成本预留），"
-                            f"不再改进剩余 {len(targets) - targets.index(cand)} 候选")
+                            f"不再改进剩余候选")
                 break
             user_content = SELF_IMPROVE_USER.format(
                 problem=ctx.problem,
@@ -1083,17 +1602,49 @@ class SolverAgent(BaseAgent):
                 prefill_seed="【第一步：诊断】\n",
             )
             if not resp or not resp.strip():
+                # 观测埋点（2026-09-11）：3.3 此前只报"完成 N 个"，失败出口
+                # （空/拒绝/过短）**全部静默 continue** → 跑了几百秒却看到 n_imp=0
+                # 却无从定位（smoke6_v3 实证：3.3=365s 但"自改进完成"0 条）。
+                self.record(ctx, "self_improve",
+                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：空响应")
                 continue
             if _is_refusal(resp):
+                self.record(ctx, "self_improve",
+                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：模型拒绝作答")
                 continue
             # 改进版比原版还差（明显更短/空壳）则丢弃
-            if len(resp.strip()) < max(40, len(cand.reasoning) // 3):
+            _thr = max(40, len(cand.reasoning) // 3)
+            if len(resp.strip()) < _thr:
+                self.record(ctx, "self_improve",
+                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：输出过短"
+                            f"（{len(resp.strip())} < 门槛 {_thr}）")
                 continue
             answer = extract_final_answer(resp)
             if not answer or len(answer) > 300:
                 answer = rescue_final_answer(resp)[0]
             if not answer:
                 answer = smart_fallback_answer(resp)
+            # B 方案（2026-09-11，本地实验）：**覆盖前先把原版保留为独立候选**。
+            # 依据：smoke6_v3 实证 098 原候选答 B（正确），3.3 自改进后被改成 D
+            # （错误）——「无条件替换」会把好答案直接改坏，且没有任何回退机制。
+            # 现在改为"原版 + 改进版并存"，交由下游验证/投票择优（不改变下游逻辑）。
+            # 开关：SELF_IMPROVE_KEEP_ORIGINAL（默认 1）。
+            if os.environ.get("SELF_IMPROVE_KEEP_ORIGINAL", "1") != "0":
+                try:
+                    import copy as _copy
+                    _orig = _copy.copy(cand)
+                    _orig.id = 1 + max(
+                        [int(getattr(c, "id", 0) or 0) for c in ctx.candidates] or [0])
+                    _orig.self_improved = True      # 防对同一份再改进
+                    _orig.source = (getattr(cand, "source", "") or "") + "+pre_improve"
+                    ctx.candidates.append(_orig)
+                    self.record(ctx, "self_improve",
+                                f"Step2 保留原版候选#{_orig.id}"
+                                f"（答案 {str(getattr(_orig, 'answer', ''))[:30]}），"
+                                f"改进版写入#{getattr(cand, 'id', '?')}")
+                except Exception as _ce:  # noqa: BLE001
+                    self.record(ctx, "self_improve",
+                                f"Step2 保留原版失败（{type(_ce).__name__}）→ 走覆盖")
             cand.reasoning = resp
             if answer:
                 cand.answer = answer

@@ -25,9 +25,20 @@ _PROJ = r"D:/mathlib4-last_bump_for_v4.31.0"
 
 
 def _mk_lake_dir():
+    """构造一个满足 lean-lsp-mcp 工程根要求的临时目录。
+
+    2026-09-13 修：原先只写 `lakefile.toml`，而 2026-09-12 起门控改用
+    `_is_mcp_project_root`（要求 `lean-toolchain` **且** lakefile 之一，
+    与 lean-lsp-mcp 的 `require_lean_project_path()` 对齐）；
+    仅 lakefile 的目录会被判"非工程根"→ 走 bridge。
+    注意 `_ensure_min_lake_project`（autolake）**只对含 Mathlib/*.olean 的
+    闭包目录**生效（防止在任意目录乱写文件），所以这里必须自带 lean-toolchain。
+    """
     d = tempfile.mkdtemp()
     with open(os.path.join(d, "lakefile.toml"), "w", encoding="utf-8") as f:
         f.write('[package]\nname = "tmp"\n')
+    with open(os.path.join(d, "lean-toolchain"), "w", encoding="utf-8") as f:
+        f.write("leanprover/lean4:v4.31.0\n")
     return d
 
 
@@ -35,8 +46,19 @@ class BackendSwitchTest(unittest.TestCase):
     def tearDown(self):
         set_lean_backend("bridge")
 
-    def test_default_bridge(self):
-        self.assertEqual(get_lean_backend(), "bridge")
+    def test_default_backend_is_mcp(self):
+        """档2（2026-09-04）起模块默认后端 = **mcp**（用户要求 MCP 必须可用）；
+        环境不可用/门控未过时由 `_compile_lean` 自动回落 bridge。
+
+        注意与 tearDown 的耦合：不能用 get_lean_backend() 断言"默认值"
+        （前序用例的 tearDown 会把模块态改成 bridge）→ 直接锁模块常量 + 显式设置。
+        """
+        os.environ.pop("LEAN_BACKEND", None)
+        self.assertEqual(
+            lean_bridge._LEAN_BACKEND, "mcp",
+            "模块默认后端应为 mcp（2026-09-04 档2 决策）")
+        set_lean_backend("mcp")
+        self.assertEqual(get_lean_backend(), "mcp")
 
     def test_set_and_get(self):
         set_lean_backend("mcp")

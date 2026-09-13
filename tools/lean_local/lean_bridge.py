@@ -24,9 +24,11 @@ Lean 验证桥接层（agent/lean_bridge.py）
 - 依赖以下文件: agent/base.py（BugReport / Finding / Budget）
 - 自举依赖: deploy/setup_lean.sh（Lean 环境缺失时的自动安装脚本）
 """
+import contextlib
 import json
 import logging
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -499,6 +501,39 @@ _LEAN_BACKEND = "mcp"
 _LEAN_BACKEND_ENV = "LEAN_BACKEND"
 _MCP_PROXY_LOCK = threading.Lock()
 _MCP_PROXY: Optional["_LeanMcpProxyClient"] = None
+# =====================================================================
+# MCP **实例池**（2026-09-13）：并行通道，LEAN_MCP_WORKERS>1 时启用
+# ---------------------------------------------------------------------
+# 事实澄清（勿再重复推断）：串行的**不是 lean-lsp-mcp**，是我们自己的代理层。
+# lean_lsp_mcp/client_utils.py 自身就支持并发：
+#   · `_project_runtimes`：按工程根缓存 client（一个 MCP server 可同时持有多个工程）
+#   · `_MAX_SHARED_CLIENTS = 8`；`CLIENT_LOCK` 是 asyncio.Lock（仅护 client 创建）
+#   · `LEAN_MCP_SCRATCH_SLOTS`（默认 1）、`LEAN_LSP_MAX_OPEN_FILES`（默认 4）
+#   · `LEAN_MCP_PREWARM_FILES`：启动即预热，把冷启动藏进 agent 的规划阶段
+#   · `LEAN_BUILD_CONCURRENCY`：allow / cancel / share
+# 串行来自本文件的 `_MCP_PROXY()` 单例 + `_MCP_PROXY_LOCK` 全局锁：一次调用
+# 全程独占，多 worker 也退化成排队。
+#
+# 本池做法：K 个独立 proxy 进程 ⇒ K 个独立 lean-lsp-mcp ⇒ K 个独立 Lean LSP
+# server ⇒ 真正的并行。每个实例同一时刻只服务一个请求（沿用一问一答协议）。
+# ⚠ K 的上限由**内存**决定，不是 CPU：每个 Lean server 都把 Mathlib 载进内存
+#   （实测本机 32 核 / 15.2 GiB ⇒ K 实际只能取 2~4；容器内通常更紧）。
+#   ⇒ 想加大并发必须先量一个 Lean server 的 RSS，而不是看核数。
+# 开关 LEAN_MCP_WORKERS 默认 1 = 旧的单例+全局锁路径（行为逐字不变，便于 A/B）。
+# =====================================================================
+# 池按 **work_dir 分桶**：实例创建时就把 work_dir 绑成了 lean-lsp-mcp 的
+# LEAN_PROJECT_PATH，跨工程复用会让诊断落在错误的工程根
+# （`get_relative_file_path` 解析不到 → 报错或张冠李戴）。
+# 因此实例只在**同一工程内**复用；全进程实例总数受 K 约束（内存上界）。
+_MCP_POOLS: dict = {}                         # work_dir -> queue.Queue（空闲实例）
+_MCP_POOL_MADE: dict = {}                     # work_dir -> 已建实例数（含在用）
+_MCP_POOL_TOTAL = 0                           # 全进程实例总数（≤ K）
+_MCP_POOL_LOCK = threading.Lock()
+# 并行通道下 LeanBridge 会被多线程调用：Lean/MCP 编译可并行，但 LLM 调用必须
+# 串行（限流口径按单线程标定；client 非线程安全契约）。K=1 时不加锁。
+_LLM_SERIAL_LOCK = threading.Lock()
+# os.environ["LEAN_PATH"] 的自增注入是"读-改-写"，并行下必须加锁（防丢更新）
+_LEAN_PATH_LOCK = threading.Lock()
 # 2026-09-12：mcp 门控未通过的告警去重（每个 work_dir 只报一次，防逐候选刷屏）
 _MCP_GATE_WARNED = set()
 
@@ -562,6 +597,117 @@ def _is_lake_workdir(work_dir: str) -> bool:
                for f in ("lakefile.toml", "lakefile.lean", "lake-manifest.json"))
 
 
+# 最小 lake 工程标记（内容刻意极简：只为让 lean-lsp-mcp 认这是工程根）
+_MIN_LAKEFILE_TOML = 'name = "mathlib"\ndefaultTargets = []\n'
+_MIN_MANIFEST_JSON = (
+    '{"version": "1.1.0", "packagesDir": ".lake/packages", '
+    '"packages": [], "name": "mathlib", "lakeDir": ".lake"}\n')
+# lean-lsp-mcp 的 require_lean_project_path 还强制要求 `lean-toolchain` 文件，
+# 缺失即 ValueError 启动失败（2026-09-12 实测抓到，见 _min_toolchain_content）
+_FALLBACK_TOOLCHAIN = "leanprover/lean4:v4.31.0"
+
+
+def _min_toolchain_content() -> str:
+    """`lean-toolchain` 内容：env > 仓根同名文件 > 项目锁定版本兜底。"""
+    env = (os.environ.get("LEAN_TOOLCHAIN", "") or "").strip()
+    if env:
+        return env + "\n"
+    try:
+        p = os.path.join(_project_root(), "lean-toolchain")
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", errors="replace") as f:
+                t = f.read().strip()
+            if t:
+                return t + "\n"
+    except Exception:  # noqa: BLE001
+        pass
+    return _FALLBACK_TOOLCHAIN + "\n"
+
+
+def _is_mcp_project_root(root: str) -> bool:
+    """lean-lsp-mcp `require_lean_project_path()` 的等价要求。
+
+    实测（2026-09-12）该库硬性要求：`lean-toolchain` **且**
+    （`lakefile.lean` 或 `lakefile.toml`）；缺任一项即启动 ValueError。
+    比 `_is_lake_workdir`（三选一）严格 —— 门控必须按这个口径判。
+    """
+    if not root or not os.path.isdir(root):
+        return False
+    if not os.path.isfile(os.path.join(root, "lean-toolchain")):
+        return False
+    return any(os.path.isfile(os.path.join(root, f))
+               for f in ("lakefile.toml", "lakefile.lean"))
+
+
+def _ensure_min_lake_project(root: str) -> bool:
+    """Mathlib **闭包**目录缺 lake 工程标记时，补最小工程文件（幂等）。
+
+    背景（2026-09-12，用户要求 mcp 必须可用）：
+      平台部署形态是「Mathlib 闭包 + LEAN_PATH」，全仓**没有** lakefile；
+      而 `verify()` 在 project_dir 非空时把 **work_dir 设为 project_dir 本身**
+      （见 `_compile(code, project_dir, ...)`），于是 mcp 门控恒为 False →
+      **lean-lsp-mcp 在平台永不被调用**，连带丢失它的三项高价值错误反馈能力：
+      错误行 goal state / multi_attempt 可用策略 / hover 查证 API。
+
+    这里只补**工程标记**（lean-toolchain + lakefile.toml + manifest），不搬动
+    任何 olean：Lean 编译仍走 lean.exe + LEAN_PATH 原路径
+    （`_compile_lean` 的 is_lake 判定只看可执行文件名），行为不变。
+
+    返回 True 表示该目录现在满足 lean-lsp-mcp 的工程根要求。
+    """
+    try:
+        if not root or not os.path.isdir(root):
+            return False
+        # 只对「含 Mathlib olean 的闭包目录」动手，避免在任意目录乱写文件
+        ml = os.path.join(root, "Mathlib")
+        if not os.path.isdir(ml):
+            return False
+        has_olean = False
+        try:
+            for i, fn in enumerate(os.listdir(ml)):
+                if i > 400:
+                    break
+                if fn.endswith(".olean"):
+                    has_olean = True
+                    break
+        except OSError:
+            return False
+        if not has_olean:
+            return False
+        wrote = []
+        for fn, content in (("lakefile.toml", _MIN_LAKEFILE_TOML),
+                            ("lake-manifest.json", _MIN_MANIFEST_JSON),
+                            ("lean-toolchain", _min_toolchain_content())):
+            p = os.path.join(root, fn)
+            if not os.path.isfile(p):
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(content)
+                wrote.append(fn)
+        if wrote:
+            logger.info("[LeanBridge] ★ 已为 Mathlib 闭包补最小 lake 工程标记 %s：%s"
+                        "（mcp 需要工程根；可用 LEAN_MCP_AUTOLAKE=0 关闭）",
+                        root, ", ".join(wrote))
+        return _is_mcp_project_root(root)
+    except Exception as exc:  # noqa: BLE001  只读挂载/权限不足 → 静默失败
+        logger.warning("[LeanBridge] 补 lake 工程标记失败（忽略）: %s", exc)
+        return False
+
+
+def _mcp_gate_ok(work_dir: str) -> bool:
+    """mcp 后端门控：work_dir 必须满足 lean-lsp-mcp 的工程根要求。
+
+    2026-09-12 升级：单纯 `_is_lake_workdir` 会让「闭包 + LEAN_PATH」部署形态
+    永久不可用（平台实测即如此）。现按 `LEAN_MCP_AUTOLAKE`（**默认 1**，因用户
+    明确要求 mcp 必须可用）在闭包目录上补最小工程文件后再判定。
+    设 `LEAN_MCP_AUTOLAKE=0` 可恢复旧的严格门控（仅现成 lake 工程才走 mcp）。
+    """
+    if _is_mcp_project_root(work_dir):
+        return True
+    if (os.environ.get("LEAN_MCP_AUTOLAKE", "1") or "1").strip() in ("0", "false", "no"):
+        return False
+    return _ensure_min_lake_project(work_dir)
+
+
 def _detect_mcp_proxy_python() -> str:
     """探测装有 lean-lsp-mcp 的 venv python（代理执行器）。
 
@@ -601,6 +747,20 @@ def _mcp_proxy_script() -> str:
     return p if os.path.isfile(p) else ""
 
 
+def mcp_available() -> bool:
+    """MCP 通道是否真可用（venv python + 代理脚本都在）。
+
+    用途：**并行只在 MCP 可用时启用**。理由：MCP 走 LSP 常驻诊断（单次 60s 量级、
+    实例间彼此独立 ⇒ 并行收益明确）；而 bridge 是 `lake env lean` 全量编译，
+    并行收益未验证，且同工程目录并发跑 lake 有额外风险。
+    MCP 不可用时（如比赛平台无 Lean 环境）一切照旧走串行 bridge —— 零行为变化。
+    """
+    try:
+        return bool(_detect_mcp_proxy_python() and _mcp_proxy_script())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class _LeanMcpProxyClient:
     """spawn venv python 跑 lean_mcp_proxy.py，一行 JSON 一问一答。
 
@@ -613,15 +773,44 @@ class _LeanMcpProxyClient:
         env = dict(os.environ)
         env["LEAN_PROJECT_PATH"] = project_dir
         env.setdefault("LEAN_LOG_LEVEL", "NONE")
+        # 2026-09-13 修复（诊断能力）：stderr 由 DEVNULL 改为 PIPE + 后台收割。
+        # 原因：`lean-lsp-mcp` 启动失败时（典型场景：LEAN_PROJECT_PATH 指向的
+        # 目录不是合法 Lean 工程 → app_lifespan 里 require_lean_project_path
+        # 抛异常），**子进程是活着的但永不响应任何请求**；原实现把 stderr 丢弃，
+        # 且统一报"proxy 无响应（可能崩溃）"，把排查方向带偏（实测误导过一次
+        # 完整诊断）。注意必须**持续读取**——PIPE 写满会阻塞子进程。
         try:
             self._proc = subprocess.Popen(
                 [python, script],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                stderr=subprocess.PIPE, text=True, encoding="utf-8",
                 errors="replace", env=env, bufsize=1)
         except OSError as exc:
             raise RuntimeError(f"proxy 启动失败: {exc}") from exc
         self._seq = 0
+        self._stderr_tail = ""
+        threading.Thread(target=self._drain_stderr, daemon=True).start()
+
+    def _drain_stderr(self) -> None:
+        """后台收割 stderr，仅保留尾部（供启动失败时给出真实原因）。"""
+        try:
+            proc = self._proc
+            if proc is None or proc.stderr is None:
+                return
+            for line in iter(proc.stderr.readline, ""):
+                if not line:
+                    break
+                self._stderr_tail = (self._stderr_tail + line)[-4000:]
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _stderr_hint(self, limit: int = 3) -> str:
+        """把 stderr 尾部压成一行附到异常信息里（无内容则返回空串）。"""
+        raw = (self._stderr_tail or "").strip()
+        if not raw:
+            return ""
+        lines = [x.strip(" |+") for x in raw.splitlines() if x.strip()]
+        return "；stderr 尾部: " + " / ".join(lines[-limit:])[:400]
 
     def request(self, file_path: str, timeout: float = 150.0,
                 goal_line=None, goal_column=None) -> dict:
@@ -659,7 +848,17 @@ class _LeanMcpProxyClient:
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"proxy 读响应失败: {exc}") from exc
         if not resp_line:
-            raise RuntimeError("proxy 无响应（可能崩溃）")
+            # 2026-09-13：区分两种**完全不同**的故障，避免误判（见 __init__ 注释）。
+            #   · 进程已退出            → 真崩溃 / 被外部杀掉
+            #   · 进程存活但无输出      → MCP 服务启动失败（真实原因在 stderr）
+            _rc = self._proc.poll()
+            _hint = self._stderr_hint()
+            if _rc is not None:
+                raise RuntimeError(f"proxy 进程已退出（退出码={_rc}）{_hint}")
+            raise RuntimeError(
+                "proxy 无输出：进程存活但 MCP 服务未就绪"
+                "（常见原因：LEAN_PROJECT_PATH 指向的不是合法 Lean 工程）"
+                + _hint)
         try:
             resp = json.loads(resp_line)
         except json.JSONDecodeError as exc:
@@ -698,7 +897,17 @@ class _LeanMcpProxyClient:
             raise RuntimeError(f"proxy 响应超时（>{timeout:.0f}s）")
         resp_line = q.get_nowait() if not q.empty() else ""
         if not resp_line:
-            raise RuntimeError("proxy 无响应（可能崩溃）")
+            # 2026-09-13：区分两种**完全不同**的故障，避免误判（见 __init__ 注释）。
+            #   · 进程已退出            → 真崩溃 / 被外部杀掉
+            #   · 进程存活但无输出      → MCP 服务启动失败（真实原因在 stderr）
+            _rc = self._proc.poll()
+            _hint = self._stderr_hint()
+            if _rc is not None:
+                raise RuntimeError(f"proxy 进程已退出（退出码={_rc}）{_hint}")
+            raise RuntimeError(
+                "proxy 无输出：进程存活但 MCP 服务未就绪"
+                "（常见原因：LEAN_PROJECT_PATH 指向的不是合法 Lean 工程）"
+                + _hint)
         try:
             return json.loads(resp_line)
         except json.JSONDecodeError as exc:
@@ -749,26 +958,429 @@ class _LeanMcpProxyClient:
             self._proc = None
 
 
+def _total_ram_gb() -> float:
+    """物理内存总量（GiB）。取不到 → 按 8.0 保守估（宁小勿大）。"""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MS(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            m = _MS()
+            m.dwLength = ctypes.sizeof(_MS)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                return float(m.ullTotalPhys) / float(1 << 30)
+        else:
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        return float(line.split()[1]) / (1024.0 * 1024.0)
+    except Exception:  # noqa: BLE001
+        pass
+    return 8.0
+
+
+def _avail_ram_gb() -> float:
+    """当前**可用**物理内存（GiB）。取不到 → 返回一个大值（不做无谓拦截）。"""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MS(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            m = _MS()
+            m.dwLength = ctypes.sizeof(_MS)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                return float(m.ullAvailPhys) / float(1 << 30)
+        else:
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        return float(line.split()[1]) / (1024.0 * 1024.0)
+    except Exception:  # noqa: BLE001
+        pass
+    return 1e6
+
+
+# 再建一个 Lean server 的内存门槛（GiB）。低于它就不再扩池，宁可回落 bridge —— 
+# 单个 Lean+Mathlib 常驻 1.5–4 GB，深夜/繁忙机器上硬开会把整台机器拖垮（OOM = 全盘失败）。
+_MIN_FREE_GIB_FOR_NEW = 1.5
+_NO_ROOM_WARNED = False
+
+
+def _mcp_room_for_new_instance() -> bool:
+    """是否还有余量再起一个 Lean server（防 OOM 护栏）。"""
+    global _NO_ROOM_WARNED
+    ok = _avail_ram_gb() >= _MIN_FREE_GIB_FOR_NEW
+    if not ok and not _NO_ROOM_WARNED:
+        _NO_ROOM_WARNED = True
+        logger.warning(
+            "[LeanBridge] 可用内存不足 %.1f GiB → 不再扩充 MCP 实例（回落 bridge）",
+             _MIN_FREE_GIB_FOR_NEW)
+    return ok
+
+
+def _auto_workers() -> int:
+    """自动并行度：**由内存定，其次核数**（每个 Lean server 都把 Mathlib 载进内存）。
+
+    K = clamp(1, min(8, 总内存GiB//4, max(1, 核数//4)))
+    - 硬上限 8：与 lean-lsp-mcp 自身的 `_MAX_SHARED_CLIENTS = 8` 对齐；
+    - ``//4``：单个 Lean+Mathlib 常驻约 1.5–4 GB，按 4 GB 留量最保守；
+      核数按 4 核/实例（Lean 载入 Mathlib 是多线程的）。
+    例：本机 32 核 / 15.2 GiB ⇒ min(8, 3, 8) = **3**；
+        平台 32 核 / 32 GiB ⇒ min(8, 8, 8) = **8**。
+    ⚠ 这是"能开几个"的上界估算；真值仍要量单实例 RSS。
+      另有运行期护栏 `_mcp_room_for_new_instance()`：可用内存 <1.5 GiB 即停止扩池。
+    """
+    try:
+        cores = os.cpu_count() or 2
+    except Exception:  # noqa: BLE001
+        cores = 2
+    by_ram = int(_total_ram_gb() // 4)
+    by_cpu = max(1, int(cores) // 4)
+    return max(1, min(8, by_ram, by_cpu))
+
+
+_WORKERS_LOGGED = False
+
+
+def lean_parallelism() -> int:
+    """MCP/Lean 并行度（``LEAN_MCP_WORKERS``）。
+
+    - 未设置 / ``auto`` / ``0`` → 按内存与核数自动推算（见 ``_auto_workers``）；
+    - 显式正整数 → 用该值（``1`` = 旧的单例 + 全局锁，逐字不变）；
+    - 非法值 → 自动。
+    """
+    global _WORKERS_LOGGED
+    raw = (os.environ.get("LEAN_MCP_WORKERS", "") or "").strip().lower()
+    if raw in ("", "auto", "0"):
+        k = _auto_workers()
+        auto = True
+    else:
+        try:
+            k = max(1, int(raw))
+            auto = False
+        except (TypeError, ValueError):
+            k = _auto_workers()
+            auto = True
+    if not _WORKERS_LOGGED:
+        _WORKERS_LOGGED = True
+        logger.info(
+            "[LeanBridge] MCP 并行度 K=%d（%s；内存 %.1f GiB / %s 核）—— "
+            "1 = 单例串行，>1 = 实例池并行",
+            k, "auto" if auto else "显式", _total_ram_gb(), os.cpu_count())
+    return k
+
+
+def _mcp_workers() -> int:
+    """内部别名（保持旧调用点可读）。"""
+    return lean_parallelism()
+
+
+def _mcp_pool_reset() -> None:
+    """关闭并清空全部实例池（测试/收尾用）。
+
+    注意：只关**空闲**实例；正在被借出的实例由 ``_mcp_acquire`` 的 finally 归还时
+    自然丢弃（名额已清零，等价于"下次重建"）。
+    """
+    global _MCP_POOL_TOTAL
+    with _MCP_POOL_LOCK:
+        pools = list(_MCP_POOLS.values())
+        _MCP_POOLS.clear()
+        _MCP_POOL_MADE.clear()
+        _MCP_POOL_TOTAL = 0
+    for _q in pools:
+        while True:
+            try:
+                _c = _q.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                _c.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+# =====================================================================
+# 并发安全的临时 .lean 文件（MCP 诊断用）
+# ---------------------------------------------------------------------
+# 调用方用 `%d_%d % (pid, int(monotonic()*1e6))` 或 `%ms` 生成文件名：并发提交时
+# 存在**极小概率**撞名（同微秒/同毫秒），一旦撞名两个线程会互相覆盖内容 →
+# LSP 诊断张冠李戴（把 A 的错误算到 B 头上）。这里只在本进程内登记"正在使用"，
+# 撞名就把内容复制成唯一副本，用完移入 `_lean_trash/`；不改变调用方的写入/清理契约。
+# =====================================================================
+_MCP_FILE_INUSE: set = set()
+_MCP_FILE_LOCK = threading.Lock()
+
+
+def _mcp_unique_file(lean_file: str) -> tuple:
+    """取一个独占的 .lean 路径；返回 ``(路径, 是否副本)``。"""
+    key = os.path.normcase(os.path.abspath(lean_file))
+    with _MCP_FILE_LOCK:
+        if key not in _MCP_FILE_INUSE:
+            _MCP_FILE_INUSE.add(key)
+            return lean_file, False
+    stem, ext = os.path.splitext(lean_file)
+    for i in range(1, 10000):
+        cand = "%s__w%d%s" % (stem, i, ext)
+        ckey = os.path.normcase(os.path.abspath(cand))
+        with _MCP_FILE_LOCK:
+            if ckey in _MCP_FILE_INUSE:
+                continue
+            _MCP_FILE_INUSE.add(ckey)
+        try:
+            shutil.copyfile(lean_file, cand)
+        except Exception:  # noqa: BLE001  复制失败 → 退回原名（旧行为）
+            with _MCP_FILE_LOCK:
+                _MCP_FILE_INUSE.discard(ckey)
+            return lean_file, False
+        return cand, True
+    return lean_file, False
+
+
+def _mcp_release_file(lean_file: str, is_copy: bool, work_dir: str = "") -> None:
+    """释放登记；副本移入 ``_lean_trash/``（不用 os.remove，避开沙箱硬杀钩子）。"""
+    with _MCP_FILE_LOCK:
+        _MCP_FILE_INUSE.discard(os.path.normcase(os.path.abspath(lean_file)))
+    if is_copy and work_dir:
+        _trash_lean_file(work_dir, os.path.basename(lean_file))
+
+
+
+
+def _mcp_client_alive(client) -> bool:
+    """实例健康判定：进程存在且未退出（已 close() 视为不可用）。"""
+    try:
+        proc = getattr(client, "_proc", None)
+        return proc is not None and proc.poll() is None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# 异常/超时后"必须丢弃"的实例（按 id 登记，避免给对象加属性）。
+# 为什么不能只看进程存活：读超时后进程往往还活着，但那次的**响应会迟到**，
+# 一旦归还池里被下一个请求读到就会"张冠李戴"（一问一答协议错位）。
+_MCP_DROP: set = set()
+_MCP_DROP_LOCK = threading.Lock()
+
+
+def _mcp_mark_drop(client) -> None:
+    """标记实例不可复用：下次归还时关闭并释放名额（调用方不再自行 close）。"""
+    if client is None:
+        return
+    with _MCP_DROP_LOCK:
+        _MCP_DROP.add(id(client))
+
+
+def _mcp_take_drop_flag(client) -> bool:
+    """取出并清除"需丢弃"标记。"""
+    key = id(client)
+    with _MCP_DROP_LOCK:
+        if key in _MCP_DROP:
+            _MCP_DROP.discard(key)
+            return True
+    return False
+
+
+# MCP 计时统计（累计）。用途：让"单次 61s / 占总时长 54%"这类结论**可取证** ——
+# 此前全仓没有任何 MCP 计时埋点，所有耗时都是用日志时间戳反推的。
+_MCP_STATS = {"calls": 0, "ok": 0, "fail": 0, "seconds": 0.0}
+_MCP_STATS_LOCK = threading.Lock()
+
+
+def mcp_stats() -> dict:
+    """累计 MCP 诊断调用统计（calls / ok / fail / seconds）。"""
+    with _MCP_STATS_LOCK:
+        return dict(_MCP_STATS)
+
+
+def _mcp_note(seconds: float, ok: bool) -> None:
+    with _MCP_STATS_LOCK:
+        _MCP_STATS["calls"] += 1
+        _MCP_STATS["seconds"] += float(seconds)
+        _MCP_STATS["ok" if ok else "fail"] += 1
+
+
+def _wd_key(work_dir: str) -> str:
+    """池分桶键：同一工程目录的不同写法必须落到同一桶。"""
+    try:
+        return os.path.normcase(os.path.abspath(work_dir))
+    except Exception:  # noqa: BLE001
+        return str(work_dir)
+
+
+def _pool_drop(wd_key: str) -> None:
+    """实例不可用 → 释放名额（下次可重建）并回收空桶。"""
+    global _MCP_POOL_TOTAL
+    with _MCP_POOL_LOCK:
+        _MCP_POOL_TOTAL = max(0, _MCP_POOL_TOTAL - 1)
+        n = max(0, _MCP_POOL_MADE.get(wd_key, 0) - 1)
+        if n:
+            _MCP_POOL_MADE[wd_key] = n
+        else:
+            _MCP_POOL_MADE.pop(wd_key, None)
+
+
+@contextlib.contextmanager
+def _mcp_acquire(work_dir: str, wait: float = 240.0):
+    """借出一个 MCP 代理实例；yield None 表示 mcp 不可用（调用方回落 bridge）。
+
+    - ``LEAN_MCP_WORKERS<=1``：旧路径 —— 单例 + 全局锁（锁跨整个调用持有，行为不变）。
+    - ``>1``：实例池 —— **按 work_dir 分桶**，池满则阻塞等待 ``wait`` 秒，
+      仍取不到则 yield None（宁可回落 bridge，也不把主链无限期挂住）。
+    - 归还时做健康判定：进程已退出 / 已被 close() 的实例**丢弃不归还** ——
+      避免"某次读超时、响应迟到"污染下一个请求（一问一答协议错位）。
+    """
+    global _MCP_PROXY, _MCP_POOL_TOTAL
+    py = _detect_mcp_proxy_python()
+    sc = _mcp_proxy_script()
+    if not (py and sc and work_dir):
+        yield None
+        return
+    if _mcp_workers() <= 1:
+        # ---- 旧路径：单例 + 全局锁（逐字保留原语义）----
+        _MCP_PROXY_LOCK.acquire()
+        try:
+            if _MCP_PROXY is None:
+                try:
+                    _MCP_PROXY = _LeanMcpProxyClient(py, sc, work_dir)
+                except Exception:  # noqa: BLE001
+                    _MCP_PROXY = None
+            yield _MCP_PROXY
+        finally:
+            if _mcp_take_drop_flag(_MCP_PROXY):
+                try:
+                    _MCP_PROXY.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                _MCP_PROXY = None          # 出错实例 → 关闭并下次重建
+            elif not _mcp_client_alive(_MCP_PROXY):
+                _MCP_PROXY = None          # 进程已死 → 下次重建
+            _MCP_PROXY_LOCK.release()
+        return
+    # ---- 池路径：K 个独立实例，可真正并行（严格按 work_dir 分桶）----
+    _wd = _wd_key(work_dir)
+    with _MCP_POOL_LOCK:
+        q = _MCP_POOLS.get(_wd)
+        if q is None:
+            q = _MCP_POOLS[_wd] = queue.Queue()
+    client = None
+    try:
+        client = q.get_nowait()
+    except queue.Empty:
+        # 内存护栏（2026-09-13）：首个实例总允许（等价旧单例行为）；
+        # 再加实例前先看可用内存，不足则不再扩池（回落 bridge，避免 OOM）。
+        _room = _mcp_room_for_new_instance() if _MCP_POOL_TOTAL > 0 else True
+        make = False
+        with _MCP_POOL_LOCK:
+            if _MCP_POOL_TOTAL < _mcp_workers() and (_MCP_POOL_TOTAL == 0 or _room):
+                _MCP_POOL_TOTAL += 1
+                _MCP_POOL_MADE[_wd] = _MCP_POOL_MADE.get(_wd, 0) + 1
+                make = True
+        if not make:
+            # 名额已满：本工程一时没有空闲实例 → **回收别工程的空闲实例**再新建。
+            # 依据：实例创建时把 LEAN_PROJECT_PATH 绑死了工程根，别工程的实例对本
+            # 工程毫无用处；而"空等本桶归还"在只有一个活跃工程时等价于死等
+            # （实测会挂满 wait 秒）。回收的是**空闲**实例，不打断任何在跑的请求。
+            stolen = None
+            with _MCP_POOL_LOCK:
+                for _k, _q in list(_MCP_POOLS.items()):
+                    if _k == _wd:
+                        continue
+                    try:
+                        stolen = (_k, _q.get_nowait())
+                        break
+                    except queue.Empty:
+                        continue
+            if stolen is not None:
+                try:
+                    stolen[1].close()
+                except Exception:  # noqa: BLE001
+                    pass
+                with _MCP_POOL_LOCK:
+                    _n = max(0, _MCP_POOL_MADE.get(stolen[0], 0) - 1)
+                    if _n:
+                        _MCP_POOL_MADE[stolen[0]] = _n
+                    else:
+                        _MCP_POOL_MADE.pop(stolen[0], None)
+                    _MCP_POOL_MADE[_wd] = _MCP_POOL_MADE.get(_wd, 0) + 1
+                    # 净值不变：关掉 1 个 + 新建 1 个 ⇒ _MCP_POOL_TOTAL 保持
+                make = True
+        if make:
+            try:
+                client = _LeanMcpProxyClient(py, sc, work_dir)
+            except Exception:  # noqa: BLE001
+                _pool_drop(_wd)
+                client = None
+        else:
+            try:
+                # 同工程并发争用：等**本工程**实例归还（不跨工程等待）
+                client = q.get(timeout=max(1.0, wait))
+            except queue.Empty:
+                client = None
+    if client is None:
+        logger.warning(
+            "[LeanBridge] mcp 实例池取用失败（K=%d, work_dir=%s）→ 回落 bridge",
+            _mcp_workers(), work_dir)
+        yield None
+        return
+    try:
+        yield client
+    finally:
+        if not _mcp_take_drop_flag(client) and _mcp_client_alive(client):
+            q.put(client)                  # 健康实例归还本工程桶
+        else:
+            try:
+                client.close()             # 出错/已死 → 关闭（仅此一处 close）
+            except Exception:  # noqa: BLE001
+                pass
+            _pool_drop(_wd)
+
+
 def mcp_run_code(code: str, work_dir: str, timeout: float = 120.0) -> dict:
     """模块级：用 lean-lsp-mcp **本地执行**一段 Lean 代码（B1 数值验证用）。
 
     2026-09-11：为"数值计算验证"提供入口（与 SymPy 互为独立交叉校验）。
     - 全本地 LSP，不联网；mcp 环境缺失/异常 → 返回 {"ok": False, "error": ...}，
       调用方须**静默降级**（不得阻断主链路）。
-    - 与 _compile_via_mcp 共用同一全局 proxy（并发串行化，正确性优先）。
+    - 2026-09-13：改经 ``_mcp_acquire`` 借出实例 —— K=1 时即旧的单例 + 全局锁；
+      K>1 时与 ``_compile_via_mcp`` 共享实例池 ⇒ 数值核验与编译核验可并行。
     """
-    global _MCP_PROXY
-    py = _detect_mcp_proxy_python()
-    sc = _mcp_proxy_script()
-    if not (py and sc and work_dir):
-        return {"ok": False, "error": "mcp-env-missing"}
-    try:
-        with _MCP_PROXY_LOCK:
-            if _MCP_PROXY is None:
-                _MCP_PROXY = _LeanMcpProxyClient(py, sc, work_dir)
-            return _MCP_PROXY.run_code(code, timeout=timeout)
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    with _mcp_acquire(work_dir) as proxy:
+        if proxy is None:
+            return {"ok": False, "error": "mcp-env-missing"}
+        try:
+            _t0 = time.monotonic()
+            out = proxy.run_code(code, timeout=timeout)
+            _mcp_note(time.monotonic() - _t0, bool(out.get("ok")))
+            logger.info("[LeanBridge] ★ mcp run_code 耗时 %.1fs（ok=%s）",
+                        time.monotonic() - _t0, bool(out.get("ok")))
+            return out
+        except Exception as exc:  # noqa: BLE001
+            _mcp_mark_drop(proxy)      # 出错实例丢弃，避免协议错位（归还时统一关闭）
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
@@ -776,21 +1388,42 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
     """用 lean-lsp-mcp（经 proxy）做行级诊断验证，verdict 语义与 bridge 对齐。
 
     返回 {"ok": bool, "error": str}；mcp 不可用/异常返回 None（调用方回落 bridge）。
-    全程持 _MCP_PROXY_LOCK：多 worker 并发时串行化（正确性优先，mcp 为实验后端）。
+    2026-09-13：① 改经实例池借出（``LEAN_MCP_WORKERS``，1 = 旧的单例 + 全局锁）；
+    ② 并发撞名保护 —— 同名 .lean 被两个线程同时诊断会互相覆盖内容 → 取唯一副本，
+    用完移入 ``_lean_trash/``（不改变调用方的写入/清理契约）。
     """
-    global _MCP_PROXY
-    python = _detect_mcp_proxy_python()
-    script = _mcp_proxy_script()
-    if not python or not script:
-        logger.warning("[LeanBridge] mcp 后端：无 venv python/代理脚本 → 回落 bridge")
-        return None
-    with _MCP_PROXY_LOCK:
+    _qfile, _qcopy = _mcp_unique_file(lean_file)
+    try:
+        return _compile_via_mcp_locked(_qfile, code, work_dir, timeout,
+                                       allow_sorry)
+    finally:
+        _mcp_release_file(_qfile, _qcopy, work_dir)
+
+
+def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
+                            timeout: float, allow_sorry: bool) -> Optional[dict]:
+    """``_compile_via_mcp`` 的实现体（已持有独占 .lean 路径）。"""
+    with _mcp_acquire(work_dir) as _px:
+        if _px is None:
+            logger.warning(
+                "[LeanBridge] mcp 后端：无 venv python/代理脚本或实例池取用失败 "
+                "→ 回落 bridge")
+            return None
         try:
-            if _MCP_PROXY is None:
-                _MCP_PROXY = _LeanMcpProxyClient(python, script, work_dir)
             # 首文件冷启动（lean server 加载 Mathlib）可达 60-90s → 放宽
-            resp = _MCP_PROXY.request(lean_file,
-                                      timeout=max(timeout + 60.0, 150.0))
+            # 2026-09-13：本次调用计时入账（这是唯一可信的 MCP 耗时口径；
+            # 此前全仓无埋点，耗时要靠日志时间戳反推）
+            _t0 = time.monotonic()
+            try:
+                resp = _px.request(lean_file,
+                                   timeout=max(timeout + 60.0, 150.0))
+            except BaseException:
+                _mcp_note(time.monotonic() - _t0, False)
+                raise
+            _mcp_el = time.monotonic() - _t0
+            _mcp_note(_mcp_el, bool(resp.get("ok")))
+            logger.info("[LeanBridge] ★ mcp 诊断耗时 %.1fs（ok=%s, K=%d）",
+                        _mcp_el, bool(resp.get("ok")), _mcp_workers())
             if not resp.get("ok"):
                 logger.warning(
                     "[LeanBridge] mcp 诊断失败（%s）→ 回落 bridge",
@@ -810,7 +1443,7 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                 gl = errors[0].get("line")
                 if gl and os.environ.get("LEAN_MCP_GOAL_LOC", "1") != "0":
                     try:
-                        gresp = _MCP_PROXY.request(
+                        gresp = _px.request(
                             lean_file, timeout=45.0, goal_line=int(gl),
                             goal_column=int(errors[0].get("column") or 1))
                         goal = gresp.get("goal")
@@ -826,7 +1459,7 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                     try:
                         _ln0 = int(errors[0].get("line") or 1)
                         _col0 = int(errors[0].get("column") or 1)
-                        _ma = _MCP_PROXY.multi_attempt(
+                        _ma = _px.multi_attempt(
                             lean_file, _ln0,
                             ["norm_num", "ring", "linarith", "omega",
                              "simp", "aesop", "positivity"],
@@ -854,7 +1487,7 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                             r"(?:unknown (?:identifier|constant)|Invalid field)"
                             r"\s*'?([A-Za-z_][\w'.]*)", _hmsgs)
                         if _hm:
-                            _hr = _MCP_PROXY.hover(lean_file, _hln, _hcol,
+                            _hr = _px.hover(lean_file, _hln, _hcol,
                                                    timeout=45.0)
                             _hraw = str(_hr.get("raw") or "")[:400]
                             if _hraw:
@@ -883,7 +1516,7 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
                     _tm = re.search(
                         r"\btheorem\s+([A-Za-z_][\w'.]*)", code or "")
                     if _tm:
-                        _vr = _MCP_PROXY.verify_theorem(
+                        _vr = _px.verify_theorem(
                             lean_file, _tm.group(1), timeout=45.0)
                         _vraw = str(_vr.get("raw") or "")
                         if "sorryAx" in _vraw:
@@ -899,12 +1532,7 @@ def _compile_via_mcp(lean_file: str, code: str, work_dir: str,
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] mcp 后端异常（%s）→ 回落 bridge",
                            str(exc)[:160])
-            try:
-                if _MCP_PROXY is not None:
-                    _MCP_PROXY.close()
-                    _MCP_PROXY = None
-            except Exception:  # noqa: BLE001
-                pass
+            _mcp_mark_drop(_px)        # 出错实例丢弃（超时后响应迟到会污染下一请求）
             return None
 
 
@@ -937,11 +1565,14 @@ def _compile_lean(
     # 已被环境显式设置时尊重原值（调用约定：env 显式最高优先），仅追加缺失闭包。
     _lean_entry = os.path.join(work_dir, "Mathlib", "Tactic.olean")
     if os.path.isfile(_lean_entry):
-        _lp = (os.environ.get("LEAN_PATH", "") or "").strip()
-        _lp_dirs = [os.path.normpath(d) for d in _lp.split(os.pathsep) if d]
-        if os.path.normpath(work_dir) not in _lp_dirs:
-            os.environ["LEAN_PATH"] = (
-                (_lp + os.pathsep) if _lp else "") + work_dir
+        # 2026-09-13：并行通道下多线程会同时走到这里 —— os.environ 是进程级共享，
+        # 读-改-写必须加锁，否则可能丢更新（LEAN_PATH 漏掉闭包 → bridge 直编失败）。
+        with _LEAN_PATH_LOCK:
+            _lp = (os.environ.get("LEAN_PATH", "") or "").strip()
+            _lp_dirs = [os.path.normpath(d) for d in _lp.split(os.pathsep) if d]
+            if os.path.normpath(work_dir) not in _lp_dirs:
+                os.environ["LEAN_PATH"] = (
+                    (_lp + os.pathsep) if _lp else "") + work_dir
     lean_file = os.path.join(work_dir, lean_filename)
     # 2026-09-11（mcp 可用性修复）：mcp 后端下规范化 imports —— 裸 `import Mathlib`
     # 在本机 Mathlib 布局下会触发 fatalError，导致 mcp 恒报 diagnostics_unavailable。
@@ -952,7 +1583,7 @@ def _compile_lean(
 
     # 档2（2026-09-04）：mcp 后端分发（仅 lake 工程；不可用返回 None 回落 bridge）。
     # 放在写文件之后、跑命令之前：mcp 路径复用同一 .lean 文件做 LSP 诊断。
-    if get_lean_backend() == "mcp" and _is_lake_workdir(work_dir):
+    if get_lean_backend() == "mcp" and _mcp_gate_ok(work_dir):
         logger.info("[LeanBridge] ★ 走 mcp 后端：%s（后端配置=%s）",
                     os.path.basename(lean_file), get_lean_backend())
         via_mcp = _compile_via_mcp(lean_file, code, work_dir, timeout,
@@ -1183,8 +1814,11 @@ class LeanBridge:
             if _pfm is not None:
                 msgs = _pfm(messages, seed)
                 stitch = _st
-        resp = self.client.chat(
-            messages=msgs, temperature=temperature, max_tokens=max_tokens)
+        _guard = (_LLM_SERIAL_LOCK if _mcp_workers() > 1
+                  else contextlib.nullcontext())
+        with _guard:
+            resp = self.client.chat(
+                messages=msgs, temperature=temperature, max_tokens=max_tokens)
         text = _normalize_bridge_response(resp)
         # 响应为空（API 故障/预算耗尽）时不拼接种子——否则种子本身会被当成
         # 结果（如 "import Mathlib.Tactic\n" 恰好是合法 Lean 代码 → 假 proof_valid）。
@@ -1280,16 +1914,25 @@ class LeanBridge:
         suggestion = parsed.get("suggestion", "") or ""
         critical_desc = parsed.get("critical_desc", "") or ""
 
+        # 2026-09-12：叠加**确定性修法**（由编译器原文特征推断）。
+        # 原实现 desc = `critical_desc or suggestion or compile_error[:300]` ——
+        # 只要 LLM 给出描述，编译器原文就被丢弃，模型因此拿不到"改哪一行"的信息
+        # （与 2.6 实测「2 轮重试 0 成功」同源）。此处把确定性修法**追加在末尾**：
+        # 既不破坏 LLM 的业务判断（逻辑错/翻译错的定性），又保证反馈始终可操作。
+        _det_hint = hint_for_compile_error(compile_error)
+        _base_desc = critical_desc or suggestion or compile_error[:300]
+        _desc = (_base_desc + "\n修法提示：" + _det_hint) if _det_hint else _base_desc
+
         if category in ("logic_error", "both"):
             findings = [Finding(
                 location="lean_verify", kind="Critical", severity=5,
-                desc=critical_desc or suggestion or compile_error[:300])]
+                desc=_desc)]
             report = BugReport(findings=findings, verdict="proof_invalid")
         else:
             # 纯翻译错误 / uncertain：视为可修复缺口，但需人工复核 → 降级 unknown
             findings = [Finding(
                 location="lean_translate", kind="Gap", severity=1,
-                desc=critical_desc or suggestion or "Lean 形式化/编译存在问题")] if repairable in ("yes", "partial") else []
+                desc=_desc or "Lean 形式化/编译存在问题")] if repairable in ("yes", "partial") else []
             report = BugReport(findings=findings, verdict="unknown")
 
         # 附加可修复性与修正建议（改造2 新增可选字段，向后兼容）
@@ -1877,6 +2520,54 @@ def _strip_code_fence(text: str) -> str:
     if m:
         return m.group(1).strip()
     return text.strip()
+
+
+def hint_for_compile_error(err: str) -> str:
+    """按 Lean 编译器错误的**文本特征**给出具体可执行的修法（确定性，不依赖 LLM）。
+
+    2026-09-12 新增（实测驱动）：Lean 通道的三个落点（2.6 前置形式化 / 3.6 候选
+    淘汰 / 6.5 最终闸门）此前都把"编译器能给的精确错误"降级成 LLM 的概括话术，
+    模型拿到后不知道改哪一行。实测 2.6 在 3 题上「2 轮重试 0 成功」的根因即此：
+    真实错误是 `Set.Fintype.card` 这个 API 不存在、以及把"值当类型"用，而反馈却
+    让模型「重新审题」。
+
+    返回空串 = 未识别出特征（调用方自行兜底），因此可安全叠加到既有描述之后。
+    """
+    e = (err or "").lower()
+    if not e:
+        return ""
+    if ("unknown identifier" in e or "unknown constant" in e
+            or "unknown namespace" in e or "unknown declaration" in e
+            or "unknown theorem" in e):
+        m = re.search(
+            r"unknown\s+(?:identifier|constant|namespace|declaration|theorem|"
+            r"axiom)[^A-Za-z0-9_]*([A-Za-z_][A-Za-z0-9_.]*)", err)
+        name = (m.group(1) if m else "")
+        if "." in name:
+            return ("**未知标识符**：`%s` 在 Mathlib 中不存在。这是 **API 名**，请改用"
+                    "等价的标准名称——例如「集合的元素个数」应写 `Set.ncard` / "
+                    "`Finset.card`（**没有 `Set.Fintype.card` 这个名字**）。" % name)
+        return ("**未知标识符**：`%s` 未定义。请先确认题目是否给出了该符号；若未给出，"
+                "请改用 Mathlib 已有记号，或先用 `def`/`abbrev` 把它定义出来。"
+                % (name or "该名字"))
+    if "type mismatch" in e or "has type" in e or "expected to have type" in e:
+        return ("**类型不匹配**：Lean 里**值不是类型**。`def n : Nat := 2025` 定义的是"
+                "**值**，不能当类型用——表示 n 个元素请用 `Fin n`，例如 "
+                "`Finset (Fin 2025 × Fin 2025)`。数值字面量出现在需要 `Prop` 的位置"
+                "也不可用，请显式标注类型（如 `(19 : ℕ)`）。")
+    if ("expected" in e or "unexpected token" in e or "invalid syntax" in e
+            or "line break" in e or "unknown token" in e):
+        return ("**语法错误**：① theorem 的**结论位不能直接写 `let ... in`**——请把结论"
+                "写成明确的命题，中间定义放进 `by` 块用 `have`/`let`；② 集合字面量 "
+                "`{x | P x}` **必须先声明类型**（如 `(S : Set ℕ) := {x | ...}`），"
+                "不能直接接 `.card`。")
+    if "failed to synthesize" in e or "instance" in e:
+        return ("**类型类实例推断失败**：多为类型标注缺失或用错。请为数值/集合显式标注"
+                "类型，并确认结构具备所需实例（如 `Finset` 的元素类型需 "
+                "`DecidableEq`）。")
+    if "unknown module prefix" in e:
+        return "**缺少模块导入**：请补上对应 `import`（如 `import Mathlib`）。"
+    return ""
 
 
 def _analyze_formal_gaps(compile_error: str) -> list:
