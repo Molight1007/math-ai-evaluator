@@ -559,6 +559,15 @@ class BlueprintPlannerAgent(BaseAgent):
         # （formal_spec/formal_gaps/theorem_memory）已随 2026-09-06 去 Lean 化
         # 全部移除（theorem_memory 为 lean_gate"编译验证通过"定理的复用缓存，
         # 无 Lean 后无写入方，2026-09-06 用户确认一并关闭），此处直接使用题干。
+        # 2026-09-13 B0：答案形态要求必须**也在 Blueprint 路径在场** ——
+        # 实测 003/074 都走 Blueprint DAG（blueprint_nodes=5/6），而此前只注入
+        # LLM 规划路径的 problem_text ⇒ 形态要求完全没生效（两条路径必须同源）。
+        try:
+            from .question_type import answer_form_requirement as _afr_bp
+            problem_text = problem_text + _afr_bp(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "")
+        except Exception:  # noqa: BLE001
+            pass
 
         user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
         last_resp = None
