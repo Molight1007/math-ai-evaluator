@@ -6,7 +6,8 @@ from __future__ import annotations
 在竞赛 6.5h 硬限内把全卷总耗时控制在约 5.83 小时（target=21000s），并把省下的预算集中投入难题。
 
 核心机制（借鉴 math_competition_agent 的 paper_pacer 思想，适配本版）：
-- 每档位有设计预算帽（tier_cap）：fast=120s / standard=540s / deep=1200s；
+- 每档位有设计预算帽（tier_cap）：standard=540s / deep=1200s；
+  2026-09-14 删除 fast 档（字典中的 fast 键保留作兜底，正常不再被使用）；
   （deep 上限 = 平台单题硬限 max_time_per_question=1200s，不可再抬）
 - 动态收紧：paper_cap = 剩余目标时间 / 剩余题数；
 - 软预算：soft_budget = min(tier_cap, max(paper_cap, MIN_SOFT))；

@@ -375,6 +375,47 @@ _ASKS_ALL_RE = re.compile(
     r"所有\s*可能|全部\s*可能", re.IGNORECASE)
 _ASKS_RANGE_RE = re.compile(
     r"范围|区间|取值范围|充要条件|必要条件|充分条件", re.IGNORECASE)
+# 极值类题（2026-09-14 B2 批次）：实测 016/066 都是"差一"失分——
+# 只验证了 n 可行、没验证 n±1 不可行。112 题中约 48 道含极值措辞。
+_EXTREMUM_RE = re.compile(
+    r"smallest|largest|minimum|maximum|least\s+possible|greatest\s+possible"
+    r"|minimal|maximal|最小|最大", re.IGNORECASE)
+
+
+_ANSWER_FMT_DIRECTIVE_RE = re.compile(
+    r"(Remember to put your final answer within\s*\\boxed\{\}\s*\.?|"
+    r"Put your final answer within\s*\\boxed\{\}\s*\.?|"
+    r"Please put your final answer within\s*\\boxed\{\}\s*\.?|"
+    r"请将最终答案(?:放|写)在\s*\\boxed\{\}\s*(?:内|中)[。.]?)",
+    re.IGNORECASE)
+
+
+def strip_answer_format_directive(problem: str) -> str:
+    """剥离题面里「把最终答案放进 \\boxed{}」这句格式指令。
+
+    ★ 2026-09-14 实测：**112/112 题全部带这句**（题库统一附加）。
+
+    为何必须剥离：它会随题面进入**每一个中间子目标**的 prompt ⇒
+      ① 每个选项判定子目标都输出 `\\boxed{A}`/`\\boxed{B}`…，
+         而不是要求的「结论：正确/错误」；
+      ② **最后一个选项**子目标直接吐**最终答案**（#103 的「判定选项 E」
+         就输出了 `\\boxed{ABCD}`）⇒ 聚合层认不出它是 E 的判定 ⇒ **丢项**。
+    该指令只对**最终汇总**步骤有效，故在子目标 prompt 中剥离（merge 仍保留）。
+    """
+    if not problem:
+        return problem or ""
+    _t = _ANSWER_FMT_DIRECTIVE_RE.sub("", problem)
+    return re.sub(r"\n{3,}", "\n\n", _t).strip()
+
+
+def asks_all_values(problem: str) -> bool:
+    """题面是否要求「所有 / 全部」取值（穷尽性搜索机制的触发条件）。
+
+    2026-09-14：003（漏 2030）与 074（漏取整解族）的失败**不是形态问题**——
+    模型自信地认为"只有一个解"，形态要求（必须枚举）对它无效。
+    需要的是**穷尽性搜索**：强制按解族分类穷举。本函数供该机制判定是否触发。
+    """
+    return bool(_ASKS_ALL_RE.search(problem or ""))
 
 
 def answer_form_requirement(problem: str, qtype: str = "") -> str:
@@ -391,10 +432,14 @@ def answer_form_requirement(problem: str, qtype: str = "") -> str:
     t = problem or ""
     if not t:
         return ""
-    if qtype == QT_CHOICE:
+    if qtype in (QT_CHOICE, QT_PROOF):
+        # 选择题：答案形态由 `objective_injection`（客观题特化）负责，
+        #   两套要求同时注入会互相干扰（曾把 093 的 `CE` 要求成"具体数值"）。
+        # 证明题：答案是**证明过程**而非数值/对象 ⇒ 注入"必须给具体值"有害。
         return ""
+    _parts: list = []
     if _ASKS_ALL_RE.search(t):
-        return (
+        _parts.append(
             "\n\n**【答案形态要求 · 必须遵守】**\n"
             "本题问『所有 / 全部』的取值：最终答案**必须逐项枚举出全部解**，"
             "用逗号分隔（正确示例：`2026, 2030`）。\n"
@@ -403,15 +448,27 @@ def answer_form_requirement(problem: str, qtype: str = "") -> str:
             "· 收尾前必须自问一句『是否存在第二个解族 / 另一支解？』"
             "并确认已穷尽所有可能。"
         )
-    if not _ASKS_RANGE_RE.search(t):
-        return (
+    elif not _ASKS_RANGE_RE.search(t):
+        _parts.append(
             "\n\n**【答案形态要求 · 必须遵守】**\n"
             "本题要求**具体数值或具体对象**（不是取值范围、不是充要条件）：\n"
             "· 最终答案必须是一个明确的值，或明确的对象列表；\n"
             "· **禁止**用 `≥ / ≤ / is even / for all / 任意` 等条件式"
             "或性质描述代替具体值。"
         )
-    return ""
+    # 2026-09-14 B2 批次：极值类题必须验证**边界严格性**。
+    # 实测 016（答 20 / 正解 21）、066（答 3 / 正解 4）都是同一种失分：
+    # **只验证了 n 可行，没验证 n±1 不可行** ⇒ 普遍性地"差一"。
+    if _EXTREMUM_RE.search(t):
+        _parts.append(
+            "\n\n**【极值题要求 · 必须遵守】**\n"
+            "本题求**极值**（最小/最大）。给出答案 n 时必须同时给出**两项**论证：\n"
+            "· **可行性**：给出达到 n 的**显式构造**（不能只说『存在』）；\n"
+            "· **严格性**：证明**相邻值**（求最小则 n−1，求最大则 n+1）"
+            "**不可能达到** —— 这是最常被漏掉的一步。\n"
+            "两项都成立才能提交 n；若发现 n 不可行或相邻值可行，必须修正答案。"
+        )
+    return "".join(_parts)
 
 
 # ---------------------------------------------------------------------------

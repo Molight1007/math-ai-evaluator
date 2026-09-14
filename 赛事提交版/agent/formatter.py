@@ -15,6 +15,7 @@ BUG 修复：
 """
 
 import logging
+import os
 import re
 
 from .base import BaseAgent, TaskContext
@@ -22,9 +23,40 @@ from utils.extract import format_response, is_truncated_answer
 
 logger = logging.getLogger("MathPilot")
 
+# 2026-09-13 晚：紧急直答（最终兜底）所需的最小剩余时间（秒）。
+# 这是"无论超没超时都要产出答案"的最后一环 —— 留 45s 让它有机会跑完一次
+# 短直答（prefill 答案前置 + 小 max_tokens，实测正常 1–3s）。
+_FINAL_ANSWER_MIN_SEC = float(os.getenv("FINAL_ANSWER_MIN_SEC", "45"))
+# 紧急直答的输出上限（token）。旧值 65536 = 允许它写一整篇论文，
+# 与"只要一行答案"的 prefill 语义矛盾，且在 120s 读超时下极易被截断。
+# 直答只需一行：512 足够，且能显著提高"一定拿到答案"的成功率。
+_EMERGENCY_ANSWER_MAX_TOKENS = int(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS", "512"))
+
 # 拒绝回答/不完整答案的模式（2026-09-02 加"子目标求解失败"占位符：
 # 占位符直接当最终答案 = 50% 错题（009/053/004/022 等），必须触发换候选兜底）
-_REFUSAL_RE = re.compile(r"无法求解|无法解决|不能解决|无法解答|我无法|暂无|无解|子目标求解失败", re.IGNORECASE)
+# 2026-09-13 晚补：新增 solver 的「生成失败」占位符族。实测 4 题里 010/016 的
+# `predicted` 就是 `[生成失败] 调用受限或模型拒绝回答` —— 它从 solver 的占位
+# 候选流到这里时**不被旧正则识别**，于是被当成合法答案直接提交（formatter:115）。
+# `生成失败`/`调用受限`/`拒绝回答`/`未给出有效解答`/`无法作答` 一律视为无效答案，
+# 触发 `_pick_fallback` → 换候选 → 最终 `_emergency_answer` 直答兜底。
+_REFUSAL_RE = re.compile(
+    r"无法求解|无法解决|不能解决|无法解答|我无法|暂无|无解|子目标求解失败|"
+    r"生成失败|调用受限|拒绝回答|未给出有效解答|无法作答",
+    re.IGNORECASE,
+)
+
+# 2026-09-13 晚：「答案缺失/占位」判据（**窄口径**，用于决定"要不要推翻现有答案
+# 重新求一次"）。与上面的 `_REFUSAL_RE` 的区别是**刻意不含** `无解` / `暂无` ——
+# 它们是合法答案（「该方程无解」就是正确答案），用它们触发 `_emergency_answer`
+# 会让直答**覆盖正确解**（独立验证者实测：answer='无解' 被覆盖成 '7'）。
+# `_REFUSAL_RE` 的宽松口径仅用于"换个候选试试"（第 89 行），语义不同故分开。
+# ⚠ 本常量与 `agent/orchestrator.py::_DEGRADED_ANSWER_RE`、
+#   `user_agent.ReasoningAgent._DEGRADED_ANSWER_RE` **必须保持同一口径**。
+_MISSING_ANSWER_RE = re.compile(
+    r"生成失败|调用受限|拒绝回答|未给出有效解答|无法作答|子目标求解失败|"
+    r"我无法|无法求解|无法解决|不能解决|无法解答",
+    re.IGNORECASE,
+)
 
 # 明显截断/不完整的 LaTeX 环境或元语句
 _INCOMPLETE_RE = re.compile(
@@ -60,7 +92,11 @@ class FormatterAgent(BaseAgent):
                 confidence = 0.0
             else:
                 answer = getattr(best, "answer", "") or ""
-                if not answer or len(answer) < 2:
+                # 2026-09-12 定型前审核修复：原判据 `not answer or len(answer) < 2`
+                # 会把**单字符答案**（选项字母 `A`/`C`、判断题值、个位数）整条丢弃，
+                # 换成推理尾部 500 字 → 客观题必然判错（题库中选项字母类答案占比可观）。
+                # 单字符是**合法且完整**的答案，只在空（或纯空白）时才回退推理尾部。
+                if not answer.strip():
                     answer = (getattr(best, "reasoning", "") or "")[-500:]
                 confidence = getattr(best, "confidence", 0.0)
                 # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
@@ -100,13 +136,20 @@ class FormatterAgent(BaseAgent):
 
         # 2026-09-02 占位符兜底：子目标求解失败的占位符（50% 错题根源）
         # 续写无意义 → 走紧急直答重新求一次最终答案
-        if "[子目标求解失败]" in (answer or ""):
+        # 2026-09-13 晚扩面（用户硬要求「无论超没超时都要把答案生成出来」）：
+        # 触发条件从"只认 [子目标求解失败]"扩到「空答案 / 任何拒绝占位符」。
+        # 依据：上一轮实测 010/016 的最终答案就是 `[生成失败] 调用受限或模型拒绝回答`，
+        # 而这条兜底路径因条件太窄**从未被触发** ⇒ 占位符被原样交出去。
+        # 现在只要最终答案不可用，就再博一次直答；直答也拿不到才交给上层最终兜底。
+        _ans_txt = (answer or "").strip()
+        if (not _ans_txt) or _MISSING_ANSWER_RE.search(_ans_txt):
             direct = self._emergency_answer(ctx)
-            if direct:
+            if direct and not _MISSING_ANSWER_RE.search(direct):
                 self.record(ctx, "finalize", f"占位符答案 → 紧急直答: {direct[:120]}")
                 answer = direct
             else:
-                self.record(ctx, "finalize", "占位符答案且紧急直答失败，原样输出")
+                self.record(ctx, "finalize",
+                            "答案不可用（空/占位符）且紧急直答未得，交上层最终兜底")
 
         ctx.final_response = format_response(answer)
         self.record(
@@ -121,6 +164,124 @@ class FormatterAgent(BaseAgent):
         选择最优答案（BUG-13 修复：共识加权）。
         优先使用聚类结果中置信度最高且规模最大的簇；其次使用传统 verdict 置信度。
         """
+        # 2026-09-13：选择题答案多数投票（OBJECTIVE_MAJORITY_VOTE=1 时）。
+        # 必须放在 best_cluster 分支**之前**：best_cluster 是 verifier 聚类，
+        # 且簇内再按"推理长度"选（下见 #0），对客观题（答案形态稳定、候选
+        # 易因裸字母 `A` 与 `\boxed{A}` 的格式差异被聚类拆散 / 簇内择优失真）
+        # 直接做答案频次投票更可靠——这正是 102 候选 4B/2A 却被选 A 的根因。
+        import os as _os
+        if (_os.environ.get("OBJECTIVE_MAJORITY_VOTE", "0") == "1"
+                and getattr(ctx, "question_type", "") == "选择题"):
+            _mv: dict = {}
+            for _c in (ctx.candidates or []):
+                _a = (getattr(_c, "answer", "") or "").strip()
+                if _a and len(_a) > 3 and not _REFUSAL_RE.search(_a):
+                    _mv[_a] = _mv.get(_a, 0) + 1
+            if _mv:
+                # 2026-09-13 用户设计：**平票时做差分检测**——
+                # 当多种选项组合并列最高频（如 AB×2 与 ABC×2），用集合差分
+                # 定位真正的争议选项（此处 = C），只对争议项做定向验证；
+                # 非平票则退回多数投票（取最高频组合）。
+                _groups = self._group_option_sets(_mv)
+                _fixed = self._objective_diff_probe(ctx, _groups)
+                if _fixed:
+                    from .base import Candidate as _Cand
+                    return _Cand(id=-1, answer=_fixed,
+                                 reasoning="[差分检测修正]")
+                _top_ans, _top_n = max(_mv.items(), key=lambda kv: kv[1])
+                # ⚠ P3 修复（2026-09-14 代码审查）：差分检测失败**且平票**时，
+                # 上面的 `max()` 取的是 dict 插入序里第一个候选 ⇒ 等于**随机**。
+                # 改为**取交集**：并列组合共同包含的选项 = 无争议的共识部分，
+                # 是"争议项无法判定"时唯一有依据的保守选择。
+                # （实测：AD×2 vs ACD×2 ⇒ **AD**，即剔除有争议的 C；
+                #   A×3 vs B×3 完全对立、交集为空 ⇒ 只能退回最高票）
+                _max_v = max(_mv.values())
+                _tops_ans = [k for k, v in _mv.items() if v == _max_v]
+                if len(_tops_ans) > 1:
+                    try:
+                        _sets = [set(re.findall(r"[A-E]", _t))
+                                 for _t in _tops_ans]
+                        _inter = set.intersection(*_sets) if _sets else set()
+                        if _inter:
+                            _ans_i = "".join(sorted(_inter))
+                            try:
+                                ctx._pick_diag = {
+                                    "branch": "formatter_tie_intersection",
+                                    "tops": ["".join(sorted(x)) for x in _sets],
+                                    "intersection": _ans_i,
+                                    "picked": _ans_i,
+                                }
+                            except Exception:  # noqa: BLE001
+                                pass
+                            self.record(ctx, "finalize",
+                                        "选择题平票且差分失败 → 取交集 {} ⇒ {}".format(
+                                            ["".join(sorted(x)) for x in _sets],
+                                            _ans_i))
+                            from .base import Candidate as _Cand2
+                            return _Cand2(id=-1, answer=_ans_i,
+                                          reasoning="[平票取交集]")
+                    except Exception:  # noqa: BLE001
+                        pass
+                # 2026-09-13：埋点写入 ctx._pick_diag（_collect_diag 会落盘），
+                # 与 orchestrator 兜底路径共用同一字段，保证"选取来源"可追溯。
+                try:
+                    _pd = {
+                        "branch": "formatter_majority_vote",
+                        "picked": _top_ans[:40],
+                        "top_n": _top_n,
+                        "dist": {k[:40]: v for k, v in _mv.items()},
+                        "groups": {"".join(sorted(k)): g["votes"]
+                                   for k, g in _groups.items()},
+                    }
+                    # 保留差分检测的失败原因（否则被本埋点覆盖，事后无法定位
+                    # "为什么平票却没走差分检测"）
+                    _prev = getattr(ctx, "_pick_diag", None)
+                    if isinstance(_prev, dict) and str(
+                            _prev.get("branch", "")).startswith("diff_probe"):
+                        _pd["diff_probe_failed"] = _prev
+                    ctx._pick_diag = _pd
+                except Exception:  # noqa: BLE001
+                    pass
+                for _c in (ctx.candidates or []):
+                    if (getattr(_c, "answer", "") or "").strip() == _top_ans:
+                        return _c
+        # ---- 2026-09-14 枚举优先（题面要求『所有』时）----
+        # 实测 003：merge 已正确产出 `\boxed{0,2026}`，但 verdicts **三条全部失效**
+        # （LLM 超时 —— 超时阈值被收到 120s 且 max_retries=1），答案选取随之退化，
+        # **把正确的枚举丢掉了**，最终只剩 `\boxed{2026}`。
+        # 依据：题面明确要求"所有/全部"时，**枚举形态的候选天然优于单值候选**
+        # （单值必然不满足题意）。故在常规选答之前先做一次"枚举优先"。
+        try:
+            from .question_type import asks_all_values as _aav2
+            if _aav2(ctx.problem or ""):
+                _enum_c = []
+                for _c in (ctx.candidates or []):
+                    _a2 = (getattr(_c, "answer", "") or "").strip()
+                    if not _a2 or _REFUSAL_RE.search(_a2):
+                        continue
+                    _core2 = _a2
+                    _mb2 = re.search(r"\\boxed\{([^{}]*)\}", _a2)
+                    if _mb2:
+                        _core2 = _mb2.group(1)
+                    if re.search(r"[,，;；、]", _core2):
+                        _enum_c.append(_c)
+                if _enum_c:
+                    _enum_c.sort(key=lambda c: len(c.reasoning or ""),
+                                 reverse=True)
+                    try:
+                        ctx._pick_diag = {
+                            "branch": "enum_preferred",
+                            "picked": (getattr(_enum_c[0], "answer", "") or "")[:60],
+                            "n_enum_candidates": len(_enum_c),
+                        }
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.record(ctx, "finalize",
+                                "题面要求『所有』→ 枚举形态候选优先"
+                                "（{} 个枚举候选，取推理最详细者）".format(len(_enum_c)))
+                    return _enum_c[0]
+        except Exception:  # noqa: BLE001
+            pass
         # 0) 聚类数据（来自 verifier）→ 找最佳簇中第一个候选
         best_cluster = getattr(ctx, '_best_cluster', None)
         if best_cluster:
@@ -145,6 +306,154 @@ class FormatterAgent(BaseAgent):
                     return c
             return ctx.candidates[0]
         return None
+
+    @staticmethod
+    def _group_option_sets(mv: dict) -> dict:
+        """把 {答案字符串: 频次} 归并成 {选项字母集合: {"answers": [...], "votes": N}}。
+
+        2026-09-13：供选择题「平票检测 + 差分定位」使用。只处理选项字母类答案。
+
+        ⚠ 必须累加**票数**（`votes`），不能用 `len(answers)`——后者是"该集合有
+        几种不同写法"（通常就是 1），会把任何分组都算成 1 票 ⇒ 误判平票。
+        （实测教训：102 候选 B×4/AB×1/A×1，B 本应绝对多数，却因该口径错误
+        触发差分检测，把答案从 B 改成 A，把本可答对的题改错。）
+        """
+        groups: dict = {}
+        for _ans, _n in (mv or {}).items():
+            _letters = re.findall(r"[A-E]", _ans)
+            if not _letters:
+                continue
+            _k = frozenset(_letters)
+            _g = groups.setdefault(_k, {"answers": [], "votes": 0})
+            _g["answers"].append(_ans)
+            try:
+                _g["votes"] += int(_n)
+            except (TypeError, ValueError):
+                _g["votes"] += 1
+        return groups
+
+    def _objective_diff_probe(self, ctx: TaskContext, groups: dict) -> str:
+        """选择题候选平票时的**差分检测**（2026-09-13 用户设计）。
+
+        设计意图：当多种选项组合并列最高频（如 `AB×2` 与 `ABC×2`），
+        不要盲目取其一 —— A、B 是共识，**争议只在于 C**。于是：
+            争议项 = 并列组合的并集 − 交集（此处 = {C}）
+        只对争议项做一次定向 LLM 验证，其余沿用共识，把预算花在真正的分歧点。
+
+        例：
+            AB×2  vs ABC×2   → 争议 {C}
+            ABD×2 vs ABC×2   → 争议 {C, D}
+            A×2   vs B×2     → 争议 {A, B}（交集为空，两个都验）
+
+        返回修正后的答案字母串（共识 ∪ 判为正确的争议项）；
+        无平票 / 无争议项 / 调用失败 → ""（调用方回退多数投票）。
+        """
+        try:
+            if len(groups) < 2:
+                return ""
+            _max_n = max(g["votes"] for g in groups.values())
+            _tops = [k for k, g in groups.items() if g["votes"] == _max_n]
+            if len(_tops) < 2:
+                return ""                       # 无平票（存在唯一最高票）→ 交给多数投票
+            _inter = set.intersection(*[set(k) for k in _tops])
+            _union = set.union(*[set(k) for k in _tops])
+            _diff = sorted(_union - _inter)
+            if not _diff:
+                return ""
+            _opt_text = {}
+            try:
+                from .question_type import extract_options
+                _opt_text = dict(extract_options(ctx.problem or "") or [])
+            except Exception:  # noqa: BLE001
+                _opt_text = {}
+            _diff_lines = [
+                "- 选项 {}：{}".format(
+                    L, _opt_text.get(L, "(题干未提取到该选项文本)"))
+                for L in _diff]
+            _sys = (
+                "你是选择题审题专家。用户给你一道选择题，以及若干**存在分歧的选项**。"
+                "请**只**针对这些分歧选项逐一判定其陈述是否正确，每个选项给出"
+                "『正确』或『错误』并附一句理由；最后一行必须输出"
+                "『【结论】: <这些选项中所有正确的字母>』（只写字母如 C 或 CD；"
+                "若都不正确则写 无）。不要重述题目。"
+            )
+            _user = ("题目：\n{}\n\n以下选项在候选解答中存在分歧，请逐一判定：\n{}"
+                     .format(ctx.problem, "\n".join(_diff_lines)))
+            # 2026-09-13 超时护栏（口径照抄 verifier.py:334）：本阶段唯一 LLM 调用
+            # 原先 max_tokens=65536 且无任何时间护栏 → 诱导长思考撞 LLMClient
+            # 默认 180s 超时 + 1 次重试 ≈363s（实测 352/363/364s，占单题 1200s
+            # 硬时限 30%）。deadline / 生成侧软截止已到 → 放弃差分检测，返回 ""
+            # 由 _pick_best 回退到现成的多数投票结果。
+            # 2026-09-13 修复（关键）：**不能**用 `gen_time_up()` 判断！
+            # 它是"生成侧软截止"（= 单题 deadline 前 verify_reserve 秒），而
+            # formatter 是流程的**最后一个阶段** ⇒ 走到这里时 `gen_time_up()`
+            # **必然为 True** ⇒ 差分检测在 096/102 实测中**从未真正执行过**，
+            # 全部静默回退多数投票（平票时 = 随机取第一个，正是用户指出的问题）。
+            # 改为：只看"离单题硬限是否还够一次短调用"（max_tokens=512，
+            # 约 20–40s；留 120s 余量以容纳一次重试）。
+            if ctx.is_timed_out() or ctx.time_remaining() < 120:
+                self.record(ctx, "finalize",
+                            "选择题差分检测：剩余时间不足一次短调用，"
+                            "跳过（回退多数投票）")
+                return ""
+            from .base import _normalize_chat_response
+            # 2026-09-13：单次调用 → **最多 2 次**。原实现只调一次，且只认
+            # `【结论】:` 一种写法，任一环节出问题就静默回退多数投票。
+            # 现在：空响应/异常/**有输出但无结论**都会重试；失败写埋点。
+            _text, _errs, _m = "", [], None
+            for _attempt in range(2):
+                try:
+                    _resp = self.client.chat(
+                        messages=[{"role": "system", "content": _sys},
+                                  {"role": "user", "content": _user}],
+                        temperature=0.0, max_tokens=512,
+                    )
+                    _text = _normalize_chat_response(_resp) or ""
+                    if not _text.strip():
+                        _errs.append("attempt{}:empty".format(_attempt + 1))
+                        continue
+                    _m = (re.search(r"【结论】[:：]?\s*([A-E]+|无)", _text)
+                          or re.search(r"(?:结论|答案|正确(?:的)?选项)\s*[:：]?\s*"
+                                       r"([A-E]{1,5}|无)", _text))
+                    if _m:
+                        break
+                    _errs.append("attempt{}:no_verdict".format(_attempt + 1))
+                except Exception as _e:  # noqa: BLE001
+                    _errs.append("attempt{}:{}".format(
+                        _attempt + 1, type(_e).__name__))
+            if not _m:
+                try:
+                    ctx._pick_diag = {
+                        "branch": "diff_probe_no_verdict",
+                        "errs": _errs,
+                        "raw_tail": (_text or "")[-200:],
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
+                return ""
+            _v = _m.group(1)
+            _ok = (set(_v) if _v != "无" else set()) & set(_diff)
+            _ans = "".join(sorted(_inter | _ok))
+            try:
+                ctx._pick_diag = {
+                    "branch": "formatter_diff_probe",
+                    "tops": ["".join(sorted(t)) for t in _tops],
+                    "diff": "".join(_diff),
+                    "ok": "".join(sorted(_ok)),
+                    "picked": _ans,
+                }
+            except Exception:  # noqa: BLE001
+                pass
+            self.record(
+                ctx, "finalize",
+                "选择题差分检测：并列 {} → 争议项 {} → 判对 {} → 修正答案 {}".format(
+                    [''.join(sorted(t)) for t in _tops],
+                    ''.join(_diff),
+                    ''.join(sorted(_ok)) or '无',
+                    _ans or '(空)'))
+            return _ans
+        except Exception:  # noqa: BLE001
+            return ""
 
     def _pick_fallback(self, ctx: TaskContext, exclude_answer: str = "") -> str:
         """当最佳答案是拒绝/不完整回答时，从候选中找到更可靠的答案"""
@@ -193,6 +502,13 @@ class FormatterAgent(BaseAgent):
             for attempt in range(2):
                 if not is_truncated_answer(answer):
                     break
+                # 2026-09-13 超时护栏（既有失败语义 = 原样返回 answer）：
+                # deadline / 生成侧软截止已到 → 不再续写，直接落到函数末尾
+                # `return answer`，与原有"补全失败不阻断"语义一致。
+                if ctx.is_timed_out() or ctx.gen_time_up():
+                    self.record(ctx, "finalize",
+                                "截断答案续写：时间已到，跳过续写（原样返回）")
+                    break
                 tail = answer[-200:]  # 断点前片段作锚
                 msgs = [
                     {"role": "system", "content":
@@ -238,13 +554,27 @@ class FormatterAgent(BaseAgent):
             sys_p = ("你是数学解题器。请直接给出题目的最终答案"
                      "（数值/表达式/集合），不要任何解释或推导过程。"
                      "格式：【最终答案】: <答案>")
+            # 2026-09-13 超时护栏（既有失败语义 = 返回 ""，调用方原样输出）。
+            # 2026-09-13 晚改判据（用户硬要求「无论超没超时都要把答案生成出来」）：
+            # 原判据 `is_timed_out() or gen_time_up()` 把这条**最后的答案产出路径**
+            # 也一起关掉了 —— 实测 010/016 剩余 -30s / -105s 时必然跳过，只能交占位符。
+            # 现改为：
+            #   · 硬墙（is_timed_out）已过或余量 < 45s → 仍跳过（跨硬墙会被平台杀
+            #     进程组、整题计 C，代价比交白卷更大）；
+            #   · 生成侧软截止（gen_time_up）**不再拦截** —— 它是为"验证"预留的余量，
+            #     而执行到这里时验证阶段早已结束，没有可牺牲的下游了。
+            if ctx.is_timed_out() or ctx.time_remaining() < _FINAL_ANSWER_MIN_SEC:
+                self.record(ctx, "finalize",
+                            f"紧急直答：余量不足（{ctx.time_remaining():.0f}s < "
+                            f"{_FINAL_ANSWER_MIN_SEC:.0f}s），跳过（交上层最终兜底）")
+                return ""
             resp = self.client.chat(
                 messages=prefill_messages(
                     [{"role": "system", "content": sys_p},
                      {"role": "user", "content": ctx.problem}],
                     "【最终答案】: ",
                 ),
-                temperature=0.0, max_tokens=65536,
+                temperature=0.0, max_tokens=_EMERGENCY_ANSWER_MAX_TOKENS,
             )
             text = _normalize_chat_response(resp)
             if not text:

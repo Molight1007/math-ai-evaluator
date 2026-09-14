@@ -813,6 +813,28 @@ class SolverAgent(BaseAgent):
                 self.record(ctx, "answer_selfcheck_skip",
                             "答案已由表达式范式（本地计算器）产出，跳过重复核验")
                 return resp, answer
+            # 2026-09-14 **幂等短路**（沙箱实测 #003：同一答案被 adopt 2 次、重问 3 次）。
+            # 根因：`resolved` 只含**本轮** response 的 `<calc>`，而上一轮重问采纳的工具值
+            # 没有跨轮保存 ⇒ 下一轮又判"无工具来源" ⇒ 反复重问，白烧 2–3 次 LLM 调用
+            # （实测 569s / 561s 各来一遍）。
+            # 修法：把「已核验过的数值」与「已就同一答案重问过」记在 ctx 上，跨轮生效。
+            # 纯短路，**只会减少重问、不会改变答案**。
+            _verified, _reasked = set(), set()
+            if ctx is not None:
+                _verified = set(getattr(ctx, "_selfcheck_verified_vals", None) or ())
+                _reasked = set(getattr(ctx, "_selfcheck_reasked_ans", None) or ())
+            if to_exact_number is not None and answer:
+                _w0 = to_exact_number(answer)
+                if _w0 is not None and str(_w0) in _verified:
+                    self.record(ctx, "answer_selfcheck_skip",
+                                f"答案 {str(answer)[:30]} 已在先前轮次经工具核验"
+                                "（幂等短路，不再重问）")
+                    return resp, answer
+                if str(answer)[:60] in _reasked:
+                    self.record(ctx, "answer_selfcheck_skip",
+                                f"已就答案 {str(answer)[:30]} 重问过一次且未变"
+                                "（幂等短路，不再重问）")
+                    return resp, answer
             if to_exact_number is None or not answer:
                 return resp, answer
             want = to_exact_number(answer)
@@ -831,7 +853,15 @@ class SolverAgent(BaseAgent):
                 got = to_exact_number(_rs)
                 if got is not None:
                     tool_vals.append((_ex, _rs, got))
-            if any(g == want for _e, _r, g in tool_vals):
+            if any(g == want for _e, _r, g in tool_vals) or str(want) in _verified:
+                # 2026-09-14：命中即记入跨轮已核验集合（供上方幂等短路使用）。
+                if ctx is not None:
+                    try:
+                        _v = set(getattr(ctx, "_selfcheck_verified_vals", None) or ())
+                        _v.add(str(want))
+                        ctx._selfcheck_verified_vals = _v
+                    except Exception:  # noqa: BLE001
+                        pass
                 return resp, answer             # 已有工具来源 → 放行
             # 2026-09-13（用户方案 C-A）：**有工具值但对不上答案** ⇒ 计算不一致。
             # 这是比"没有工具来源"更强的信号：答案与它自己的计算矛盾。
@@ -912,6 +942,14 @@ class SolverAgent(BaseAgent):
                          + "\n".join(hints) + "\n\n")
             user += ("请**只输出**得出最终答案的计算表达式（写在 <calc>…</calc> 内），"
                      "不要自行给出数值答案。")
+            # 2026-09-14：重问前登记，使同一答案**只重问一次**（幂等短路依据）。
+            if ctx is not None:
+                try:
+                    _rq = set(getattr(ctx, "_selfcheck_reasked_ans", None) or ())
+                    _rq.add(str(answer)[:60])
+                    ctx._selfcheck_reasked_ans = _rq
+                except Exception:  # noqa: BLE001
+                    pass
             raw = self._compressed_solve(
                 ctx, system, user, temperature=0.0,
                 max_tokens=int(getattr(self.config, 'max_answer_tokens', 4096)),
@@ -964,6 +1002,15 @@ class SolverAgent(BaseAgent):
                 self.record(ctx, "answer_selfcheck_adopt",
                             f"答案改用工具值 {_tv}（表达式 {str(_te)[:40]}；"
                             f"模型原答 {str(new_ans)[:30]}）")
+                # 2026-09-14：采纳的工具值记入跨轮已核验集合 —— 否则下一轮
+                # `resolved` 看不到它，会再判"无工具来源"并重复重问（#003 实测 2 次 adopt）。
+                if ctx is not None:
+                    try:
+                        _v = set(getattr(ctx, "_selfcheck_verified_vals", None) or ())
+                        _v.add(str(_tv))
+                        ctx._selfcheck_verified_vals = _v
+                    except Exception:  # noqa: BLE001
+                        pass
                 return (_raw2 if _raw2 else raw), str(_tv)
             if new_val != want:
                 self.record(ctx, "answer_selfcheck_fix",

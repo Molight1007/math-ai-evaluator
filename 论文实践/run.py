@@ -27,7 +27,7 @@ from analysis import metrics, report as report_mod  # noqa: E402
 from judge import fingerprint as fpmod  # noqa: E402
 from judge import lean as lean_judge  # noqa: E402
 from llm.client import LLMClient  # noqa: E402
-from probes import abstraction, structure, trap, transfer  # noqa: E402
+from probes import abstraction, statement, structure, trap, transfer  # noqa: E402
 from record import Record  # noqa: E402
 
 PROBE_FUNCS = {
@@ -35,12 +35,14 @@ PROBE_FUNCS = {
     "B": trap.run,
     "C": structure.run,
     "D": abstraction.run,
+    "E": statement.run,
 }
 PROBE_DESC = {
     "A": "同构迁移（测联想能否发生）",
     "B": "陷阱题（测类比是否用错地方）",
     "C": "结构指认（元认知 + 反向构造）",
     "D": "抽象⇄实例化",
+    "E": "定理陈述完整性（测严格理解最硬的一层）",
 }
 
 
@@ -112,6 +114,13 @@ def do_gold() -> int:
     return 0 if n_ok == total else 1
 
 
+def do_criterion() -> int:
+    """文本判据自检（不联网、不花钱、3 秒）。"""
+    from judge import criterion
+    n_fail, _ = criterion.run()
+    return 1 if n_fail else 0
+
+
 # ---------------------------------------------------------------- 主流程
 def run_probes(args) -> int:
     probes = list(PROBE_FUNCS) if "all" in args.probe else args.probe
@@ -179,7 +188,7 @@ def run_probes(args) -> int:
           f"API错误：{summary['errors']}  截断：{summary['truncated']}")
     if use_lean:
         print(f"整体 Lean 验证通过率：{summary['lean_ok_rate_all']}")
-    for k in ("A", "B", "C", "D"):
+    for k in ("A", "B", "C", "D", "E"):
         if k in summary:
             print(f"\n[{k}] {PROBE_DESC[k]}")
             for kk, vv in summary[k]["aggregate"].items():
@@ -200,8 +209,10 @@ def main() -> int:
                     help="要跑的探针，默认 all")
     ap.add_argument("--model", default=config.DEFAULT_MODEL,
                     choices=list(config.MODELS), help="模型")
-    ap.add_argument("--mode", default="live", choices=["live", "dry", "gold"],
-                    help="live=真跑；dry=假模型跑管线；gold=离线自检判据")
+    ap.add_argument("--mode", default="live",
+                    choices=["live", "dry", "gold", "criterion"],
+                    help="live=真跑；dry=假模型跑管线；gold=离线自检判据；"
+                         "criterion=自检文本判据正则（不联网）")
     ap.add_argument("--repeat", type=int, default=config.REPEATS,
                     help="每题重复采样轮数（统计随机性）")
     ap.add_argument("--max-tokens", type=int, default=None,
@@ -216,6 +227,8 @@ def main() -> int:
         return do_check()
     if args.mode == "gold":
         return do_gold()
+    if args.mode == "criterion":
+        return do_criterion()
     return run_probes(args)
 
 

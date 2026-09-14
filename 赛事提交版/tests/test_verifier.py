@@ -22,30 +22,47 @@ def make_verifier() -> VerifierAgent:
 
 
 class IsCorrectVoteTest(unittest.TestCase):
+    """2026-09-11 三态化：True(判对) / False(判错) / None(弃权)。
+
+    弃权 = LLM 调用失败或输出无法解析 —— 属**基础设施/格式故障**，不是
+    "答案错误"。旧契约把故障一律判 False，使 36 张故障票（占票池 ~30%）
+    被当作反证计入，既压低置信度触发无谓 revise，也把可通过的候选投死。
+    """
+
     def setUp(self) -> None:
         self.verifier = make_verifier()
 
-    def test_none_input(self) -> None:
-        self.assertFalse(self.verifier._is_correct_vote(None))
+    def test_none_input_abstains(self) -> None:
+        self.assertIsNone(self.verifier._is_correct_vote(None))
+
+    def test_unparseable_abstains(self) -> None:
+        self.assertIsNone(self.verifier._is_correct_vote("嗯，让我想想"))
+        self.assertIsNone(self.verifier._is_correct_vote(""))
 
     def test_verdict_a(self) -> None:
-        self.assertTrue(self.verifier._is_correct_vote("VERDICT: A"))
+        self.assertIs(self.verifier._is_correct_vote("VERDICT: A"), True)
 
     def test_verdict_b(self) -> None:
-        self.assertFalse(self.verifier._is_correct_vote("VERDICT: B"))
+        self.assertIs(self.verifier._is_correct_vote("VERDICT: B"), False)
+
+    def test_verdict_newline_and_boxed_wrapper(self) -> None:
+        # 平台实测形态（de90cedc 日志 9 次解析失败）：换行 + \boxed 壳
+        self.assertIs(self.verifier._is_correct_vote("VERDICT:\n\n\\boxed{B}"), False)
+        self.assertIs(self.verifier._is_correct_vote("VERDICT: \\boxed{A}"), True)
+        self.assertIs(self.verifier._is_correct_vote("verdict: b"), False)
 
     def test_explicit_correct(self) -> None:
-        self.assertTrue(self.verifier._is_correct_vote("该解答完全正确"))
-        self.assertTrue(self.verifier._is_correct_vote("CORRECT"))
+        self.assertIs(self.verifier._is_correct_vote("该解答完全正确"), True)
+        self.assertIs(self.verifier._is_correct_vote("CORRECT"), True)
 
     def test_reject_word_wins_over_correct(self) -> None:
         # "不正确" 含 "正确" 子串，拒绝词必须优先
-        self.assertFalse(self.verifier._is_correct_vote("答案不正确"))
-        self.assertFalse(self.verifier._is_correct_vote("The answer is INCORRECT"))
+        self.assertIs(self.verifier._is_correct_vote("答案不正确"), False)
+        self.assertIs(self.verifier._is_correct_vote("The answer is INCORRECT"), False)
 
     def test_reject_words(self) -> None:
-        self.assertFalse(self.verifier._is_correct_vote("错误"))
-        self.assertFalse(self.verifier._is_correct_vote("WRONG"))
+        self.assertIs(self.verifier._is_correct_vote("错误"), False)
+        self.assertIs(self.verifier._is_correct_vote("WRONG"), False)
 
 
 class NormalizeAnswerTextTest(unittest.TestCase):
@@ -104,6 +121,40 @@ class EquivGroupTest(unittest.TestCase):
         groups = self.verifier._equiv_group([], ["a", "b", "a"])
         flat = sorted(i for g in groups for i in g)
         self.assertEqual(flat, [0, 1, 2])
+
+
+class ClusterAbstainTest(unittest.TestCase):
+    """2026-09-11：弃权票必须剔出 total_votes 分母（故障≠反证）。
+
+    场景复刻 de90cedc 实测：某候选 5 张票里 2 张是限流/解析故障。
+    旧口径 confidence = 2/5 = 0.40（<0.5 → 触发无谓 revise）；
+    新口径 confidence = 2/3 ≈ 0.67（≥0.5 → 正常接受）。
+    """
+
+    def setUp(self) -> None:
+        self.verifier = make_verifier()
+
+    def _cands(self):
+        return [SimpleNamespace(id=0, answer="42", reasoning="r0")]
+
+    def test_abstain_excluded_from_denominator(self) -> None:
+        from agent.base import Verdict
+        vds = [[
+            Verdict(correct=True), Verdict(correct=True), Verdict(correct=False),
+            Verdict(correct=False, abstain=True), Verdict(correct=False, abstain=True),
+        ]]
+        clusters = self.verifier._cluster_candidates(self._cands(), vds)
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0].vote_total, 3)
+        self.assertEqual(clusters[0].vote_correct, 2)
+        self.assertAlmostEqual(clusters[0].confidence, 2 / 3, places=6)
+
+    def test_all_abstain_yields_zero_total_not_zero_confidence_evidence(self) -> None:
+        from agent.base import Verdict
+        vds = [[Verdict(correct=False, abstain=True)]]
+        clusters = self.verifier._cluster_candidates(self._cands(), vds)
+        self.assertEqual(clusters[0].vote_total, 0)
+        self.assertEqual(clusters[0].vote_correct, 0)
 
 
 # ============================================================
@@ -351,12 +402,20 @@ class VoteRubricTest(_RubricFixture, unittest.TestCase):
         self.assertTrue(votes[0].correct)
         self.assertIsNotNone(votes[0].deterministic)
 
-    def test_parse_failed_conservative_pass(self) -> None:
-        """rubric JSON 解析失败 → 保守放行（不误杀），并留证据。"""
+    def test_parse_failed_abstains(self) -> None:
+        """rubric JSON 解析失败 → **弃权**（2026-09-11 三态化）。
+
+        旧契约记 `correct=True`（"保守放行"）：调用失败/格式故障被凭空当成
+        一张**正确票**，虚抬簇置信度 —— 与"故障计成错票"是同一枚硬币的两面。
+        新契约记弃权票（abstain=True, correct=False）：既不判对也不判错，
+        不参与 total_votes 分母；该候选若最终零有效票，由 orchestrator 的
+        5.5 低置信度通道兜底复核。
+        """
         v, ctx, _ = self._make("模型拒绝输出 JSON")
         votes = v._vote_rubric(ctx, ctx.problem, self._cand())
         self.assertEqual(len(votes), 1)
-        self.assertTrue(votes[0].correct)
+        self.assertTrue(votes[0].abstain)
+        self.assertFalse(votes[0].correct)
         self.assertEqual(votes[0].raw, "rubric_parse_failed")
 
 

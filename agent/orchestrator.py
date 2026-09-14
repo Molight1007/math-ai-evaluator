@@ -487,16 +487,36 @@ class Orchestrator(BaseAgent):
         r"作为.{0,8}(工具|助手|规范|器)|assistant|instruction|prompt",
         _re.IGNORECASE)
 
+    # 题面复述 / 疑问式措辞 —— 2026-09-14 加严（#005 实测）。
+    # 实况：重问把 `\boxed{1234}` 改写成
+    #   `The problem asks for all possible values of $C(1234)$ …`
+    # 旧判据 `re.search(r"\d", txt)` 因为它含 `1234` 而**放行**，
+    # 结果答案从"可判的数值"退化成"不可判的散文"（error_class=format_unresolved）。
+    # ⚠ 刻意只收**题面/疑问式**措辞，不收一般英文散文 —— 因为本题库存在
+    #   **合法英文答案**（如 011 的 gold `$f(x,y)= g(x+y, xy(x-y)^{2})$ for some
+    #   polynomial $g$`），过宽会误杀正确解。
+    _RESTATE_ANS_RE = _re.compile(
+        r"the\s+(problem|question|task|answer\s+is\s+asked)\b|"
+        r"\basks?\s+(for|us\s+to)\b|\bwe\s+(need|want|must|are\s+asked)\b|"
+        r"\blet\s+us\b|\bfind\s+all\b|\ball\s+possible\s+values?\b|"
+        r"\bwhat\s+is\b|\bwhich\s+of\s+the\s+following\b|\bnote\s+that\b|"
+        r"\bthe\s+user\b",
+        _re.IGNORECASE)
+
     @staticmethod
     def _looks_like_answer(txt: str) -> bool:
-        """重问结果是否"像答案"——防元话语 / 空话污染（003 实测教训）。
+        """重问结果是否"像答案"——防元话语 / 题面复述污染（003、005 实测教训）。
 
-        判据：① 非空且不过长 ② 不含元话语 ③ 含数字或数学符号。
+        判据：① 非空且不过长 ② 不含元话语 ③ **不含题面复述/疑问式措辞**
+              ④ 含"答案核"（数字 / 数学宏 / 结构化集合）
         不满足则调用方**保留原答案**（绝不因重问而变差）。
         """
         if not txt or len(txt) > 120:
             return False
         if Orchestrator._META_ANS_RE.search(txt):
+            return False
+        # 2026-09-14（#005）：题面复述一律不是答案 —— 即便它里面含数字。
+        if Orchestrator._RESTATE_ANS_RE.search(txt):
             return False
         if _re.search(r"\d", txt):
             return True
@@ -918,11 +938,15 @@ class Orchestrator(BaseAgent):
             # 2.5) 难度路由：静态预判 + LLM 自评 → 三级档位（难题深度通道）
             self.difficulty_router.run(ctx)
             tier = getattr(ctx, 'tier', 'standard')
-            # 应急模式：所有档位强制降级到 fast（预算收紧，保产出）
-            if ctx.state.emergency and tier != 'fast':
-                ctx.tier = 'fast'
-                tier = 'fast'
-                self.record(ctx, "paper_pacer", "应急模式：强制降档到 fast")
+            # 应急模式：所有档位强制降档到 **standard**（预算收紧，保产出）。
+            # 2026-09-14：**fast 档已删除**（用户要求，只留 standard/deep）
+            # ⇒ 应急降档目标改为 standard —— 它仍保有完整的子目标分解与
+            # 逐项判定链路，只压缩预算；不像已删除的 fast 那样连候选池与
+            # 子目标分解都一并省掉（实测那正是 102/103/106 出问题的原因）。
+            if ctx.state.emergency and tier != 'standard':
+                ctx.tier = 'standard'
+                tier = 'standard'
+                self.record(ctx, "paper_pacer", "应急模式：强制降档到 standard")
             # deep 档配额闸（2026-08-28 新增）：deep 占比封顶 25%。
             # 时间账：并发 3 × 6h = 64800 题·秒；deep 占 30% 需 70080，超 5280
             # → 全卷必爆。超配额时降级到 standard，保证全卷能做完。
@@ -1200,9 +1224,9 @@ class Orchestrator(BaseAgent):
             # 3.3) Step 2 无条件自改进（IMO2025 论文流水线）：
             #      生成后、验证前，对候选先 review+improve 一遍（注入第二段推理
             #      预算）。论文实测初始解质量低、此步显著改进。
-            #      仅 deep/standard 档执行；fast 档与应急模式跳过（控成本）。
+            #      仅非应急模式执行（2026-09-14：fast 档已删除，原
+            #      `tier != 'fast'` 条件恒真 ⇒ 移除，见 difficulty_router）。
             if (getattr(self.config, 'enable_self_improve', True)
-                    and tier != 'fast'
                     and not ctx.state.emergency
                     and not ctx.state.verify_only
                     and ctx.candidates
@@ -1634,7 +1658,9 @@ class Orchestrator(BaseAgent):
                         _deep_cap = int(os.environ.get("DEEP_MAX_REWORK", "3"))
                     except (TypeError, ValueError):
                         _deep_cap = 3
-                    _max_rework = (2 if tier in ("fast", "standard")
+                    # 2026-09-14：fast 档已删除 ⇒ 原 `tier in ("fast","standard")`
+                    # 简化为 `tier == "standard"`。
+                    _max_rework = (2 if tier == "standard"
                                    else (None if _deep_cap < 0 else _deep_cap))
                     best_reasoning = ""
                     for _c in (ctx.candidates or []):
@@ -2612,6 +2638,8 @@ class Orchestrator(BaseAgent):
                 str(t.get("content")) for t in (getattr(ctx, "trace", None) or [])
                 if isinstance(t, dict) and t.get("step") == "answer_form"
             ][:10],
+            # 穷尽性搜索机制：是否追加了「解族穷尽性检查」子目标
+            "exhaust_diag": getattr(ctx, "_exhaust_diag", None) or {},
             # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
             "budget_skips": sum(1 for t in (getattr(ctx, "trace", None) or [])
                                 if isinstance(t, dict) and t.get("step") == "budget_skip"),

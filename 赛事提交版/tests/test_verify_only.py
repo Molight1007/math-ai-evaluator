@@ -72,7 +72,27 @@ def test_generation_steps_all_gated_by_verify_only():
         idx = src.find(needle)
         assert idx >= 0, f"找不到生成步骤锚点：{needle}（代码可能重构，请更新测试）"
         # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符
-        back = 700 if needle == "self.solver.run(ctx)" else 400
+        # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符；
+        # 2026-09-11 又在其前插入 P4-2 阶段预算包裹（注释 + try/finally ≈ 500 字符）
+        # → 700 已够不到门禁行（门禁结构完好：`if not ctx.state.verify_only:` 在其前）
+        # → 放宽到 1500。
+        back = 1500 if needle == "self.solver.run(ctx)" else 400
+        # audit_candidates：2026-09-06 晚 Lean 双通道恢复后其前方插入了
+        # lean_gate.apply 分支（约 15 行），verify_only 门禁行被推远 → 窗口 1200。
+        # 2026-09-10 又在其前方新增「适用性豁免题」注释块（+3 行），1200 恰好
+        # 差数十字符够不到门禁行（门禁为 668 行 `if ctx.state.verify_only: ... else:`
+        # 结构，逻辑完整）→ 放宽到 1600。
+        if needle == "self.audit_gate.audit_candidates(":
+            back = 2100
+        # 2026-09-12：把"固定字符窗口"改为**随结构锚点自适应** —— 窗口至少覆盖到
+        # 该语句之前最近的一处 verify_only 门禁行（再留 1200 字符余量）。
+        # 原实现硬编码 back，随注释增长反复失效（本测试历史上已手工放宽 4 次：
+        # 700 → 1500 → 1600 → 2100）。语义不变：若其前根本不存在门禁行，
+        # _gate_pos < 0，窗口保持原值 → 断言照旧失败（仍能抓住真正的漏改）。
+        _gate_pos = max(src.rfind("if ctx.state.verify_only:", 0, idx),
+                        src.rfind("if not ctx.state.verify_only:", 0, idx))
+        if _gate_pos >= 0:
+            back = max(back, idx - _gate_pos + 1200)
         window = src[max(0, idx - back):idx + len(needle)]
         # solver.run 是主采样，被独立 if 包裹（if not ctx.state.verify_only:）
         if needle == "self.solver.run(ctx)":

@@ -177,6 +177,13 @@ class AuditGate(BaseAgent):
         n_fail = 0
         rejected: list[tuple] = []
         for cand in candidates:
+            # 时间保护：单题接近 deadline → 提前退出逐候选审核（Level0 数值代回不再
+            # 触发），与下方 rubric 分支的 is_time_critical 口径一致；留痕便于区分
+            # "因时间跳过" 与 "根本没触发"。
+            if ctx.is_time_critical():
+                self.record(ctx, "audit_gate_timeout",
+                            f"时间临界，提前退出候选审核：已否决 {n_fail}/{len(candidates)}")
+                break
             ans = (cand.get("answer", "") if isinstance(cand, dict)
                    else getattr(cand, "answer", ""))
             if not ans or not str(ans).strip():

@@ -21,6 +21,9 @@ class Record:
     lean_ok: bool = False
     lean_compiled: bool = False
     lean_sorry: bool = False
+    # 该题是否真的走了 Lean 判定。无判据的题（组合/分析类）为 False，
+    # 统计整体通过率时必须排除，否则会被无判据题人为拉低。
+    lean_checked: bool = False
     lean_error: str = ""
     fingerprint: list[str] = field(default_factory=list)
     metrics: dict = field(default_factory=dict)
@@ -42,6 +45,7 @@ class Record:
             "lean_ok": self.lean_ok,
             "lean_compiled": self.lean_compiled,
             "lean_sorry": self.lean_sorry,
+            "lean_checked": self.lean_checked,
             "lean_error": self.lean_error,
             "fingerprint": self.fingerprint,
             "metrics": self.metrics,
@@ -61,6 +65,7 @@ class Record:
             "lean_ok": int(self.lean_ok),
             "lean_compiled": int(self.lean_compiled),
             "lean_sorry": int(self.lean_sorry),
+            "lean_checked": int(self.lean_checked),
             "truncated": int(self.truncated),
             "error": self.error,
             "elapsed": round(self.elapsed, 2),

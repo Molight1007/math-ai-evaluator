@@ -709,6 +709,241 @@ ABS_ITEMS: list[AbsItem] = [
 ]
 
 
+# ================================================================
+# E 组：定理陈述完整性（Statement Completeness）
+# ----------------------------------------------------------------
+# 这是"严格理解"维度最硬的一层：现有 B/D 测的是**判断**
+# （给一个被改坏的定理，能否识破），E 测的是**陈述**
+# （让模型自己完整精确地说出定理的全部条件）。能判断 ≠ 能陈述。
+#
+# 判据为混合式：
+#   ① 文本条件完整率 —— 按 key_conditions 关键条件清单逐项匹配
+#   ② Lean 特例编译率 —— 让模型写该定理在一个具体特例下的形式化命题并证明
+# 详见 `探针E_陈述层_设计方案.md`。
+# ================================================================
+@dataclass
+class EItem:
+    eid: str
+    theorem: str                         # 定理名
+    dimension: str                       # 子维度
+    statement: str                       # 给模型的题目
+    key_conditions: list[str]            # 关键条件清单（评分依据，**需老师复核**）
+    condition_patterns: list[list[str]]  # 每个关键条件对应的正则，命中任一即算"已列出"
+    gold_lean: str = ""                  # 特例 Lean；空串 = 闭包内无法形式化，仅文本判定
+    note: str = ""
+
+
+E_ITEMS: list[EItem] = [
+    EItem(
+        eid="E1",
+        theorem="拉格朗日中值定理",
+        dimension="条件完整性",
+        statement=(
+            "请完整、精确地叙述**拉格朗日中值定理**，列出它的**全部条件**和结论。\n"
+            "注意：条件的精确表述不能含糊——区间是开的还是闭的？"
+            "是连续还是可导？两者能混为一谈吗？"
+        ),
+        key_conditions=[
+            "在闭区间 [a,b] 上连续",
+            "在开区间 (a,b) 上可导",
+            "存在 ξ ∈ (a,b) 使 f'(ξ) = (f(b)-f(a))/(b-a)",
+        ],
+        # ⚠️ 正则一律写**中英双语**变体。原因：模型（尤其 DeepSeek）陈述定理时
+        # 常混杂英文术语，若只写中文，"inner product space""linearly dependent"
+        # 这类正确回答会被漏判，同样是**静默失效**。
+        condition_patterns=[
+            [r"闭区间", r"\[\s*a\s*,\s*b\s*\].{0,12}连续", r"ContinuousOn",
+             r"closed\s*interval", r"continuous\s*on\s*\["],
+            [r"开区间", r"\(\s*a\s*,\s*b\s*\).{0,12}可导", r"可导",
+             r"DifferentiableOn", r"open\s*interval",
+             r"differentiable\s*on\s*\("],
+            [r"中值点", r"ξ", r"f\s*'\s*\(", r"斜率", r"切线",
+             r"\bxi\b", r"exists.{0,24}\b(xi|ξ|c)\b", r"mean\s*value"],
+        ],
+        # 特例 f(x)=x² 于 [0,1]：存在 ξ∈(0,1) 使 2ξ = (1²-0²)/(1-0)
+        # 注意命题里显式用了 Set.Ioo（开区间），把"开区间"这一条件编进了形式化命题
+        gold_lean=_lean(
+            "example : ∃ ξ : ℝ, ξ ∈ Set.Ioo (0:ℝ) 1 ∧\n"
+            "    2 * ξ = ((1:ℝ)^2 - (0:ℝ)^2) / (1 - 0) := by\n"
+            "  use 1 / 2\n"
+            "  constructor\n"
+            "  · norm_num\n"
+            "  · norm_num"
+        ),
+        note="最经典的条件完整性测试：'连续'与'可导'的区间开闭极易被笼统带过",
+    ),
+    EItem(
+        eid="E2",
+        theorem="费马小定理",
+        dimension="量词与模运算",
+        statement=(
+            "请完整、精确地叙述**费马小定理**，列出它的**全部条件**和结论。\n"
+            "注意：p 需要满足什么？a 需要满足什么？结论的模运算形式如何精确书写？"
+        ),
+        key_conditions=[
+            "p 是素数",
+            "p 不整除 a（即 gcd(a,p) = 1）",
+            "a^(p-1) ≡ 1 (mod p)",
+        ],
+        condition_patterns=[
+            [r"素数", r"质数", r"prime"],
+            [r"不整除", r"p\s*∤\s*a", r"互素", r"互质", r"gcd.{0,12}=\s*1",
+             r"coprime", r"not\s*divide", r"does\s*not\s*divide",
+             r"\bp\s*∤", r"relatively\s*prime"],
+            [r"a\s*\^?\s*\(?\s*p\s*-\s*1\s*\)?", r"a\s*\^\s*\{\s*p\s*-\s*1\s*\}",
+             r"≡\s*1", r"≡\s*1\s*\(?\s*mod", r"mod\s*p", r"模\s*p", r"modulo",
+             r"a\^\{?\(?p\s*-\s*1\)?\}?\s*≡"],
+        ],
+        # 特例 p=11, a=2：2^10 ≡ 1 (mod 11)
+        gold_lean=_lean(
+            "example : ((2:ℤ)^10) % 11 = 1 := by\n"
+            "  norm_num"
+        ),
+        note="与 D4（把 p 换成合数 4）互补：D4 测判断，E2 测完整陈述",
+    ),
+    EItem(
+        eid="E3",
+        theorem="柯西-施瓦茨不等式",
+        dimension="适用范畴",
+        statement=(
+            "请完整、精确地叙述**柯西-施瓦茨不等式**，"
+            "说明它在什么数学结构（什么空间）上成立，并给出**取等条件**。"
+        ),
+        key_conditions=[
+            "在内积空间（或实数/复数的 n 维向量空间）上成立",
+            "|⟨u,v⟩| ≤ ‖u‖ · ‖v‖ 的形式",
+            "取等条件：u 与 v 线性相关（成比例）",
+        ],
+        # ⚠️ 正则必须按 **归一化之后** 的文本来写（见 util.normalize_math）：
+        # `‖u‖` / `||u||` / `\|u\|` 都会变成 `|u|`，`·` 变 `*`，`≤` 变 `<=`。
+        # 2026-09-05 这里曾因只写 Unicode 范数 `‖`，导致 ASCII 写法的
+        # 完美回答被误判为"漏条件"——判据静默失效，且完全不报错。
+        condition_patterns=[
+            [r"内积空间", r"内积", r"InnerProduct", r"inner\s*product",
+             r"欧氏空间", r"向量", r"\bvectors?\b", r"Euclidean", r"Hilbert"],
+            [r"\|\s*u\s*\|\s*\*?\s*\|\s*v\s*\|",
+             r"\|[^|\n]{1,24}\|\s*\*?\s*\|[^|\n]{1,24}\|",
+             r"\<\s*[A-Za-z]\s*,\s*[A-Za-z]\s*\>",
+             r"内积.{0,40}<=", r"sqrt", r"模长.{0,10}乘积",
+             r"(inner\s*product|dot\s*product).{0,40}<="],
+            [r"取等", r"线性相关", r"成比例", r"共线", r"等号成立",
+             r"equality", r"linearly\s*dependent", r"proportional",
+             r"collinear", r"iff\s+.{0,32}(equal|proportional|dependent)"],
+        ],
+        # n=2 实数版：(a₁b₁+a₂b₂)² ≤ (a₁²+a₂²)(b₁²+b₂²)，用 Lagrange 恒等式一步证出
+        gold_lean=_lean(
+            "example (a1 a2 b1 b2 : ℝ) :\n"
+            "    (a1*b1 + a2*b2)^2 ≤ (a1^2 + a2^2) * (b1^2 + b2^2) := by\n"
+            "  nlinarith [sq_nonneg (a1*b2 - a2*b1)]"
+        ),
+        note="取等条件是最容易被省略的一项——能区分'会用'与'真懂'",
+    ),
+    EItem(
+        eid="E4",
+        theorem="一致收敛与极限交换",
+        dimension="隐含条件",
+        statement=(
+            "连续函数列 f_n 的极限函数 f 仍然连续，需要什么条件？\n"
+            "请精确说明条件，并解释为什么**仅仅逐点收敛是不够的**。"
+        ),
+        key_conditions=[
+            "f_n 必须一致收敛于 f（而非仅仅逐点收敛）",
+            "结论：极限函数连续 / 极限与积分可交换",
+        ],
+        condition_patterns=[
+            [r"一致收敛", r"uniformly", r"Uniform",
+             r"uniform\s*convergence", r"一致地收敛"],
+            [r"逐点收敛.{0,40}(不够|不能|不行)", r"逐点.{0,20}(不够|不能)",
+             r"极限.{0,20}连续", r"交换.{0,12}极限", r"极限与积分",
+             r"exchange.{0,28}(limit|integral|sum|derivative)",
+             r"interchange.{0,28}(limit|integral)",
+             r"pointwise.{0,44}(not\s*enough|insufficient|does\s*not|fail)",
+             r"limit\s*function.{0,24}continuous",
+             r"continuous.{0,24}limit"],
+        ],
+        gold_lean="",   # 涉及极限与分析，闭包内难以低成本形式化 → 仅文本判定
+        note="纯文本判据：一致收敛 vs 逐点收敛是分析里最经典的'隐含条件'",
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
+# E 组判据自检语料（**加题时必须同步加**）
+#
+# 用途：不联网、不花钱，验证「条件清单正则」是否真的判得准。
+#   perfect —— 条件说全了的回答，**必须全命中**
+#   vague   —— 把条件含糊带过的回答，**必须漏命中**（否则判据过松，无法区分）
+#   variants—— 同一句正确的话换写法（中/英/LaTeX/ASCII），**必须仍全命中**
+#
+# 为什么必须做这件事：判据正则写错时**不会报错、不会崩溃**，只会让所有模型
+# 被静默地判成"漏条件"，从而得出错误的论文结论。2026-09-05 就是靠这段自检
+# 抓出 E3 只认 Unicode 范数 `‖`、不认 ASCII `||` 的 bug。
+# ---------------------------------------------------------------------------
+E_SELFTEST: dict[str, dict[str, list[str]]] = {
+    "E1": {
+        "perfect": [
+            "拉格朗日中值定理：设函数 f 满足 (1) f 在闭区间 [a, b] 上连续；"
+            "(2) f 在开区间 (a, b) 上可导；"
+            "则存在 ξ ∈ (a, b)，使得 f'(ξ) = (f(b) - f(a)) / (b - a)。",
+        ],
+        "vague": [
+            "拉格朗日中值定理：如果函数连续可导，"
+            "那么存在一个点使得导数等于平均变化率。",
+        ],
+        "variants": [
+            "f is continuous on the closed interval [a,b] and differentiable on "
+            "the open interval (a,b), so there exists xi in (a,b) with "
+            "f'(xi) = (f(b)-f(a))/(b-a).",
+            "函数 f 在闭区间 [a, b] 上连续，在开区间 (a, b) 上可导，"
+            "则存在 ξ ∈ (a, b) 使得 f'(ξ) 等于割线斜率。",
+        ],
+    },
+    "E2": {
+        "perfect": [
+            "费马小定理：若 p 是素数，且 p 不整除 a（即 gcd(a, p) = 1），"
+            "则 a^(p-1) ≡ 1 (mod p)。",
+        ],
+        "vague": [
+            "费马小定理：a^(p-1) ≡ 1 (mod p)。",
+        ],
+        "variants": [
+            "If p is prime and p does not divide a, then a^(p-1) ≡ 1 (mod p).",
+            "若 p 为素数且与 a 互素（gcd(a,p)=1），则 a^{p-1} ≡ 1 (mod p)。",
+        ],
+    },
+    "E3": {
+        "perfect": [
+            "柯西-施瓦茨不等式：在内积空间中，对任意向量 u, v，"
+            "有 |<u, v>| ≤ ‖u‖ · ‖v‖。取等条件是 u 与 v 线性相关（成比例）。",
+        ],
+        "vague": [
+            "柯西-施瓦茨不等式：|⟨u,v⟩| ≤ ‖u‖ · ‖v‖。",
+        ],
+        "variants": [
+            "In an inner product space, |<u,v>| <= ||u|| * ||v||, "
+            "with equality iff u and v are linearly dependent.",
+            r"在内积空间中 $|\langle u,v\rangle| \leq \|u\| \cdot \|v\|$，"
+            "等号成立当且仅当 u 与 v 线性相关。",
+            "For vectors x, y: |x·y| <= |x| * |y|, equality when proportional.",
+        ],
+    },
+    "E4": {
+        "perfect": [
+            "若函数列 f_n 一致收敛于 f，且每个 f_n 连续，"
+            "则极限函数 f 连续，且极限与积分可交换。",
+        ],
+        "vague": [
+            "如果函数列收敛，那么极限和积分可以交换。",
+        ],
+        "variants": [
+            "f_n 必须一致收敛于 f；仅仅逐点收敛不够，不能保证极限函数连续。",
+            "Uniform convergence is required; pointwise convergence is not "
+            "enough to exchange limit and integral.",
+        ],
+    },
+}
+
+
 def all_gold_lean() -> list[tuple[str, str]]:
     """返回 (标识, gold_lean) 列表，供 gold 自检模式离线验证判据链路。
 
@@ -725,4 +960,6 @@ def all_gold_lean() -> list[tuple[str, str]]:
         out.append((f"{r.rid}-gold", r.gold_lean))
     for a in ABS_ITEMS:
         out.append((f"{a.aid}-gold", a.gold_lean))
+    for e in E_ITEMS:
+        out.append((f"{e.eid}-gold", e.gold_lean))
     return [(k, v) for k, v in out if v.strip()]

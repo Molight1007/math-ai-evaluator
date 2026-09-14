@@ -53,6 +53,7 @@ def run_once(
         rec.lean_code = code
         if code:
             res = lean_judge.check(code, tag=f"{probe}_{item_id}_{variant}")
+            rec.lean_checked = True
             rec.lean_ok = res.ok
             rec.lean_compiled = res.compiled
             rec.lean_sorry = res.sorry

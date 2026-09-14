@@ -70,7 +70,11 @@ def _parse_verdict(text: str) -> bool:
         return False
     if "VERDICT" in upper and "B" in upper.split("VERDICT")[-1][:4]:
         return False
-    if "CORRECT" in upper or "VERDICT" in upper and "A" in upper:
+    # 2026-09-12 定型前审核：显式加括号固化优先级。`and` 本就优先于 `or`，
+    # 加括号后**语义完全不变**，只是消除"靠运算符优先级隐式表达意图"的隐患。
+    # ⚠ 已知过宽（未改，属行为变化需赛后评估）：`"A" in upper` 会命中任何含
+    #   大写 A 的文本（如 ANSWER / ABOVE），理想判据是 VERDICT 后紧跟 A/B。
+    if "CORRECT" in upper or ("VERDICT" in upper and "A" in upper):
         return True
     return False
 

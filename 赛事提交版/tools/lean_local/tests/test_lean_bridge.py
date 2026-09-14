@@ -144,6 +144,43 @@ class HelperTest(unittest.TestCase):
         self.assertTrue(_answer_embedded(
             "example : (2 : ℚ) ≤ 3 := by norm_num", "无解"))
 
+    def test_answer_embedded_boxed_20260907(self):
+        """#52 模板化（2026-09-07）：带 \\boxed{} 壳的答案——壳下数值必须锚定。
+
+        nt-093 实证：answer="\\boxed{3000}" 时旧逻辑 fullmatch 失败→token 空→
+        放行不查数字，自证代码绕过锚定，编译后才被 _cc 拦（答对 3000 却
+        proof_invalid）。剥壳后应恢复数字核对。
+        """
+        # \\boxed{3000}：代码含 3000 → True；不含 → False
+        self.assertTrue(_answer_embedded(
+            "example : (12 + 13 : ℚ) = 3000 := by norm_num", "\\boxed{3000}"))
+        self.assertFalse(_answer_embedded(
+            "example : (12 + 13 : ℚ) = 2999 := by norm_num", "\\boxed{3000}"))
+        # 中文句里的数字：同样要核对
+        self.assertTrue(_answer_embedded(
+            "example : (12 + 13 : ℚ) = 3000 := by norm_num", "最大值为 3000"))
+        self.assertFalse(_answer_embedded(
+            "example : (12 + 13 : ℚ) = 2999 := by norm_num", "最大值为 3000"))
+        # 分数 LaTeX（\\dfrac{2617}{2618}）：代码只含分子 2617 也算锚定（沾边）
+        self.assertTrue(_answer_embedded(
+            "example : (x : ℚ) = 2617 := by norm_num",
+            "\\dfrac{2617}{2618}"))
+        # 代码完全不含 2617/2618 → 未锚定 → False
+        self.assertFalse(_answer_embedded(
+            "example : (x : ℚ) = 42 := by norm_num",
+            "\\dfrac{2617}{2618}"))
+        # 多层嵌套 \\boxed{\\dfrac{...}}
+        self.assertTrue(_answer_embedded(
+            "example : (x : ℚ) = 2617 / 2618 := by norm_num",
+            "\\boxed{\\dfrac{2617}{2618}}"))
+
+    def test_answer_embedded_small_int_kept(self):
+        """纯小数字答案（如 3）仍精确检查（回归保护：fullmatch 分支保留）。"""
+        self.assertTrue(_answer_embedded(
+            "example : (1 + 2 : ℕ) = 3 := by norm_num", "3"))
+        self.assertFalse(_answer_embedded(
+            "example : (13 : ℕ) = 13 := by norm_num", "3"))
+
 
 class LeanEnvTest(unittest.TestCase):
     """Lean 环境检测（本环境大概率无 lake，仅验证返回结构不抛异常）。"""

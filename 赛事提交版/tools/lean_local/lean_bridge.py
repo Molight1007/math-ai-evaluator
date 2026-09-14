@@ -2122,3 +2122,163 @@ def _answer_embedded(lean_code: str, answer: str) -> bool:
         return bool(ans_tokens & code_tokens)
     # 纯中文/符号答案 → 无法校验，放行（靠提示词约束）
     return True
+
+
+# ========================================================================
+# 2026-09-14 恢复：Lean 双通道被 ImportError 整体禁用（mirror 专用补丁）
+# --------------------------------------------------------------------
+# 现象：日志第 3 行起报 24 次
+#   「tools.lean_local 不可用，Lean 双通道禁用（回落 AuditGate）」
+#   cannot import name 'hint_for_compile_error' from lean_bridge
+# 根因：一次「同步主仓」把 mirror 的 lean_bridge.py 覆写成缺这 5 个定义的版本，
+#       而 lean_gate.py / lean_pre_verifier.py（与主仓同源）仍在 import 它们。
+# 处置：**逐字**从主仓搬回下列 5 个定义，不再整文件覆盖
+#       （整文件覆盖会删掉本文件特有的 vendor 分片逻辑）。
+# 定义来源：主仓 tools/lean_local/lean_bridge.py
+# ========================================================================
+
+def _total_ram_gb() -> float:
+    """物理内存总量（GiB）。取不到 → 按 8.0 保守估（宁小勿大）。"""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MS(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            m = _MS()
+            m.dwLength = ctypes.sizeof(_MS)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                return float(m.ullTotalPhys) / float(1 << 30)
+        else:
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        return float(line.split()[1]) / (1024.0 * 1024.0)
+    except Exception:  # noqa: BLE001
+        pass
+    return 8.0
+
+
+def mcp_available() -> bool:
+    """MCP 通道是否真可用（venv python + 代理脚本都在）。
+
+    用途：**并行只在 MCP 可用时启用**。理由：MCP 走 LSP 常驻诊断（单次 60s 量级、
+    实例间彼此独立 ⇒ 并行收益明确）；而 bridge 是 `lake env lean` 全量编译，
+    并行收益未验证，且同工程目录并发跑 lake 有额外风险。
+    MCP 不可用时（如比赛平台无 Lean 环境）一切照旧走串行 bridge —— 零行为变化。
+    """
+    try:
+        return bool(_detect_mcp_proxy_python() and _mcp_proxy_script())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _auto_workers() -> int:
+    """自动并行度：**由内存定，其次核数**（每个 Lean server 都把 Mathlib 载进内存）。
+
+    K = clamp(1, min(8, 总内存GiB//4, max(1, 核数//4)))
+    - 硬上限 8：与 lean-lsp-mcp 自身的 `_MAX_SHARED_CLIENTS = 8` 对齐；
+    - ``//4``：单个 Lean+Mathlib 常驻约 1.5–4 GB，按 4 GB 留量最保守；
+      核数按 4 核/实例（Lean 载入 Mathlib 是多线程的）。
+    例：本机 32 核 / 15.2 GiB ⇒ min(8, 3, 8) = **3**；
+        平台 32 核 / 32 GiB ⇒ min(8, 8, 8) = **8**。
+    ⚠ 这是"能开几个"的上界估算；真值仍要量单实例 RSS。
+      另有运行期护栏 `_mcp_room_for_new_instance()`：可用内存 <1.5 GiB 即停止扩池。
+    """
+    try:
+        cores = os.cpu_count() or 2
+    except Exception:  # noqa: BLE001
+        cores = 2
+    by_ram = int(_total_ram_gb() // 4)
+    by_cpu = max(1, int(cores) // 4)
+    return max(1, min(8, by_ram, by_cpu))
+
+
+_WORKERS_LOGGED = False
+
+
+def lean_parallelism() -> int:
+    """MCP/Lean 并行度（``LEAN_MCP_WORKERS``）。
+
+    - 未设置 / ``auto`` / ``0`` → 按内存与核数自动推算（见 ``_auto_workers``）；
+    - 显式正整数 → 用该值（``1`` = 旧的单例 + 全局锁，逐字不变）；
+    - 非法值 → 自动。
+    """
+    global _WORKERS_LOGGED
+    raw = (os.environ.get("LEAN_MCP_WORKERS", "") or "").strip().lower()
+    if raw in ("", "auto", "0"):
+        k = _auto_workers()
+        auto = True
+    else:
+        try:
+            k = max(1, int(raw))
+            auto = False
+        except (TypeError, ValueError):
+            k = _auto_workers()
+            auto = True
+    if not _WORKERS_LOGGED:
+        _WORKERS_LOGGED = True
+        logger.info(
+            "[LeanBridge] MCP 并行度 K=%d（%s；内存 %.1f GiB / %s 核）—— "
+            "1 = 单例串行，>1 = 实例池并行",
+            k, "auto" if auto else "显式", _total_ram_gb(), os.cpu_count())
+    return k
+
+
+def hint_for_compile_error(err: str) -> str:
+    """按 Lean 编译器错误的**文本特征**给出具体可执行的修法（确定性，不依赖 LLM）。
+
+    2026-09-12 新增（实测驱动）：Lean 通道的三个落点（2.6 前置形式化 / 3.6 候选
+    淘汰 / 6.5 最终闸门）此前都把"编译器能给的精确错误"降级成 LLM 的概括话术，
+    模型拿到后不知道改哪一行。实测 2.6 在 3 题上「2 轮重试 0 成功」的根因即此：
+    真实错误是 `Set.Fintype.card` 这个 API 不存在、以及把"值当类型"用，而反馈却
+    让模型「重新审题」。
+
+    返回空串 = 未识别出特征（调用方自行兜底），因此可安全叠加到既有描述之后。
+    """
+    e = (err or "").lower()
+    if not e:
+        return ""
+    if ("unknown identifier" in e or "unknown constant" in e
+            or "unknown namespace" in e or "unknown declaration" in e
+            or "unknown theorem" in e):
+        m = re.search(
+            r"unknown\s+(?:identifier|constant|namespace|declaration|theorem|"
+            r"axiom)[^A-Za-z0-9_]*([A-Za-z_][A-Za-z0-9_.]*)", err)
+        name = (m.group(1) if m else "")
+        if "." in name:
+            return ("**未知标识符**：`%s` 在 Mathlib 中不存在。这是 **API 名**，请改用"
+                    "等价的标准名称——例如「集合的元素个数」应写 `Set.ncard` / "
+                    "`Finset.card`（**没有 `Set.Fintype.card` 这个名字**）。" % name)
+        return ("**未知标识符**：`%s` 未定义。请先确认题目是否给出了该符号；若未给出，"
+                "请改用 Mathlib 已有记号，或先用 `def`/`abbrev` 把它定义出来。"
+                % (name or "该名字"))
+    if "type mismatch" in e or "has type" in e or "expected to have type" in e:
+        return ("**类型不匹配**：Lean 里**值不是类型**。`def n : Nat := 2025` 定义的是"
+                "**值**，不能当类型用——表示 n 个元素请用 `Fin n`，例如 "
+                "`Finset (Fin 2025 × Fin 2025)`。数值字面量出现在需要 `Prop` 的位置"
+                "也不可用，请显式标注类型（如 `(19 : ℕ)`）。")
+    if ("expected" in e or "unexpected token" in e or "invalid syntax" in e
+            or "line break" in e or "unknown token" in e):
+        return ("**语法错误**：① theorem 的**结论位不能直接写 `let ... in`**——请把结论"
+                "写成明确的命题，中间定义放进 `by` 块用 `have`/`let`；② 集合字面量 "
+                "`{x | P x}` **必须先声明类型**（如 `(S : Set ℕ) := {x | ...}`），"
+                "不能直接接 `.card`。")
+    if "failed to synthesize" in e or "instance" in e:
+        return ("**类型类实例推断失败**：多为类型标注缺失或用错。请为数值/集合显式标注"
+                "类型，并确认结构具备所需实例（如 `Finset` 的元素类型需 "
+                "`DecidableEq`）。")
+    if "unknown module prefix" in e:
+        return "**缺少模块导入**：请补上对应 `import`（如 `import Mathlib`）。"
+    return ""

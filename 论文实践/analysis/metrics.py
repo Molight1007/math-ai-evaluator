@@ -165,17 +165,79 @@ def summarize_D(recs: list[Record]) -> dict:
     return {"per_item": per_item, "aggregate": agg}
 
 
+# ---------------------------------------------------------------- E 组
+def summarize_E(recs: list[Record]) -> dict:
+    """E 组：定理陈述完整性。
+
+    两个判据分开统计，避免"无 Lean 判据的题"人为拉低 Lean 通过率：
+      - condition_completeness：文本条件完整率（全部 E 题都算）
+      - lean_*：只在 has_lean 的题上算
+    另按 dimension 分子维度看，定位模型到底漏哪一类条件。
+    """
+    per_item: list[dict] = []
+    for r in recs:
+        m = r.metrics
+        per_item.append({
+            "eid": r.item_id,
+            "theorem": m.get("theorem", ""),
+            "dimension": m.get("dimension", ""),
+            "n_cond": len(m.get("key_conditions", [])),
+            "n_hit": sum(m.get("cond_hits", [])),
+            "completeness": m.get("condition_completeness", 0.0),
+            "full": m.get("full_conditions", 0),
+            "missing": m.get("missing_conditions", []),
+            "has_lean": m.get("has_lean", 0),
+            "lean_ok": m.get("lean_ok", 0),
+            "both_pass": m.get("both_pass", 0),
+        })
+
+    lean_items = [p for p in per_item if p["has_lean"]]
+    n_lean = len(lean_items) or 1
+
+    # 按子维度聚合：定位"漏的是哪一类条件"
+    by_dim: dict[str, list[dict]] = defaultdict(list)
+    for p in per_item:
+        by_dim[p["dimension"] or "未标注"].append(p)
+
+    agg = {
+        "n_items": len(per_item),
+        "n_with_lean": len(lean_items),
+        # ① 文本条件完整率：平均每条定理说出了多少比例的关键条件
+        "condition_completeness_rate": _mean(
+            [p["completeness"] for p in per_item]),
+        # ② 完全陈述率：一条条件都没漏的比例（最严格）
+        "full_statement_rate": _rate([p["full"] for p in per_item]),
+        # ③ Lean 特例编译率（只在有判据的题上统计）
+        "lean_special_ok_rate": _rate([p["lean_ok"] for p in lean_items]),
+        # ④ 双通过率：条件说全 **且** 特例编译过（无判据题只看条件）
+        "both_pass_rate": _rate([p["both_pass"] for p in per_item]),
+    }
+    by_dim_out = {
+        dim: {
+            "n": len(v),
+            "completeness": _mean([p["completeness"] for p in v]),
+            "full_rate": _rate([p["full"] for p in v]),
+        }
+        for dim, v in sorted(by_dim.items())
+    }
+    return {"per_item": per_item, "by_dimension": by_dim_out, "aggregate": agg}
+
+
 def summarize_all(records: list[Record]) -> dict:
     by_probe: dict[str, list[Record]] = defaultdict(list)
     for r in records:
         by_probe[r.probe].append(r)
 
+    # 整体 Lean 通过率只统计**真正走过编译器**的记录，
+    # 否则无判据的题（组合/分析/纯陈述）会被算成 0 而人为拉低数字。
+    checked = [r for r in records if r.lean_checked]
     out = {
         "counts": {k: len(v) for k, v in sorted(by_probe.items())},
         "total": len(records),
         "errors": sum(1 for r in records if r.error),
         "truncated": sum(1 for r in records if r.truncated),
-        "lean_ok_rate_all": _rate([int(r.lean_ok) for r in records]),
+        "lean_checked": len(checked),
+        "lean_ok_rate_all": _rate([int(r.lean_ok) for r in checked]),
         "mean_elapsed": _mean([r.elapsed for r in records]),
     }
     if by_probe.get("A"):
@@ -186,4 +248,6 @@ def summarize_all(records: list[Record]) -> dict:
         out["C"] = summarize_C(by_probe["C"])
     if by_probe.get("D"):
         out["D"] = summarize_D(by_probe["D"])
+    if by_probe.get("E"):
+        out["E"] = summarize_E(by_probe["E"])
     return out

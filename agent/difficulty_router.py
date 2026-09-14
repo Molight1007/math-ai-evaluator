@@ -6,7 +6,10 @@ from __future__ import annotations
 难题深度求解通道的第一环：在求解前判定题目档位，决定资源分配。
 
 三级档位：
-- fast     简单题：1 候选 + 0-1 票验证，预算 60-120s
+- ~~fast     简单题：1 候选 + 0-1 票验证，预算 60-120s~~
+  **⚠ 2026-09-14 已删除**（用户要求）—— 判据是"看起来简单"而非"确认会做"，
+  且它省掉的恰是候选池与子目标分解；实测全库仅 6 道进 fast、其中 3 道选择题。
+  原 fast 题现归入 **standard**（改用标准预算与完整链路）。
 - standard 标准题：2 候选 + 1 票聚类，预算 300-480s（== 现状）
 - deep     难题：4 候选温度分层 + 截断续写 + 子目标分解 + 3 票验证
            + 0 票时 revise 自纠错 + playoff 复算，预算至 1200s
@@ -258,8 +261,17 @@ class DifficultyRouter(BaseAgent):
 
     @staticmethod
     def _score_to_tier(score: float) -> str:
-        if score <= _SCORE_FAST_MAX:
-            return "fast"
+        """2026-09-14：**删除 fast 档**（用户要求），只保留 standard / deep。
+
+        删除理由：
+          ① fast 的判据是"**看起来简单**"（题型领域 / 题目长度 / LLM 自评），
+             **不是"确认会做"**；而它省掉的恰是候选池与**子目标分解**
+             （三层结构/逐项判定的载体）。
+          ② 实测全库仅 6 道进过 fast，其中 **3 道是选择题**、2 道属 gold 争议题
+             （102 / 106），103 还是多选 —— 保护被跳过的正是最需要保护的题。
+          ③ 两档制让资源分配（候选数 / 投票数 / 续写 / 预算）逻辑更简单可控。
+        低分题现归入 **standard**（即原 fast 题改用标准预算与完整链路）。
+        """
         if score >= _SCORE_DEEP_MIN:
             return "deep"
         return "standard"

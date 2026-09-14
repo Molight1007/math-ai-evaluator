@@ -6,7 +6,8 @@ from __future__ import annotations
 在竞赛 6.5h 硬限内把全卷总耗时控制在约 5.83 小时（target=21000s），并把省下的预算集中投入难题。
 
 核心机制（借鉴 math_competition_agent 的 paper_pacer 思想，适配本版）：
-- 每档位有设计预算帽（tier_cap）：fast=120s / standard=540s / deep=1200s；
+- 每档位有设计预算帽（tier_cap）：standard=540s / deep=1200s；
+  2026-09-14 删除 fast 档（字典中的 fast 键保留作兜底，正常不再被使用）；
   （deep 上限 = 平台单题硬限 max_time_per_question=1200s，不可再抬）
 - 动态收紧：paper_cap = 剩余目标时间 / 剩余题数；
 - 软预算：soft_budget = min(tier_cap, max(paper_cap, MIN_SOFT))；
@@ -42,6 +43,12 @@ class PaperPacer:
         # 默认 21000（5.83h），仅为无配置时的兜底；实际取 config.paper_target_time。
         self.target_seconds = float(getattr(config, 'paper_target_time', 21000))
         self.min_soft = float(getattr(config, 'paper_min_soft', DEFAULT_MIN_SOFT))
+        # 「放开时间」系数（2026-09-13 新增）：卷面进度正常时，单题预算可放宽到
+        # `sustainable × normal_relax`。1.0 = 严格按平均线（不超支）；1.5（默认）
+        # = 允许前期用掉后期额度（拿时间换单题质量），代价是全卷最多超支 50%，
+        # 由 `ratio` 熔断兜底。设 1.0 即"完全不放开、只看平均线"。
+        self.normal_relax = float(
+            getattr(config, 'pacer_normal_relax', 1.5) or 1.5)
         # 总题数：config 优先，其次构造参数，最后默认值
         self.total_questions = int(
             total_questions
@@ -110,45 +117,57 @@ class PaperPacer:
     def budget_for(self, tier: str) -> float:
         """返回某档位的当前软预算帽（秒）。
 
-        2026-08-29 改为「进度正常 → 给满档位预算；落后 → 收紧到平均」：
+        ── 2026-09-13 重写（「放开时间」+「防卡死」同时成立）──────────────
+        背景（已实测确认）：单题 1200s **纯属自设**（`user_agent.py:169` 注释
+        自陈"ICMA 同款"，平台日志 `deadline_seconds: 0`，平台不设单题硬限）；
+        而全卷时钟此前是**死的**（`orchestrator.run()` 每题把 total_deadline
+        重置为 `now + 6.25h` ⇒ ratio 恒 0 ⇒ 应急/收紧分支永不触发）。两者叠加
+        = 唯一约束只剩单题那道 1200s 顶，等于**没有任何人在管全卷**。
 
-        旧逻辑 soft = min(tier_cap, max(paper_cap, MIN_SOFT)) 永远按"平均剩余
-        预算"封顶：deep 档设计 1200s 却常年只拿到 ~578s（平均线），难题求解
-        必然被截断（D5 基线实测 815 次"剩余时间不足"、Solver 被跳过 225 次、
-        expr_wrong 69% 里大量是"没时间算完"而非真算错）。
+        新口径：单题预算 = `min(档位帽, 全卷可持续值 × 系数)`，其中
 
-        新逻辑：只要卷面进度正常（已用时间比例 ≤ 已答题数比例），单题就给满
-        档位预算（fast 120 / standard 480 / deep 1200），**保证每题做完或确认
-        不会**；只有卷面真正落后时才按剩余预算收紧（并保底 MIN_SOFT=120s，
-        绝不压到无法完成一次求解）。卷面一旦因难题吃满而落后，后续题自动收紧，
-        全卷总时间仍收敛在 target 附近。
+            sustainable = concurrency × 剩余目标时间 / 剩余题数
+                        （= 余下题目"平均每题可花"的题·秒，已含并发折算）
+
+        - **进度正常**（时间消耗比例 ≤ 完成比例）→ 给 `sustainable × relax`
+          （relax 默认 1.5，来自 config.pacer_normal_relax）。**这就是"放开
+          时间"的入口**：卷面有余量时单题能拿更多——本地少量题测试时
+          sustainable 很大，实际会拿满档位帽；平台 112 题时自动回落到平均线。
+        - **卷面落后** → 只给 `sustainable`（系数 1.0）。
+        - 两者都受 `tier_cap` 封顶、受 `min_soft` 保底。
+
+        ⚠ 与旧版的关键差别：**进度正常不再无脑 `return tier_cap`**。旧写法在
+        档位帽被放开（如 deep 3600）之后，会让前几题各自吃满 3600s 把全卷烧穿
+        ——这正是"卡在某题上导致写不完"的机理。现在任何一题的单题预算都不可
+        超过 `concurrency × 剩余/剩余题数 × relax`，全卷因此始终收敛在 target
+        附近（最坏超支幅度由 relax 决定）。
         """
         elapsed = time.time() - self.start_time
         with self._lock:
             answered = max(self.done, self.started - self._inflight_window)
         tier_cap = float(self.tier_caps.get(tier, 480.0))
 
-        # 2026-09-02 开局宽容：开题阶段（answered < inflight_window），
-        # 并发 3 题都刚开始，done=0 → answered=0，time_frac>0 永远判定"落后"，
-        # 死锁 deep 档 1200s 拿不到（实测 4 题全拿 ~560s 平均线）。
-        # 修复：开题直接给满档，让 deep 档 1200s 真生效。
-        if answered < self._inflight_window:
-            return tier_cap
+        # 全卷可持续单题预算（含并发折算）——「不写不完」的数学护栏。
+        remaining_target = max(1.0, self.target_seconds - elapsed)
+        remaining_q = max(1, self.total_questions - answered)
+        sustainable = self.concurrency * remaining_target / remaining_q
+        bonus_per_q = self.bonus_pool / remaining_q
 
-        # 进度判定：时间消耗比例 ≤ 完成比例 → 正常/超前，给满档位预算
+        # 开题宽容：并发尚未回填（answered 偏小），"落后"判定不可靠。
+        # 但仍受 sustainable × relax 约束——否则前几题会把全卷烧穿。
+        if answered < self._inflight_window:
+            return min(tier_cap,
+                       max(sustainable * self.normal_relax, self.min_soft))
+
+        # 进度判定：时间消耗比例 ≤ 完成比例 → 正常/超前，放开到 relax 倍
         budget_frac = answered / max(1, self.total_questions)
         time_frac = elapsed / max(1.0, self.target_seconds)
         if time_frac <= budget_frac:
-            return tier_cap
-
-        # 落后 → 收紧到平均（剩余墙钟 × 并发 / 剩余题数）+ 盈余加成
-        # 2026-09-02 老师需求：已完成题省下的时间（bonus_pool）按剩余题数
-        # 摊还给后续题，让"简单题早完成→难题有更多时间"。
-        remaining_target = max(1.0, self.target_seconds - elapsed)
-        remaining_q = max(1, self.total_questions - answered)
-        paper_cap = self.concurrency * remaining_target / remaining_q
-        bonus_per_q = self.bonus_pool / remaining_q
-        return min(tier_cap, max(paper_cap + bonus_per_q, self.min_soft))
+            cap = sustainable * self.normal_relax + bonus_per_q
+        else:
+            # 落后 → 回到平均线；已完成题省下的盈余按剩余题数摊还
+            cap = sustainable + bonus_per_q
+        return min(tier_cap, max(cap, self.min_soft))
 
     # ------------------------------------------------------------------
     # deep 档配额（防止全卷超时）

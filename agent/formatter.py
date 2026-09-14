@@ -189,6 +189,39 @@ class FormatterAgent(BaseAgent):
                     return _Cand(id=-1, answer=_fixed,
                                  reasoning="[差分检测修正]")
                 _top_ans, _top_n = max(_mv.items(), key=lambda kv: kv[1])
+                # ⚠ P3 修复（2026-09-14 代码审查）：差分检测失败**且平票**时，
+                # 上面的 `max()` 取的是 dict 插入序里第一个候选 ⇒ 等于**随机**。
+                # 改为**取交集**：并列组合共同包含的选项 = 无争议的共识部分，
+                # 是"争议项无法判定"时唯一有依据的保守选择。
+                # （实测：AD×2 vs ACD×2 ⇒ **AD**，即剔除有争议的 C；
+                #   A×3 vs B×3 完全对立、交集为空 ⇒ 只能退回最高票）
+                _max_v = max(_mv.values())
+                _tops_ans = [k for k, v in _mv.items() if v == _max_v]
+                if len(_tops_ans) > 1:
+                    try:
+                        _sets = [set(re.findall(r"[A-E]", _t))
+                                 for _t in _tops_ans]
+                        _inter = set.intersection(*_sets) if _sets else set()
+                        if _inter:
+                            _ans_i = "".join(sorted(_inter))
+                            try:
+                                ctx._pick_diag = {
+                                    "branch": "formatter_tie_intersection",
+                                    "tops": ["".join(sorted(x)) for x in _sets],
+                                    "intersection": _ans_i,
+                                    "picked": _ans_i,
+                                }
+                            except Exception:  # noqa: BLE001
+                                pass
+                            self.record(ctx, "finalize",
+                                        "选择题平票且差分失败 → 取交集 {} ⇒ {}".format(
+                                            ["".join(sorted(x)) for x in _sets],
+                                            _ans_i))
+                            from .base import Candidate as _Cand2
+                            return _Cand2(id=-1, answer=_ans_i,
+                                          reasoning="[平票取交集]")
+                    except Exception:  # noqa: BLE001
+                        pass
                 # 2026-09-13：埋点写入 ctx._pick_diag（_collect_diag 会落盘），
                 # 与 orchestrator 兜底路径共用同一字段，保证"选取来源"可追溯。
                 try:
@@ -212,6 +245,43 @@ class FormatterAgent(BaseAgent):
                 for _c in (ctx.candidates or []):
                     if (getattr(_c, "answer", "") or "").strip() == _top_ans:
                         return _c
+        # ---- 2026-09-14 枚举优先（题面要求『所有』时）----
+        # 实测 003：merge 已正确产出 `\boxed{0,2026}`，但 verdicts **三条全部失效**
+        # （LLM 超时 —— 超时阈值被收到 120s 且 max_retries=1），答案选取随之退化，
+        # **把正确的枚举丢掉了**，最终只剩 `\boxed{2026}`。
+        # 依据：题面明确要求"所有/全部"时，**枚举形态的候选天然优于单值候选**
+        # （单值必然不满足题意）。故在常规选答之前先做一次"枚举优先"。
+        try:
+            from .question_type import asks_all_values as _aav2
+            if _aav2(ctx.problem or ""):
+                _enum_c = []
+                for _c in (ctx.candidates or []):
+                    _a2 = (getattr(_c, "answer", "") or "").strip()
+                    if not _a2 or _REFUSAL_RE.search(_a2):
+                        continue
+                    _core2 = _a2
+                    _mb2 = re.search(r"\\boxed\{([^{}]*)\}", _a2)
+                    if _mb2:
+                        _core2 = _mb2.group(1)
+                    if re.search(r"[,，;；、]", _core2):
+                        _enum_c.append(_c)
+                if _enum_c:
+                    _enum_c.sort(key=lambda c: len(c.reasoning or ""),
+                                 reverse=True)
+                    try:
+                        ctx._pick_diag = {
+                            "branch": "enum_preferred",
+                            "picked": (getattr(_enum_c[0], "answer", "") or "")[:60],
+                            "n_enum_candidates": len(_enum_c),
+                        }
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.record(ctx, "finalize",
+                                "题面要求『所有』→ 枚举形态候选优先"
+                                "（{} 个枚举候选，取推理最详细者）".format(len(_enum_c)))
+                    return _enum_c[0]
+        except Exception:  # noqa: BLE001
+            pass
         # 0) 聚类数据（来自 verifier）→ 找最佳簇中第一个候选
         best_cluster = getattr(ctx, '_best_cluster', None)
         if best_cluster:

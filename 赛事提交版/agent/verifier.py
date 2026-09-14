@@ -85,46 +85,54 @@ class VerifierAgent(BaseAgent):
     # 投票与解析
     # ==================================================================
 
-    def _is_correct_vote(self, text: str) -> bool:
-        """解析 VERDICT 行。规则：先判拒绝词，再判接受词（BUG-2 修复）。"""
+    # VERDICT 行解析（2026-09-11）：放宽带换行 / \boxed{} 壳的写法。
+    # 此前拒绝词表里写死 `VERDICT\s*:\s*B`，模型输出 `VERDICT: \n\n\boxed{B}`
+    # 时被换行 + 壳打断 → 落入"无法解析" → 判错（实测 9 次）。
+    _VERDICT_LINE_RE = re.compile(
+        r"VERDICT\s*[:：]\s*(?:\\boxed\s*\{\s*)?([AB])", re.IGNORECASE)
+
+    def _is_correct_vote(self, text: str) -> bool | None:
+        """解析 VERDICT 行 → True(判对) / False(判错) / None(弃权)。
+
+        2026-09-11 三态化（依据 `Bug清单_团队提交de90cedc_0911.md` §3）：
+        LLM 调用失败（text is None）与输出无法解析，语义上是**基础设施/格式
+        故障 = 弃权**，不是"答案错误"。此前一律 `return False`，把 36 张故障票
+        （27 次 None 输入 + 9 次解析失败，占票池 ~30%）当成反证计入：
+        既压低簇置信度触发无谓 revise（单题白烧 96–158s），也把本可通过的
+        候选直接投死。返回 None 的票在聚合时剔出 total_votes 分母。
+        """
         if text is None:
-            logger.warning("_is_correct_vote 收到 None 输入，默认判错")
-            return False
+            logger.warning("_is_correct_vote 收到 None 输入（LLM 调用失败）→ 弃权")
+            return None
         text_upper = text.upper()
+
+        # 0) VERDICT 行优先（权威信号，含换行/壳变体）。
+        #    注意：在**原文**上做 IGNORECASE 匹配，不能在 text_upper 上匹配——
+        #    upper() 会把 `\boxed` 变成 `\BOXED`，导致壳形态正则失配。
+        m = self._VERDICT_LINE_RE.search(text)
+        if m:
+            return m.group(1).upper() == "A"
 
         # 1) 拒绝词优先——规避"不正确"包含"正确"的误判
         reject_patterns = [
             r'\bINCORRECT\b', r'\bWRONG\b', r'\bFALSE\b',
             r'不\s*正\s*确', r'错\s*误', r'\bNO\b(?!\s*CHANGE|TE)',
-            r'VERDICT\s*:\s*B',
         ]
         for pat in reject_patterns:
-            if re.search(pat, text_upper) and "不正确" not in text:
-                # "不正确" 已被 \b 匹配避免；额外保底
-                pass
-        for pat in reject_patterns:
             if re.search(pat, text_upper):
-                # 排除 VERDICT: B 旁边的假阳性（只对明确单一匹配生效）
                 return False
 
         # 2) 接受词
         accept_patterns = [
             r'\bCORRECT\b', r'\bTRUE\b', r'正\s*确', r'\bYES\b',
-            r'VERDICT\s*:\s*A',
         ]
         for pat in accept_patterns:
             if re.search(pat, text_upper):
                 return True
 
-        # 3) 仅包含 VERDICT: B → 拒绝
-        if re.search(r'VERDICT\s*:\s*B', text_upper):
-            return False
-
-        # 4) 无法判断 → 保守当作错误（宁可假阴，交给共识/revise 兜底）
-        #    v2.6 修复"虚高置信度"：此前默认判对会导致未解析的票计入正确票，
-        #    使错误答案也拿到高置信度。改为判错后，低共识会触发 revise/协作复核。
-        logger.warning(f"无法从文本中解析 VERDICT，默认为错误: {text[:100]}")
-        return False
+        # 3) 无法判断 → 弃权（既不判对也不判错，不参与分母）
+        logger.warning("无法从文本中解析 VERDICT，计为弃权票: %s", text[:100])
+        return None
 
     # ==================================================================
     # 答案归一化与等价判定
@@ -222,9 +230,12 @@ class VerifierAgent(BaseAgent):
             for idx in g:
                 cid = candidates[idx].get("id", idx) if isinstance(candidates[idx], dict) else idx
                 cluster.candidate_ids.append(cid)
-                # 统计该候选的所有票
+                # 统计该候选的所有票（2026-09-11：弃权票不计入分母 ——
+                # 故障≠反证，见 _is_correct_vote 三态化说明）
                 if idx < len(verdicts):
                     for v in verdicts[idx]:
+                        if getattr(v, "abstain", False):
+                            continue
                         cluster.vote_total += 1
                         if v.correct:
                             cluster.vote_correct += 1
@@ -319,14 +330,26 @@ class VerifierAgent(BaseAgent):
         - 确定性 pass → 追加一张独立正确票（deterministic_pass，非 LLM 客观票）
         - 确定性 unknown → 只挂证据，不改判
         """
+        # 超时保护：deadline 已过 → 不判分（与 _vote 路径口径一致，空 verdicts 由上层走兜底）
+        if ctx.is_timed_out():
+            self.record(ctx, "vote_timeout",
+                        "rubric 判分路径：单题 deadline 已过，跳过判分（返回空票）")
+            logger.warning("Verifier: 单题 deadline 已过，跳过 rubric 判分")
+            return []
         text = self._candidate_text(candidate)
         votes: list[Verdict] = []
 
         # 1) rubric 判分（1 次 JSON prefill）
         rub = self._vote_one_rubric(ctx, problem, text)
         if rub is None:
-            votes.append(Verdict(correct=True, raw="rubric_parse_failed",
-                                 feedback="rubric 判分解析失败，保守放行"))
+            # 2026-09-11 三态化：判分调用/解析失败 = 基础设施故障 → 弃权。
+            # 此前记 `correct=True`（"保守放行"）会凭空制造一张**正确票**、
+            # 虚抬簇置信度——与"故障计成错票"是同一枚硬币的两面。
+            # 改为弃权后既不判对也不判错，不参与 total_votes 分母；若该候选
+            # 最终零有效票，orchestrator 的 5.5 低置信度通道仍会兜底复核。
+            votes.append(Verdict(correct=False, abstain=True,
+                                 raw="rubric_parse_failed",
+                                 feedback="rubric 判分解析失败（弃权，不计票）"))
         else:
             correct = str(rub.get("verdict", "B")).upper() == "A"
             feedback = ""
@@ -444,13 +467,16 @@ class VerifierAgent(BaseAgent):
             for f in concurrent.futures.as_completed(futures):
                 try:
                     raw = f.result()
+                    ok = self._is_correct_vote(raw)
                     verdicts.append(Verdict(
-                        correct=self._is_correct_vote(raw),
+                        correct=bool(ok),
+                        abstain=ok is None,   # 故障票 = 弃权，剔出 total_votes 分母
                         raw=raw,
                     ))
                 except Exception as e:
                     logger.warning(f"Vote failed: {e}")
-                    verdicts.append(Verdict(correct=False, raw=str(e)))
+                    # 调用异常同样是基础设施故障 → 弃权，不得当反证
+                    verdicts.append(Verdict(correct=False, abstain=True, raw=str(e)))
 
         # 可选评分模式（补充/校准）
         if use_scoring and self.config.use_scoring:
@@ -832,10 +858,16 @@ class VerifierAgent(BaseAgent):
                                if step_result else False)
             v = Verdict(correct=overall_correct, raw=json.dumps(step_result or {}))
             cluster = AnswerCluster("proof")
-            cluster.candidate_ids = [candidates[0].get("id", 0)]
+            # 2026-09-12 定型前审核修复：候选是 `Candidate` dataclass（无 `.get`），
+            # 原写法 `candidates[0].get("id", 0)` 在证明题单候选通道会抛
+            # AttributeError（被外层吞掉 → 该通道静默失效）。
+            cluster.candidate_ids = [getattr(candidates[0], "id", 0)]
             cluster.vote_correct = 1 if overall_correct else 0
             cluster.vote_total = 1
-            feedback = (step_result.get("step_verdicts", [{}])[0].get("note", "")
+            # 2026-09-12 定型前审核修复：`step_verdicts` 键存在但为**空列表**时，
+            # 原来的 `[0]` 会 IndexError（同样被外层吞掉 → 静默失效）。
+            _sv = (step_result or {}).get("step_verdicts") or [{}]
+            feedback = (_sv[0].get("note", "")
                         if step_result and not overall_correct else "")
             return {
                 "cluster_data": [cluster],
@@ -860,7 +892,12 @@ class VerifierAgent(BaseAgent):
                                  use_scoring=use_scoring)
             # 反例挑战（P2，sq 语义）：仅"该候选无任何正确票"且非数值答案时触发，
             # LLM 生成命题 → 程序数值验证 → hard_fail 硬否决（客观证伪）。
-            if use_challenge and vds and not any(v.correct for v in vds):
+            # 2026-09-11：若该候选**全是弃权票**（判分链路故障、无任何判定信息），
+            # 不再触发挑战——限流风暴中这会逐候选追加 LLM 调用、自激放大（详见
+            # Bug清单 §5 的 176 次限流秒级连发）。有真实判定信息时才值得挑战。
+            _has_real_vote = any(not getattr(v, "abstain", False) for v in vds)
+            if (use_challenge and vds and _has_real_vote
+                    and not any(v.correct for v in vds)):
                 ans = (cand.get("answer", "") if isinstance(cand, dict)
                        else getattr(cand, "answer", ""))
                 chal = self._challenge_counterexample(
@@ -916,7 +953,9 @@ class VerifierAgent(BaseAgent):
             confidence = (best_cluster.vote_correct / best_cluster.vote_total
                           if best_cluster.vote_total else 0.0)
             # 触发条件：置信度低（验证结果不可靠）或投票全否
-            if confidence < 0.5 and True:
+            # 2026-09-12 定型前审核：原为 `if confidence < 0.5 and True:`
+            # （`and True` 是残留死条件，删除后语义完全不变）
+            if confidence < 0.5:
                 top_ans = best_cluster.answer_norm or ""
                 if self._playoff_recheck(ctx, problem, top_ans):
                     best_cluster.vote_correct += 1

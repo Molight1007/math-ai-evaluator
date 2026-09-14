@@ -31,10 +31,13 @@ v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调�
 from __future__ import annotations
 
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from agent.base import BaseAgent, Budget, TaskContext
-from tools.lean_local.lean_bridge import LeanBridge
+from tools.lean_local.lean_bridge import (
+    LeanBridge, hint_for_compile_error, lean_parallelism, mcp_available)
 
 logger = logging.getLogger("MathPilot")
 
@@ -105,6 +108,35 @@ class LeanGate:
     def strict(self) -> bool:
         return bool(getattr(self.config, "lean_gate_strict", False))
 
+    @staticmethod
+    def _not_applicable(ctx: TaskContext) -> tuple[bool, str]:
+        """按题 Lean 适用性豁免（2026-09-10 用户要求「所有题都要用 Lean，
+        除非非常简单的题」）。
+
+        答案不是数学对象的题（选项字母 / 判断值 / 概念文字）Lean 结构上无从
+        形式化核验，按**题**豁免而不是用全局开关一刀切。判定值由
+        ``orchestrator`` 在 1.1) 步骤落盘到 ``ctx.metadata["lean_applicable"]``
+        （:func:`agent.question_type.lean_applicable`）——本模块只读 metadata，
+        保持 ``tools/`` 单向依赖 ``agent/`` 的隔离原则。
+
+        缺省语义：metadata 无该键（旧结果 / 手搓 ctx / 单测 fixture）→
+        视为适用，既有行为完全不变。
+
+        返回 ``(是否豁免, 原因)``。
+        """
+        md = getattr(ctx, "metadata", None)
+        if isinstance(md, dict) and md.get("lean_applicable") is False:
+            return True, str(md.get("lean_skip_reason", "") or "not_applicable")
+        return False, ""
+
+    @property
+    def _unknown_stop(self) -> int:
+        """连续 N 个 unknown 后止损（B，2026-09-07）：剩余候选不再逐个
+        整题 verify。同题同翻译器，连续 unknown = 验证器对该题失效（翻译/
+        形式化失败有传染性），再验也只是重复烧 LLM+编译时间；PB-002 实证
+        六候选整题 verify 563s 全 unknown 白烧 9 分钟。0 = 关闭（逐候选全验）。"""
+        return int(getattr(self.config, "lean_gate_unknown_stop", 2) or 0)
+
     @property
     def _bridge_inst(self) -> LeanBridge | None:
         if self._bridge is None:
@@ -114,6 +146,91 @@ class LeanGate:
                 logger.warning("LeanBridge 初始化失败，Lean 门禁整体降级: %s", e)
                 self._bridge = None
         return self._bridge
+
+    # ------------------------------------------------------------------
+    # 候选级并行预取（2026-09-13）
+    # ------------------------------------------------------------------
+    def _prefetch_reports(self, ctx: TaskContext, candidates: list,
+                          bridge, is_proof: bool, domain: str):
+        """波次并行预取候选的 Lean 报告；返回与 ``candidates`` 等长的 list。
+
+        元素为 ``(report, exc)``；``None`` = "该候选未预取，由原循环按原路径验证"。
+
+        设计约束（全部为了不改变原语义）：
+        - **纯计算**：不改 ctx、不写 kept/feedbacks，所有决策与埋点仍留给原循环；
+        - 逐波提交（波宽 = 并行度 K），每波后判**时间护栏**与**空转止损**（与原
+          循环同一判据），命中即停 —— 未预取的候选走原串行路径；
+        - 并行度 <=1 / ``LEAN_GATE_PARALLEL=0`` → 返回 None：完全旧路径。
+
+        依据：候选级验证彼此独立（各写各的 .lean、各要一份 report），原为
+        6 候选 ×20–38s 全串行；并行后压缩到 ⌈N/K⌉ 波。
+        """
+        import time as _t
+        if os.environ.get("LEAN_GATE_PARALLEL", "1") == "0":
+            return None
+        # 只在 MCP 通道真可用时并行：bridge 是 `lake env lean` 全量编译，
+        # 并行收益未验证且同目录并发 lake 有额外风险 → 保持旧的串行行为。
+        if not mcp_available():
+            logger.info("LeanGate: MCP 通道不可用（无 venv/代理）→ 候选验证保持串行")
+            return None
+        try:
+            _k = int(lean_parallelism())
+        except Exception:  # noqa: BLE001
+            return None
+        if _k <= 1 or len(candidates) < 2:
+            return None
+        _stop = self._unknown_stop
+        timeout = float(getattr(self.config, "lean_timeout", 60.0))
+        _hard = float(getattr(self.config, "max_time_per_question", 1200))
+        out: list = [None] * len(candidates)
+
+        def _one(_cand):
+            """只做「算 report」：入参与原循环逐字相同，异常原样带回主线程重抛。"""
+            try:
+                if is_proof:
+                    return bridge.verify(
+                        problem=ctx.problem or "",
+                        reasoning=_cand.reasoning or "",
+                        domain=domain, timeout=timeout), None
+                return bridge.verify_answer(
+                    problem=ctx.problem or "",
+                    reasoning=_cand.reasoning or "",
+                    answer=_cand.answer or "",
+                    domain=domain, timeout=timeout), None
+            except Exception as _e:  # noqa: BLE001
+                return None, _e
+
+        i, n, _streak = 0, len(candidates), 0
+        while i < n:
+            # 时间护栏（与原循环同口径）：剩余 < 45s 即停止取件
+            if (ctx.start_time >= 10**8
+                    and (ctx.start_time + _hard) - _t.time() < 45.0):
+                logger.info("LeanGate: 并行预取停止（剩余时间不足 45s）")
+                break
+            wave = list(enumerate(candidates))[i:i + _k]
+            _tk = _t.perf_counter()
+            try:
+                with ThreadPoolExecutor(max_workers=len(wave)) as _ex:
+                    _res = list(_ex.map(lambda p: _one(p[1]), wave))
+            except Exception as _we:  # noqa: BLE001  线程池异常 → 整体退回串行
+                logger.warning("LeanGate: 并行预取异常，退回串行: %s",
+                               str(_we)[:160])
+                return None
+            _unk = 0
+            for (_idx, _cand), (_r, _e) in zip(wave, _res):
+                out[_idx] = (_r, _e)
+                if _r is None or getattr(_r, "verdict", "") == "unknown":
+                    _unk += 1
+            _streak = _streak + _unk if _unk == len(wave) else 0
+            logger.info("LeanGate: 并行预取 %d 个候选耗时 %.1fs（K=%d）",
+                        len(wave), _t.perf_counter() - _tk, _k)
+            i += len(wave)
+            # 空转止损（与原循环同判据）：整波 unknown → 剩余不再预取
+            if _stop > 1 and _streak >= _stop and n > _stop + 1:
+                logger.info("LeanGate: 连续 %d 个候选 unknown，停止预取剩余候选",
+                            _streak)
+                break
+        return out
 
     # ------------------------------------------------------------------
     # 主入口
@@ -135,6 +252,15 @@ class LeanGate:
 
         domain = getattr(ctx, "domain", "")
         qtype = getattr(ctx, "question_type", "")
+        # 按题豁免（2026-09-10）：答案非数学对象 → Lean 整题跳过（调用方
+        # orchestrator 已把这类题改路由 AuditGate，此处是防御性兜底）。
+        _na, _na_why = self._not_applicable(ctx)
+        if _na:
+            self._record_ctx(ctx, {"enabled": False, "skipped": "not_applicable",
+                                   "reason": _na_why, "tier": tier,
+                                   "domain": domain, "question_type": qtype,
+                                   "candidates": len(candidates)})
+            return kept, feedbacks
         if not self._enabled(tier, domain, qtype):
             self._record_ctx(ctx, {"enabled": False, "tier": tier,
                                    "domain": domain, "question_type": qtype,
@@ -175,7 +301,34 @@ class LeanGate:
 
         kept = []
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
-        for cand in candidates:
+        _unknown_streak = 0  # B（2026-09-07）：连续 unknown 计数 → 空转止损
+        _stop = self._unknown_stop
+        # 2026-09-13：候选级验证**波次并行预取**（并行度 >1 时启用，开关
+        # LEAN_GATE_PARALLEL，默认跟随 LEAN_MCP_WORKERS）。
+        # 原循环逻辑一行不改：只把"算 report"这一段挪进并行批次（纯计算），
+        # 决策 / kept / feedbacks / ctx 埋点**全部仍在主线程按原顺序执行** ——
+        # 并发面收敛到最小，行为与串行版逐候选一致。
+        _pre = self._prefetch_reports(ctx, candidates, bridge, is_proof, domain)
+        for _idx, cand in enumerate(candidates):
+            # 逐候选时间护栏（2026-09-11，依据 审计_112题Lean阻断路径全量排查_0910.md）
+            # 问题：本循环此前**无时间检查**，而 72/81 题有 6 个候选，6 × 20–38s =
+            #   120–230s，可能把该题推过 1200s 硬墙 → 反过来饿死 6.5 最终闸门
+            #   （实测 14/81 = 17.3% 的题在 6.5 因 time_critical 跳过 Lean）。
+            # 口径：剩余 < 45s（≈ 一次编译 + 余量）即停止验剩余候选，按"未验"降级
+            #   保留（不淘汰，与 lenient 一致），记 degraded="time_budget" 便于统计。
+            if ctx.start_time >= 10**8 and (_pre is None or _pre[_idx] is None):
+                _left_budget = (ctx.start_time + float(getattr(
+                    self.config, "max_time_per_question", 1200))) - _t.time()
+                if _left_budget < 45.0:
+                    self._record_ctx(ctx, {
+                        "id": getattr(cand, "id", None), "verdict": "unknown",
+                        "lean_valid": False, "degraded": "time_budget",
+                        "error": None,
+                        "reason": f"剩余 {_left_budget:.0f}s < 45s，保留候选不验"
+                                  f"（护 6.5 最终闸门）",
+                    })
+                    kept.append(cand)
+                    continue
             entry = {
                 "id": cand.id,
                 "verdict": "unknown",
@@ -183,12 +336,35 @@ class LeanGate:
                 "degraded": None,
                 "error": None,
             }
+            # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
+            # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
+            # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
+            if _stop > 1 and _unknown_streak >= _stop and len(candidates) > _stop + 1:
+                entry["degraded"] = "verify_stop"
+                entry["reason"] = (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
+                                   "（验证器失效），止损跳过整题 verify")
+                if self.strict:
+                    feedbacks.append(
+                        f"[Lean 硬验证] 候选 {cand.id} 跳过验证（unknown 止损，"
+                        "strict 保守拒绝）")
+                    # strict 模式：不进 kept
+                else:
+                    kept.append(cand)
+                self._record_ctx(ctx, entry)
+                continue
             try:
                 # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
                 # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
                 # 非证明题（解答/计算）走轻量 verify_answer（norm_num/ring
                 # 验证最终答案与关键计算，5-21s，避免整题形式化拖垮时间预算）。
-                if is_proof:
+                # 2026-09-13：已并行预取的候选直接取结果（异常原样重抛 → 落到下方
+                # degraded 分支，与串行版逐字一致）；未预取（预算不足 / 已止损 /
+                # 并行关闭）的候选照旧当场串行验证。
+                if _pre is not None and _pre[_idx] is not None:
+                    report, _pre_exc = _pre[_idx]
+                    if _pre_exc is not None:
+                        raise _pre_exc
+                elif is_proof:
                     report = bridge.verify(
                         problem=ctx.problem or "",
                         reasoning=cand.reasoning or "",
@@ -223,10 +399,12 @@ class LeanGate:
                         BaseAgent.add_used_theorems(ctx, used_names)
                 if report is None:
                     entry["degraded"] = "no_report"
+                    _unknown_streak += 1
                     kept.append(cand)          # 无报告 → 降级放行
                 elif report.verdict in ("proof_valid", "answer_valid"):
                     entry["verdict"] = report.verdict
                     entry["lean_valid"] = True
+                    _unknown_streak = 0        # 验证器正常工作（出绿点），计数清零
                     BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
                     # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
                     # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
@@ -258,8 +436,10 @@ class LeanGate:
                             msg = report.suggestion or report.findings[0].desc
                     feedbacks.append(
                         f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：\n{msg}")
+                    _unknown_streak = 0   # 编译器明确判错 = 验证器正常，计数清零
                 else:  # unknown
                     entry["verdict"] = "unknown"
+                    _unknown_streak += 1
                     if self.strict:
                         entry["degraded"] = "strict_reject"
                         feedbacks.append(
@@ -301,13 +481,22 @@ class LeanGate:
         - 环境缺失 / 异常 → 降级放行 True（不因 Lean 环境误伤答案）
         """
         if not answer or not answer.strip():
-            self._record_ctx(ctx, {"gate": "final_answer", "tier": tier,
-                                   "skipped": "empty_answer"})
+            self._record_ctx(ctx, {"step": "final_gate", "gate": "final_answer",
+                                   "tier": tier, "skipped": "empty_answer"})
+            return True
+        # 按题豁免（2026-09-10）：答案非数学对象 → Lean 无法形式化核验，跳过。
+        # 调用方 orchestrator 6.5 已把这类题改路由 AuditGate（LLM 判分链），
+        # 此处是防御性兜底：绝不因 Lean 形式化不了就把客观题的答案判死。
+        _na, _na_why = self._not_applicable(ctx)
+        if _na:
+            self._record_ctx(ctx, {"step": "final_gate", "gate": "final_answer",
+                                   "tier": tier, "skipped": "not_applicable",
+                                   "reason": _na_why})
             return True
         domain = getattr(ctx, "domain", "")
         qtype = getattr(ctx, "question_type", "")
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
-        entry = {"gate": "final_answer", "tier": tier,
+        entry = {"step": "final_gate", "gate": "final_answer", "tier": tier,
                  "is_proof": is_proof, "answer": answer[:80]}
         # 2026-09-02 老师强调：Lean 答案检查一定不能跳过。
         # 时间检查必须用 **1200s hard 硬顶**（不是 ctx.time_remaining 看的 soft
@@ -376,17 +565,38 @@ class LeanGate:
                     msg = report.suggestion
             except Exception:  # noqa: BLE001
                 msg = report.suggestion or str(
-                    (report.findings or [None])[0])[:200]
-            entry["feedback"] = msg[:200]
+                    (report.findings or [None])[0])[:400]
+            # 2026-09-12：截断由 200 → 400。原因：`desc` 现在会在末尾追加
+            # 「修法提示」（`hint_for_compile_error`），若仍按 200 截断，**可操作
+            # 的修法会被切掉**，只剩 LLM 的定性描述 —— 与本次修复目的相悖。
+            entry["feedback"] = msg[:400]
             self._record_ctx(ctx, entry)
             return False
         # 2026-09-03 老师指令："当答案无法被验证或标记为未知时，必须默认拒绝
         # 而非放行"。unknown（翻译失败/验证无法判定/自证嫌疑）→ 一律拒绝，
         # 让 6.5 步换候选/重生成（校验不了就不许裸奔输出）。
+        # A1（2026-09-12）：加开关（**默认仍是老师要求的严格拒绝**）。
+        # 依据：平台实测 strict_reject 17 次、verdict 100% unknown，6.5 因此
+        # 白烧 ~1520s，而"拒绝后仍输出某答案"→ 只烧时间不改输出。开关用于
+        # 量化严格拒绝的真实代价（关掉做 A/B，用数据决定是否调整）。
+        if os.environ.get("LEAN_GATE_STRICT_UNKNOWN", "1") == "0":
+            entry["degraded"] = "lenient_unknown"
+            entry["feedback"] = ("Lean 无法判定（unknown）→ 按开关配置**弃权放行**"
+                                 "（LEAN_GATE_STRICT_UNKNOWN=0，用于 A/B 对照）")
+            self._record_ctx(ctx, entry)
+            return True
         entry["verdict"] = "unknown"
         entry["degraded"] = "strict_reject"
-        entry["feedback"] = ("Lean 验证无法判定（unknown）：翻译失败或代码未交叉引用题目条件。"
-                             "禁止放行裸答案——请重写验证代码，锚定题目数值与条件。")
+        # 2026-09-12：在方向性要求之外，附上**具体编译错误 + 按错误类型给的修法**。
+        # 原文案只说"锚定题目数值与条件"，模型无从知道验证代码错在哪一行（与 2.6
+        # 实测「2 轮重试 0 成功」同源问题：反馈不可操作）。
+        _err6 = str(entry.get("error") or entry.get("reason") or "")
+        _hint6 = hint_for_compile_error(_err6)
+        entry["feedback"] = (
+            "Lean 验证无法判定（unknown）：翻译失败或代码未交叉引用题目条件。"
+            "禁止放行裸答案——请重写验证代码，锚定题目数值与条件。"
+            + (("\n编译错误：%s\n修法提示：%s" % (_err6[:200], _hint6))
+               if _hint6 else ""))
         self._record_ctx(ctx, entry)
         return False
 

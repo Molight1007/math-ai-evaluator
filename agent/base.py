@@ -419,7 +419,8 @@ class TaskContext:
     dag_review_report: dict = field(default_factory=dict)
 
     # ---- 难题深度求解通道字段 ----
-    tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
+    tier: str = "standard"                      # standard / deep（DifficultyRouter 写入；
+                                                # 2026-09-14 删除 fast 档）
     tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
     soft_budget: float = 0.0                    # PaperPacer 分配的当前档位软预算帽（秒）
     pacer_remaining: float = 0.0                # 全卷时间池剩余目标时间（秒，诊断用）

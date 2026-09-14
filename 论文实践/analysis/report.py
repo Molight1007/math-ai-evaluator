@@ -65,7 +65,11 @@ def write_report(
     L.append(f"- 题量：{summary.get('total',0)} 条记录（{summary.get('counts',{})}）")
     L.append(f"- API 错误：{summary.get('errors',0)} 条；截断：{summary.get('truncated',0)} 条")
     L.append(f"- Lean 环境：{meta.get('lean_status','')}")
-    L.append(f"- 整体 Lean 验证通过率：{summary.get('lean_ok_rate_all',0)}")
+    L.append(f"- 走 Lean 判定的记录：{summary.get('lean_checked',0)}/"
+             f"{summary.get('total',0)} 条"
+             "（其余为无判据的题，如涉及极限的分析题）")
+    L.append(f"- 整体 Lean 验证通过率：{summary.get('lean_ok_rate_all',0)}"
+             "（分母只含真正走过编译器的记录）")
     L.append(f"- 平均单题耗时：{summary.get('mean_elapsed',0)} s\n")
 
     L.append("> 判据说明：所有「正确」指 **Lean 4 编译器接受该形式化证明**"
@@ -149,10 +153,52 @@ def write_report(
             ("lean_ok", "Lean✓"), ("gold", "标准答案"),
         ]))
 
+    # ---------------- E
+    if "E" in summary:
+        e = summary["E"]
+        L.append("\n## 探针 E：定理陈述完整性（测「严格理解」最硬的一层）\n")
+        L.append("**为什么需要 E**：B / D 测的是**判断**——给一个被改坏的定理，"
+                 "模型能否识破并构造反例，这是**被动**的。"
+                 "E 测的是**陈述**——让模型**自己**完整精确地说出定理的全部条件，"
+                 "这是**主动**的。\n")
+        L.append("> **能判断 ≠ 能精确陈述。** 例如拉格朗日中值定理：识破「去掉可导条件」"
+                 "是一回事，自己写出「闭区间连续**且**开区间可导」是另一回事。\n")
+        L.append("**指标解读**\n")
+        L.append("- `条件完整率`：平均说出了多少比例的**关键条件**（逐项正则匹配）")
+        L.append("- `完全陈述率`：**一条条件都没漏**的比例（最严格，本探针主指标）")
+        L.append("- `Lean特例编译率`：该定理在**一个具体特例**下的形式化命题能否编译通过"
+                 "（只统计有判据的题）")
+        L.append("- `双通过率`：条件说全 **且** 特例编译过"
+                 "（无 Lean 判据的题只按条件判定）\n")
+        L.append("### 汇总\n")
+        L.append("| 指标 | 数值 |\n|---|---|")
+        for k, v in e["aggregate"].items():
+            L.append(f"| {k} | {v} |")
+        L.append("")
+        L.append("### 按子维度\n")
+        L.append("（定位模型到底**漏哪一类条件**：是漏定义域？漏连续性？还是漏量词顺序？）\n")
+        L.append(_md_table(
+            [{"dim": k, **v} for k, v in e["by_dimension"].items()],
+            [("dim", "子维度"), ("n", "题数"),
+             ("completeness", "条件完整率"), ("full_rate", "完全陈述率")],
+        ))
+        L.append("### 逐题\n")
+        L.append("`缺失条件` 一列是本探针**最有诊断价值**的输出："
+                 "直接指出模型对每条定理漏了什么。\n")
+        L.append(_md_table(e["per_item"], [
+            ("eid", "题号"), ("theorem", "定理"), ("dimension", "子维度"),
+            ("n_hit", "命中条件"), ("n_cond", "应有条件"),
+            ("completeness", "条件完整率"), ("full", "条件说全"),
+            ("has_lean", "有Lean判据"), ("lean_ok", "Lean✓"),
+            ("both_pass", "双通过"), ("missing", "缺失条件"),
+        ]))
+
     # ---------------- 局限
     L.append("\n## 结果解读须知（诚实声明）\n")
-    L.append("1. **样本量**：当前题库规模小（A 3 对 / B 3 题 / C 6+4 / D 3），"
+    L.append("1. **样本量**：当前题库规模小（A 8 对 / B 6 题 / C 10+4 / D 5 / E 4），"
              "单轮结果只能作**定性信号**，不能作统计结论。")
+    L.append("   - E 组 `关键条件清单` 目前由本项目拟定，**需李平老师复核**后"
+             "方可写入论文；清单有误会直接影响 `条件完整率` 的有效性。")
     L.append("2. **随机性**：老师指出「大模型推理中会随机出现」错误。"
              "正式结论需 `--repeat N` 多轮采样后报告均值与方差。")
     L.append("3. **判据边界**：Lean 判「形式化证明是否成立」，不判「数学洞见是否优雅」。"

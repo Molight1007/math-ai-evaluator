@@ -123,6 +123,41 @@ class RescueFinalAnswerTest(unittest.TestCase):
         self.assertEqual(rescue_final_answer(None), ("", ""))
 
 
+class UnbalancedMathDelimsTest(unittest.TestCase):
+    """2026-09-11：截断的推理正文不得进入答案（Bug清单 §6 / #006 实况）。
+
+    #006 提交的答案是 `假设 \\( A(0) = 0 \\)，代入 \\( p = 1 \\) 和 \\( q`
+    （39 字符、句子中间硬断）：既不可判分，又被当作锚串喂给 Lean 污染判定。
+    """
+
+    def test_truncated_reasoning_rejected(self) -> None:
+        from utils.extract import _clean_extracted_answer
+        # 3 个 \( 配 2 个 \) → 未闭合 → 判无效
+        text = "假设 \\( A(0) = 0 \\)，代入 \\( p = 1 \\) 和 \\( q"
+        self.assertEqual(_clean_extracted_answer(text), "")
+
+    def test_properly_paired_latex_kept(self) -> None:
+        from utils.extract import _clean_extracted_answer
+        text = "\\( A(x) = 1 - x \\)"
+        self.assertEqual(_clean_extracted_answer(text), text)
+
+    def test_odd_dollar_rejected_even_kept(self) -> None:
+        from utils.extract import _clean_extracted_answer
+        self.assertEqual(_clean_extracted_answer("$x^2$"), "$x^2$")
+        self.assertEqual(_clean_extracted_answer("答案是 $x^2"), "")
+
+    def test_plain_answer_unaffected(self) -> None:
+        from utils.extract import _clean_extracted_answer
+        # 不含任何定界符的正常答案不得被误杀
+        self.assertEqual(_clean_extracted_answer("524288"), "524288")
+        self.assertEqual(_clean_extracted_answer(r"\boxed{16}"), r"\boxed{16}")
+
+    def test_rescue_skips_unbalanced_tail(self) -> None:
+        from utils.extract import rescue_final_answer
+        ans, src = rescue_final_answer("推理……\n假设 \\( A(0) = 0 \\)，代入 \\( p = 1 \\) 和 \\( q")
+        self.assertNotIn("\\( q", ans)
+
+
 class StripContinuationMarkersTest(unittest.TestCase):
     """2026-08-29 回归：Intern 会回显 `[续写]` 占位符污染最终答案。"""
 

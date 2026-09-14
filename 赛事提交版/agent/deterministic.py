@@ -21,8 +21,10 @@ from __future__ import annotations
 """
 
 import logging
+import os
 import random
 import re
+import threading
 
 logger = logging.getLogger("MathPilot.Deterministic")
 
@@ -36,6 +38,14 @@ except ImportError:  # pragma: no cover - 环境缺依赖时的降级路径
 
 # 代入回验的容差（浮点噪声）
 _SUBSTITUTION_TOL = 1e-4
+
+# 检查入口超时护栏（2026-09-13）：病态 SymPy 表达式会让 sp.simplify 卡死，实测单次
+# 460s/116s；而单题硬时限仅 1200s，且 3.6 / 4_verify / 6.5 三处各跑一次 check_answer。
+# 写法对齐 calc_tool._subst_with_timeout（join(_SYM_TIMEOUT_SEC)）与
+# symbolic_solve.solve_with_tool（join(_SOLVE_TIMEOUT_SEC)）：daemon 线程 + join 超时。
+_DET_TIMEOUT_SEC = float(os.environ.get("DETERMINISTIC_TIMEOUT_SEC", "5.0") or "5.0")
+_DET_HUNG_MAX = 8      # 累计超时上限，超过后整体降级（防无界建线程）
+_DET_HUNG = 0          # 累计超时次数；成功一次衰减 1，防跨题永久降级
 
 
 def _safe_parse(text: str):
@@ -292,7 +302,7 @@ class DeterministicChecker:
     # ------------------------------------------------------------------
     def check_answer(self, ctx, problem: str, answer: str,
                      domain: str | None = None) -> dict:
-        """对单个候选答案做确定性旁证/硬否决。
+        """对单个候选答案做确定性旁证/硬否决（**带内部超时护栏**）。
 
         Args:
             ctx: TaskContext（仅保留参数兼容，可传 None）。
@@ -303,7 +313,49 @@ class DeterministicChecker:
         Returns:
             {"verdict": "pass"|"fail"|"unknown", "confidence": float,
              "evidence": str, "method": str}
+
+        超时后返回 verdict="unknown"（"不改判"语义，绝不返回 fail 误杀正确候选）。
         """
+        global _DET_HUNG
+        if _DET_HUNG >= _DET_HUNG_MAX:
+            logger.warning(
+                "确定性检查已降级（历史超时 %d 次 ≥ %d），返回 unknown",
+                _DET_HUNG, _DET_HUNG_MAX)
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": "确定性检查已降级（历史超时过多）",
+                    "method": "timeout_guard"}
+        box: dict = {}
+
+        def _run() -> None:
+            try:
+                box["r"] = self._check_answer_core(problem, answer, domain)
+            except Exception as exc:  # noqa: BLE001  线程内异常回传，不逃逸
+                box["e"] = exc
+
+        th = threading.Thread(target=_run, name="det_check", daemon=True)
+        th.start()
+        th.join(_DET_TIMEOUT_SEC)
+        if th.is_alive():                      # 卡死 → 放弃该线程（daemon，不阻塞退出）
+            _DET_HUNG += 1
+            logger.warning("确定性检查超时(>%.1fs)，返回 unknown（不改判）: answer=%s",
+                           _DET_TIMEOUT_SEC, (answer or "")[:80])
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": f"确定性检查超时(>{_DET_TIMEOUT_SEC:.1f}s)",
+                    "method": "timeout"}
+        if _DET_HUNG:                          # 成功时让累计计数衰减（防跨题永久降级）
+            _DET_HUNG -= 1
+        if "e" in box:
+            logger.debug("确定性检查线程异常 → unknown: %s: %s",
+                         type(box["e"]).__name__, box["e"])
+            return {"verdict": "unknown", "confidence": 0.0,
+                    "evidence": f"确定性检查异常: {type(box['e']).__name__}",
+                    "method": "error"}
+        return box.get("r") or {"verdict": "unknown", "confidence": 0.0,
+                                "evidence": "确定性检查无结果", "method": "none"}
+
+    def _check_answer_core(self, problem: str, answer: str,
+                           domain: str | None = None) -> dict:
+        """check_answer 的实际检查逻辑（在受超时护栏保护的 daemon 线程内执行）。"""
         if not _HAS_SYMPY:
             return {"verdict": "unknown", "confidence": 0.0,
                     "evidence": "sympy 不可用", "method": "none"}
@@ -418,3 +470,59 @@ class DeterministicChecker:
 
 # 常见整型变量名（采样时采整数，贴近数论/组合题语境）
 _INT_VARIABLES: frozenset = frozenset({"n", "m", "k", "i", "j", "p", "q"})
+
+
+# ============================================================
+# 2026-09-10 L1：精确代入核验（与上面的浮点采样通道并列）
+# ------------------------------------------------------------
+# verify_by_substitution 走的是"随机采样 + 浮点容差"，适合核恒等式；
+# 而"模型给关系式、题面给具体数值"这种场景要求**精确**比对（1e-4 容差会把
+# 2.0001 判成 2）。这里补一条精确通道：代入 → Fraction 精确值 → 精确判等。
+# 严格宁漏勿误：任一侧无法精确数值化 → unknown（绝不误杀）。
+# ============================================================
+
+
+def verify_answer_exact(expr: str, answer: str, mapping: dict | None = None) -> dict:
+    """精确代入核验：把 mapping 代入 expr，与 answer 做**精确**数值判等。
+
+    与 verify_by_substitution 的分工：那条通道核"等式/恒等式"（采样+容差），
+    这条通道核"关系式 + 具体取值 → 具体答案"（代入+精确）。
+
+    Returns:
+        {"verdict": "pass"|"fail"|"unknown", "evidence": str,
+         "value": str|None, "method": str}
+        - pass/fail 只在**双方都精确**时给出；否则一律 unknown。
+    """
+    try:
+        from .calc_tool import safe_eval_subst, to_exact_number
+    except ImportError:  # 提交包（submit/）路径兜底
+        try:
+            from calc_tool import safe_eval_subst, to_exact_number
+        except ImportError:
+            return {"verdict": "unknown", "evidence": "calc_tool 不可用",
+                    "value": None, "method": "exact_subst"}
+    if not expr or not str(expr).strip():
+        return {"verdict": "unknown", "evidence": "表达式为空",
+                "value": None, "method": "exact_subst"}
+    if not mapping:
+        return {"verdict": "unknown", "evidence": "无可用变量取值",
+                "value": None, "method": "exact_subst"}
+    want = to_exact_number(answer)
+    if want is None:
+        return {"verdict": "unknown", "evidence": f"答案非精确数值: {str(answer)[:40]}",
+                "value": None, "method": "exact_subst"}
+    got_s = safe_eval_subst(expr, mapping)
+    if got_s.startswith(("WARN:", "ERROR:")):
+        return {"verdict": "unknown", "evidence": f"代入求值未成功: {got_s[:80]}",
+                "value": None, "method": "exact_subst"}
+    got = to_exact_number(got_s)
+    if got is None:                      # 代入后是近似值/无理式 → 不精确判等
+        return {"verdict": "unknown", "evidence": f"代入结果是近似/符号值: {got_s[:60]}",
+                "value": got_s, "method": "exact_subst"}
+    if got == want:
+        return {"verdict": "pass",
+                "evidence": f"精确代入一致: {expr} → {got_s}",
+                "value": got_s, "method": "exact_subst"}
+    return {"verdict": "fail",
+            "evidence": f"精确代入不一致: {expr} → {got_s}，与答案 {answer} 不符",
+            "value": got_s, "method": "exact_subst"}

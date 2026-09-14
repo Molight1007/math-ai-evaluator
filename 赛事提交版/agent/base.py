@@ -210,6 +210,9 @@ class Verdict:
     raw: str = ""               # 原始投票返回文本（verifier 使用）
     score: dict | None = None   # 评分模式的详细分数（verifier 使用）
     deterministic: dict | None = None  # 确定性验证旁证/否决证据（verifier 使用，0 LLM 预算）
+    abstain: bool = False       # 弃权票（verifier 使用）：LLM 调用失败/输出无法解析
+                                # → 属"基础设施/格式故障"，不是"答案错误"。
+                                # 聚合时剔出 total_votes 分母，避免把故障当反证。
 
 
 @dataclass
@@ -416,7 +419,8 @@ class TaskContext:
     dag_review_report: dict = field(default_factory=dict)
 
     # ---- 难题深度求解通道字段 ----
-    tier: str = "standard"                      # fast / standard / deep（DifficultyRouter 写入）
+    tier: str = "standard"                      # standard / deep（DifficultyRouter 写入；
+                                                # 2026-09-14 删除 fast 档）
     tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
     soft_budget: float = 0.0                    # PaperPacer 分配的当前档位软预算帽（秒）
     pacer_remaining: float = 0.0                # 全卷时间池剩余目标时间（秒，诊断用）
@@ -488,7 +492,11 @@ class TaskContext:
 
     def total_time_remaining(self) -> float:
         """返回Agent总剩余时间（秒）"""
-        if self.total_deadline == 0.0:
+        # 2026-09-12 定型前审核：与 time_remaining() 统一「伪 epoch」护栏。
+        # 原先只挡 `== 0.0`，未挡测试 fixture 的伪 epoch（如 9999.0）→
+        # is_total_timed_out() 恒 True，而同一个 ctx 上 time_remaining()
+        # 却返回 inf，属"同一实体内两套矛盾口径"（会上演'某机制永远触发'）。
+        if self.total_deadline == 0.0 or self.total_deadline < 10**8:
             return float("inf")
         import time
         return self.total_deadline - time.time()
@@ -562,6 +570,34 @@ class BaseAgent(ABC):
         if extra:
             entry.update(extra)
         ctx.trace.append(entry)
+
+    # ============================================================
+    # 2026-09-14：补齐「工具成功算过」的埋点
+    # ------------------------------------------------------------
+    # `diag.calc_tool_calls` 由 `orchestrator._collect_diag()`（约 :2575）按 trace 的
+    # `step == "calc_tool_call"` 导出，但**全代码库从未 record 过这个 step 名**
+    # （只 record 了 `calc_tool_mode` 与 `solver_calc_rewrite`）⇒ 该字段
+    # **结构性恒空**。后果：会把"工具从来没成功算过"误读成事实 ——
+    # 2026-09-14 就因此误导读过一次归因（与 `calc_prewarm` 白名单缺失同源）。
+    # 与 `audit_calc_fallbacks`（记**失败**）**镜像**：这里记**成功**。
+    # 纯埋点，不参与任何判定逻辑。
+    # ============================================================
+    def record_calc_successes(self, ctx: TaskContext, resolved) -> int:
+        """记录被工具**成功算出**的 `<calc>` 条目，返回成功条数。
+
+        `resolve_all_calcs()` 返回项形如 `(expr, result)`；`result` 以
+        `WARN:` / `ERROR:` 开头即失败（那部分由 `audit_calc_fallbacks` 记录，
+        走 `calc_fallback`）。此处只收成功项。
+        """
+        n = 0
+        for _ex, _rs in (resolved or []):
+            if str(_rs).startswith(("WARN:", "ERROR:")):
+                continue
+            self.record(ctx, "calc_tool_call",
+                        f"<calc>{_ex}</calc> → {_rs}",
+                        expr=str(_ex)[:90], result=str(_rs)[:120])
+            n += 1
+        return n
 
     def llm(self, ctx: TaskContext, messages: list, temperature: float,
             max_tokens: int) -> Optional[str]:
@@ -652,6 +688,164 @@ class BaseAgent(ABC):
             logger.warning("[%s] LLM call failed: %s", self.name, e)
             return None
 
+
+    # ============================================================
+    # 2026-09-09 用户洞察落地：原生工具调用循环（与"智能体调 WebSearch"同逻辑：
+    # 检测到需求 → 生成 tool_call → 执行 → 结果回传 → 继续）。
+    # calc_eval 工具：模型在需要计算时**自己决定**调用，无需文本标签遵从。
+    # ============================================================
+    CALC_TOOL_SCHEMA = {
+        "type": "function",
+        "function": {
+            "name": "calc_eval",
+            "description": (
+                "精确数学计算器：给定一个数学表达式（如 '25*4+1'、'comb(50,3)'、"
+                "'1/2+1/3'、'sqrt(45)'、'sum(k,1,10)'），返回精确/符号/近似结果。"
+                "只传**要算的单个表达式**，不要传等号两侧的等式或 Python 代码。"),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expr": {
+                        "type": "string",
+                        "description": "要计算的数学表达式（单表达式，不含等号）",
+                    }
+                },
+                "required": ["expr"],
+            },
+        },
+    }
+
+    @staticmethod
+    def _calc_tool_exec(expr: str) -> str:
+        """执行 calc_eval：本地 calc_tool.safe_eval（失败可见，原样回传）。"""
+        try:
+            from .calc_tool import safe_eval
+        except Exception:  # noqa: BLE001  提交包路径兜底
+            try:
+                from calc_tool import safe_eval
+            except Exception:  # noqa: BLE001
+                return "ERROR: 计算工具不可用"
+        try:
+            return safe_eval(expr)[:500] if expr else "ERROR: 空表达式"
+        except Exception as exc:  # noqa: BLE001
+            return f"ERROR: {type(exc).__name__}: {exc}"
+
+    def llm_with_calc(self, ctx, messages: list, temperature: float = 0.0,
+                      max_tokens: int = 32768, max_rounds: int = 3
+                      ) -> Optional[str]:
+        """带 calc_eval 原生工具的对话循环（≤max_rounds 轮）。
+
+        模型生成 tool_call → 执行 calc_tool → 结果以 tool 消息回传 → 模型继续；
+        无 tool_calls → 返回最终文本。任何异常/平台不支持 tools → 回落 self.llm
+        （行为与现状一致，零风险）。tool 执行次数 record 供审计。
+        """
+        try:
+            import json
+            msgs = list(messages)
+            # 2026-09-09（接线修复后仍 0 调用）：模型不知道工具存在——
+            # 单轮实验 100% 调用是因为 system 明说了"必须调用 calc_eval"。
+            # 求解 prompt 只提 <calc> 文本协议，未告知有原生函数可用 →
+            # 在 system 层自动注入工具使用说明（不改调用方 user 结构）。
+            _tool_hint = (
+                "\n\n【可用工具】你有函数 calc_eval(expr)：调用外部精确计算器"
+                "（支持 + - * / ^ 组合数 comb 求和 sum 积分 integral 开方 sqrt "
+                "对数 log·ln 指数 exp 等，返回精确/符号/近似结果）。"
+                "**易错运算（开方/根式、对数 log·ln、指数 exp 与自然常数 e、"
+                "组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π）必须"
+                "调用它获取结果、基于返回结果继续，禁止心算**；简单加减乘除可自算。"
+                "例如需要 comb(50,3)*2**10 时，调用 calc_eval(expr='comb(50,3)*2**10')。"
+                "若返回 WARN/ERROR 说明表达式有问题，修正后重试调用。"
+            )
+            try:
+                if msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system":
+                    msgs = [dict(msgs[0], content=str(msgs[0].get("content") or "") + _tool_hint)] + msgs[1:]
+                else:
+                    msgs = [{"role": "system", "content": _tool_hint.strip()}] + msgs
+            except Exception:  # noqa: BLE001
+                pass
+            n_calls = 0
+            last_text = None
+            for _round in range(max_rounds):
+                # 2026-09-12 修复（时间护栏）：工具循环此前**完全绕过** `llm()` 的
+                # 时间守卫与 max_tokens_cap，循环内不查 ctx 剩余时间 ——
+                # `max_rounds=3` × 单次 client timeout(180s) 最坏 540s，异常再回落
+                # `self.llm` 又 180s，足以烧穿单题预算（历史"工具循环撞 timeout
+                # 再花 180s"的根因）。时间不足时直接停手并返回已有文本，
+                # **不再回落**（回落等于再等一轮）。
+                if (ctx is not None and hasattr(ctx, "gen_time_up")
+                        and ctx.gen_time_up()):
+                    if last_text and last_text.strip():
+                        return last_text
+                    return None
+                try:
+                    resp = self.client.chat(
+                        messages=msgs,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        tools=[self.CALC_TOOL_SCHEMA],
+                    )
+                except TypeError:
+                    # 平台 client 不支持 tools 参数 → 永久回落普通调用
+                    logger.warning("[%s] client 不支持 tools，回落普通 llm",
+                                   self.name)
+                    return self.llm(ctx, messages, temperature, max_tokens)
+                if isinstance(resp, dict) and resp.get("tool_calls"):
+                    n_calls += 1
+                    msgs.append(resp)            # assistant 消息原样（含 tool_calls）
+                    for tc in resp["tool_calls"]:
+                        fn = tc.get("function", {}) or {}
+                        try:
+                            args = json.loads(fn.get("arguments", "") or "{}")
+                        except Exception:  # noqa: BLE001
+                            args = {}
+                        expr = str(args.get("expr", "") or "")
+                        result = self._calc_tool_exec(expr)
+                        msgs.append({
+                            "role": "tool",
+                            "tool_call_id": tc.get("id", ""),
+                            "content": result,
+                        })
+                        try:
+                            self.record(
+                                ctx, "calc_tool_call",
+                                f"<calc_tool> {expr} -> {result[:50]}")
+                        except Exception:  # noqa: BLE001
+                            pass
+                    continue
+                # 无 tool_calls：str（文本）或 dict（content）
+                if isinstance(resp, str):
+                    last_text = resp
+                elif isinstance(resp, dict):
+                    last_text = str(resp.get("content", "") or "")
+                else:
+                    last_text = _normalize_chat_response(resp)
+                if last_text and last_text.strip():
+                    return last_text
+            # 达 max_rounds（仍连续调工具）→ 取最后一次文本兜底
+            if last_text and last_text.strip():
+                return last_text
+            return None
+        except Exception as exc:  # noqa: BLE001  失败回落普通调用
+            logger.warning("[%s] 工具循环异常（回落普通 llm）: %s",
+                           self.name, str(exc)[:120])
+            return self.llm(ctx, messages, temperature, max_tokens)
+
+    def _maybe_tool_llm(self, ctx, messages: list, temperature: float,
+                        max_tokens: int) -> Optional[str]:
+        """开关分派：tool_calc_enabled=True → 工具循环；否则原 llm（现状）。
+
+        2026-09-09 探针：record calc_tool_mode 让 diag 可区分"开关未走工具循环"
+        与"走了但模型 0 次调用"（试点 0 触发的归因关键）。
+        """
+        if getattr(self.config, "tool_calc_enabled", False):
+            try:
+                if ctx is not None:
+                    self.record(ctx, "calc_tool_mode",
+                                f"工具循环开启（{self.name}，tools 已传）")
+            except Exception:  # noqa: BLE001
+                pass
+            return self.llm_with_calc(ctx, messages, temperature, max_tokens)
+        return self.llm(ctx, messages, temperature, max_tokens)
 
 # ============================================================
 # 安全防护工具

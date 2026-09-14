@@ -22,9 +22,29 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 import logging
 
 from agent.base import BaseAgent, TaskContext
-from tools.lean_local.lean_bridge import LeanBridge, _parse_analysis_json, _strip_code_fence
+from tools.lean_local.lean_bridge import (
+    LeanBridge, hint_for_compile_error,
+    _parse_analysis_json, _strip_code_fence)
 
 logger = logging.getLogger("MathPilot")
+
+
+def _hint_for_error(err: str) -> str:
+    """按 Lean 编译器错误的特征给出**具体可执行的修法**（而非笼统"重新审题"）。
+
+    2026-09-12 实测驱动：2.6 前置形式化在 3 题上「2 轮重试 0 成功」，根因是失败
+    反馈让模型**重新审题**，而实际错误全部是 **Lean 语言层面**（API 不存在 / 把值
+    当类型用 / 语法），重审题改不到点子上。
+
+    实现上**委托**给共享的 `lean_bridge.hint_for_compile_error`（3.6 候选淘汰
+    同样复用它，避免两处重复实现出现行为分叉）；本函数只额外提供"未识别特征时"
+    的兜底文案（2.6 的场景必须给出非空反馈）。
+    """
+    if "sorry" in (err or "").lower():
+        return "声明阶段允许 `sorry`，此项无需处理。"
+    return hint_for_compile_error(err) or (
+        "请**逐条针对上面的编译错误修正 Lean 写法**"
+        "（数学含义保持不变，只改 Lean 的表达方式）。")
 
 
 class LeanPreVerifier(BaseAgent):
@@ -115,13 +135,17 @@ class LeanPreVerifier(BaseAgent):
                 # 反馈不只是 Lean 编译错误——加"重新审题"强指令，逼迫 LLM 重读
                 # 题目原文而非重复同样的错误翻译。
                 error_summary = (result.get("error") or "")[:200]
+                # 2026-09-12 改动（实测驱动）：原反馈只让模型「**重新审题**」，
+                # 但实测 3 题的失败全在 Lean 语言层面（API 不存在 / 值当类型用 /
+                # 语法），重审题改不到点上 ⇒ 2 轮重试 0 成功。现改为按错误类型
+                # 给**写法层面的具体修法**，同时保留"数学含义不变"的约束
+                # （实测表明模型对题意的理解原本是正确的）。
                 feedback = (
                     f"上轮形式化编译失败：\n{error_summary}\n\n"
-                    "**请重新审题**（不要重复上轮思路）：\n"
-                    "1. 重新通读题目原文，逐条列出题目给定的数学定义/条件/所求量。\n"
-                    "2. 常见错误：把英文介词（to/from/of/with/by）当函数名；"
-                    "漏掉条件或边界；把'求值'译成'求证'等。\n"
-                    "3. 重新写 Lean 声明，确保：每出现的符号在题目中已定义或用 Lean 标准符号。\n"
+                    "**请针对上述 Lean 编译错误修正代码写法**"
+                    "（题目理解与数学含义保持不变，只改 Lean 的表达方式）：\n"
+                    f"{_hint_for_error(error_summary)}\n"
+                    "（若你判断上轮确实读错了题意，请一并说明并修正。）\n"
                 )
                 self.record(ctx, "lean_preverify",
                             f"题目前置形式化失败（第 {r + 1} 轮），强制重新理解重试: "

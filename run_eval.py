@@ -775,10 +775,12 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # 2026-09-04 平台教训（14.29% 归因）：放开单题时限 → 时间爆炸 → 64 题被
     # 时间墙切掉 invalid。改回比赛档 1200s（deep 档上限）——超时截断宁可 invalid
     # 也不拖垮整卷。
-    # 2026-09-14：1200 → **1150**，与提交配置 `user_agent.py::AgentConfig
-    # .max_time_per_question`（同为 1150）对齐 —— 本文件的一贯要求是"本地评测必须
-    # 与平台一致，否则'本地验证通过'不代表'比赛限时下可复现'"。
-    "max_time_per_question": 1150,
+    # 2026-09-14 实测落实：1200 → 1150 → **1100**，与提交配置
+    # `user_agent.py::AgentConfig.max_time_per_question` 对齐。
+    # 依据：同批错题实测两次超限（并发3 轮 1164.7s / 并发1 轮 **1211s > 1200 越墙**）。
+    # ⚠ **只改这一处硬限**；`tier_budget.deep` 仍为 1150（档位预算管资源分配，
+    #   压它会提前掐断本可在 1200s 内跑完的题）。
+    "max_time_per_question": 1100,
     # ---- 对齐 user_agent.py:101 / :105 / :106 ----
     "max_workers": 3,
     # 9/4：平台不限 token → 本地 override 同步放开（防截断腰斩；上探 65536 对齐 AgentConfig）

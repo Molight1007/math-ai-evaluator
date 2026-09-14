@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import threading
 import time
 from typing import Optional
@@ -28,14 +29,37 @@ import requests
 
 logger = logging.getLogger("MathPilot.LLMClient")
 
-_DEFAULT_TIMEOUT = 180  # 秒（2026-09-03：240→180。v9 实测 LLM API 不稳时
-                        # 3 次重试链一次失败烧 14 分钟（003 吃满 2867s 致 Lean 闸门
-                        # 0 执行）。180s 覆盖长推理（蓝图 6144 tokens），
-                        # 同时把单次失败耗时压下来）
+_DEFAULT_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
+# 2026-09-13 晚（4 题实测复盘）：超时后**重试**才是真正的成本黑洞。
+# 实测 4 题里 `failed after 2 attempts` 出现 5 次、5/5 全败，而单次故障 =
+# 180s × 2 + 退避 ≈ **365s** —— 010/016 两题各被两轮 365s 烧光整题预算，
+# 最终连答案都没生成（`predicted` 退化成 `[生成失败] 调用受限或模型拒绝回答`）。
+# ⇒ 两处收紧：
+#   ① 读超时 180 → 120（`LLM_TIMEOUT` 可覆盖；实测正常调用 1–3s，长推理留 120s 富余）
+#   ② 超时类故障**默认不重试**（`LLM_RETRY_ON_TIMEOUT=1` 可恢复旧行为）——
+#      "拿同样的请求再赌一次"，实测 5/5 全败，纯亏 timeout 秒。
+# 单次故障成本：365s → 120s。
+_RETRY_ON_TIMEOUT = os.getenv("LLM_RETRY_ON_TIMEOUT", "0") == "1"
 _CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
 _MAX_RETRIES = 1      # 2026-09-03：2→1。持续网络问题时 3 次重试纯浪费；
                        # 瞬时抖动 1 次重试足够，配合调用方 is_time_critical 兜底
+                       # （⚠ 仅对非超时故障生效，见 `_RETRY_ON_TIMEOUT`）
 _RETRY_BACKOFF = 2.0
+# 2026-09-11 限流专项退避（依据 Bug清单_团队提交de90cedc_0911.md §5）：
+# 服务端 `-20048 请求过于频繁` 实测 176 次，且 5 个 revise 候选并发发起 →
+# 固定 2s 退避（实测两次失败间隔仅 2.1s）等于没有退避，且无抖动 → 自激放大。
+# 限流单独给更大基数 + 抖动 + 上限；并发线程因此错峰，不再同步撞墙。
+_RETRY_BACKOFF_RATE = 8.0   # 限流场景退避基数（秒）
+_RETRY_BACKOFF_MAX = 24.0   # 单次退避上限（秒）
+_RETRY_JITTER = 0.5         # 抖动比例：wait += U(0, wait*JITTER)
+_RATE_LIMIT_MARKERS = ("-20048", "429", "too many requests", "请求过于频繁", "rate limit",
+                       # 2026-09-14 补：服务端过载也走大退避。
+                       # 实测（今早 12 题回归）多次出现
+                       # `HTTP 400 {"code":"-20014","message":"书生体验过于火爆，请稍后再试"}`
+                       # —— 它是**服务端过载/限流**，但此前不在标记表里 ⇒ `_is_rate=False`
+                       # ⇒ 只退避 2s（而 `max_retries=1` 意味着**只有一次重试机会**），
+                       # 2s 后大概率仍撞墙、白烧一次调用。判定为大退避更合理。
+                       "-20014", "过于火爆")
 
 # ============================================================
 # 真实截断信号（2026-09-01 SU-01 优化 0）
@@ -118,7 +142,13 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 4096,
         stream: bool = False,
-    ) -> str:
+        tools: Optional[list] = None,
+    ):
+        """
+        2026-09-09：新增 tools 支持（原生工具调用试点）——透传 tools 到 API；
+        模型返回 tool_calls 时返回完整 assistant 消息 dict（供工具循环读取），
+        否则保持原文本返回（兼容既有调用方）。
+        """
         """
         发送 chat completion 请求，返回模型回复文本。
 
@@ -149,9 +179,13 @@ class LLMClient:
         }
         if stream:
             payload["stream"] = True
+        if tools is not None:
+            payload["tools"] = tools
 
         last_error = None
+        _tried = 0
         for attempt in range(self.max_retries + 1):
+            _tried = attempt + 1
             try:
                 resp = requests.post(
                     url,
@@ -165,6 +199,18 @@ class LLMClient:
                         content = _consume_stream(resp, logger, self.model, max_tokens)
                         return content
                     data = resp.json()
+                    # 2026-09-09：模型请求工具调用 → 返回完整 assistant 消息
+                    # （含 tool_calls），由调用方工具循环读取；普通回答仍取文本
+                    try:
+                        _msg = (data.get("choices") or [{}])[0].get("message") or {}
+                        if "tool_calls" in _msg and _msg["tool_calls"]:
+                            return {
+                                "role": "assistant",
+                                "content": _msg.get("content") or "",
+                                "tool_calls": _msg["tool_calls"],
+                            }
+                    except Exception:  # noqa: BLE001
+                        pass
                     content = _extract_content(data)
                     # 真实截断信号：非流式响应的 finish_reason（部分代理可能缺失）
                     fr = None
@@ -192,9 +238,20 @@ class LLMClient:
                     attempt + 1, self.max_retries + 1, last_error,
                 )
 
-            except requests.exceptions.Timeout:
+            except requests.exceptions.Timeout as e:
                 last_error = f"Request timeout after {self.timeout}s"
                 logger.warning("LLM chat timeout (attempt %d/%d)", attempt + 1, self.max_retries + 1)
+                # 2026-09-13：**读超时**默认不重试。服务端挂住时重试是"同样的请求
+                # 再赌一次"——实测 5/5 全败，每次白烧 self.timeout 秒，直接把单题
+                # 预算烧穿（365s/次）。调用方（solver/orchestrator/formatter）已有
+                # 各自的降级与兜底路径，交给它们比在这里重试更划算。
+                # ⚠ 必须排除 `ConnectTimeout`：它同时继承 `ConnectionError` 与 `Timeout`
+                # （`except Timeout` 在前会先命中它），而**连接**超时走的是 30s 的
+                # `_CONNECT_TIMEOUT`、失败很快，重试仍有正收益（探测服务端抖动）。
+                # 只有**读**超时（`self.timeout`，即 120s 那种）才值得放弃重试。
+                if (not _RETRY_ON_TIMEOUT
+                        and not isinstance(e, requests.exceptions.ConnectTimeout)):
+                    break
             except requests.exceptions.ConnectionError as e:
                 last_error = f"Connection error: {e}"
                 logger.warning("LLM chat connection error: %s", e)
@@ -202,12 +259,28 @@ class LLMClient:
                 last_error = f"Unexpected error: {e}"
                 logger.warning("LLM chat unexpected error: %s", e)
 
-            if attempt < _MAX_RETRIES:
-                wait = _RETRY_BACKOFF * (2 ** attempt)
-                logger.debug("Retrying in %.1fs...", wait)
+            if attempt < self.max_retries:
+                # 2026-09-11 修正三处缺陷：
+                #  ① 原判据 `attempt < _MAX_RETRIES` 用的是**模块常量**而非
+                #     `self.max_retries` → 调用方传非默认 max_retries 时
+                #     "重试循环次数"与"退避守卫"不一致（潜伏 bug）。
+                #  ② 限流（-20048）未单独识别 → 固定 2s 退避对服务端节流无效。
+                #  ③ 无抖动 → 并发候选同步重试，放大限流。
+                _low = (last_error or "").lower()
+                _is_rate = any(mk in _low for mk in _RATE_LIMIT_MARKERS)
+                base = _RETRY_BACKOFF_RATE if _is_rate else _RETRY_BACKOFF
+                wait = min(base * (2 ** attempt), _RETRY_BACKOFF_MAX)
+                wait += random.uniform(0.0, wait * _RETRY_JITTER)
+                logger.warning(
+                    "LLM chat 重试 %d/%d（%s，退避 %.1fs）: %s",
+                    attempt + 1, self.max_retries,
+                    "限流" if _is_rate else "故障", wait, (last_error or "")[:160],
+                )
                 time.sleep(wait)
 
-        raise LLMError(f"LLM call failed after {self.max_retries + 1} attempts: {last_error}")
+        # 实际尝试次数而非 max_retries+1：超时短路（break）时两者不等，
+        # 报真实次数才能让日志/归因不被误导（旧写法会让"只试了 1 次"显示成 2 次）。
+        raise LLMError(f"LLM call failed after {_tried} attempts: {last_error}")
 
     def __repr__(self) -> str:
         return f"LLMClient(model={self.model}, base_url={self.base_url})"

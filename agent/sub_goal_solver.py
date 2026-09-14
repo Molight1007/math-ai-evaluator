@@ -479,8 +479,33 @@ class SubGoalSolverAgent(BaseAgent):
                 self.record(ctx, "subgoal",
                             "穷尽性搜索：追加『解族穷尽性检查』子目标"
                             "（题面要求『所有』，共 {} 个子目标）".format(len(subgoals)))
+                # 埋点落 diag（2026-09-14）：trace 不进结果文件 ⇒ 此前无法确认
+                # 机制是否真的生效，只能靠猜。写入 ctx 供 _collect_diag 落盘。
+                try:
+                    ctx._exhaust_diag = {
+                        "appended": True,
+                        "n_before": len(subgoals) - 1,
+                        "n_after": len(subgoals),
+                        "trigger": "asks_all_values",
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                try:
+                    ctx._exhaust_diag = {
+                        "appended": False,
+                        "reason": ("非『求所有』题" if not _aav(ctx.problem or "")
+                                   else "无子目标可追加"),
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception as _e:  # noqa: BLE001
             logger.debug("[穷尽性] 子目标追加失败: %s", _e)
+            try:
+                ctx._exhaust_diag = {"appended": False,
+                                     "reason": "异常: {}".format(type(_e).__name__)}
+            except Exception:  # noqa: BLE001
+                pass
 
         _sg_stats = self._subgoal_stats(subgoals)
         ctx.subgoal_stats = _sg_stats   # S4-lite：落 ctx 供 _collect_diag 进结果文件（A/B 对照）
@@ -1035,6 +1060,10 @@ class SubGoalSolverAgent(BaseAgent):
                 "title": "建立判断基准",
                 "description": (
                     "先**只**建立本题的判断依据，**不要**在这里判定任何选项。\n"
+                    "⚠ **严禁**在本步输出 `\\boxed{...}`、『最终答案』『答案是』"
+                    "『综上，选』等**最终答案形态**的内容 —— 本步只提供依据，"
+                    "最终答案由后续汇总步骤给出。实测 #098 因本步违规吐 `\\boxed{D}`，"
+                    "导致该选项判定子目标照抄基准、整个判定链失效。\n"
                     "按题目需要输出以下之一（或多项）：\n"
                     "· 涉及定义/定理 → 写出相关定义或定理的**完整原文**；\n"
                     "· 涉及对应关系（“X 变为 Y”“增大/减小”“系数/常数项”"
@@ -1667,8 +1696,21 @@ class SubGoalSolverAgent(BaseAgent):
                 bool(getattr(self.config, "objective_tactic_enabled", True)))
         except Exception:  # noqa: BLE001
             _obj_inj = ""
+        # ★ 2026-09-14（#103「丢 E」真根因修复）：剥离题面的
+        #   「Remember to put your final answer within \boxed{}.」指令。
+        #   实测该句**112/112 题都有**（题库统一附加），它会随题面进入**每个
+        #   中间子目标**的 prompt ⇒ ① 选项判定子目标全都输出 `\boxed{A}`；
+        #   ② **最后一个选项**直接吐**最终答案**（#103「判定选项 E」→
+        #   `\boxed{ABCD}`）⇒ 聚合层认不出它是 E 的判定 ⇒ 静默丢项。
+        #   该指令只对**最终汇总**步骤有效（merge 仍用原题、保留 boxed 要求），
+        #   故此处对子目标 prompt 使用剥离版题面。
+        try:
+            from .question_type import strip_answer_format_directive as _safd
+            _prob_for_step = _safd(ctx.problem or "")
+        except Exception:  # noqa: BLE001
+            _prob_for_step = ctx.problem or ""
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
-            problem=(ctx.problem or "") + _obj_inj,
+            problem=_prob_for_step + _obj_inj,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
             lemma_context=lemma_context,
@@ -2898,9 +2940,71 @@ class SubGoalSolverAgent(BaseAgent):
         if not deps:
             return ""
         title_map = {s.get("id"): (s.get("title") or "") for s in subgoals}
-        lines = [f"  子目标 #{d}「{title_map.get(d, '')}」结果: {results_map[d]}"
-                 for d in deps]
+        lines = []
+        for d in deps:
+            _txt = str(results_map[d])
+            _title = title_map.get(d, "")
+            # 2026-09-14 P1：**切断"基准污染"链**。
+            # 实测 #098 的基准子目标违规吐 `\boxed{D}`；而 #103 的「判定选项 E」
+            # 直接输出 `\boxed{ABCD}`（照抄了基准的答案形态）⇒ 聚合层认不出 E。
+            # 故：基准结果里若出现 `\boxed{...}`，注入下游**前**剥离外壳并加显式告警。
+            if "基准" in _title and "\\boxed" in _txt:
+                _txt = re.sub(r"\\boxed\{([^{}]*)\}", r"\1", _txt)
+                _txt = ("（⚠ 本基准曾误输出最终答案，其 `\\boxed` 外壳已被系统剥离；"
+                        "请只把它当作**判断依据**，**不要照抄**为任何选项的答案）"
+                        + _txt)
+            lines.append(f"  子目标 #{d}「{_title}」结果: {_txt}")
+        # 2026-09-14 P1：**依赖未产出时的降级**（实测 #110）。
+        # #110 的基准子目标求解失败 ⇒ 注入字符数 = 0 ⇒ 依赖它的选项子目标
+        # 拿到空上下文、整个判定链断掉（gold A / 模型 D）。
+        # 故：声明的依赖**全部未解出**时不再返回空串，而是显式告知下游
+        # "共享依据缺失，请独立完成"，避免静默断链。
+        _declared = [d for d in (sg.get("depends_on") or [])]
+        if _declared and not deps:
+            _names = "、".join(
+                "#{}「{}」".format(d, title_map.get(d, "")) for d in _declared)
+            return ("  （⚠ 前置子目标 {} **未能产出有效结果**，本次无法提供共享依据；"
+                    "请**基于题目本身独立完成**本步判定，"
+                    "不要因缺少依据而放弃或空转）").format(_names)
         return "\n".join(lines)
+
+    # 选项判定结论解析（2026-09-14 实测 #103/#107/#110 暴露的问题）。
+    # 模型**经常不遵守**"开头写『结论：正确/错误』"的格式，实际输出的形态包括：
+    #   「结论：正确 依据：…」/「选项 D：正确」/「X = Y」（等价判断，暗示正确）/
+    #   直接复述基准（**无任何结论**）。
+    # 聚合层若不能识别，就会**丢项**（#103 丢 E）或**误采纳**（#107 判 D 对却输出 C）。
+    _VERDICT_PATTERNS = (
+        (re.compile(r"结论\s*[:：]\s*(正确|成立|符合|是正确|对的)"), "正确"),
+        (re.compile(r"结论\s*[:：]\s*(错误|不成立|不符合|不正确|是错)"), "错误"),
+        (re.compile(r"选项\s*[A-E]\s*[:：]\s*(正确|成立|符合)"), "正确"),
+        (re.compile(r"选项\s*[A-E]\s*[:：]\s*(错误|不成立|不符合)"), "错误"),
+        (re.compile(r"^\s*(正确|成立|符合)\s*$", re.M), "正确"),
+        (re.compile(r"^\s*(错误|不成立|不符合)\s*$", re.M), "错误"),
+    )
+
+    @classmethod
+    def _extract_option_verdict(cls, text: str):
+        """从选项子目标的结果里解析出「正确 / 错误」；解析不到返回 None。
+
+        按**优先级**匹配（先"结论："和"选项X："这类强信号，再退到独立词）。
+        解析不到 ⇒ 调用方应显式标注"判定缺失"，让合并层单独复核，
+        **不得**默认当作"跳过"（那正是 #103 丢 E 的机制）。
+        """
+        t = str(text or "")
+        if not t:
+            return None
+        # 先看强信号（"结论：" / "选项X："）
+        for pat, verdict in cls._VERDICT_PATTERNS[:4]:
+            if pat.search(t):
+                return verdict
+        # 再退到独立词（但同一结果里两种都有 ⇒ 歧义，返回 None）
+        has_ok = bool(cls._VERDICT_PATTERNS[4][0].search(t))
+        has_no = bool(cls._VERDICT_PATTERNS[5][0].search(t))
+        if has_ok and not has_no:
+            return "正确"
+        if has_no and not has_ok:
+            return "错误"
+        return None
 
     @staticmethod
     def _format_all_results(results_map: dict[int, str],
@@ -2909,7 +3013,25 @@ class SubGoalSolverAgent(BaseAgent):
         lines = []
         for sg in subgoals:
             result = results_map.get(sg["id"], "（未求解）")
-            lines.append(f"子目标 #{sg['id']}「{sg['title']}」: {result}")
+            _title = str(sg.get("title") or "")
+            _txt = str(result)
+            # 2026-09-14：聚合层不再依赖模型的格式自觉（实测 #103/#107/#110）——
+            # 对「判定选项 X」子目标**解析结论并结构化前置**，使合并层无需理解
+            # 自由文本即可汇总；解析不到则显式标注"判定缺失，需单独复核"。
+            _m = re.match(r"^判定选项\s*([A-E])\s*$", _title.strip())
+            if _m:
+                _lab = _m.group(1)
+                _v = SubGoalSolverAgent._extract_option_verdict(_txt)
+                if _v:
+                    _txt = "【系统解析：选项 {} = {}】{}".format(_lab, _v, _txt[:400])
+                else:
+                    _txt = (
+                        "（⚠ 本步**未给出明确结论** —— 既无『结论：正确/错误』"
+                        "也无『选项{}：正确/错误』，原文：{}；"
+                        "合并时请**单独复核选项 {}**，"
+                        "**不得**因其格式不规范而默认排除）"
+                    ).format(_lab, _txt[:200], _lab)
+            lines.append(f"子目标 #{sg['id']}「{_title}」: {_txt}")
         return "\n".join(lines)
 
     @staticmethod
