@@ -796,6 +796,16 @@ class SubGoalSolverAgent(BaseAgent):
             answer=final_answer,
             reasoning=full_reasoning,
             revised=False,
+            # 2026-09-14：选择题走「逐项判定」链路 ⇒ 标记来源，供选取阶段优先采纳。
+            # 依据：实测 #107 逐项判定正确得出 D，却被候选池里 5 个整体求解的 C
+            # 以 5:1 多数投票淹没。逐项判定是**有依据**的结论，不应输给数量。
+            # 置 OBJECTIVE_ITEMWISE_PRIORITY=0 可回退（项目惯例：每项优化一开关）。
+            origin=(
+                "itemwise"
+                if (getattr(ctx, "question_type", "") == "选择题"
+                    and os.environ.get("OBJECTIVE_ITEMWISE_PRIORITY", "1") != "0")
+                else ""
+            ),
         )
         ctx.candidates.append(candidate)
         self.record(ctx, "subgoal", "子目标求解完成，已生成候选解答",

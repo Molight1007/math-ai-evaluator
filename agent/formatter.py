@@ -170,6 +170,33 @@ class FormatterAgent(BaseAgent):
         # 易因裸字母 `A` 与 `\boxed{A}` 的格式差异被聚类拆散 / 簇内择优失真）
         # 直接做答案频次投票更可靠——这正是 102 候选 4B/2A 却被选 A 的根因。
         import os as _os
+        # 2026-09-14：选择题**优先采纳「逐项判定」候选**（origin="itemwise"）。
+        # 依据：它是**逐个选项验证过**的结论（有共享基准、有逐项依据），可靠性
+        # 高于"整体求解"候选。实测 #107 逐项判定正确得出 D（gold=D），却因候选池
+        # 里有 5 个整体求解的 C，被 5:1 多数投票淹没 ⇒ 必须让**有依据的结论**
+        # 优先于**数量多数**。置 OBJECTIVE_ITEMWISE_PRIORITY=0 可回退。
+        if (_os.environ.get("OBJECTIVE_ITEMWISE_PRIORITY", "1") == "1"
+                and getattr(ctx, "question_type", "") == "选择题"):
+            _iw = [c for c in (getattr(ctx, "candidates", None) or [])
+                   if getattr(c, "origin", "") == "itemwise"
+                   and (getattr(c, "answer", "") or "").strip()]
+            if _iw:
+                _iw.sort(key=lambda c: len(c.reasoning or ""), reverse=True)
+                try:
+                    ctx._pick_diag = {
+                        "branch": "formatter_itemwise_priority",
+                        "picked": (_iw[0].answer or "")[:40],
+                        "n_itemwise": len(_iw),
+                        "n_total": len(getattr(ctx, "candidates", None) or []),
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
+                self.record(ctx, "finalize",
+                            "选择题优先采纳逐项判定候选：{}"
+                            "（逐项 {} 个 / 共 {} 个候选）".format(
+                                (_iw[0].answer or "")[:40], len(_iw),
+                                len(getattr(ctx, "candidates", None) or [])))
+                return _iw[0]
         if (_os.environ.get("OBJECTIVE_MAJORITY_VOTE", "0") == "1"
                 and getattr(ctx, "question_type", "") == "选择题"):
             _mv: dict = {}

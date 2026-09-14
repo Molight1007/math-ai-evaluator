@@ -194,6 +194,11 @@ class Candidate:
     answer: str                 # 提取出的简洁最终答案
     reasoning: str              # 完整推理过程（含文本）
     revised: bool = False       # 是否由自纠错回环产生
+    # 2026-09-14：来源标记。选择题的「逐项判定」候选标 `itemwise` ——
+    # 它是**逐个选项验证过**的结论，可靠性高于"整体求解"的候选；
+    # 实测 #107 逐项判定得出 D（正确），却因候选池里 5 个 C 而被多数
+    # 投票淹没 ⇒ 选择题选取时应对 itemwise 候选优先。
+    origin: str = ""
 
 
 @dataclass
