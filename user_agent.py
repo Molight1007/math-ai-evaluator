@@ -371,7 +371,16 @@ class AgentConfig:
     deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
-    enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
+    # 2026-09-14 **默认关闭**。依据不是"证明无影响"，而是**实测它已基本不触发**：
+    #   5 题 × 2 臂 = 10 次观测，`3.4_collab` 耗时**全部 0.0s** ——
+    #   ① 多数题被判 standard（按设计不跑，只有 deep 档跑）；
+    #   ② 真判 deep 的题到达 3.4 时生成侧时间截止已过，被门控跳过
+    #      （004 = 2.7 355s + 3_solve 243s ≈ 600s，之后还要留 3.6 121s + 4_verify 383s）。
+    # ⇒ 关掉它既不损失正确率（本来就没跑），也**杜绝了历史最坏 691s 的复发**
+    #   （004 旧配置下单题被 3.4 烧掉 691s，把 3.3 / 4_verify / 6.5 全挤成 0s）。
+    # ⚠ 该 A/B **不是**"证明无影响"的有效对照（机制两臂都没触发），
+    #   不能把这次结论外推成"3.4 无用"。若要真正评估它，必须在时间充裕的配置下单独测。
+    enable_collaborative_deep: bool = False  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 3              # 协作验证循环最大轮数（2026-09-06 P3 用户拍板 6→3：单轮含 3 次 LLM 不可中断、algebra-003 曾烧 535s，收紧省时；时间充裕时停滞检测照常兜底）
     # 子目标阶段预算（2026-09-06 P1 用户拍板按档拆分）：
     # deep 保留 750s（难题深度分解值）；standard/fast 用 450s——
