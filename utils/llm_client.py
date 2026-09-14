@@ -52,7 +52,14 @@ _RETRY_BACKOFF = 2.0
 _RETRY_BACKOFF_RATE = 8.0   # 限流场景退避基数（秒）
 _RETRY_BACKOFF_MAX = 24.0   # 单次退避上限（秒）
 _RETRY_JITTER = 0.5         # 抖动比例：wait += U(0, wait*JITTER)
-_RATE_LIMIT_MARKERS = ("-20048", "429", "too many requests", "请求过于频繁", "rate limit")
+_RATE_LIMIT_MARKERS = ("-20048", "429", "too many requests", "请求过于频繁", "rate limit",
+                       # 2026-09-14 补：服务端过载也走大退避。
+                       # 实测（今早 12 题回归）多次出现
+                       # `HTTP 400 {"code":"-20014","message":"书生体验过于火爆，请稍后再试"}`
+                       # —— 它是**服务端过载/限流**，但此前不在标记表里 ⇒ `_is_rate=False`
+                       # ⇒ 只退避 2s（而 `max_retries=1` 意味着**只有一次重试机会**），
+                       # 2s 后大概率仍撞墙、白烧一次调用。判定为大退避更合理。
+                       "-20014", "过于火爆")
 
 # ============================================================
 # 真实截断信号（2026-09-01 SU-01 优化 0）

@@ -145,18 +145,20 @@ class AgentConfig:
     # solver._maybe_answer_selfcheck 的高危算子门槛。
     # 回退：`--calc_hard_only false`。
     calc_hard_only: bool = True
-    # 2026-09-13 用户选定「方案 B：生成前算式预计算」——
-    # 动机：official112-016 单题实测 `calc_tool_calls = []` 且 `calc_fallback = 0`，
-    # 即模型**压根不写 <calc>**，所有"生成后回填"防线全部空转。
-    # True → 在子目标主求解之前先用一次**短调用**（prefill 种子 "<calc>" +
-    # max_tokens=256）让模型列出待精确计算的算式，系统求值后挂到
-    # `ctx.calc_prewarm_block`，随方案 A 的精确值汇总段一并注入后续所有路径。
-    # 默认 True 的依据：仅在档位 ∈ {standard, deep} 且非客观题（选择题/判断题）、
-    # 题面含 `$ \ 数字` 时触发（official112 覆盖率 98/112 = 87.5%）；失败/NONE/
-    # 纯四则一律 graceful，只埋点 calc_prewarm，不阻断。
-    # 设 False 回到旧行为（不做生成前预计算，只保留生成后回填）。
-    # 回退：`--enable_calc_prewarm false`（或 env `CALC_PREWARM=0`）。
-    enable_calc_prewarm: bool = True
+    # 2026-09-14 改为**默认关闭**：实测无价值 + 有明确成本。
+    # 关闭依据（12 题错题回归 `results/wrong12_v1_0914_out.jsonl`）：
+    #   · 12/12 题都产出了 1 条预计算，但**只有 1 题（015 的 `fact(2)=2`）与答案相关**，
+    #     其余全部无关 —— 例：014 的 gold 是三个特定大数，它猜了
+    #     `sum((i+1)*i**2, i, 0, 1000)`；016 的 gold 是 21，它猜了 `10+sqrt(10)`。
+    #   · 根因：**"让模型在解题前凭题面猜该算什么"这个前提不成立**，猜的算式质量很差。
+    #   · 且与方案 A 功能重叠 —— 方案 A 已把**解题过程中真算出来的** `[计算]` 值
+    #     前置注入（`collect_calc_results` → 4 条路径），那才是有效的值。
+    #   · 成本不低：本批单题 30–111s（API 不稳时），而单题预算只有 1150s。
+    # ⇒ 净收益为负，默认关闭。字段保留，随时可开回。
+    # 开启方式：`--enable_calc_prewarm true` 或 env `CALC_PREWARM=1`
+    # （注意 `_prewarm_applicable` 判据是 `os.environ.get("CALC_PREWARM","1") == "0"`，
+    #   故 env 侧只有设 `0` 才关；默认值由本字段决定）。
+    enable_calc_prewarm: bool = False
     # 2026-09-12 用户要求「原本完成的子目标要记录，不能重头再来」：
     # True → 同一题的**已完成子目标结果**跨 run() 调用复用（零 LLM）。
     # 背景：orchestrator 会在 3_solve / 3.5 等阶段多次调用 sub_goal_solver.run()，

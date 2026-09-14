@@ -431,6 +431,56 @@ class SubGoalSolverAgent(BaseAgent):
         subgoals = plan_data.get("subgoals", [])
         merge_strategy = plan_data.get("merge_strategy", "")
         problem_analysis = plan_data.get("problem_analysis", {})
+        # ---- 2026-09-14 穷尽性搜索机制（B0 遗留课题）----
+        # 实测 003（漏 `2030`）与 074（漏取整解族）的失败**不是形态问题**：
+        # 模型自信地认为"只有一个解"，因此"必须枚举"的形态要求对它无效。
+        # 现由代码**强制追加**一个「解族穷尽性检查」子目标，逼迫模型按解族
+        # 分类穷举（常数/线性/周期/取整/分段…）并回答"是否还有其他解族"。
+        # 追加发生在规划**之后** ⇒ 不会被 max_subgoals 截断，且覆盖全部规划路径
+        # （选择题 / Blueprint DAG / LLM 规划）。
+        try:
+            from .question_type import asks_all_values as _aav
+            if _aav(ctx.problem or "") and subgoals:
+                _max_id = max(int(sg.get("id", 0) or 0) for sg in subgoals)
+                subgoals.append({
+                    "id": _max_id + 1,
+                    "title": "解族穷尽性检查",
+                    "description": (
+                        "本题问『所有 / 全部』取值，前面的子目标**可能只找到了一部分解**。"
+                        "现在专门做一次穷尽性检查：\n"
+                        "1. 先列出本题**所有可能的解族类型**（如：常数解 / 线性解 / "
+                        "多项式解 / 周期解 / 取整型解（⌈x⌉、⌊x⌋）/ 分段定义解 / "
+                        "特殊函数解 / 指数对数型解 …）—— 这一步要**尽量列全**；\n"
+                        "2. 对每一类逐一判定『该类是否存在满足条件的解』，给出结论与"
+                        "理由（**排除某类必须给出反证或构造性论证**，不得只写"
+                        "“不可能”“显然无解”）；\n"
+                        "3. 最后必须明确回答：**除前面已找到的解之外，是否还存在"
+                        "其他解族？** 若有，写出该解族的具体形式（含参数）。\n"
+                        "⚠ 宁可多列一类再排除，也不得因“看起来不可能”而跳过；"
+                        "给出结论时必须注明依据。"
+                    ),
+                    "type": "verify",
+                    # ⚠ **必须依赖全部已有子目标**：执行期 `_format_dep_results`
+                    # 只注入**直接依赖**的结果 —— 若只依赖最后一个，穷尽性检查就
+                    # 看不到前面找到的任何解，而它的任务恰恰是"检查是否遗漏解族"。
+                    "depends_on": [sg["id"] for sg in subgoals],
+                    "expected_output": "各解族存在性判定 + 是否存在遗漏解族 + 遗漏解的具体形式",
+                    "result": "",
+                })
+                # merge 必须把「解族穷尽性检查」的结论纳入最终答案（否则子目标白跑）
+                _exh_note = (
+                    "\n【穷尽性要求（必须遵守）】最终答案**必须综合『解族穷尽性检查』"
+                    "子目标的结论**：把检查中确认存在的**所有解族**全部列出"
+                    "（含该检查新发现的遗漏解族的具体形式），"
+                    "**不得**只采用前面子目标找到的部分解；"
+                    "若检查结论与前面矛盾，以穷尽性检查为准并说明理由。"
+                )
+                merge_strategy = (merge_strategy or "直接给出最终答案") + _exh_note
+                self.record(ctx, "subgoal",
+                            "穷尽性搜索：追加『解族穷尽性检查』子目标"
+                            "（题面要求『所有』，共 {} 个子目标）".format(len(subgoals)))
+        except Exception as _e:  # noqa: BLE001
+            logger.debug("[穷尽性] 子目标追加失败: %s", _e)
 
         _sg_stats = self._subgoal_stats(subgoals)
         ctx.subgoal_stats = _sg_stats   # S4-lite：落 ctx 供 _collect_diag 进结果文件（A/B 对照）
@@ -1734,6 +1784,7 @@ class SubGoalSolverAgent(BaseAgent):
                 and getattr(self.config, 'enable_calc_tool', True)):
             resp, _resolved = resolve_all_calcs(resp)
             # P1-2（2026-09-09）：工具失败审计留痕（WARN:/ERROR: 回填）
+            self.record_calc_successes(ctx, _resolved)
             if audit_calc_fallbacks is not None:
                 for _ex, _rs in audit_calc_fallbacks(_resolved):
                     self.record(ctx, "calc_fallback",
@@ -2704,6 +2755,7 @@ class SubGoalSolverAgent(BaseAgent):
                     and getattr(self.config, 'enable_calc_tool', True)):
                 resp, _resolved = resolve_all_calcs(resp)
                 # P1-2（2026-09-09）：merge 内工具失败审计留痕（WARN:/ERROR:）
+                self.record_calc_successes(ctx, _resolved)
                 if audit_calc_fallbacks is not None:
                     for _ex, _rs in audit_calc_fallbacks(_resolved):
                         self.record(ctx, "calc_fallback",

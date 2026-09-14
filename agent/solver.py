@@ -502,6 +502,7 @@ class SolverAgent(BaseAgent):
                 or not text):
             return text
         out, resolved = resolve_all_calcs(text)
+        self.record_calc_successes(ctx, resolved)
         if audit_calc_fallbacks is not None:
             for _ex, _rs in audit_calc_fallbacks(resolved):
                 self.record(ctx, "calc_fallback", f"<calc>{_ex}</calc> → {_rs}",
@@ -1710,6 +1711,7 @@ class SolverAgent(BaseAgent):
             if resolve_all_calcs is not None and getattr(
                     self.config, 'enable_calc_tool', True):
                 resp, _resolved = resolve_all_calcs(resp)
+                self.record_calc_successes(ctx, _resolved)
                 if audit_calc_fallbacks is not None:
                     for _ex, _rs in audit_calc_fallbacks(_resolved):
                         self.record(ctx, "calc_fallback",
@@ -1722,6 +1724,7 @@ class SolverAgent(BaseAgent):
                 # 的标记文本，模型的心算值直接成为答案 —— 即"强制走工具"这一关
                 # 白花一次 LLM 重问，目的完全落空。
                 resp, _re2 = resolve_all_calcs(resp)
+                self.record_calc_successes(ctx, _re2)
                 if audit_calc_fallbacks is not None:
                     for _ex, _rs in audit_calc_fallbacks(_re2):
                         self.record(ctx, "calc_fallback",
@@ -1905,6 +1908,7 @@ class SolverAgent(BaseAgent):
             if resolve_all_calcs is not None and getattr(
                     self.config, 'enable_calc_tool', True):
                 resp, _resolved = resolve_all_calcs(resp)
+                self.record_calc_successes(ctx, _resolved)
                 if audit_calc_fallbacks is not None:
                     for _ex, _rs in audit_calc_fallbacks(_resolved):
                         self.record(ctx, "calc_fallback",
@@ -1917,6 +1921,7 @@ class SolverAgent(BaseAgent):
                 # 的标记文本，模型的心算值直接成为答案 —— 即"强制走工具"这一关
                 # 白花一次 LLM 重问，目的完全落空。
                 resp, _re2 = resolve_all_calcs(resp)
+                self.record_calc_successes(ctx, _re2)
                 if audit_calc_fallbacks is not None:
                     for _ex, _rs in audit_calc_fallbacks(_re2):
                         self.record(ctx, "calc_fallback",

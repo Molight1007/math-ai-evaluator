@@ -570,6 +570,34 @@ class BaseAgent(ABC):
             entry.update(extra)
         ctx.trace.append(entry)
 
+    # ============================================================
+    # 2026-09-14：补齐「工具成功算过」的埋点
+    # ------------------------------------------------------------
+    # `diag.calc_tool_calls` 由 `orchestrator._collect_diag()`（约 :2575）按 trace 的
+    # `step == "calc_tool_call"` 导出，但**全代码库从未 record 过这个 step 名**
+    # （只 record 了 `calc_tool_mode` 与 `solver_calc_rewrite`）⇒ 该字段
+    # **结构性恒空**。后果：会把"工具从来没成功算过"误读成事实 ——
+    # 2026-09-14 就因此误导读过一次归因（与 `calc_prewarm` 白名单缺失同源）。
+    # 与 `audit_calc_fallbacks`（记**失败**）**镜像**：这里记**成功**。
+    # 纯埋点，不参与任何判定逻辑。
+    # ============================================================
+    def record_calc_successes(self, ctx: TaskContext, resolved) -> int:
+        """记录被工具**成功算出**的 `<calc>` 条目，返回成功条数。
+
+        `resolve_all_calcs()` 返回项形如 `(expr, result)`；`result` 以
+        `WARN:` / `ERROR:` 开头即失败（那部分由 `audit_calc_fallbacks` 记录，
+        走 `calc_fallback`）。此处只收成功项。
+        """
+        n = 0
+        for _ex, _rs in (resolved or []):
+            if str(_rs).startswith(("WARN:", "ERROR:")):
+                continue
+            self.record(ctx, "calc_tool_call",
+                        f"<calc>{_ex}</calc> → {_rs}",
+                        expr=str(_ex)[:90], result=str(_rs)[:120])
+            n += 1
+        return n
+
     def llm(self, ctx: TaskContext, messages: list, temperature: float,
             max_tokens: int) -> Optional[str]:
         """
