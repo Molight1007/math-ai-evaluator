@@ -3,7 +3,7 @@
 
 覆盖:
 - 反馈属实 → 保留（复核后反馈含原缺陷）
-- 反馈误报 → 驳回（返回"无实质缺陷"降级提示）
+- 反馈误报 → 驳回（返回**空串**；由调用方据此结束 revise，见下方用例说明）
 - 复核配置关闭 → 原样返回
 - 空/短反馈 → 不触发复核
 """
@@ -45,10 +45,20 @@ class ReviewFeedbackTest(unittest.TestCase):
         self.assertIn("漏掉", out)
 
     def test_feedback_rejected_when_false(self) -> None:
+        """判定为误报时返回**空串**（2026-09-17 有意的行为变更）。
+
+        原行为：返回通用提示「解答已较完整，请重新审题核对计算细节后给出最终答案。」
+        问题：该句**信息量为零**，却被当作 revise 反馈驱动一整轮"生成 + 验证"
+        （实测 official112-099 的 `diag.revise_feedback[0]` 正是这句，属纯浪费）。
+        现行为：返回空串 = "复核未发现实质缺陷"，由调用方
+        `Orchestrator._deep_revise_loop` 据此**结束回环**而非盲目重解。
+
+        本用例同时保留并锁死原始意图：**被驳回的误报内容不得透传给模型**。
+        """
         orch, ctx = _make_ctx_and_orch(["无实质缺陷"])
         out = orch._review_bug_feedback(ctx, "缺陷：x = 2 是错误答案（实际正确）")
         self.assertNotIn("x = 2 是错误答案", out)
-        self.assertIn("重新审题", out)  # 降级为通用提示
+        self.assertEqual(out, "")
 
     def test_disabled_config_passthrough(self) -> None:
         orch, ctx = _make_ctx_and_orch([])

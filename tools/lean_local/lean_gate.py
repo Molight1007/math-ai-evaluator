@@ -154,6 +154,58 @@ class LeanGate:
         return self._bridge
 
     # ------------------------------------------------------------------
+    # 验证结果缓存（2026-09-17，Z3）
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _verify_key(problem: str, reasoning: str, answer: str, is_proof: bool):
+        """**语义等价**的验证去重键 = sha1(题目, 推理, 答案, 是否证明题)。
+
+        为什么安全：键里含 `reasoning` 的哈希 —— 只有三者**逐字相同**才算命中，
+        与 `bridge.verify/verify_answer` 的实际入参一一对应 ⇒ 复用报告**不改变任何
+        验证语义**。这正是它与 `lean_dedup_by_answer`（只按答案、默认关，自述"会改
+        语义"）的本质区别。
+
+        解决的浪费（确定性重复）：3.6 `apply` 已逐候选验一次，而 6.5
+        `gate_final_answer` 又用**逐字相同的三元组**再验一次（orchestrator 取
+        `best_reasoning` 时取的就是 `answer == final_response` 的那个候选）
+        ⇒ 同一份输入被验两遍，每遍 = 1 次 LLM 翻译 + 1 次 Lean 编译。
+        """
+        import hashlib as _hl
+        try:
+            _raw = "%s\x1f%s\x1f%s\x1f%d" % (
+                problem or "", reasoning or "", answer or "",
+                1 if is_proof else 0)
+            return _hl.sha1(_raw.encode("utf-8", "replace")).hexdigest()
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
+    def _cache_get(ctx, key):
+        """命中返回 report，未命中/不可用返回 None（缓存挂在 ctx，每题独立）。"""
+        if not key:
+            return None
+        try:
+            _c = getattr(ctx, "_lean_verify_cache", None)
+            if isinstance(_c, dict):
+                return _c.get(key)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    @staticmethod
+    def _cache_put(ctx, key, report):
+        if not key or report is None:
+            return
+        try:
+            _c = getattr(ctx, "_lean_verify_cache", None)
+            if not isinstance(_c, dict):
+                _c = {}
+                ctx._lean_verify_cache = _c
+            _c[key] = report
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ------------------------------------------------------------------
     # 候选级并行预取（2026-09-13）
     # ------------------------------------------------------------------
     def _prefetch_reports(self, ctx: TaskContext, candidates: list,
@@ -191,18 +243,30 @@ class LeanGate:
         out: list = [None] * len(candidates)
 
         def _one(_cand):
-            """只做「算 report」：入参与原循环逐字相同，异常原样带回主线程重抛。"""
+            """只做「算 report」：入参与原循环逐字相同，异常原样带回主线程重抛。
+
+            2026-09-17（Z3）：先查**语义等价**缓存（键含 reasoning 哈希）——
+            命中即复用，节省一次 LLM 翻译 + 一次 Lean 编译；未命中则验后回填。
+            """
             try:
+                _z3k = self._verify_key(ctx.problem or "", _cand.reasoning or "",
+                                        _cand.answer or "", is_proof)
+                _hit = self._cache_get(ctx, _z3k)
+                if _hit is not None:
+                    return _hit, None
                 if is_proof:
-                    return bridge.verify(
+                    _rep = bridge.verify(
                         problem=ctx.problem or "",
                         reasoning=_cand.reasoning or "",
-                        domain=domain, timeout=timeout), None
-                return bridge.verify_answer(
-                    problem=ctx.problem or "",
-                    reasoning=_cand.reasoning or "",
-                    answer=_cand.answer or "",
-                    domain=domain, timeout=timeout), None
+                        domain=domain, timeout=timeout)
+                else:
+                    _rep = bridge.verify_answer(
+                        problem=ctx.problem or "",
+                        reasoning=_cand.reasoning or "",
+                        answer=_cand.answer or "",
+                        domain=domain, timeout=timeout)
+                self._cache_put(ctx, _z3k, _rep)
+                return _rep, None
             except Exception as _e:  # noqa: BLE001
                 return None, _e
 
@@ -379,6 +443,25 @@ class LeanGate:
                     kept.append(cand)
                 self._record_ctx(ctx, entry)
                 continue
+            # ★ 2026-09-17（Z5）：**非数学对象答案直接跳过验证**。
+            # 实测日志里 `答案 '</tool_call>'`、`答案 '步骤8：重新思考——正确的下界构造'`
+            # 都被送进 Lean（`verify_answer` 只挡空串与选项字母，中文步骤名/散文未挡），
+            # 每次 = 1 次 LLM 翻译 + 1 次 Lean 编译，纯浪费。
+            # 语义与"验证返回 unknown"一致（候选仍按 lenient 保留），只是不再付出调用。
+            if not is_proof:
+                try:
+                    from agent.formatter import _looks_like_non_answer as _nma
+                    if _nma(str(getattr(cand, "answer", "") or "")):
+                        entry["verdict"] = "unknown"
+                        entry["degraded"] = "non_math_answer"
+                        entry["reason"] = ("答案非数学对象（工具残留/步骤标签/散文/代码）"
+                                           "→ 跳过 Lean 验证（Z5 2026-09-17）")
+                        if not self.strict:
+                            kept.append(cand)
+                        self._record_ctx(ctx, entry)
+                        continue
+                except Exception:  # noqa: BLE001  判据不可用则放行原路径
+                    pass
             try:
                 # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
                 # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
@@ -403,13 +486,22 @@ class LeanGate:
                     report = _ans_cache[_dedup_key]
                     entry["cached_from_answer"] = True
                 else:
-                    report = bridge.verify_answer(
-                        problem=ctx.problem or "",
-                        reasoning=cand.reasoning or "",
-                        answer=cand.answer or "",
-                        domain=domain,
-                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                    )
+                    # 2026-09-17（Z3）：串行路径也走语义等价缓存
+                    _z3k = self._verify_key(ctx.problem or "", cand.reasoning or "",
+                                            cand.answer or "", is_proof)
+                    _z3hit = self._cache_get(ctx, _z3k)
+                    if _z3hit is not None:
+                        report = _z3hit
+                        entry["cached_from_identity"] = True
+                    else:
+                        report = bridge.verify_answer(
+                            problem=ctx.problem or "",
+                            reasoning=cand.reasoning or "",
+                            answer=cand.answer or "",
+                            domain=domain,
+                            timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                        )
+                        self._cache_put(ctx, _z3k, report)
                     if _dedup and _dedup_key:
                         _ans_cache[_dedup_key] = report
                 # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
@@ -571,27 +663,39 @@ class LeanGate:
             entry["degraded"] = "env_unavailable"
             self._record_ctx(ctx, entry)
             return True
-        try:
-            if is_proof:
-                report = bridge.verify(
-                    problem=ctx.problem or "",
-                    reasoning=reasoning or answer,
-                    domain=domain,
-                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                )
-            else:
-                report = bridge.verify_answer(
-                    problem=ctx.problem or "",
-                    reasoning=reasoning or answer,
-                    answer=answer,
-                    domain=domain,
-                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                )
-        except Exception as e:  # noqa: BLE001
-            entry["error"] = str(e)[:200]
-            entry["degraded"] = "exception_lenient"
-            self._record_ctx(ctx, entry)
-            return True
+        # ★ 2026-09-17（Z3）：6.5 先查**语义等价**缓存 —— 3.6 `apply` 已对
+        # (题目, 推理, 答案) 逐字相同的候选验过一次，此处再验属确定性重复。
+        _z3k = self._verify_key(ctx.problem or "", reasoning or answer,
+                               answer, is_proof)
+        _z3hit = self._cache_get(ctx, _z3k)
+        if _z3hit is not None:
+            report = _z3hit
+            entry["cached_from_identity"] = True
+            entry["reason"] = ("复用 3.6 阶段同 (题目,推理,答案) 的验证报告"
+                               "（Z3 2026-09-17 语义等价去重）")
+        else:
+            try:
+                if is_proof:
+                    report = bridge.verify(
+                        problem=ctx.problem or "",
+                        reasoning=reasoning or answer,
+                        domain=domain,
+                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                    )
+                else:
+                    report = bridge.verify_answer(
+                        problem=ctx.problem or "",
+                        reasoning=reasoning or answer,
+                        answer=answer,
+                        domain=domain,
+                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                    )
+                self._cache_put(ctx, _z3k, report)
+            except Exception as e:  # noqa: BLE001
+                entry["error"] = str(e)[:200]
+                entry["degraded"] = "exception_lenient"
+                self._record_ctx(ctx, entry)
+                return True
         if report is None:
             entry["degraded"] = "no_report"
             self._record_ctx(ctx, entry)

@@ -6,7 +6,7 @@ from __future__ import annotations
 在竞赛 6.5h 硬限内把全卷总耗时控制在约 5.83 小时（target=21000s），并把省下的预算集中投入难题。
 
 核心机制（借鉴 math_competition_agent 的 paper_pacer 思想，适配本版）：
-- 每档位有设计预算帽（tier_cap）：standard=540s / deep=1200s；
+- 每档位有设计预算帽（tier_cap）：standard=750s / deep=1150s（2026-09-17 更正，原注释 540/1200 与 AgentConfig 默认不符）；
   2026-09-14 删除 fast 档（字典中的 fast 键保留作兜底，正常不再被使用）；
   （deep 上限 = 平台单题硬限 max_time_per_question=1200s，不可再抬）
 - 动态收紧：paper_cap = 剩余目标时间 / 剩余题数；
@@ -57,8 +57,11 @@ class PaperPacer:
         )
         self.tier_caps = dict(getattr(
             config, 'tier_budget',
-            # 与 user_agent.tier_budget 保持一致；deep 上限 = 平台单题硬限 1200s
-            {"fast": 120.0, "standard": 540.0, "deep": 1200.0},
+            # ★ 2026-09-17（Audit-2）：兜底值改为**与 AgentConfig 声明默认完全一致**
+            #   （原为 {120,540,1200}，既非 AgentConfig 的 {300,750,1150}，也非
+            #   run_eval 本地基线的 {120,540,1150} ⇒ 是第三套口径，只会在
+            #   `config.tier_budget` 缺失时静默生效，属"埋雷"）。
+            {"fast": 300.0, "standard": 750.0, "deep": 1150.0},
         ))
         # ---- deep 档全卷配额（2026-08-28 新增）----
         # 时间账：平台并发 3、Agent 总 ≤6.5h → 总"题·秒"预算 = 3 × 23400 = 70200。

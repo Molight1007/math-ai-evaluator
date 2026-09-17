@@ -904,7 +904,7 @@ class _LeanMcpProxyClient:
                 try:
                     ln = self._proc.stdout.readline()
                     q.put(ln)
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001  pyflakes: exc 未使用，去掉绑定
                     q.put("")
 
             t = threading.Thread(target=_reader, daemon=True)
@@ -2218,6 +2218,22 @@ class LeanBridge:
                 cands = [m.group(1) for m in
                          re.finditer(r"\[\s*计算\s*\]\s*([^\n=]{2,120})=([^\n]{1,60})",
                                      text)]
+            # ★ 2026-09-17（L1）：**去 `<calc>` 依赖**的正则回退。
+            # 背景：本守卫原先只认 `<calc>…</calc>` 与 `[计算] x = y`，而
+            # `enable_calc_tool=False`（2026-09-15 起默认关）⇒ 模型不被要求写 `<calc>`
+            # ⇒ 提不到算式 ⇒ **102/102 条记录的 `sys_verify` 全为 None**
+            #（本守卫自 2026-09-15 起**结构性不可达**，等于不存在）。
+            # 回退判据：**整行纯算术等式**（左侧只含数字/运算符/括号、且至少含一个
+            # `+ - * / ^`；右侧为数字）⇒ 交给下游构造 `(左) = (答案)` 编译。
+            # 0 LLM 成本、不改提示词、不动 calc 链。
+            _from_marker = True
+            if not cands:
+                _from_marker = False
+                _rx_fb = re.compile(
+                    r"^[ \t]*([0-9+\-*/^(). \t]{5,120})=[ \t]*"
+                    r"([-+]?\d+(?:\.\d+)?)[ \t]*$", re.M)
+                cands = [m.group(1) for m in _rx_fb.finditer(text)]
+                cands = [c for c in cands if any(op in c for op in "+-*/^")]
             exprs = []
             for c in cands[:4]:
                 e = (c or "").strip()
@@ -2245,6 +2261,12 @@ class LeanBridge:
                 _trash_lean_file(project_dir, lean_file)
                 if comp and comp.get("ok"):
                     return True
+            # ★ 2026-09-17（L1）：**仅当算式来自显式工具标记时**才允许"矛盾 ⇒ 判错"。
+            # 原因：正则回退抓到的等式可能与本题**无关**（推理里任意一行算术都能命中）
+            # ⇒ 用它判 `False`（= 答案必错的强信号）会**误拒正确候选**。
+            # 故回退来源**只能确认（True），不能否决**，否则返回 None（不作判断）。
+            if not _from_marker:
+                return None
             # 所有算式都算不出该答案 ⇒ 答案与自身计算矛盾
             return False
         except Exception:  # noqa: BLE001  任何异常都不影响原有判定
@@ -3006,6 +3028,25 @@ def _answer_embedded(lean_code: str, answer: str) -> bool:
     if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", core):
         pat = r"(?<![0-9])" + re.escape(core) + r"(?![0-9])"
         return re.search(pat, lean_code or "") is not None
+    # ★ 2026-09-17（L2）：**分数答案专项锚定**。
+    # 实测 official112-070 的候选 `\boxed{\frac{1}{2}}`：剥 boxed 后 core=`\frac{1}{2}`，
+    # 而下方通用数字核对取出的集合是 {"1","2"} − {"0","1","2"} = **∅**（通用小整数被
+    # 排除）⇒ 必然退化到 token 检查、而代码里没有 `frac` ⇒ 判「未锚定」
+    # ⇒ 该题 2 条候选白走 `convert_to_lean_failed`。
+    # 故对分数形态单独核对：代码须出现 `a/b`、`\frac{a}{b}` 或 `\dfrac{a}{b}`。
+    _mf = (re.fullmatch(r"\\(?:d|t)?frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", core)
+           or re.fullmatch(r"([+-]?\d+)\s*/\s*([+-]?\d+)", core))
+    if _mf:
+        _a, _b2 = _mf.group(1).strip(), _mf.group(2).strip()
+        _code = lean_code or ""
+        for _form in ("%s/%s" % (_a, _b2),
+                      "\\frac{%s}{%s}" % (_a, _b2),
+                      "\\dfrac{%s}{%s}" % (_a, _b2),
+                      "(%s/%s)" % (_a, _b2),
+                      "%s / %s" % (_a, _b2)):
+            if _form in _code:
+                return True
+        return False
     # 非纯数字形态：提取数字核对（排除 0/1/2 通用小整数的假匹配）
     ans_nums = set(re.findall(r"\d+", core)) - {"0", "1", "2"}
     if ans_nums:

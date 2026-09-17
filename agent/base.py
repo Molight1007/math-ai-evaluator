@@ -220,6 +220,47 @@ class Candidate:
                 pass
 
 
+def next_candidate_id(candidates) -> int:
+    """返回**不会与既有候选冲突**的下一个候选 id（2026-09-17 新增）。
+
+    为什么需要：全仓多处用 `len(candidates)` 生成 Candidate.id，而**腾位/删除会让
+    len 变小** ⇒ 新 id 与旧候选 id 重叠（实测 official112-013 出现**两个 id=3**、
+    025 出现 id=7）。下游凡按 id 匹配的地方都会错位 ——
+    `orchestrator` 的 `_gate_tried`、`formatter` 的簇内候选匹配、
+    `verdicts[i].id` ↔ `candidates[i].id` 的对齐关系。
+
+    统一收敛到本函数，避免各写入点口径再次分叉（本仓库已有"口径不一"的历史教训）。
+    """
+    _mx = -1
+    for _c in (candidates or []):
+        try:
+            _mx = max(_mx, int(getattr(_c, "id", -1)))
+        except (TypeError, ValueError):
+            continue
+    return _mx + 1
+
+
+def pick_best_candidates(candidates, verdicts, k: int = 3) -> list:
+    """按 **(正确票数, 推理长度)** 降序取前 k 个候选（2026-09-17 新增）。
+
+    用途 = 候选池腾位。原实现是 `list(ctx.candidates)[-3:]`，即按 id 尾部保留
+    "最新"的 3 个，**与正确性无关** —— 若新追加的候选恰好最差，就会留下最差 3 个、
+    丢掉初始解（通常较好）。抽出此函数使口径单一、且可被单元测试直接覆盖。
+    """
+    _votes = {}
+    for _v in (verdicts or []):
+        try:
+            _votes[int(getattr(_v, "id", -1))] = int(
+                getattr(_v, "correct_votes", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    _pool = list(candidates or [])
+    _pool.sort(key=lambda _c: (
+        -_votes.get(int(getattr(_c, "id", -1)), 0),
+        -len(getattr(_c, "reasoning", "") or "")))
+    return _pool[:max(0, int(k))]
+
+
 @dataclass
 class Verdict:
     """一个候选解答的验证结果"""

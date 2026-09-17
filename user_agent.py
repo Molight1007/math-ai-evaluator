@@ -271,7 +271,12 @@ class AgentConfig:
     #   CLI/kwargs 传它会被静默丢弃，只给人"可调"的假象。
 
     # ---- 自主调控（大幅缩减）----
-    max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
+    # 2026-09-17（Audit-1）：本字段此前**声明 + 白名单 + CLI 全齐，但全仓零读取点**
+    #   ⇒ `--revise_rounds N` 被 __init__ 写入 config 后无人消费，属**静默失效的 CLI**。
+    #   现接到 `orchestrator._deep_revise_loop` 的**全局轮数上限**（该上限原先硬编码 5）。
+    #   默认取 5 以保持既有行为不变；<=0 表示不设全局上限。
+    #   注：单次调用的轮数由 `deep_revise_rounds` 控制（两回事）。
+    max_revise_rounds: int = 5
     max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
                                         # 覆盖 5 题 batch + 限流重试 + deep 档完整流程
                                         # = classifier 1 + 求解 3 + 投票 6 + self_audit 1
@@ -417,7 +422,9 @@ class AgentConfig:
     tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
     tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
     tier_max_calls: dict = None             # 每档 LLM 调用预算上限
-    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:120, standard:540, deep:1320}
+    # ⚠ 2026-09-17（Audit-2）：注释原写 {120,540,1320}，与 `__post_init__` 的
+    #   实际默认 {300,750,1150} **不符**（属「注释与代码两套口径」）。此处以代码为准。
+    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:300, standard:750, deep:1150}
     # 2026-09-13 更正后重设：36000（10h，基于错误前提"平台无总时长"）→ **19500**。
     # 依据：平台全卷硬限 **6 小时 = 21600s**（不含 Judge，见上方权威出处）。
     # 取 19500 = 6h 的 90%，给 Judge / 提交 IO / 冷启动留约 35 分钟余量。

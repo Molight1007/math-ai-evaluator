@@ -20,7 +20,7 @@ import os
 import re
 import time
 
-from .base import BaseAgent, TaskContext, Candidate
+from .base import (BaseAgent, TaskContext, Candidate, next_candidate_id)
 
 try:
     from prompts.sub_goal import (
@@ -490,6 +490,11 @@ class SubGoalSolverAgent(BaseAgent):
             return ctx
 
         subgoals = plan_data.get("subgoals", [])
+        # ★ 2026-09-17（Z8）：规划结果为空 ⇒ 后续的逐步求解与 merge 都无从下手，
+        #   原实现仍会跑一遍 merge/建候选（纯空转）。此处直接早退。
+        if not subgoals:
+            self.record(ctx, "subgoal", "子目标规划为空 → 跳过求解与合并（Z8 2026-09-17）")
+            return ctx
         # 2026-09-17（P-20）：剥掉规划结论里的「答案形态」，防其被当作指令
         merge_strategy = _strip_answer_forms(plan_data.get("merge_strategy", ""))
         problem_analysis = plan_data.get("problem_analysis", {})
@@ -862,7 +867,7 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "subgoal", "候选池已达上限 6，跳过子目标候选入池")
             return
         candidate = Candidate(
-            id=len(ctx.candidates),
+            id=next_candidate_id(ctx.candidates),
             answer=final_answer,
             reasoning=full_reasoning,
             revised=False,

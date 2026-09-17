@@ -20,7 +20,7 @@ Orchestrator/main 的信号量约束，本模块单题内不额外开线程）�
 
 import logging
 
-from .base import BaseAgent, TaskContext, Candidate
+from .base import (BaseAgent, TaskContext, Candidate, next_candidate_id)
 from utils.extract import (
     extract_final_answer,
     rescue_final_answer,
@@ -154,7 +154,7 @@ class CollaborativeSolver(BaseAgent):
         if not answer or len(answer) > 300:
             answer = rescue_final_answer(final)[0] or smart_fallback_answer(final)
         candidate = Candidate(
-            id=len(ctx.candidates),
+            id=next_candidate_id(ctx.candidates),
             answer=answer or "",
             reasoning=final,
             revised=False,

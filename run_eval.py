@@ -878,7 +878,8 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     "use_lemma_accumulation": False,
     "by_enable_fast_path": True,
     # ---- 本地卷档位预算（2026-09-02 晚三次修正：对齐比赛限时）----
-    # 平台 112 题卷 tier_budget = fast 120 / standard 540 / deep 1200
+    # 本地基线（2026-09-17 更正）：fast 120 / standard 540 / deep **1150**
+# ⚠ 原注释写 deep 1200，与本文件 :887 的实际值 1150 不符（Audit-2）。
     # （user_agent.py 口径，#49 已 480→540 上调）。本地评测必须与平台一致，
     # 否则"本地验证通过"不代表"比赛限时下可复现"。
     # 历史：540→900 是配合 54000s 不限时总池的放宽，违背比赛时间模拟，

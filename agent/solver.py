@@ -27,6 +27,8 @@ from .base import (
     BaseAgent, TaskContext, Candidate,
     detect_hallucination, detect_truncated,
     detect_template_leak,
+    next_candidate_id,           # 2026-09-17：候选 id 单一来源（防腾位后 id 冲突）
+    pick_best_candidates,        # 2026-09-17：腾位按票数选优（单一来源）
 )
 from prompts.policy import (
     SELF_IMPROVE_USER,
@@ -391,10 +393,19 @@ class SolverAgent(BaseAgent):
         # 只到 3、revise 补 ≤3，总量天然 ≤6，封顶不再主动砍候选，无 003 式风险。
         # count 只传 remaining 上限，adaptive 缩小在 _generate_initial 内部做。
         remaining = 6 - len(getattr(ctx, 'candidates', None) or [])
-        if remaining <= 0:
+        # ★ 2026-09-17（M1）：池满时**不要在这里 return**。
+        # 腾位逻辑写在 `_generate_revise` 内部（其 `_room <= 0` 分支），而本函数
+        # 在 `remaining <= 0` 时直接返回 ⇒ **那段腾位结构性不可达**。
+        # 实测后果：official112-003 的 `revise_round=4`，但 6 个候选
+        # `revised` **全为 False** —— 4 轮修订一个候选都没生成，却烧掉
+        # `5_revise_or_fallback 688.5s + 5.5_low_conf 805.6s = 1494s`。
+        # 修法：仅"非修订轮且池满"才早退；修订轮池满时把 cap 置 None，
+        # 交给 `_generate_revise` 自行腾位后决定 count。
+        _is_revise = bool(ctx.revise_round > 0 and ctx.revise_feedback)
+        if remaining <= 0 and not _is_revise:
             return ctx
-        if ctx.revise_round > 0 and ctx.revise_feedback:
-            self._generate_revise(ctx, cap=remaining)
+        if _is_revise:
+            self._generate_revise(ctx, cap=(remaining if remaining > 0 else None))
         else:
             self._generate_initial(ctx, count=remaining)
         return ctx
@@ -826,9 +837,14 @@ class SolverAgent(BaseAgent):
             #   修法：工具关闭时本关**整体跳过**——要求不可能被满足，
             #   继续检查只会白烧调用并劣化答案。
             if not getattr(self.config, "enable_calc_tool", False):
+                # ⚠ 2026-09-17（L4）：本早退**同时**使下方的「计算冲突」检测
+                #   （`ctx.calc_inconsistent = True`）**结构性不可达**，进而使
+                #   `orchestrator` 6.5 那条「计算冲突优先于 Lean answer_valid」的裁决
+                #   永不生效。此处显式记录，避免读 diag 时误以为它在工作。
                 self.record(ctx, "answer_selfcheck_skip",
                             "enable_calc_tool=False ⇒ `<calc>` 引导与标记解析均未启用，"
-                            "本关要求结构性无法满足 → 整体跳过（不再徒劳重问）")
+                            "本关要求结构性无法满足 → 整体跳过（不再徒劳重问）；"
+                            "**连带 calc_inconsistent 检测不可达**（L4 2026-09-17）")
                 return resp, answer
             # 2026-09-12 逻辑堆叠治理（定型前审核）：答案已由表达式范式（本地
             # 计算器）产出 —— 本关不再以"看不到 <calc> 来源"为由重复打回，
@@ -1405,7 +1421,7 @@ class SolverAgent(BaseAgent):
 
     def _generate_proof(self, ctx: TaskContext) -> Candidate | None:
         """使用证明题专用提示词生成分步编号的完整证明。"""
-        from .base import Candidate
+        from .base import Candidate, next_candidate_id
         conditions = "见题目"
         strategy_hint = "选择最合适的证明方法（直接证明/反证法/归纳法/构造法）"
         user = PROOF_TEMPLATE.format(
@@ -1440,7 +1456,7 @@ class SolverAgent(BaseAgent):
             except Exception:  # noqa: BLE001  剥壳失败不阻断
                 pass
             answer = _raw_clean.strip()[-500:]
-        cid = len(ctx.candidates)
+        cid = next_candidate_id(ctx.candidates)
         return Candidate(id=cid, reasoning=raw, answer=answer)
 
     def _compressed_solve(self, ctx: TaskContext, system: str, user: str,
@@ -1630,7 +1646,11 @@ class SolverAgent(BaseAgent):
         except Exception:  # noqa: BLE001
             pass
 
-        base_cid = len(ctx.candidates)
+        # ★ 2026-09-17（M4）：id 基线改为 `max(已有 id)+1`。
+        # 原用 `len(ctx.candidates)`，而腾位会让 len 变小 ⇒ 新 id 与旧 id 重叠
+        # （实测 013 出现**两个 id=3**、025 出现 id=7）。下游按 id 匹配的地方
+        # （`orchestrator` 的 `_gate_tried`、`formatter` 的簇内候选匹配）随之错位。
+        base_cid = next_candidate_id(ctx.candidates)
         if temperatures is None:
             tier_tbl = getattr(self.config, 'tier_temperatures', None)
             temperatures = (tier_tbl.get(getattr(ctx, 'tier', 'standard'), [0.1, 0.3, 0.5])
@@ -1896,7 +1916,12 @@ class SolverAgent(BaseAgent):
         # → **最需要重解时反而重解不了**（实测 revise_round 恒为 0，反馈白给）。
         _room = 6 - len(getattr(ctx, "candidates", None) or [])
         if _room <= 0 and getattr(ctx, "revise_feedback", None):
-            _keep = list(ctx.candidates or [])[-3:]
+            # ★ 2026-09-17（M3）：腾位改为**按验证票数保留最优 3 个** ——
+            # 口径与实现统一在 `base.pick_best_candidates`（可被单测直接覆盖）。
+            # 原规则 `[-3:]` 按 id 尾部保留"最新"的 3 个，与正确性无关：若新追加
+            # 的候选恰好最差，就会留下最差 3 个、丢掉初始解（通常较好）。
+            _keep = pick_best_candidates(ctx.candidates,
+                                         getattr(ctx, "verdicts", None), k=3)
             self.record(ctx, "revise",
                         f"候选池满（{len(ctx.candidates)} 个）→ 腾位至 3 个，"
                         f"为重解让出槽位（A 修复 2026-09-12）")
@@ -1919,7 +1944,11 @@ class SolverAgent(BaseAgent):
                     f"revise_round={getattr(ctx, 'revise_round', 0)}、"
                     f"报文首 {str(feedback_text)[:80]}")
 
-        base_cid = len(ctx.candidates)
+        # ★ 2026-09-17（M4）：id 基线改为 `max(已有 id)+1`。
+        # 原用 `len(ctx.candidates)`，而腾位会让 len 变小 ⇒ 新 id 与旧 id 重叠
+        # （实测 013 出现**两个 id=3**、025 出现 id=7）。下游按 id 匹配的地方
+        # （`orchestrator` 的 `_gate_tried`、`formatter` 的簇内候选匹配）随之错位。
+        base_cid = next_candidate_id(ctx.candidates)
 
         # 2026-09-13 方案 A（revise 的**唯一**数值来源）：REVISE_USER_TEMPLATE
         # 只含「题目 + 反馈」，**不含上一轮解答全文** ⇒ 被 revise 的那批候选的
@@ -1933,10 +1962,34 @@ class SolverAgent(BaseAgent):
         _trace_block = _calc_trace_block(
             _trace_src, getattr(ctx, "calc_prewarm_block", None))
 
+        # ★ 2026-09-17（M7）：把「上一轮解答」**真正**喂给 revise。
+        # REVISE_SYSTEM 第 1/3 条明确要求“认真阅读【上一轮错误解答】”「保留正确的
+        # 推理部分」，但 user 模板此前**只有题目 + 反馈** ⇒ 模型无从保留，只能整题
+        # 重解。这正是 revise 越改越差的机制之一（013 蓝图 d=50 → revise 改成 19、
+        # 025 蓝图 4 → 直答 509040-2*169680）。此处给出上一轮各候选的答案清单
+        # 与主推理尾部，使“保留正确部分”成为可执行指令。
+        _prev_lines = []
+        for _pc in (getattr(ctx, "candidates", None) or [])[:6]:
+            _pa = str(getattr(_pc, "answer", "") or "").strip()
+            if _pa:
+                _prev_lines.append("· 候选#%s 答案：%s"
+                                   % (getattr(_pc, "id", "?"), _pa))
+        _cs_all = list(getattr(ctx, "candidates", None) or [])
+        _main_reasoning = ""
+        if _cs_all:
+            _main_reasoning = max(
+                (str(getattr(_c2, "reasoning", "") or "") for _c2 in _cs_all),
+                key=len)
+        _prev_block = "\n".join(_prev_lines) or "（无——本轮无既有候选答案）"
+        if _main_reasoning:
+            _prev_block += ("\n\n（上一轮主推理尾部 1200 字，供沿用正确结论）\n"
+                            + _main_reasoning[-1200:])
+
         def _make_one(i: int):
             cid = base_cid + i
             user_content = REVISE_USER_TEMPLATE.format(
-                problem=ctx.problem, feedback=feedback_text)
+                problem=ctx.problem, feedback=feedback_text,
+                prev_answer=_prev_block)
             # 2026-09-13：revise 此前无 calc 引导，且整段重写会把子目标链已回填
             # 的 [计算] 精确值洗成新的心算值 → 同源追加引导 + 显式"沿用痕迹"要求。
             # 方案 A：再前置「系统已算出的精确值」清单（扫不到 [计算] 行时，

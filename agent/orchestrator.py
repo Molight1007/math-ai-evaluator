@@ -207,6 +207,49 @@ def _parse_exhaust_result(subgoal_trace) -> dict:
     return out
 
 
+# ★ 2026-09-17（P1-F）：受监控的诊断键（trace step 名）。
+_DIAG_MONITORED_KEYS = (
+    "value_attack", "formal_spec", "formal_gaps", "pick_diag", "calc_tool_calls",
+    "calc_prewarm_events", "calc_rewrite", "calc_fallback", "lemma_repo",
+    "preverify_trace", "symbolic_solve_events", "objective_check_events",
+    "numericize_events", "expression_eval_events",
+)
+
+
+def _diag_completeness(ctx) -> dict:
+    """2026-09-17（P1-F）：**区分「未执行」与「执行但无产出」**。
+
+    背景：实测 13/14 个诊断键在多数题为「键存在但值为空」，读 `diag` 时**无法判断**
+    是"该环节根本没跑"还是"跑了但没产出" ⇒ 归因只能靠猜（此前已多次因此误判）。
+
+    三态：
+      · `not_ran`        —— trace 里没有该 step 的任何记录（环节未执行）
+      · `ran_no_output`  —— 有记录，但内容与附加字段均为空（执行过、无产出）
+      · `ran_with_data`  —— 有记录且有内容/附加字段（正常）
+    """
+    out = {}
+    try:
+        _tr = [t for t in (getattr(ctx, "trace", None) or [])
+               if isinstance(t, dict)]
+    except Exception:  # noqa: BLE001
+        _tr = []
+    for _k in _DIAG_MONITORED_KEYS:
+        _hits = [t for t in _tr if str(t.get("step", "")) == _k]
+        if not _hits:
+            out[_k] = "not_ran"
+            continue
+        _has = False
+        for _t in _hits:
+            if str(_t.get("content", "") or "").strip():
+                _has = True
+                break
+            if any(_kk not in ("step", "content") for _kk in _t.keys()):
+                _has = True
+                break
+        out[_k] = "ran_with_data" if _has else "ran_no_output"
+    return out
+
+
 def _summarize_deep_review(ctx) -> dict:
     """按题汇总「带推理的最终复核」的判定（2026-09-15）。
 
@@ -885,6 +928,8 @@ class Orchestrator(BaseAgent):
         try:
             if ctx.is_time_critical():
                 logger.debug("[C-lite] 跳过数值攻击：时间紧张")
+                self.record(ctx, "value_attack",
+                            "跳过：时间紧张（is_time_critical）")   # Z2 2026-09-17
                 return
             # 审核修正（2026-09-03）：原读 `ctx.blueprint_merge`——该属性**不存在**
             # （TaskContext 无此字段，diag 用的是 ctx.blueprint["merge_strategy"]），
@@ -896,11 +941,15 @@ class Orchestrator(BaseAgent):
             if not merge_text:
                 logger.debug("[C-lite] 跳过数值攻击：无蓝图 merge 文本"
                              "（blueprint.merge_strategy / subgoal_merge_plan 均空）")
+                self.record(ctx, "value_attack",
+                            "跳过：无蓝图 merge 文本")            # Z2 2026-09-17
                 return
             # 只对"极值声称"题下手（其余题型放行，零误伤）
             import re as _re2
             if not (_re2.search(r"max|min|最大|最小", merge_text, _re2.I)):
                 logger.debug("[C-lite] 跳过数值攻击：merge 文本无极值关键词")
+                self.record(ctx, "value_attack",
+                            "跳过：merge 文本无极值关键词")        # Z2 2026-09-17
                 return
             from .value_attack import attack_value_claim
             from utils.prefill import prefill_messages, stitch
@@ -931,22 +980,43 @@ class Orchestrator(BaseAgent):
                 "只输出 JSON。"
             )
             user_p = f"题目：\n{ctx.problem[:1500]}\n\n声称的答案/蓝图结论：\n{merge_text[:800]}"
+            # ★ 2026-09-17（Z1）：**前置**跳过离散/组合类题。
+            # 原实现把 `is_continuous_opt` 判定放在下面那次 LLM 调用**之后**
+            # （`max_tokens=32768`，最坏 2×300s 超时重试）⇒ 组合/数论/离散题
+            # 也**先付一次超长调用**才被跳过（实测 002/003/013/025 四题最终都判为
+            # 非连续优化，即那次调用纯浪费）。
+            # 判据**只用 `ctx.domain`**（高精度、零误伤）：仅在明确属离散领域时前置
+            # 跳过；其余仍由 LLM 的 `is_continuous_opt` 判定（下方原逻辑完全不动）。
+            _dom_now = str(getattr(ctx, "domain", "") or "")
+            if any(_k in _dom_now for _k in
+                   ("组合", "数论", "离散", "图论", "数理逻辑")):
+                self.record(ctx, "value_attack",
+                            "跳过数值攻击：领域=%s 属离散/组合类，连续采样框架不适用"
+                            " —— **前置跳过，未付出 LLM 调用**（Z1 2026-09-17）"
+                            % _dom_now[:20])
+                return
             raw = self.llm(ctx, prefill_messages(
                 [{"role": "system", "content": sys_p},
                  {"role": "user", "content": user_p}], '{"direction":'), 0.0, 32768)
             if not raw:
                 logger.debug("[C-lite] 跳过数值攻击：LLM 提取返回空")
+                self.record(ctx, "value_attack",
+                            "跳过：LLM 提取返回空（**本次已付出一次超长调用**）")
                 return
             raw = stitch('{"direction":', raw)
             m = _re2.search(r"\{[\s\S]*\}", raw)
             if not m:
                 logger.debug("[C-lite] 跳过数值攻击：LLM 输出无 JSON 块")
+                self.record(ctx, "value_attack",
+                            "跳过：LLM 输出无 JSON 块（**已付出调用**）")
                 return
             import json as _json
             try:
                 parsed = _json.loads(m.group())
             except (_json.JSONDecodeError, ValueError) as exc:
                 logger.debug("[C-lite] 跳过数值攻击：JSON 解析失败 %s", exc)
+                self.record(ctx, "value_attack",
+                            "跳过：JSON 解析失败（**已付出调用**）：%s" % str(exc)[:80])
                 return
             direction = str(parsed.get("direction") or "")
             claimed = parsed.get("claimed")
@@ -961,6 +1031,10 @@ class Orchestrator(BaseAgent):
             if direction not in ("max", "min") or claimed is None:
                 logger.debug("[C-lite] 跳过数值攻击：direction=%r claimed=%r 不合法",
                              direction, claimed)
+                self.record(ctx, "value_attack",
+                            "跳过：direction/claimed 不合法"
+                            "（**已付出调用**）direction=%r claimed=%r"
+                            % (direction, claimed))               # Z2 2026-09-17
                 return
             # 2) 数值攻击
             result = attack_value_claim(
@@ -1586,6 +1660,11 @@ class Orchestrator(BaseAgent):
             #   audit_reject_feedback 中的硬信号拼入，正是所需的定向修正输入。
             # 信号源（均为该点之前已产生）：数值攻击证伪（蓝图阶段，写 blueprint_value_false）、
             #   AuditGate reject（3.6 阶段）。final_gate 在 6.5 才产生，晚于此处，不纳入。
+            # ⚠ 2026-09-17（Audit-4）核实：`orchestrator.run()` 仅在
+            #   `user_agent.solve()` 里被调用**一次**（无重试/升级循环）⇒ 本守卫的
+            #   读(:此) 与写(下方) 同处一趟直线代码内，**当前恒为真分支（守卫无效）**。
+            #   保留而不删除，是为将来 run() 被重入时仍能防重复触发；但**不得**把它
+            #   当作"已生效的幂等保护"来依赖（原测试仅断言源码字符串含该名，锁不住行为）。
             if not getattr(ctx, "_p1_triggered", False):
                 _p1_msgs = []
                 if getattr(ctx, "blueprint_value_false", None):
@@ -1622,11 +1701,11 @@ class Orchestrator(BaseAgent):
                                 "P1 硬信号触发强制重解"
                                 f"（{len(_p1_msgs)} 条，tier={tier}，"
                                 f"剩余 {ctx.time_remaining():.0f}s）")
-                    _p1_before = str(getattr(ctx, "final_answer", "") or "")
+                    _p1_before = str(getattr(ctx, "final_response", "") or "")
                     self._deep_revise_loop(ctx, {}, tier_votes, force=True)
                     # G1（2026-09-11）：记录重解成效——此前只能看到"触发了"，
                     # 看不到"改没改、改成什么样"，导致"触发但无效"无法量化。
-                    _p1_after = str(getattr(ctx, "final_answer", "") or "")
+                    _p1_after = str(getattr(ctx, "final_response", "") or "")
                     self.record(
                         ctx, "revise",
                         f"P1 重解成效：{'答案已变化' if _p1_after != _p1_before else '答案未变化'}"
@@ -1715,9 +1794,14 @@ class Orchestrator(BaseAgent):
             # verify 提前完成反而给 oracle 打开 365s 烧穿窗口（elapsed 1402s）。
             # oracle 是"4_verify 之后的复核增强"，到生成侧软截止即弃——
             # verify 已投过票，放弃复核不损失主验证，只少一层 deep 深查。
+            # ★ 2026-09-17（Audit-3）：口径统一为 `is_time_critical()`（真实剩余时间）。
+            # `gen_time_up()` 是**生成**侧软截止（deadline − verify_reserve）；4.5 Oracle
+            # 属"4_verify 之后的复核"，用生成时钟闸它是口径错配，与已修好的 5.5 不一致。
+            # 真正的耗时护栏是本行的 `_enhance_window_ok`（要求剩余 ≥ 360+tail+30），
+            # 故换时钟不会重新打开烧穿窗口。
             if (tier == 'deep'
                     and getattr(ctx, '_best_cluster', None) is not None
-                    and not ctx.gen_time_up()
+                    and not ctx.is_time_critical()
                     and self._enhance_window_ok(ctx, "oracle")):
                 self._oracle_review_best(ctx, ver_result, tier_votes)
 
@@ -1745,8 +1829,11 @@ class Orchestrator(BaseAgent):
                     and all(v.total_votes > 0 for v in ctx.verdicts)
                     and all(v.correct_votes == 0 for v in ctx.verdicts)):
                 revised_ok = False
+                # ★ 2026-09-17（Audit-3）：同上，改用 `is_time_critical()`。
+                # 全 0 票后的强制重解属**验证之后的修正**，不是生成；原用生成侧
+                # 软截止闸它，与同文件 5.5（已改 `is_time_critical`）形成新的不一致。
                 if (tier == 'deep' and not ctx.state.emergency
-                        and not ctx.gen_time_up()):
+                        and not ctx.is_time_critical()):
                     revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
                 if not revised_ok:
                     self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
@@ -1888,6 +1975,21 @@ class Orchestrator(BaseAgent):
                     # 什么（answer_valid 只证明"LLM 写的命题可证"），一律不放行。
                     # 这把"数值答案正确性"的裁决权从 Lean 收回给计算器。
                     _ci = bool(getattr(ctx, "calc_inconsistent", False))
+                    # ⚠ 2026-09-17（L4）可达性核实：`calc_inconsistent` 的**唯一**
+                    #   置位点在 `solver._maybe_answer_selfcheck`，而该函数在
+                    #   `enable_calc_tool=False`（当前默认）时**整体早退**
+                    #   ⇒ 本分支在当前配置下**结构性不可达**（该裁决从未生效）。
+                    #   不在此处"补一个替代判据"：用推理里的任意算式判"矛盾"会**误拒
+                    #   正确候选**（同 L1 的结论）。要恢复它必须二选一：
+                    #     (a) 重新开启 calc 工具链（连带 `<calc>` 引导与回填）；
+                    #     (b) 为 6.5 新增独立的"答案 ↔ 题面条件"复算通路。
+                    #   在做出该决定前，此处保留但**显式标注不可达**，避免误读。
+                    if (not _ci
+                            and not getattr(self.config, "enable_calc_tool", False)):
+                        self.record(
+                            ctx, "final_gate",
+                            "calc_inconsistent 判据在当前配置下不可达"
+                            "（enable_calc_tool=False ⇒ selfcheck 整体早退）")
                     if _ci:
                         self.record(
                             ctx, "final_gate",
@@ -1961,7 +2063,17 @@ class Orchestrator(BaseAgent):
                                     for _cc in (ctx.candidates or []):
                                         if _cc.id in (getattr(ctx, "_gate_tried", []) or []):
                                             _pass_cands.append(_cc)  # 未过审核的作参考保留
-                                    ctx.candidates = _pass_cands[:3]  # 腾位
+                                    # ★ 2026-09-17（M2）：`_gate_tried` 为空时**禁止清空**候选池。
+                                    # 此时 `_pass_cands` 必为空，原代码把原有全部候选（含较优/
+                                    # 正确者）删光，随后 revise 生成的 3 个成为唯一候选，且
+                                    # **没有任何新旧对比**。`_gate_tried` 为空意味着"一个候选都还
+                                    # 没试过"，清空属误删；保留原池，由 `_generate_revise` 自行腾位。
+                                    if _pass_cands:
+                                        ctx.candidates = _pass_cands[:3]  # 腾位
+                                    else:
+                                        self.record(ctx, "control",
+                                                    "审核未试过任何候选 → 保留原候选池"
+                                                    "（不清空，M2 2026-09-17）")
                                     ctx.revise_round = getattr(ctx, "revise_round", 0) + 1
                                     _before = len(ctx.candidates or [])
                                     self.solver.run(ctx)
@@ -2189,7 +2301,14 @@ class Orchestrator(BaseAgent):
         self.record(ctx, "review",
                     f"反馈复核完成: {reviewed[:60]}")
         if "无实质缺陷" in reviewed:
-            return "解答已较完整，请重新审题核对计算细节后给出最终答案。"
+            # ★ 2026-09-17（泛化句）：返回**空串** = "复核未发现实质缺陷"。
+            # 原返回一句泛化建议「解答已较完整，请重新审题核对计算细节后给出最终答案。」，
+            # 它被当作 revise 反馈 ⇒ **信息量为零的盲目重解**（实测 099 的
+            # `diag.revise_feedback[0]` 正是这句），白烧一轮"生成 + 验证"。
+            # 改由调用方据此**结束 revise**，而不是拿它去空转。
+            self.record(ctx, "review",
+                        "复核判定无实质缺陷 → 不做盲目重解（2026-09-17）")
+            return ""
         return reviewed
 
     def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
@@ -2204,9 +2323,38 @@ class Orchestrator(BaseAgent):
         if max_rounds <= 0 or ctx.state.emergency:
             return False
         # 2026-09-02 老师需求：revise 全局轮数上限 5（revise_round 跨主路径累计）
-        if getattr(ctx, 'revise_round', 0) >= 5:
-            self.record(ctx, "revise", "revise 已达全局上限 5 轮，不再继续")
+        # ★ 2026-09-17（Audit-1）：全局轮数上限改由 `max_revise_rounds` 提供
+        #（原先硬编码 5，而同名 config 字段全仓零读取点 ⇒ `--revise_rounds` 静默失效）。
+        # 默认 5 与旧行为一致；`<=0` 表示不设全局上限（研究阶段可选）。
+        _max_total = int(getattr(self.config, 'max_revise_rounds', 5) or 5)
+        if _max_total > 0 and getattr(ctx, 'revise_round', 0) >= _max_total:
+            self.record(ctx, "revise",
+                        f"revise 已达全局上限 {_max_total} 轮（max_revise_rounds），不再继续")
             return False
+        # ★ 2026-09-17（Z6）：**同一次「轮次 + 答案」不重复 revise**。
+        # 实测 5) 段（全 0 票强制重解）与 5.5（低置信强制复核）会在**同一趟流程**里
+        # 先后调用本函数；全 0 票时两处触发条件同时成立 ⇒ 同一批候选、同一答案被
+        # revise 两遍，第二轮必然拿到同样的反馈、做同样的事。
+        # 量级：`5_revise_or_fallback 1705s + 5.5_low_conf 1942s` 合计占全量 21.6%。
+        # 去重键 = (revise_round, final_response)：相同即本趟已跑过，直接返回。
+        # `force=True`（P1 应急重解）是调用方**显式要求**的，不参与去重。
+        if not force:
+            _pass_key = (int(getattr(ctx, "revise_round", 0) or 0),
+                         str(getattr(ctx, "final_response", "") or ""))
+            _seen = getattr(ctx, "_revise_pass_keys", None)
+            if not isinstance(_seen, set):
+                _seen = set()
+                try:
+                    ctx._revise_pass_keys = _seen
+                except Exception:  # noqa: BLE001
+                    _seen = None
+            if _seen is not None:
+                if _pass_key in _seen:
+                    self.record(ctx, "revise",
+                                "同一答案（round=%d）本趟已 revise 过 → 跳过重复回环"
+                                "（Z6 2026-09-17）" % _pass_key[0])
+                    return False
+                _seen.add(_pass_key)
         if force:
             # P1 应急重解：构造**结构化错误诊断报告**（2026-09-11 用户指正：
             # "不能光检测错误，要把错误情况总结后返回给大模型，否则等于没检查"）。
@@ -2268,14 +2416,26 @@ class Orchestrator(BaseAgent):
                 feedback = "所有候选均未获验证通过，请重新审题并纠正推理错误。"
         # Step 4：复核验证器反馈（可驳回误报），避免被错误反馈误导修正。
         # 仅当反馈非空且预算允许时做（deep 档 +1 次调用，回环前只做一次）。
+        _reviewed_empty = False
         if (not ctx.is_time_critical()
                 and len(feedback) > 10):
-            feedback = self._review_bug_feedback(ctx, feedback)
+            _rv = self._review_bug_feedback(ctx, feedback)
+            if _rv:
+                feedback = _rv
+            else:
+                _reviewed_empty = True
         # 注入各客观审核环节（3.6 AuditGate / 4.6 对抗 / 4.5 Oracle）淘汰反馈，
         # 驱动定向修正（audit_reject_feedback 为通用 revise 反馈通道）
         audit_fb = getattr(ctx, "audit_reject_feedback", None)
         if audit_fb:
             feedback = feedback + "\n" + "\n".join(audit_fb)
+        # ★ 2026-09-17：复核判定"无实质缺陷"且无审核反馈 ⇒ **没有可修正的目标**，
+        # 继续只会盲目重解（信息量为零，却要付一轮"生成 + 验证"）。直接结束回环。
+        if _reviewed_empty and not audit_fb:
+            self.record(ctx, "revise",
+                        "复核无实质缺陷且无审核反馈 → 结束 revise"
+                        "（避免零信息空转，2026-09-17）")
+            return False
         for r in range(max_rounds):
             # 2026-09-06：升级 gen_time_up——revise 回环 = solver.run 生成 +
             # verifier 验证，单轮可烧 200-400s，须按生成侧软截止更早收手。
@@ -2308,14 +2468,14 @@ class Orchestrator(BaseAgent):
             #   答案一旦变化，`_npa == _cur` 自然不成立 ⇒ 标记自动失效。
             if not force:
                 _npa = getattr(ctx, "_revise_no_progress_answer", None)
-                _cur_ans = str(getattr(ctx, "final_answer", "") or "")
+                _cur_ans = str(getattr(ctx, "final_response", "") or "")
                 if _npa is not None and _cur_ans and _npa == _cur_ans:
                     self.record(ctx, "revise",
                                 "该答案此前重解后**未发生变化** → 跳过重复 revise"
                                 "（无进展保护，:1566 置位）")
                     break
             ctx.revise_round += 1
-            _ans_before = str(getattr(ctx, "final_answer", "") or "")
+            _ans_before = str(getattr(ctx, "final_response", "") or "")
             ctx.revise_feedback = [feedback]
             self.record(ctx, "revise",
                         f"deep 档 revise 自纠错 第{ctx.revise_round}轮",
@@ -2329,7 +2489,7 @@ class Orchestrator(BaseAgent):
             #   最终成效埋点仍记"答案未变化"）。
             # 保守性：**只在答案完全未变时停**，且**第 1 轮永远保留**（有可能一次
             # 改对）；答案一旦变化即视为有进展，继续跑满剩余轮数 —— 原有功能不变。
-            _ans_after = str(getattr(ctx, "final_answer", "") or "")
+            _ans_after = str(getattr(ctx, "final_response", "") or "")
             if (_ans_before and _ans_after and _ans_before == _ans_after
                     and ctx.revise_round >= 1):
                 self.record(
@@ -2614,7 +2774,13 @@ class Orchestrator(BaseAgent):
             ctx._pick_diag = {"error": "pick_diag_failed"}
         # 1) 从 verdicts 找有非拒绝答案的
         if ctx.verdicts:
-            sorted_v = sorted(ctx.verdicts, key=lambda v: v.confidence, reverse=True)
+            # ★ 2026-09-17（M5）：**票数优先于置信度**。`confidence = 正确票/总票`，
+            # 单候选全对时 confidence=1.0 却只有 3 票；应先看"是否真的拿到正确票"。
+            sorted_v = sorted(
+                ctx.verdicts,
+                key=lambda v: (int(getattr(v, "correct_votes", 0) or 0),
+                               float(getattr(v, "confidence", 0.0) or 0.0)),
+                reverse=True)
             for v in sorted_v:
                 ans = getattr(v, "answer", "") or ""
                 # ★ 2026-09-16 审计修复：去掉 `len(ans) > 3` 门槛（同 formatter.py:95-98
@@ -2814,8 +2980,10 @@ class Orchestrator(BaseAgent):
                  "correct": getattr(v, "correct", None),
                  "confidence": getattr(v, "confidence", None)}
                 for v in (getattr(ctx, "verdicts", None) or [])],
-            "audit_gate": [g for g in (getattr(ctx, "audit_gate", None) or [])
-                           if isinstance(g, dict)][:6],
+            # ⚠ 2026-09-17：此处原先还有一条 `"audit_gate": [...][:6]`，与本文件
+            #   下方（`_collect_diag` 的 ⑤ 段）**同名重复**。字典字面量里后键覆盖
+            #   前键 ⇒ 那条"只留 dict、限 6 条"的实现**被静默丢弃**，一直是死代码。
+            #   已删除，避免误读与 pyflakes `dictionary key repeated` 告警。
             # ④ 子目标求解（结构化轨迹）
             "subgoal_trace": getattr(ctx, "subgoal_trace", None) or [],
             "subgoal_merge_plan": (getattr(ctx, "subgoal_merge_plan", "") or "")[:300],
@@ -2922,6 +3090,9 @@ class Orchestrator(BaseAgent):
                 getattr(ctx, "final_response", "") or ""),
             # 阶段耗时（2026-09-03 老师要看 deep 档每环节具体耗时）
             "stage_timers": self._collect_stage_durs(ctx),
+            # ★ 2026-09-17（P1-F）：埋点三态自查 —— 未执行 / 执行无产出 / 有产出。
+            # 解决「键存在但值为空 ⇒ 无法判断该环节跑没跑」的归因盲区。
+            "diag_completeness": _diag_completeness(ctx),
         }
 
     def _emergency_direct_solve(self, problem: str) -> str:

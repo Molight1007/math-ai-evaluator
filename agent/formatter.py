@@ -240,6 +240,47 @@ class FormatterAgent(BaseAgent):
             except Exception:  # noqa: BLE001
                 pass
 
+        # ★ 2026-09-17（P1-D）：**多答案题并集**（仅在题面明确要求「所有 / 全部」时启用）。
+        _uni = self._maybe_union_enumerated(ctx, answer)
+        if _uni:
+            try:
+                ctx._pick_diag = {
+                    "branch": "enum_union",
+                    "picked": _uni[:80],
+                    "base": (answer or "")[:40],
+                }
+            except Exception:  # noqa: BLE001
+                pass
+            self.record(ctx, "format",
+                        "多答案并集（P1-D）：%s → %s" % ((answer or "")[:30], _uni[:60]))
+            answer = _uni
+
+        # ★ 2026-09-17（P1-C）：把**分歧候选**（各不同答案簇的代表）记入 `_pick_diag`。
+        # 用户决策「候选不必要强制不一致，但有不一致的思路一定要保留」——
+        # 此处**只保留可见性**：不制造多样性、不改选答逻辑。
+        # `ctx._cluster_data` 此前只有写入、**全项目零读取点** ⇒ 分歧信息一直在手边却
+        # 从未被使用（025 的 diag 只能看到 1 个簇正是因此）。
+        try:
+            _cd_all = getattr(ctx, "_cluster_data", None)
+            if isinstance(_cd_all, list) and _cd_all:
+                _reps = []
+                for _cl in _cd_all:
+                    _an = str(getattr(_cl, "answer_norm", "") or "").strip()
+                    if not _an:
+                        continue
+                    _reps.append({
+                        "answer": _an[:60],
+                        "size": int(getattr(_cl, "size", 0) or 0),
+                        "confidence": round(
+                            float(getattr(_cl, "confidence", 0.0) or 0.0), 3),
+                        "correct_votes": int(getattr(_cl, "vote_correct", 0) or 0),
+                        "total_votes": int(getattr(_cl, "vote_total", 0) or 0),
+                    })
+                if _reps and isinstance(getattr(ctx, "_pick_diag", None), dict):
+                    ctx._pick_diag["divergent_clusters"] = _reps[:8]
+        except Exception:  # noqa: BLE001
+            pass
+
         # 答案过长检测：如果答案超过300字符，尝试从推理尾部重新提取
         if answer and len(answer) > 300:
             for c in (ctx.candidates or []):
@@ -297,6 +338,71 @@ class FormatterAgent(BaseAgent):
             confidence=round(confidence, 4),
         )
         return ctx
+
+    def _maybe_union_enumerated(self, ctx: TaskContext, current: str):
+        """2026-09-17（P1-D）：多答案题的**候选并集**。
+
+        用户要求（原话）：「如果大模型能确定多个正确的答案，那就把所有答案都输出。
+        但要保证不是什么答案都输出，要保证输出的答案的正确率。」
+
+        硬约束（**宁缺勿滥**，任一不满足即放弃并集、保持原逻辑）：
+          ① 仅在题面明确要求「所有 / 全部」时启用（高精度，覆盖"求所有解"型）；
+          ② 只并入**无反对票**的簇（`vote_total > 0` 且 `vote_correct == vote_total`）；
+          ③ 每簇只取 1 个代表；并入项数上限 **3**（实测 gold 最多 3 项）；
+          ④ **加法而非替换** —— 当前答案必须已属某个"全票簇"，否则放弃；
+          ⑤ 逐项过 `_looks_like_non_answer` 闸门，并与已有项去重；
+          ⑥ 用 **ASCII 逗号 + 空格**连接（对齐 `run_eval._split_multi` **只按 `,` 拆**
+             的口径；**不可用顿号**，否则判分器拆不出多项）；
+          ⑦ 结果项数 < 2 ⇒ 放弃。
+
+        返回 `None` = 不改（保持原逻辑）。
+        """
+        try:
+            from agent.question_type import asks_all_values as _aav
+            if not _aav(getattr(ctx, "problem", "") or ""):
+                return None
+            _cd = getattr(ctx, "_cluster_data", None)
+            if not isinstance(_cd, list) or len(_cd) < 2:
+                return None
+            _cur = (current or "").strip()
+            if not _cur:
+                return None
+
+            def _vt(_cl):
+                return (int(getattr(_cl, "vote_total", 0) or 0),
+                        int(getattr(_cl, "vote_correct", 0) or 0))
+
+            # ④ 当前答案必须已在某个全票簇内，否则放弃（防"什么都输出"）
+            _cur_ok = False
+            for _cl in _cd:
+                _an = str(getattr(_cl, "answer_norm", "") or "").strip()
+                _tv, _cv = _vt(_cl)
+                if _an and _tv > 0 and _cv == _tv and (_an == _cur or _cur in _an):
+                    _cur_ok = True
+                    break
+            if not _cur_ok:
+                return None
+
+            _items, _seen = [], set()
+            for _cl in _cd:
+                _an = str(getattr(_cl, "answer_norm", "") or "").strip()
+                _tv, _cv = _vt(_cl)
+                if not _an or _tv <= 0 or _cv != _tv:      # ②
+                    continue
+                if _looks_like_non_answer(_an):            # ⑤
+                    continue
+                _k = _an.lower()
+                if _k in _seen:
+                    continue
+                _seen.add(_k)
+                _items.append(_an)
+                if len(_items) >= 3:                       # ③
+                    break
+            if len(_items) < 2:                            # ⑦
+                return None
+            return ", ".join(_items)                       # ⑥
+        except Exception:  # noqa: BLE001
+            return None
 
     def _pick_best(self, ctx: TaskContext):
         """
@@ -480,8 +586,21 @@ class FormatterAgent(BaseAgent):
             cid_set = set(getattr(best_cluster, 'candidate_ids', []))
             matching = [c for c in (ctx.candidates or []) if c.id in cid_set]
             if matching:
-                # 簇内选推理最详细的
-                matching.sort(key=lambda c: len(c.reasoning or ""), reverse=True)
+                # ★ 2026-09-17（M5）：簇内改为 **(票数, 置信度) 优先，最后才比推理长度**。
+                # 原实现只按"推理最长"选，与正确性脱钩 —— 本文件 418-431 已自述
+                # 003 曾因此把已正确的 `\boxed{0,2026}` 丢掉、最终只剩 `\boxed{2026}`。
+                _vm = {}
+                for _v in (getattr(ctx, "verdicts", None) or []):
+                    try:
+                        _vm[int(getattr(_v, "id", -1))] = (
+                            int(getattr(_v, "correct_votes", 0) or 0),
+                            float(getattr(_v, "confidence", 0.0) or 0.0))
+                    except Exception:  # noqa: BLE001
+                        continue
+                matching.sort(
+                    key=lambda c: (_vm.get(int(getattr(c, "id", -1)), (0, 0.0)),
+                                   len(c.reasoning or "")),
+                    reverse=True)
                 return matching[0]
 
         # 1) 传统 verdict 置信度
