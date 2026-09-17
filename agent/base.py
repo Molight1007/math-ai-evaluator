@@ -200,6 +200,25 @@ class Candidate:
     # 投票淹没 ⇒ 选择题选取时应对 itemwise 候选优先。
     origin: str = ""
 
+    def __post_init__(self):
+        # 2026-09-17：候选答案统一出口剥壳。
+        # 实测 official112-025：6 个候选里有 **5 个** answer 字段是字面量
+        # `</tool_call>`（而 reasoning 是完整的 1000+ 字符推理）；032 的
+        # `从 $N$ 倒推：若从位置 $k`、013 的英文搜索词等，也都是"工具标签 /
+        # 推理碎片被当成最终答案"。根因是多条生成路径漏剥壳、项目内无统一收敛点。
+        # 在本数据类的构造出口集中剥一次，一处即覆盖 20+ 个 Candidate 写入点。
+        # 惰性 import 避免与 utils.extract 的循环依赖；剥壳失败绝不阻断构造。
+        if isinstance(self.answer, str) and self.answer:
+            try:
+                from utils.extract import (
+                    _strip_calc_markers,
+                    _strip_toolcall_markers,
+                )
+                self.answer = _strip_toolcall_markers(
+                    _strip_calc_markers(self.answer)).strip()
+            except Exception:  # noqa: BLE001  剥壳失败不阻断构造
+                pass
+
 
 @dataclass
 class Verdict:
@@ -218,6 +237,11 @@ class Verdict:
     abstain: bool = False       # 弃权票（verifier 使用）：LLM 调用失败/输出无法解析
                                 # → 属"基础设施/格式故障"，不是"答案错误"。
                                 # 聚合时剔出 total_votes 分母，避免把故障当反证。
+    # ★ 2026-09-15 新增（用户要求"测试时把错误暴露得更具体"）：
+    # 从 `VERDICT: B（错误类型）` 里解析出的**结构化错误类型**（逗号分隔的标签，
+    # 如 "方法不适用, 前提不成立"）。此前只保留 verdict（对/错），错误类型
+    # 被丢弃 ⇒ 事后归因只能靠人工重读全文。现按标签落盘，便于逐题统计。
+    error_type: str = ""
 
 
 @dataclass
@@ -720,6 +744,57 @@ class BaseAgent(ABC):
         },
     }
 
+    # ★ 2026-09-16 新增：联网搜索工具（与 calc_eval 同一套原生 tool_calls 协议）。
+    #   此前 `tools/web_search.py` 已实现但**全仓无调用者** ⇒ `tool_calls.web_search`
+    #   恒为"未调用"、能力形同虚设（代码审计发现）。这里把它接进工具循环。
+    #   由 `config.enable_web_search`（默认 False）控制是否注册——默认关，
+    #   避免未经 A/B 就改变主链行为。
+    WEB_SEARCH_TOOL_SCHEMA = {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                "联网检索：给定一条**检索式**，返回数学相关网页/问答的标题、"
+                "链接与摘要（主后端为 Math StackExchange，次为 arXiv）。"
+                "用于查证不熟悉的定义、术语、公式或已知结论。"
+                "**返回内容仅供参考，必须自行验证，不得直接照搬。**"),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "检索式（建议用英文数学术语，效果更好）",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+    @staticmethod
+    def _web_search_tool_exec(query: str) -> str:
+        """执行 web_search。**任何失败都返回可读文本**，绝不抛异常打断求解。"""
+        try:
+            from tools.web_search import web_search
+        except Exception:  # noqa: BLE001  提交包路径兜底
+            try:
+                from web_search import web_search  # type: ignore[no-redef]
+            except Exception:  # noqa: BLE001
+                return "ERROR: 联网搜索工具不可用"
+        try:
+            r = web_search(query, limit=4)
+            if not r or r.get("status") != "ok" or not r.get("results"):
+                return "（无结果，可换关键词重试）"
+            lines = []
+            for i, h in enumerate(r["results"][:4], 1):
+                lines.append("%d. %s\n%s\n%s" % (
+                    i, h.get("title", ""), h.get("url", ""),
+                    (h.get("snippet") or "")[:220]))
+            return ("【联网检索结果（仅供参考，须自行验证）】\n"
+                    + "\n".join(lines))[:1600]
+        except Exception as exc:  # noqa: BLE001
+            return "ERROR: %s: %s" % (type(exc).__name__, str(exc)[:120])
+
     @staticmethod
     def _calc_tool_exec(expr: str) -> str:
         """执行 calc_eval：本地 calc_tool.safe_eval（失败可见，原样回传）。"""
@@ -761,6 +836,18 @@ class BaseAgent(ABC):
                 "例如需要 comb(50,3)*2**10 时，调用 calc_eval(expr='comb(50,3)*2**10')。"
                 "若返回 WARN/ERROR 说明表达式有问题，修正后重试调用。"
             )
+            # ★ 2026-09-16：开启联网搜索时补一段工具说明（同 calc 的做法——
+            #   模型不知道工具存在就不会调用）。
+            try:
+                if getattr(self.config, "enable_web_search", False):
+                    _tool_hint += (
+                        "\n\n【可用工具】你还有函数 web_search(query)：联网检索数学资料"
+                        "（主后端 Math StackExchange、次 arXiv），返回标题/链接/摘要。"
+                        "**仅在遇到不熟悉的定义、术语、公式或需要查证已知结论时调用**，"
+                        "不要滥用；检索结果仅供参考，**必须自行验证，不得直接照搬**。"
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 if msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system":
                     msgs = [dict(msgs[0], content=str(msgs[0].get("content") or "") + _tool_hint)] + msgs[1:]
@@ -770,6 +857,13 @@ class BaseAgent(ABC):
                 pass
             n_calls = 0
             last_text = None
+            # ★ 2026-09-16：按开关决定注册哪些工具（web_search 默认不注册）
+            _tools = [self.CALC_TOOL_SCHEMA]
+            try:
+                if getattr(self.config, "enable_web_search", False):
+                    _tools.append(self.WEB_SEARCH_TOOL_SCHEMA)
+            except Exception:  # noqa: BLE001
+                pass
             for _round in range(max_rounds):
                 # 2026-09-12 修复（时间护栏）：工具循环此前**完全绕过** `llm()` 的
                 # 时间守卫与 max_tokens_cap，循环内不查 ctx 剩余时间 ——
@@ -787,7 +881,7 @@ class BaseAgent(ABC):
                         messages=msgs,
                         temperature=temperature,
                         max_tokens=max_tokens,
-                        tools=[self.CALC_TOOL_SCHEMA],
+                        tools=_tools,
                     )
                 except TypeError:
                     # 平台 client 不支持 tools 参数 → 永久回落普通调用
@@ -803,17 +897,23 @@ class BaseAgent(ABC):
                             args = json.loads(fn.get("arguments", "") or "{}")
                         except Exception:  # noqa: BLE001
                             args = {}
-                        expr = str(args.get("expr", "") or "")
-                        result = self._calc_tool_exec(expr)
+                        # ★ 2026-09-16：按函数名分派（此前写死 calc_eval）
+                        _fname = str(fn.get("name", "") or "")
+                        if _fname == "web_search":
+                            _q = str(args.get("query", "") or "")
+                            result = self._web_search_tool_exec(_q)
+                            _ev = "<web_search> %s -> %s" % (_q[:60], result[:50])
+                        else:
+                            expr = str(args.get("expr", "") or "")
+                            result = self._calc_tool_exec(expr)
+                            _ev = "<calc_tool> %s -> %s" % (expr, result[:50])
                         msgs.append({
                             "role": "tool",
                             "tool_call_id": tc.get("id", ""),
                             "content": result,
                         })
                         try:
-                            self.record(
-                                ctx, "calc_tool_call",
-                                f"<calc_tool> {expr} -> {result[:50]}")
+                            self.record(ctx, "calc_tool_call", _ev)
                         except Exception:  # noqa: BLE001
                             pass
                     continue
@@ -837,16 +937,25 @@ class BaseAgent(ABC):
 
     def _maybe_tool_llm(self, ctx, messages: list, temperature: float,
                         max_tokens: int) -> Optional[str]:
-        """开关分派：tool_calc_enabled=True → 工具循环；否则原 llm（现状）。
+        """开关分派：满足**任一**条件即走工具循环，否则走原 llm（现状）。
 
-        2026-09-09 探针：record calc_tool_mode 让 diag 可区分"开关未走工具循环"
-        与"走了但模型 0 次调用"（试点 0 触发的归因关键）。
+        ★★ 2026-09-16 审计发现的**关键断链**：本方法原先只看 `tool_calc_enabled`，
+        而该键默认 **False**（`user_agent.py` 注释自述"实测 <calc> 回填 = 0、已关"）
+        ⇒ **`llm_with_calc` 从未被调用过**，工具循环是死的。
+        后果：新接线的 `enable_web_search=True` **完全无效**（工具根本不会提供给模型），
+        因为它的注册点在 `llm_with_calc` 内部。
+
+        ⇒ 改为：`tool_calc_enabled`（calc_eval）**或** `enable_web_search`（联网搜索）
+        任一为真即进入工具循环。两者都关时行为与原先**逐字一致**（零风险）。
         """
-        if getattr(self.config, "tool_calc_enabled", False):
+        _calc = bool(getattr(self.config, "tool_calc_enabled", False))
+        _web = bool(getattr(self.config, "enable_web_search", False))
+        if _calc or _web:
             try:
                 if ctx is not None:
                     self.record(ctx, "calc_tool_mode",
-                                f"工具循环开启（{self.name}，tools 已传）")
+                                "工具循环开启（%s；calc=%s web=%s）"
+                                % (self.name, _calc, _web))
             except Exception:  # noqa: BLE001
                 pass
             return self.llm_with_calc(ctx, messages, temperature, max_tokens)

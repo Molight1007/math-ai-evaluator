@@ -101,6 +101,160 @@ def _load_lean_modules() -> bool:
         logger.warning("Lean 双通道模块重新加载仍失败，Lean 保持禁用: %s", _e)
         return False
 
+
+# ---------------------------------------------------------------------------
+# 结构化错误类型聚合（2026-09-15）
+# ---------------------------------------------------------------------------
+# 背景：用户要求「之后测试记录大模型的具体答题情况，把错误暴露得更加具体」。
+# 验证器（VerifierAgent）判 B 时会从 VERIFIER_SYSTEM 约定的**封闭标签集**
+# 里回带错误类型（见 `agent/verifier.py: ERROR_TYPE_TAGS`），并以
+# `error_types={标签: 票数}` 的形式写进 trace。此处把它们从 trace 收拢成
+# 一个整题口径的字典，供 diag / 归因脚本直接消费。
+# ⚠ 纯埋点：不参与任何判定，缺 trace 时安静返回 {}。
+# ---------------------------------------------------------------------------
+def _merge_error_types(ctx) -> dict:
+    """从 trace 收拢本题的结构化错误类型分布（整题口径优先）。"""
+    trace = getattr(ctx, "trace", None) or []
+    merged: dict = {}
+    fallback: dict = {}
+    for t in trace:
+        if not isinstance(t, dict):
+            continue
+        step = t.get("step")
+        dist = t.get("error_types")
+        if not isinstance(dist, dict):
+            continue
+        if step == "verify_error_types":
+            merged = dist          # 整题终态，直接采用
+        elif step == "vote_error_types" and not merged:
+            for k, v in dist.items():   # 单次投票口径，仅作回退累加
+                fallback[k] = fallback.get(k, 0) + v
+    return merged or fallback
+
+
+def _sum_reject_votes(ctx) -> int:
+    """本题被验证器判 B 的票数（整题口径，无记录则 0）。"""
+    trace = getattr(ctx, "trace", None) or []
+    for t in reversed(trace):
+        if (isinstance(t, dict) and t.get("step") == "verify_error_types"
+                and isinstance(t.get("n_reject"), int)):
+            return t["n_reject"]
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# LeanSearch 检索埋点汇总（2026-09-15，老师 #44）
+# ---------------------------------------------------------------------------
+# 老师 #44 要求埋点必须能回答四个维度：调用次数 / 命中数 / 去重后条数 / 被采用条数。
+# 数据源 = trace 里 step=="leansearch" 的条目（**每个 TaskContext 一题**，
+# 所以天然是按题隔离的，不会把全局累计值错当成本题数据）。
+# ⚠ 「被采用条数」由 LeanGate 在 Lean 编译通过时回记（`note_adopted`），
+#   属**跨题累计**语义，因此这里只报本题的 calls/hits/unique/elapsed，
+#   不把累计值混进来（否则同一份 diag 里两个口径打架）。
+# ⚠ 纯埋点：无记录时安静返回零值字典。
+# ---------------------------------------------------------------------------
+def _parse_exhaust_result(subgoal_trace) -> dict:
+    """解析「解族穷尽性检查」子目标的输出，判断它**是否真的做了检查**。
+
+    ★ 2026-09-17 新增（针对"不可检测"问题）：
+    此前该子目标的 `result` 是**自由文本** ⇒ 无法区分"列了所有解族后确认只有一解"
+    与"压根没列、直接把前序结论抄了一遍"。
+    实测 003 的 result 就是一句 `a_n = n \\text{ for all } n \\ge 0` —— 无从判断。
+
+    现按 `sub_goal_solver` 中强制的固定格式解析四段：
+      `解族清单:` / `逐族判定:` / `前序结论复核:` / `结论: EXHAUSTIVE: yes|no`
+    并给出 `complete`（四段是否齐全）与 `n_families`。
+    **`complete=False` 即视为"未完成检查"** —— 这是可机检的硬信号。
+    """
+    out = {"found": False, "complete": False, "n_families": 0,
+           "verdict": "", "missed": "", "reason": "无该子目标"}
+    try:
+        for sg in (subgoal_trace or []):
+            if str(sg.get("title", "")).strip() != "解族穷尽性检查":
+                continue
+            out["found"] = True
+            txt = str(sg.get("result", "") or "")
+            if not txt.strip():
+                out["reason"] = "result 为空"
+                return out
+            has_list = "解族清单" in txt
+            has_judge = "逐族判定" in txt
+            has_review = "前序结论复核" in txt
+            # ⚠ 本模块用 `import re as _re`（非 `re`）—— 首版写 `re.search` 直接
+            #   NameError 被兜底吞成"解析异常"，测试才发现。别再用裸 `re`。
+            m_verdict = _re.search(r"EXHAUSTIVE\s*[:：]\s*(yes|no)", txt, _re.I)
+            out["complete"] = bool(has_list and has_judge and has_review
+                                   and m_verdict)
+            out["verdict"] = (m_verdict.group(1).lower() if m_verdict else "")
+            # 解族数量：取「解族清单」段里出现的分隔符数量 + 1（保守估计）
+            if has_list:
+                seg = txt.split("解族清单", 1)[-1]
+                seg = _re.split(r"逐族判定", seg, maxsplit=1)[0]
+                n = len(_re.findall(r"[/、,，;；]|\n\s*[-*\d]", seg))
+                out["n_families"] = min(max(n, 0), 40)
+            if "遗漏解族" in txt:
+                out["missed"] = txt.split("遗漏解族", 1)[-1].strip()[:300]
+            out["reason"] = ("格式完整" if out["complete"]
+                             else "缺段：%s" % ",".join(
+                                 [n for n, ok in (("解族清单", has_list),
+                                                  ("逐族判定", has_judge),
+                                                  ("前序结论复核", has_review),
+                                                  ("EXHAUSTIVE", bool(m_verdict)))
+                                  if not ok]))
+            return out
+    except Exception as exc:  # noqa: BLE001
+        out["reason"] = "解析异常: %s" % type(exc).__name__
+    return out
+
+
+def _summarize_deep_review(ctx) -> dict:
+    """按题汇总「带推理的最终复核」的判定（2026-09-15）。
+
+    ★ 为什么必须单独导出：复核的否决是通过**压低簇置信度**表达的（复用既有
+      revise 通道），**不产生新的 Verdict** ⇒ `n_reject_votes` / `error_types`
+      只看投票列表，**看不到复核说了什么**。第一轮实测就吃了这个亏：
+      086 的 `4_verify` 从十几秒涨到 249 秒（说明复核跑了），但导出里
+      `n_reject_votes=0`、`error_types={}`，**无法判断它是判了 A 还是判了 B**。
+      故此处把复核的判定作为**独立信号**导出（不伪造投票票数）。
+    """
+    entries = [t for t in (getattr(ctx, "trace", None) or [])
+               if isinstance(t, dict) and t.get("step") == "deep_review"]
+    if not entries:
+        return {"ran": False, "verdict": "", "error_type": "", "skipped": ""}
+    last = entries[-1]
+    verdict = str(last.get("verdict") or "")
+    ran = verdict in ("A", "B")
+    return {
+        "ran": ran,
+        "verdict": verdict,
+        "error_type": str(last.get("error_type") or ""),
+        "chars": int(last.get("chars") or 0),
+        # 未运行时的原因（时间不足 / 已达上限 / 未启用）
+        "skipped": "" if ran else str(last.get("content") or "")[:120],
+    }
+
+
+def _summarize_leansearch(ctx) -> dict:
+    """按题汇总 LeanSearch 检索埋点。"""
+    entries = [t for t in (getattr(ctx, "trace", None) or [])
+               if isinstance(t, dict) and t.get("step") == "leansearch"]
+    calls = sum(1 for e in entries if "n_hits" in e)
+    hits = sum(int(e.get("n_hits", 0) or 0) for e in entries)
+    ms = sum(float(e.get("elapsed_ms", 0.0) or 0.0) for e in entries)
+    uniq = set()
+    for e in entries:
+        for n in (e.get("names") or []):
+            if n:
+                uniq.add(n)
+    roots = [str(e.get("root", "")) for e in entries if e.get("root")]
+    return {
+        "calls": calls,
+        "hits": hits,
+        "unique": len(uniq),
+        "elapsed_ms": round(ms, 1),
+        "root": roots[-1][:120] if roots else "",
+    }
+
 try:
     from utils.sympy_tools import (
         _HAS_SYMPY, eval_expression, compute_derivative,
@@ -629,7 +783,18 @@ class Orchestrator(BaseAgent):
         （生成侧）与 `verify_reserve`（验证侧）统一负责，不再靠比例切分。
 
         传 `stage` 时走新口径；不传则回退旧公式（保证既有测试与外部调用零变化）。
+
+        ── ★★ 2026-09-15（用户指示「预算都删了，没意义，还卡正确率」）──
+        新增总开关 `phase_budget_enabled`（**默认 False = 不限**）。关闭时本函数
+        直接返回「无穷大」⇒ `_phase_deadline_guard` 里 `min(ctx.deadline, now+cap)`
+        退化为原 deadline ⇒ **阶段帽不再生效**。
+        关闭依据：2.7 的帽是 600s，而实测 mean 513 / p50 537 / **max 1168s**
+        ⇒ 一半以上的题被砍断子目标链（链没跑完 = 缺项 = 错，不只是慢）。
+        ⚠ 本开关**只管"分配型"阶段帽**；LLM 超时重试 / lean_timeout /
+          符号求解线程超时 / 各类死循环硬上限**全部保留**（那是"别挂住"，不是配额）。
         """
+        if not getattr(self.config, "phase_budget_enabled", False):
+            return float("inf")
         if stage:
             # 依据：`results/*.jsonl` 的 `stage_timers`，最近三代代码 195 题实测 max。
             _CAPS = {
@@ -740,10 +905,25 @@ class Orchestrator(BaseAgent):
             from .value_attack import attack_value_claim
             from utils.prefill import prefill_messages, stitch
             # 1) LLM 从题目 + 声称提取: 方向/声称值/目标函数 Python 源码
+            # ★★★ 2026-09-16 修复（实测驱动）：本攻击是**连续优化**专用框架
+            #   （要求 LLM 给出 `f(x)` 与 `sample_point()`），但触发条件
+            #   **只查 merge 文本是否含 max/min/最大/最小** ⇒ **组合题**只要提到
+            #   "最小"就会被拉进来。
+            #   实测 official112-013（组合极值：求最小 d 使任意整数序列存在子集和
+            #   落在 1810±d）：LLM 只能为**连续**框架瞎编一个 `f`，采样得
+            #   `best=0.000000`，而 `claimed=54.0` ⇒ 判"证伪"并写入
+            #   `audit_reject_feedback` ⇒ **用一个无意义的采样值驱动了修订**
+            #   （该题 revise_round=4）。**在极值声称正确时同样会误杀**。
+            #   修法：让提取器**同时判定题目是否属连续优化**，非连续则跳过。
             sys_p = (
-                "你是数值提取器。根据题目（一个连续优化/极值问题）生成可执行 Python。\n"
+                "你是数值提取器。判断题目**是否为连续优化/极值问题**"
+                "（即目标可写成关于实数变量 x[0],x[1],… 的连续函数，且约束为"
+                "连续可判定）。\n"
+                "**组合/数论/离散/图论极值问题一律判 false**"
+                "（例如『求最小 d 使任意整数序列存在子集和满足…』是组合极值，不是连续优化）。\n"
                 "输出 JSON：\n"
-                "{\"direction\": \"max\"|\"min\", \"claimed\": <声称的极值数值近似>, "
+                "{\"is_continuous_opt\": true|false, "
+                "\"direction\": \"max\"|\"min\", \"claimed\": <声称的极值数值近似>, "
                 "\"code\": \"def f(x): ... 用 x[0],x[1]... 计算目标函数返回 float; "
                 "def sample_point(): 返回一个满足约束的可行点 list\"}\n"
                 "注意：claimed 是把题目声称的极值（含根式分数）算出的十进制近似；"
@@ -771,6 +951,13 @@ class Orchestrator(BaseAgent):
             direction = str(parsed.get("direction") or "")
             claimed = parsed.get("claimed")
             code = str(parsed.get("code") or "")
+            # ★ 2026-09-16：非连续优化题**直接跳过**（见上方 sys_p 的注释）。
+            #   缺省视为 True 以保持旧行为（只在新字段缺失时如此，避免误跳过）。
+            if parsed.get("is_continuous_opt") is False:
+                self.record(ctx, "value_attack",
+                            "跳过数值攻击：提取器判定本题**不是**连续优化/极值问题"
+                            "（组合/数论/离散类），连续采样框架不适用")
+                return
             if direction not in ("max", "min") or claimed is None:
                 logger.debug("[C-lite] 跳过数值攻击：direction=%r claimed=%r 不合法",
                              direction, claimed)
@@ -1013,9 +1200,14 @@ class Orchestrator(BaseAgent):
             # 占 1150s 的 66% —— 全给验证侧会把生成侧饿死。
             # 按"生成 ≈55% / 验证 ≈45%"分配 ⇒ deep 540s、其余 480s（沿用原值，
             # 它本就是 1200s 约束下的合理切分）。本预留必须保住"最后能格式化出答案"。
-            _vres = float(getattr(
-                self.config, 'verify_reserve_seconds',
-                540.0 if tier == 'deep' else 480.0))
+            # ★ 2026-09-16 审计修复：`verify_reserve_seconds` 此前**未在 AgentConfig
+            #   声明、不在白名单、无 CLI**，只能靠 getattr 兜底 ⇒ 注释承诺的
+            #   "可覆盖"是假开关。现已在 AgentConfig 声明（默认 0.0）。
+            #   ⚠ 必须把 0/负 解释为"用按档位默认"，否则声明默认值本身就会
+            #   把预留变成 0（`_gen_deadline == deadline`），悄悄改变行为。
+            _vres = float(getattr(self.config, 'verify_reserve_seconds', 0.0) or 0.0)
+            if _vres <= 0:
+                _vres = 540.0 if tier == 'deep' else 480.0
             ctx._gen_deadline = (
                 ctx.deadline - _vres
                 if ctx.deadline and ctx.deadline >= 10**8 else 0.0)
@@ -1582,10 +1774,25 @@ class Orchestrator(BaseAgent):
             # 只要投票共识 < 0.5（验证器自身都不确定），就不再"自信接受"错答案，
             # 而是触发 revise 反复验证，直到获得正确票或超时/预算耗尽。
             _bc = getattr(ctx, '_best_cluster', None)
+            # ★★ 2026-09-16 修复关键断点：此处**绝对不能用 `gen_time_up()`**。
+            # 实测（0916 轮 111 题，standard 档）：
+            #   · paper_pacer 把单题预算收紧到 540s；
+            #   · verify_reserve=480s ⇒ `_gen_deadline` 只剩 **60s**；
+            #   · `2.5_difficulty`(23.6s) + `2.7_subgoal_main`(47s) 就已耗尽 60s
+            #     ⇒ 验证阶段开始时 `gen_time_up()` **早已恒为 True**。
+            # 后果：**5.5 低置信度强制复核被永久禁用**——验证器把唯一候选投成
+            #   0/2 票（+带推理复核判 B），却无人消费，错答直接提交。
+            #   trace 实证：「全部 0 正确票，触发兜底直接求解」之后
+            #   `5.5_low_conf` 阶段耗时 **9.5e-06 秒**（＝根本没执行），
+            #   `revise_round=0`。
+            # ⇒ 口径错配：`gen_time_up()` 是「**生成**侧软截止」，用于闸**生成**；
+            #   而 5.5 是**验证之后的修正**，正是那 480s `verify_reserve` 要保护的时段。
+            #   用生成时钟闸修正环节，等于把预留的验证时间作废。
+            # 改判 `is_time_critical()`（真实剩余时间），与 4.5/4.6 之外的验证侧一致。
             if (_bc is not None
                     and getattr(_bc, 'confidence', 1.0) < 0.5
                     and not ctx.state.emergency
-                    and not ctx.gen_time_up()):
+                    and not ctx.is_time_critical()):
                 self.record(
                     ctx, "control",
                     f"deep 档低置信度({_bc.confidence:.2f})，强制 revise 复核提升共识",
@@ -2077,9 +2284,36 @@ class Orchestrator(BaseAgent):
             #   但此处 `gen_time_up()` 依据生成侧软截止（deadline − verify_reserve = 720s）
             #   在累计 814s 时必为 True → **第一轮就 break**，重解从未真正发生。
             #   应急重解只受硬墙约束，由调用方（P1）保证剩余时间充足。
-            if ctx.gen_time_up() and not force:
+            # ⚠ 2026-09-16 修复（与 5.5 闸门同一病灶）：`gen_time_up()` 是
+            #   「**生成**侧软截止」（deadline − verify_reserve），而 revise 回环是
+            #   **验证之后的修正**，正是 verify_reserve 要保护的时段 ⇒ 口径错配。
+            #   预算偏紧时（如 standard 档 540s、verify_reserve 480s ⇒ _gen_deadline 仅 60s）
+            #   它**恒为 True** ⇒ 回环**第一轮就 break**。
+            #   ⚠ 实测澄清：在**当前无预算上限**配置下（max_time_per_question=86400）
+            #   它不会触发（实测 revise_round 达 2 / 6），所以并非"永久禁用"；
+            #   但一旦收紧预算就会复现 —— 故仍改为与 5.5 一致的 `is_time_critical()`。
+            if ctx.is_time_critical() and not force:
                 self.record(ctx, "revise", "revise 回环预算不足，提前终止")
                 break
+            # ★★ 2026-09-16 修复（把只写不读的字段接上）：调用方 P1 在
+            #   "重解后答案未变化"时置位 `ctx._revise_no_progress_answer`
+            #   （见 :1566，注释承诺"后续同源的 revise（4.6 对抗 / 5 全0票 /
+            #   5.5 低置信）不再对**同一个答案**重复重解"），
+            #   但**全仓没有任何读取点** ⇒ 该保护从未生效。
+            #   实测代价（official112-003）：`deep 档 revise 自纠错 第1~6轮`
+            #   连跑 6 轮、中间三次 `revise 回环 2 轮仍未获得正确票`，
+            #   而 `P1 重解成效：答案未变化（0→0 字符）` ⇒
+            #   **6 轮全部无效**，约占该题 4148s 墙钟的 22%。
+            #   语义：仅对非 force 调用生效（force 是调用方明确要求的应急重解）；
+            #   答案一旦变化，`_npa == _cur` 自然不成立 ⇒ 标记自动失效。
+            if not force:
+                _npa = getattr(ctx, "_revise_no_progress_answer", None)
+                _cur_ans = str(getattr(ctx, "final_answer", "") or "")
+                if _npa is not None and _cur_ans and _npa == _cur_ans:
+                    self.record(ctx, "revise",
+                                "该答案此前重解后**未发生变化** → 跳过重复 revise"
+                                "（无进展保护，:1566 置位）")
+                    break
             ctx.revise_round += 1
             _ans_before = str(getattr(ctx, "final_answer", "") or "")
             ctx.revise_feedback = [feedback]
@@ -2320,6 +2554,17 @@ class Orchestrator(BaseAgent):
                 total_votes=total_votes,
                 feedback=feedback,
                 score=score,
+                # ★ 2026-09-16 修复（误导性诊断字段）：`correct` 此前**从不赋值**，
+                #   恒为 dataclass 默认 False ⇒ 导出的 `diag.verdicts[i].correct`
+                #   永远是 False，即使 `correct_votes=2, total_votes=3`（多数票判对）。
+                #   实测 003 因此显示 `{'correct_votes':2,'total_votes':3,
+                #   'correct':False,'confidence':0.667}` —— 与置信度自相矛盾，
+                #   读诊断的人会误判"验证器把候选全判错了"。
+                #   注意：字段注释标明 `correct` 是**单票**语义（verifier 内部用），
+                #   聚合对象此前没有定义其含义 ⇒ 这里补上"多数票是否判对"，与
+                #   `confidence` 保持一致口径。**已核验无任何代码读聚合的 `correct`**
+                #   （读取点都在单票上），故属纯诊断修复、不改行为。
+                correct=bool(total_votes and correct_votes * 2 > total_votes),
             ))
         return result
 
@@ -2372,7 +2617,9 @@ class Orchestrator(BaseAgent):
             sorted_v = sorted(ctx.verdicts, key=lambda v: v.confidence, reverse=True)
             for v in sorted_v:
                 ans = getattr(v, "answer", "") or ""
-                if ans and len(ans) > 3 and not _re.search(r"无法求解|无法解决|不能解决", ans):
+                # ★ 2026-09-16 审计修复：去掉 `len(ans) > 3` 门槛（同 formatter.py:95-98
+                #   的论证：单字符是合法完整答案；选择题多是 `A`/`AB`/`BCD`）。
+                if ans.strip() and not _re.search(r"无法求解|无法解决|不能解决", ans):
                     if isinstance(getattr(ctx, "_pick_diag", None), dict):
                         ctx._pick_diag["branch"] = "verdict_confidence"
                         ctx._pick_diag["picked"] = ans[:40]
@@ -2388,7 +2635,9 @@ class Orchestrator(BaseAgent):
             _mv_count: dict = {}
             for _c in getattr(ctx, "candidates", None) or []:
                 _a = (getattr(_c, "answer", "") or "").strip()
-                if _a and len(_a) > 3 and not _re.search(
+                # ★ 2026-09-16 审计修复：去掉 `len(_a) > 3`（否则 A/AB/BCD 类
+                #   选择题答案进不了多数投票 ⇒ 该机制对目标题型失效）。
+                if _a and not _re.search(
                         r"无法求解|无法解决|不能解决", _a):
                     _mv_count[_a] = _mv_count.get(_a, 0) + 1
             if _mv_count:
@@ -2405,7 +2654,7 @@ class Orchestrator(BaseAgent):
         if ctx.candidates:
             sorted_c = sorted(ctx.candidates, key=lambda c: len(c.reasoning or ""), reverse=True)
             for c in sorted_c:
-                if c.answer and len(c.answer) > 3 and not _re.search(r"无法求解|无法解决|不能解决", c.answer):
+                if c.answer and c.answer.strip() and not _re.search(r"无法求解|无法解决|不能解决", c.answer):
                     if isinstance(getattr(ctx, "_pick_diag", None), dict):
                         ctx._pick_diag["branch"] = "candidate_longest_reasoning"
                         ctx._pick_diag["picked"] = c.answer[:40]
@@ -2638,8 +2887,28 @@ class Orchestrator(BaseAgent):
                 str(t.get("content")) for t in (getattr(ctx, "trace", None) or [])
                 if isinstance(t, dict) and t.get("step") == "answer_form"
             ][:10],
+            # ★ 2026-09-15（用户要求"把错误暴露得更具体"）：验证器判 B 时的
+            # **结构化错误类型分布** {标签: 票数}，标签集 = verifier.ERROR_TYPE_TAGS
+            # （符号错/计算错/边界遗漏/定义域错/跳步/循环论证/方法不适用/
+            #  前提不成立/方向反了/漏分支/其它），回应李平老师"是否硬套定理"。
+            # 口径优先取 `verify_error_types`（整题终态），无则回退
+            # `vote_error_types`（单次投票）。两者都是纯埋点，不影响判定。
+            "error_types": _merge_error_types(ctx),
+            "n_reject_votes": _sum_reject_votes(ctx),
+            # ★ 2026-09-15：LeanSearch 检索埋点（老师 #44）——本题的
+            # 调用次数 / 命中数 / 去重后条数 / 耗时 / 后端 root。
+            # `used_theorems`（run_eval 已导出）是命中定理名清单，两者互为交叉验证。
+            "leansearch": _summarize_leansearch(ctx),
+            # ★ 2026-09-15：带推理复核的判定（独立信号，不并入投票统计）。
+            # 第一轮实测因缺此字段，无法判断复核"跑了没、判了什么"。
+            "deep_review": _summarize_deep_review(ctx),
             # 穷尽性搜索机制：是否追加了「解族穷尽性检查」子目标
             "exhaust_diag": getattr(ctx, "_exhaust_diag", None) or {},
+            # ★ 2026-09-17 新增：解析该子目标的输出，判断它**是否真的做了检查**。
+            #   此前 result 是自由文本 ⇒ 无法区分"确认只有一解"与"没做检查"。
+            #   `complete=False` 即可机检的"未完成检查"信号。
+            "exhaust_result": _parse_exhaust_result(
+                getattr(ctx, "subgoal_trace", None) or []),
             # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
             "budget_skips": sum(1 for t in (getattr(ctx, "trace", None) or [])
                                 if isinstance(t, dict) and t.get("step") == "budget_skip"),

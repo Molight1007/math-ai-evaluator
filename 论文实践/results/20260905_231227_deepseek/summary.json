@@ -1,0 +1,523 @@
+{
+  "meta": {
+    "time": "2026-09-05 23:12:27",
+    "model": "deepseek",
+    "model_label": "deepseek-v4-flash",
+    "mode": "dry",
+    "repeat": 1,
+    "lean_status": "已跳过（--no-lean）"
+  },
+  "summary": {
+    "counts": {
+      "A": 24,
+      "B": 6,
+      "C": 14,
+      "D": 5,
+      "E": 4
+    },
+    "total": 53,
+    "errors": 0,
+    "truncated": 0,
+    "lean_checked": 0,
+    "lean_ok_rate_all": 0.0,
+    "mean_elapsed": 0.0,
+    "A": {
+      "per_pair": [
+        {
+          "pid": "A1",
+          "kind": "near",
+          "core": "移项后配成若干个完全平方之和，用平方非负得证",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A2",
+          "kind": "near",
+          "core": "把两边展开成标准多项式后逐项相等，用环上的恒等判别",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A3",
+          "kind": "cross",
+          "core": "把式子配成完全平方 (x-1)²，用平方非负得证",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A4",
+          "kind": "near",
+          "core": "反复使用 |u+v| ≤ |u|+|v|，再用线性算术合并",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A5",
+          "kind": "control",
+          "core": "带下界条件的线性不等式，交给算术判定过程",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A6",
+          "kind": "near",
+          "core": "把二次式配成完全平方，用平方非负得证",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A7",
+          "kind": "near",
+          "core": "先通分消去分母，再用环上恒等判别收尾",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        },
+        {
+          "pid": "A8",
+          "kind": "cross",
+          "core": "平方非负；若平方和恰为 0，则每个平方项都只能是 0",
+          "source_ok": 0,
+          "with_ok": 0,
+          "base_ok": 0,
+          "transfer_gain": 0,
+          "core_cov_with": 0.0,
+          "core_cov_base": 0.0,
+          "core_cov_delta": 0.0,
+          "inherit_with": 0.0,
+          "inherit_base": 0.0,
+          "jaccard_with": 0.0,
+          "jaccard_base": 0.0
+        }
+      ],
+      "aggregate": {
+        "source_correct_rate": 0.0,
+        "with_source_correct_rate": 0.0,
+        "baseline_correct_rate": 0.0,
+        "mean_transfer_gain": 0.0,
+        "mean_core_cov_with": 0.0,
+        "mean_core_cov_base": 0.0,
+        "mean_core_cov_delta": 0.0,
+        "mean_inherit_with": 0.0,
+        "mean_inherit_base": 0.0
+      }
+    },
+    "B": {
+      "per_item": [
+        {
+          "tid": "B1",
+          "label": "other",
+          "escaped": 0,
+          "trapped": 0,
+          "lean_ok": 0,
+          "gold_answer": "最小值 3（x = 1）",
+          "trap_hits": [],
+          "gold_hits": [],
+          "has_lean": 1
+        },
+        {
+          "tid": "B2",
+          "label": "trapped",
+          "escaped": 0,
+          "trapped": 1,
+          "lean_ok": 0,
+          "gold_answer": "不成立，n = 40（1681 = 41²）",
+          "trap_hits": [
+            "恒成立"
+          ],
+          "gold_hits": [],
+          "has_lean": 1
+        },
+        {
+          "tid": "B3",
+          "label": "other",
+          "escaped": 0,
+          "trapped": 0,
+          "lean_ok": 0,
+          "gold_answer": "不对，反例 n = 2",
+          "trap_hits": [],
+          "gold_hits": [],
+          "has_lean": 1
+        },
+        {
+          "tid": "B4",
+          "label": "trapped",
+          "escaped": 0,
+          "trapped": 1,
+          "lean_ok": 0,
+          "gold_answer": "不成立（n = 2 与 n = 4 处取等；仅当 n ≥ 5 时成立）",
+          "trap_hits": [
+            "恒成立"
+          ],
+          "gold_hits": [],
+          "has_lean": 1
+        },
+        {
+          "tid": "B5",
+          "label": "other",
+          "escaped": 0,
+          "trapped": 0,
+          "lean_ok": 0,
+          "gold_answer": "不存在最小值（x → 0⁻ 时趋于 −∞）",
+          "trap_hits": [],
+          "gold_hits": [],
+          "has_lean": 0
+        },
+        {
+          "tid": "B6",
+          "label": "other",
+          "escaped": 0,
+          "trapped": 0,
+          "lean_ok": 0,
+          "gold_answer": "5 个（最坏情况：取完 3 个蓝球后再取 2 个红球）",
+          "trap_hits": [],
+          "gold_hits": [],
+          "has_lean": 0
+        }
+      ],
+      "aggregate": {
+        "n_items": 6,
+        "n_with_lean": 4,
+        "escaped_rate": 0.0,
+        "trapped_rate": 0.333,
+        "mixed_count": 0,
+        "other_count": 4,
+        "lean_ok_rate": 0.0,
+        "escaped_and_lean_ok": 0.0
+      }
+    },
+    "C": {
+      "per_item": [
+        {
+          "sid": "C1",
+          "task": "articulate",
+          "gold": "不变量与染色",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C2",
+          "task": "articulate",
+          "gold": "抽屉原理 / 鸽巢原理",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C3",
+          "task": "articulate",
+          "gold": "数学归纳法",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C4",
+          "task": "articulate",
+          "gold": "极端原理",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C5",
+          "task": "articulate",
+          "gold": "反证法与构造反例",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C6",
+          "task": "articulate",
+          "gold": "配方法与平方和非负",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C7",
+          "task": "articulate",
+          "gold": "抽屉原理 / 鸽巢原理",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C8",
+          "task": "articulate",
+          "gold": "反证法与构造反例",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C9",
+          "task": "articulate",
+          "gold": "双射与计数",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "C10",
+          "task": "articulate",
+          "gold": "同余与模运算",
+          "pick": "未识别",
+          "correct": 0,
+          "ambiguous": 0
+        },
+        {
+          "sid": "R1",
+          "task": "reverse_lean",
+          "structure": "数学归纳法",
+          "family_hit": 0,
+          "lean_ok": 0,
+          "fingerprint": []
+        },
+        {
+          "sid": "R2",
+          "task": "reverse_lean",
+          "structure": "配方法与平方和非负",
+          "family_hit": 0,
+          "lean_ok": 0,
+          "fingerprint": []
+        },
+        {
+          "sid": "R3",
+          "task": "reverse_lean",
+          "structure": "反证法与构造反例",
+          "family_hit": 0,
+          "lean_ok": 0,
+          "fingerprint": []
+        },
+        {
+          "sid": "R4",
+          "task": "reverse_lean",
+          "structure": "同余与模运算",
+          "family_hit": 0,
+          "lean_ok": 0,
+          "fingerprint": []
+        }
+      ],
+      "aggregate": {
+        "articulate_n": 10,
+        "articulate_accuracy": 0.0,
+        "random_baseline": 0.083,
+        "articulate_ambiguous": 0,
+        "reverse_n": 4,
+        "reverse_family_hit_rate": 0.0,
+        "reverse_lean_ok_rate": 0.0
+      }
+    },
+    "D": {
+      "per_item": [
+        {
+          "aid": "D1",
+          "direction": "c2g",
+          "pattern_hit": 0,
+          "lean_ok": 0,
+          "gold": "1³ + 2³ + … + n³ = (1+2+…+n)² = [n(n+1)/2]²"
+        },
+        {
+          "aid": "D2",
+          "direction": "g2c",
+          "pattern_hit": 0,
+          "lean_ok": 0,
+          "gold": "不成立。反例 a = 2, b = 3（6 | 6，但 6 ∤ 2 且 6 ∤ 3）"
+        },
+        {
+          "aid": "D3",
+          "direction": "c2g",
+          "pattern_hit": 0,
+          "lean_ok": 0,
+          "gold": "a = m² - n², b = 2mn, c = m² + n²"
+        },
+        {
+          "aid": "D4",
+          "direction": "g2c",
+          "pattern_hit": 0,
+          "lean_ok": 0,
+          "gold": "不成立。2³ = 8，8 mod 4 = 0，不等于 1"
+        },
+        {
+          "aid": "D5",
+          "direction": "c2g",
+          "pattern_hit": 0,
+          "lean_ok": 0,
+          "gold": "前 n 个奇数之和 = n²，即 1 + 3 + 5 + … + (2n-1) = n²"
+        }
+      ],
+      "aggregate": {
+        "n_items": 5,
+        "abstraction_hit_rate": 0.0,
+        "lean_ok_rate": 0.0,
+        "both_ok_rate": 0.0
+      }
+    },
+    "E": {
+      "per_item": [
+        {
+          "eid": "E1",
+          "theorem": "拉格朗日中值定理",
+          "dimension": "条件完整性",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "在闭区间 [a,b] 上连续",
+            "在开区间 (a,b) 上可导",
+            "存在 ξ ∈ (a,b) 使 f'(ξ) = (f(b)-f(a))/(b-a)"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E2",
+          "theorem": "费马小定理",
+          "dimension": "量词与模运算",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "p 是素数",
+            "p 不整除 a（即 gcd(a,p) = 1）",
+            "a^(p-1) ≡ 1 (mod p)"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E3",
+          "theorem": "柯西-施瓦茨不等式",
+          "dimension": "适用范畴",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "在内积空间（或实数/复数的 n 维向量空间）上成立",
+            "|⟨u,v⟩| ≤ ‖u‖ · ‖v‖ 的形式",
+            "取等条件：u 与 v 线性相关（成比例）"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E4",
+          "theorem": "一致收敛与极限交换",
+          "dimension": "隐含条件",
+          "n_cond": 2,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "f_n 必须一致收敛于 f（而非仅仅逐点收敛）",
+            "结论：极限函数连续 / 极限与积分可交换"
+          ],
+          "has_lean": 0,
+          "lean_ok": 0,
+          "both_pass": 0
+        }
+      ],
+      "by_dimension": {
+        "条件完整性": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "适用范畴": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "量词与模运算": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "隐含条件": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        }
+      },
+      "aggregate": {
+        "n_items": 4,
+        "n_with_lean": 3,
+        "condition_completeness_rate": 0.0,
+        "full_statement_rate": 0.0,
+        "lean_special_ok_rate": 0.0,
+        "both_pass_rate": 0.0
+      }
+    }
+  }
+}

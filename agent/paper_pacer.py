@@ -83,6 +83,7 @@ class PaperPacer:
         # 2026-09-02 老师需求「时间动态分配」：每题省下的时间累积，
         # 后续题可在收紧时加回去（盈余→难题加时间）。
         self.bonus_pool = 0.0
+        self._q_start = None  # 本题起点（`begin()` 置位，`end()` 据此推算用时）
         self.history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -93,6 +94,8 @@ class PaperPacer:
         with self._lock:
             self.started += 1
             idx = self.started
+            # ★ 2026-09-16 审计修复：记录本题起点，供 `end()` 自行推算用时。
+            self._q_start = time.time()
         return idx
 
     def end(self, tier: str = None, duration: float = None,
@@ -101,9 +104,18 @@ class PaperPacer:
 
         soft: 该题分配到的软预算帽（秒）。若 soft > duration，
         盈余累入 bonus_pool，供后续题收紧时加回（动态分配）。
+
+        ★★ 2026-09-16 审计修复：`bonus_pool` 此前**结构性恒 0** ——
+        `orchestrator.py` 的 5 个 `pacer.end(...)` 调用点**全都只传 `soft`
+        （`:965/:1041/:1323/:1936/:1994`），从不传 `duration`**
+        ⇒ 下面 `if soft is not None and duration is not None` 条件恒假
+        ⇒ "老师需求：每题省下的时间累积、后续题加回"（2026-09-02）整条机制从未生效。
+        修法：`duration` 缺省时**由 `begin()` 记录的起点自行推算**（调用方无需改动）。
         """
         with self._lock:
             self.done += 1
+            if duration is None and self._q_start is not None:
+                duration = max(0.0, time.time() - self._q_start)
             if soft is not None and duration is not None:
                 surplus = max(0.0, float(soft) - float(duration))
                 self.bonus_pool += surplus

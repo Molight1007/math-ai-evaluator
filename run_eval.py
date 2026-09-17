@@ -268,16 +268,35 @@ def _try_float_compare(a: str, b: str, rel_tol: float = 1e-6) -> bool:
         return False
 
 
+# ★★ 2026-09-16 修复判分假阳性（实测抓到的真实 bug）：
+# 旧实现用 `re.findall(r'(-?\d+)\s*/\s*(-?\d+)', ...)` 在**任意位置**抓分数片段，
+# 再比第一组。于是只要两侧都**偶然**含同一个 `n/m` 片段就判等——
+# 实测 086：pred 与 gold 都含 `5^{1/4}`（四次根号！），被各抓出一个 `1/4`，
+# `1*4 == 1*4` ⇒ **答案 `8 / i` 与 gold `16 / ζ8` 被误判为相等**，
+# 该题因此从"错"变"对"，**直接虚高正确率**。
+# 现要求：**两侧都必须整体就是一个分数**（裸 `a/b` 或 `\frac{a}{b}`，可带括号），
+# 才进入分数比较。合法用途（`1/2` ↔ `2/4`）完全保留，偶然片段不再误判。
+_FRAC_ONLY_RE = re.compile(r"^\s*\(?\s*(-?\d+)\s*/\s*(-?\d+)\s*\)?\s*$")
+_FRAC_LATEX_RE = re.compile(
+    r"^\s*\\frac\s*\{\s*(-?\d+)\s*\}\s*\{\s*(-?\d+)\s*\}\s*$")
+
+
+def _frac_pair(text: str):
+    """整体是分数时返回 (分子, 分母)，否则 None。"""
+    for pat in (_FRAC_LATEX_RE, _FRAC_ONLY_RE):
+        m = pat.match(text or "")
+        if m:
+            try:
+                return int(m.group(1)), int(m.group(2))
+            except ValueError:
+                return None
+    return None
+
+
 def _try_fraction_compare(a: str, b: str) -> bool:
-    frac_a = re.findall(r'(-?\d+)\s*/\s*(-?\d+)', a)
-    frac_b = re.findall(r'(-?\d+)\s*/\s*(-?\d+)', b)
-    if frac_a and frac_b:
-        try:
-            na, da = int(frac_a[0][0]), int(frac_a[0][1])
-            nb, db = int(frac_b[0][0]), int(frac_b[0][1])
-            return na * db == nb * da
-        except (ValueError, ZeroDivisionError):
-            pass
+    fa, fb = _frac_pair(a), _frac_pair(b)
+    if fa and fb and fa[1] and fb[1]:
+        return fa[0] * fb[1] == fb[0] * fa[1]
     return False
 
 
@@ -695,6 +714,62 @@ def _strip_latex_cmds(text: str) -> str:
     return re.sub(r'\\[a-z]+', '', text)
 
 
+def _llm_call_snapshot() -> dict:
+    """LLM 调用计数的全局快照（用于算单题增量）。失败时返回空统计，绝不打断评测。
+
+    来源：`utils.llm_client.get_truncation_stats()` —— 每次响应结束计数一次，
+    流式/非流式两条路径都覆盖（含真实 finish_reason 口径的截断数）。
+    """
+    try:
+        from utils.llm_client import get_truncation_stats
+        st = get_truncation_stats() or {}
+        return {"calls": int(st.get("calls", 0) or 0),
+                "truncated": int(st.get("truncated", 0) or 0)}
+    except Exception:  # noqa: BLE001
+        return {"calls": 0, "truncated": 0}
+
+
+def _mcp_call_snapshot() -> dict:
+    """Lean MCP 诊断调用的全局快照（用于算单题增量）。
+
+    ★ 2026-09-16 用户要求「这些工具的调用的效果也都记录」。
+    来源：`tools.lean_local.lean_bridge.mcp_stats()`（calls / ok / fail / seconds）。
+    **判读口径**（这是回答"到底用了 MCP 还是 bridge"的关键证据）：
+      · `calls>0, ok>0`      → MCP 真正生效；
+      · `calls>0, fail==calls` → MCP **每次都失败** ⇒ 实际由 bridge 完成（0916 轮即此）；
+      · `calls==0`           → 根本没走 MCP。
+    失败时返回零值，绝不打断评测。
+    """
+    try:
+        from tools.lean_local.lean_bridge import mcp_stats
+        st = mcp_stats() or {}
+        return {"calls": int(st.get("calls", 0) or 0),
+                "ok": int(st.get("ok", 0) or 0),
+                "fail": int(st.get("fail", 0) or 0),
+                "seconds": float(st.get("seconds", 0.0) or 0.0)}
+    except Exception:  # noqa: BLE001
+        return {"calls": 0, "ok": 0, "fail": 0, "seconds": 0.0}
+
+
+def _web_call_snapshot() -> dict:
+    """通用联网搜索的全局快照（用于算单题增量）。
+
+    来源：`tools.web_search.web_search_stats()`（calls/ok/fail/seconds/results）。
+    与 `_mcp_call_snapshot` 同口径 ⇒ 逐题 `tool_calls` 可并列比较
+    "Lean MCP 调用" 与 "联网搜索调用" 的实际效果。
+    """
+    try:
+        from tools.web_search import web_search_stats
+        st = web_search_stats() or {}
+        return {"calls": int(st.get("calls", 0) or 0),
+                "ok": int(st.get("ok", 0) or 0),
+                "fail": int(st.get("fail", 0) or 0),
+                "seconds": float(st.get("seconds", 0.0) or 0.0),
+                "results": int(st.get("results", 0) or 0)}
+    except Exception:  # noqa: BLE001
+        return {"calls": 0, "ok": 0, "fail": 0, "seconds": 0.0, "results": 0}
+
+
 def _classify_error(pred: str, gold: str) -> str:
     """对判错的样本分类，定位瓶颈（#6 / #11 / #16）。
 
@@ -759,9 +834,19 @@ def _classify_error(pred: str, gold: str) -> str:
 #
 # 重要（2026-08-28 修正）：此前这份配置是"全开"版本，与 user_agent.py 的平台默认
 # 不一致（samples 3 vs 2、calls 40 vs 150、time 1100 vs 1200、scoring/lemma 开关相反），
-# 导致本地测出来的数字不能代表平台表现。现已全部对齐平台默认值，
-# 保证"本地基线 == 平台基线"，A/B 实验才有意义。
-# 需要偏离平台时请用 CLI 的 --agent_override 显式指定。
+# 导致本地测出来的数字不能代表平台表现。当时已把大部分键对齐平台默认值。
+#
+# ★★ 2026-09-16 更正（用户：「现在的测试和比赛没关系，比赛已经结束了」）：
+#   上面那句"**现已全部对齐平台默认值，保证本地基线 == 平台基线**"**已不成立**，
+#   实测仍有 **3 个键与 AgentConfig 默认不同**（本条改前没有任何注释说明）：
+#     · `tier_budget`              本地 {fast 120, standard 540, deep 1150}
+#                                 vs 配置 {300, 750, 1150}
+#     · `use_lemma_accumulation`   本地 False  vs 配置 True
+#     · `verifier_voting_times`    本地 2      vs 配置 1
+#   ⇒ **本地基线 ≠ 平台基线**。比赛已结束，**不再以"对齐平台"为目标**：
+#   本地这份就是**研究阶段基线**，有意与平台版解耦（平台版已冻结不再维护）。
+#   ⚠ 引用历史 A/B 结论时，须注意它们分别是在哪一套基线下取得的。
+# 需要临时偏离本地基线时，请用 CLI 显式指定（如 `--tier_budget`、`--voting_times`）。
 DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # ---- 对齐 user_agent.py:64 / :72 ----
     "policy_sample_times": 2,
@@ -884,6 +969,17 @@ class EvalEngine:
         domain = test.get("domain", "unknown")
         pid = test.get("id", str(test.get("_line_no", "?")))
         start = time.time()
+        # ★ 2026-09-16 用户要求「极为详细的数据」：记录本题的 LLM 调用增量。
+        # 全局计数器是进程累计的，必须做前后快照求差才等于"本题用了多少次"。
+        _llm_before = _llm_call_snapshot()
+        _mcp_before = _mcp_call_snapshot()
+        _web_before = _web_call_snapshot()
+        # ★★ 2026-09-16 修既有 bug（由 tests/test_result_detail_export.py 抓到）：
+        # `result` 原先**只在 try 内赋值**，一旦 `agent.solve()` 抛异常，
+        # 紧随其后的 `isinstance(result, dict)` 会抛 `UnboundLocalError`
+        # ⇒ 整个 `solve_one` 崩溃、**该题在结果里彻底消失**（不是记为错，是丢失），
+        # 批量评测时可能直接打断整轮。此处先给默认值。
+        result: Dict[str, Any] = {}
         try:
             result = self.agent.solve(question, {})
             elapsed = time.time() - start
@@ -894,6 +990,37 @@ class EvalEngine:
             elapsed = time.time() - start
             pred_answer = ""
             response = f"ERROR: {e}"
+            result = {}
+        _llm_after = _llm_call_snapshot()
+        llm_calls = {k: (_llm_after.get(k, 0) - _llm_before.get(k, 0))
+                     for k in set(_llm_before) | set(_llm_after)}
+        # ★ 工具级埋点（用户 2026-09-16 要求）：本题 Lean MCP 的调用次数/成功/失败/耗时。
+        _mcp_after = _mcp_call_snapshot()
+        mcp_calls = {
+            "calls": _mcp_after["calls"] - _mcp_before["calls"],
+            "ok": _mcp_after["ok"] - _mcp_before["ok"],
+            "fail": _mcp_after["fail"] - _mcp_before["fail"],
+            "seconds": round(_mcp_after["seconds"] - _mcp_before["seconds"], 2),
+        }
+        # 派生判读：MCP 是否真正生效（否则实际由 bridge 完成）
+        if mcp_calls["calls"] == 0:
+            mcp_calls["verdict"] = "未走 MCP"
+        elif mcp_calls["ok"] > 0:
+            mcp_calls["verdict"] = "MCP 生效"
+        else:
+            mcp_calls["verdict"] = "MCP 全部失败 → 实际由 bridge 完成"
+        # ★ 联网搜索埋点（用户 2026-09-16 要求「这些工具的调用的效果也都记录」）
+        _web_after = _web_call_snapshot()
+        web_calls = {
+            "calls": _web_after["calls"] - _web_before["calls"],
+            "ok": _web_after["ok"] - _web_before["ok"],
+            "fail": _web_after["fail"] - _web_before["fail"],
+            "results": _web_after["results"] - _web_before["results"],
+            "seconds": round(_web_after["seconds"] - _web_before["seconds"], 2),
+        }
+        web_calls["verdict"] = ("未调用" if web_calls["calls"] == 0
+                                else "成功" if web_calls["ok"] > 0
+                                else "全部失败")
         is_correct = answers_match(pred_answer, gold) if pred_answer and gold else None
         if not gold:
             is_correct = None
@@ -913,10 +1040,52 @@ class EvalEngine:
         diag = {}
         if isinstance(result, dict):
             diag = result.get("diag") or {}
+        # ★ 2026-09-16 用户要求「极为详细的数据：大模型的解答过程 / 时间消耗 / 各环节效果」。
+        # 此前只落盘 response[:2000] 与有限 diag，**候选的解答过程、全量事件流都没导出**
+        # ⇒ 事后无法复盘"模型到底怎么想的、在哪一步跑偏"。以下四项把过程完整留痕：
+        #   · response_full  最终回答**全文**（不再截断）
+        #   · candidates     每个候选的 answer + **reasoning（解答过程）** + 得票
+        #   · trace          全量事件流（各 agent/step 的顺序与内容）
+        #   · verdicts/cluster 验证裁决与共识簇
+        #   · llm_calls      本题 LLM 调用次数（全局计数前后快照之差）
+        # ⚠ 体积可控：单题约几十 KB，10 题 ~1MB（此前每行只存 2KB 摘要）。
+        cand_out: list = []
+        verd_out: list = []
+        cluster_out = None
+        trace_out: list = []
+        if isinstance(result, dict):
+            _verds = result.get("verdicts") or []
+            for i, c in enumerate(result.get("candidates") or []):
+                if not isinstance(c, dict):
+                    continue
+                v = _verds[i] if i < len(_verds) and isinstance(_verds[i], dict) else {}
+                cand_out.append({
+                    "id": c.get("id", i),
+                    "answer": c.get("answer", ""),
+                    "reasoning": c.get("reasoning", ""),     # ★ 解答过程
+                    "revised": bool(c.get("revised")),
+                    "confidence": v.get("confidence"),
+                    "correct_votes": v.get("correct_votes"),
+                    "total_votes": v.get("total_votes"),
+                    "feedback": v.get("feedback", ""),
+                })
+            for v in _verds:
+                if isinstance(v, dict):
+                    verd_out.append({
+                        "id": v.get("id"),
+                        "answer": v.get("answer", ""),
+                        "confidence": v.get("confidence"),
+                        "correct_votes": v.get("correct_votes"),
+                        "total_votes": v.get("total_votes"),
+                    })
+            cluster_out = result.get("cluster")
+            trace_out = result.get("trace") or []
         return {
             "id": pid, "domain": domain,
             "question": question, "gold": gold,
             "predicted": pred_answer, "response": response[:2000],
+            # ★ 最终回答全文（不截断）
+            "response_full": response,
             "correct": is_correct, "elapsed_sec": round(elapsed, 2),
             "error_class": error_class,
             # #1/#2 证据链：实际用到的 Mathlib 定理（leansearch 命中/编译通过）
@@ -924,6 +1093,14 @@ class EvalEngine:
             "mathlib_usage_stats": usage_stats,
             # 逐步归因诊断（可空：老结果文件无此字段）
             "diag": diag,
+            # ★ 2026-09-16 新增：过程留痕（候选解答过程 / 事件流 / 裁决 / 调用次数）
+            "candidates": cand_out,
+            "verdicts": verd_out,
+            "cluster": cluster_out,
+            "trace": trace_out,
+            "llm_calls": llm_calls,
+            # ★ 工具级埋点：Lean MCP + 通用联网搜索（calls/ok/fail/seconds + 派生判读）
+            "tool_calls": {"lean_mcp": mcp_calls, "web_search": web_calls},
         }
 
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:
@@ -1079,10 +1256,53 @@ def main():
     parser.add_argument("--model", default="", help="模型名（或设置 LLM_MODEL 环境变量）")
     # ---- A/B 能力开关（None 表示使用本地评测默认值）----
     parser.add_argument("--voting_times", type=int, default=None, help="verifier_voting_times（每个候选验证票数）")
+    parser.add_argument("--verifier_deep_final_enabled", type=str, default=None,
+                        choices=["true", "false"],
+                        help="verifier_deep_final_enabled（带推理的最终复核，默认 false）")
+    # ★ 2026-09-16 审计修复：以下两个键此前**只有 getattr 兜底**，
+    #   AgentConfig 未声明、白名单未列、CLI 也没有 ⇒ 注释承诺的
+    #   "回退/AB 开关"实际不可用（假开关）。现补全三处。
+    parser.add_argument("--enable_question_type_hint", type=str, default=None,
+                        choices=["true", "false"],
+                        help="全题型强制注入题型特化纪律（默认 false；"
+                             "仅客观题默认由 objective_tactic_enabled 控制）")
+    parser.add_argument("--verify_reserve_seconds", type=float, default=None,
+                        help="生成侧预留秒数（_gen_deadline = deadline − 此值）；"
+                             "0/缺省 = 按档位默认（deep 540 / 其他 480）")
+    parser.add_argument("--enable_web_search", type=str, default=None,
+                        choices=["true", "false"],
+                        help="启用联网搜索工具（web_search，默认 false；"
+                             "经原生 tool_calls 调用，效果见 tool_calls.web_search）")
+    parser.add_argument("--verifier_deep_final_min_remaining", type=float, default=None,
+                        help="verifier_deep_final_min_remaining（剩余秒数低于此值则跳过复核）")
+    # ★ 2026-09-15 审计补漏：以下两键原先**只有配置与白名单、没有 CLI 参数**
+    # ⇒ 命令行根本传不进去（与"有 CLI 没白名单"是同一类坑的镜像）。
+    parser.add_argument("--verifier_deep_review_temperature", type=float, default=None,
+                        help="verifier_deep_review_temperature（复核采样温度，默认 0.0）")
+    parser.add_argument("--verifier_deep_review_min_chars", type=int, default=None,
+                        help="verifier_deep_review_min_chars（复核最短输出字数，低于此值视为未完成；0=关闭该护栏）")
+    # ★ 2026-09-17 补：该键此前**有 AgentConfig 声明、有白名单、有读取点，却唯独没有 CLI**
+    #   （同批的 temperature/min_chars 都有）⇒ 属审核列的"半假开关"，
+    #   命令行无法调。实测需要它：默认 16384 过大，深复核产出 26k–42k 字符、
+    #   VERDICT 出现 0 次且出现复读退化（两样本 chars 完全相同=26749）。
+    parser.add_argument("--verifier_deep_review_max_tokens", type=int, default=None,
+                        help="verifier_deep_review_max_tokens（复核单次最大 token，默认 16384；"
+                             "建议 ≤6144 以缩短退化窗口）")
+    # 2026-09-16 投票方差（候选分歧 → 提高票数 + 非零温度）
+    parser.add_argument("--verifier_diversify_enabled", type=str, default=None,
+                        choices=["true", "false"],
+                        help="verifier_diversify_enabled（候选有分歧时提高票数+温度，默认 true）")
+    parser.add_argument("--verifier_disagreement_votes", type=int, default=None,
+                        help="verifier_disagreement_votes（有分歧时的每候选票数，默认 3）")
+    parser.add_argument("--verifier_disagreement_temperature", type=float, default=None,
+                        help="verifier_disagreement_temperature（有分歧时的采样温度，默认 0.7）")
     parser.add_argument("--use_scoring", type=str, default=None, choices=["true", "false"], help="use_scoring（验证器多维评分）")
     parser.add_argument("--revise_rounds", type=int, default=None, help="max_revise_rounds（自纠错回环轮数）")
     parser.add_argument("--use_proof", type=str, default=None, choices=["true", "false"], help="use_proof_channel（证明题专用通道）")
     parser.add_argument("--use_blueprint", type=str, default=None, choices=["true", "false"], help="use_blueprint（蓝图分解）")
+    parser.add_argument("--blueprint_deps_enabled", type=str, default=None,
+                        choices=["true", "false"],
+                        help="blueprint_deps_enabled（DAG 依赖边；false=复现'依赖恒空'旧行为做 A/B）")
     # 2026-09-13：为 A/B 对比新增两个开关（此前只能改代码才能切换）。
     # 背景：`3.3_improve`(单Agent自审自改) 与 `3.4_collab`(三Agent协作改进)
     # 语义重叠，需要实测"哪个更高效"才能决定舍去哪一个。
@@ -1123,6 +1343,36 @@ def main():
                         help="三档预算 'fast,standard,deep'（诊断用；不传=120,540,1150）")
     parser.add_argument("--paper_target_time", type=int, default=None,
                         help="全卷墙钟目标秒（诊断用；放大后 PaperPacer 不再收紧单题预算）")
+    # ---- 2026-09-15 赛后无约束评测：补齐此前**没有 CLI 入口**的旋钮 ----
+    # 背景：上述 4 个诊断参数只覆盖了一部分约束，`max_total_time_seconds` /
+    # 子目标阶段预算 / `max_subgoals` / `improve_min_remaining` / `deep_quota_ratio`
+    # 此前只能改代码，导致"解除比赛限制"做不彻底（改了单题上限，全卷仍被 20700 卡）。
+    # 全部默认 None = 不传即保持比赛口径，行为与改动前逐字节一致。
+    parser.add_argument("--max_total_time_seconds", type=int, default=None,
+                        help="Agent 总运行上限秒（诊断用；不传=20700 比赛口径）")
+    parser.add_argument("--subgoal_stage_budget_sec", type=float, default=None,
+                        help="deep 档子目标阶段预算秒（诊断用；不传=750）")
+    parser.add_argument("--subgoal_stage_budget_sec_std", type=float, default=None,
+                        help="standard/fast 档子目标阶段预算秒（诊断用；不传=450）")
+    parser.add_argument("--max_subgoals", type=int, default=None,
+                        help="子目标规划数上限（诊断用；不传=6 比赛口径；<=0 表示不截断）")
+    # ---- LeanSearch 引理检索（2026-09-15 重启；A/B 用）----
+    parser.add_argument("--use_leansearch", type=str, default=None,
+                        choices=["true", "false"],
+                        help="use_leansearch（LeanSearch 引理检索总开关，默认关）")
+    parser.add_argument("--leansearch_top_k", type=int, default=None,
+                        help="leansearch_top_k（每次检索返回条数，默认 5；老师 #46 要求扫 3/5/10）")
+    parser.add_argument("--leansearch_max_calls_per_q", type=int, default=None,
+                        help="leansearch_max_calls_per_q（单题检索次数上限，默认 2）")
+    parser.add_argument("--leansearch_inject_verifier", type=str, default=None,
+                        choices=["true", "false"],
+                        help="leansearch_inject_verifier（方案 A：把定理原文注入验证器，默认 true）")
+    parser.add_argument("--improve_min_remaining", type=float, default=None,
+                        help="3.3 改进停手预留秒（诊断用；不传=300；0=关闭该护栏）")
+    parser.add_argument("--deep_quota_ratio", type=float, default=None,
+                        help="deep 档全卷占比上限（诊断用；不传=0.25；1.0=不限制）")
+    parser.add_argument("--paper_total_questions", type=int, default=None,
+                        help="全卷题数（PaperPacer 分摊基准；不传=45 本地默认）")
     args = parser.parse_args()
 
     if args.list_banks:
@@ -1153,6 +1403,38 @@ def main():
     overrides: Dict[str, Any] = {}
     if args.voting_times is not None:
         overrides["verifier_voting_times"] = args.voting_times
+    if args.verifier_deep_final_enabled is not None:
+        overrides["verifier_deep_final_enabled"] = (
+            args.verifier_deep_final_enabled == "true")
+    # ★ 2026-09-16 审计补全：让这两个键的 CLI 真正生效
+    #   （此前只有 getattr 兜底，注释承诺的回退/AB 开关是假的）
+    if getattr(args, "enable_question_type_hint", None) is not None:
+        overrides["enable_question_type_hint"] = (
+            args.enable_question_type_hint == "true")
+    if getattr(args, "verify_reserve_seconds", None) is not None:
+        overrides["verify_reserve_seconds"] = args.verify_reserve_seconds
+    if getattr(args, "enable_web_search", None) is not None:
+        overrides["enable_web_search"] = (args.enable_web_search == "true")
+    if args.verifier_deep_final_min_remaining is not None:
+        overrides["verifier_deep_final_min_remaining"] = (
+            args.verifier_deep_final_min_remaining)
+    if args.verifier_deep_review_temperature is not None:
+        overrides["verifier_deep_review_temperature"] = (
+            args.verifier_deep_review_temperature)
+    if args.verifier_deep_review_min_chars is not None:
+        overrides["verifier_deep_review_min_chars"] = (
+            args.verifier_deep_review_min_chars)
+    if getattr(args, "verifier_deep_review_max_tokens", None) is not None:
+        overrides["verifier_deep_review_max_tokens"] = (
+            args.verifier_deep_review_max_tokens)
+    if args.verifier_diversify_enabled is not None:
+        overrides["verifier_diversify_enabled"] = (
+            args.verifier_diversify_enabled == "true")
+    if args.verifier_disagreement_votes is not None:
+        overrides["verifier_disagreement_votes"] = args.verifier_disagreement_votes
+    if args.verifier_disagreement_temperature is not None:
+        overrides["verifier_disagreement_temperature"] = (
+            args.verifier_disagreement_temperature)
     if args.use_scoring is not None:
         overrides["use_scoring"] = args.use_scoring == "true"
     if args.revise_rounds is not None:
@@ -1161,6 +1443,9 @@ def main():
         overrides["use_proof_channel"] = args.use_proof == "true"
     if args.use_blueprint is not None:
         overrides["use_blueprint"] = args.use_blueprint == "true"
+    if args.blueprint_deps_enabled is not None:
+        overrides["blueprint_deps_enabled"] = (
+            args.blueprint_deps_enabled == "true")
     if args.enable_dag_replan is not None:
         overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
     if args.enable_self_improve is not None:
@@ -1208,6 +1493,31 @@ def main():
             overrides["tier_budget"] = {"fast": _tb[0], "standard": _tb[1], "deep": _tb[2]}
     if args.paper_target_time is not None:
         overrides["paper_target_time"] = args.paper_target_time
+    # 2026-09-15 赛后无约束评测：补齐 7 个旋钮（默认 None ⇒ 不改变比赛口径）
+    if args.max_total_time_seconds is not None:
+        overrides["max_total_time_seconds"] = args.max_total_time_seconds
+    if args.subgoal_stage_budget_sec is not None:
+        overrides["subgoal_stage_budget_sec"] = args.subgoal_stage_budget_sec
+    if args.subgoal_stage_budget_sec_std is not None:
+        overrides["subgoal_stage_budget_sec_std"] = args.subgoal_stage_budget_sec_std
+    if args.max_subgoals is not None:
+        overrides["max_subgoals"] = args.max_subgoals
+    # ---- LeanSearch 引理检索（2026-09-15 重启）----
+    if args.use_leansearch is not None:
+        overrides["use_leansearch"] = args.use_leansearch == "true"
+    if args.leansearch_top_k is not None:
+        overrides["leansearch_top_k"] = args.leansearch_top_k
+    if args.leansearch_max_calls_per_q is not None:
+        overrides["leansearch_max_calls_per_q"] = args.leansearch_max_calls_per_q
+    if args.leansearch_inject_verifier is not None:
+        overrides["leansearch_inject_verifier"] = (
+            args.leansearch_inject_verifier == "true")
+    if args.improve_min_remaining is not None:
+        overrides["improve_min_remaining"] = args.improve_min_remaining
+    if args.deep_quota_ratio is not None:
+        overrides["deep_quota_ratio"] = args.deep_quota_ratio
+    if args.paper_total_questions is not None:
+        overrides["paper_total_questions"] = args.paper_total_questions
 
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,
@@ -1266,6 +1576,25 @@ def main():
         print(f"正确数:     {total_correct}")
         print(f"总准确率:   {total_correct/total_scored:.2%}" if total_scored else "总准确率:   N/A")
         print("=" * 60)
+
+    # ---- LeanSearch 检索埋点落盘（2026-09-15，老师 #44）----
+    # 只在**真正发生过检索**时写文件，避免生成空文件误导后续聚合。
+    # 输出：每行一个事件（call / adopted），末尾一行 summary，便于离线按题统计漏斗。
+    try:
+        from tools.lean_local.lean_search import get_stats as _ls_stats
+        _ls = _ls_stats()
+        _ls_sum = _ls.summary()
+        if _ls_sum.get("calls"):
+            _ls_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "results", "leansearch_calls.jsonl")
+            if _ls.flush(_ls_path):
+                print("LeanSearch 埋点已落盘:", _ls_path)
+                print("  汇总:", json.dumps(_ls_sum, ensure_ascii=False))
+            else:
+                print("LeanSearch 埋点落盘失败（不影响评测结果）")
+    except Exception as _e:  # noqa: BLE001
+        print("LeanSearch 埋点落盘跳过:", str(_e)[:160])
 
 
 if __name__ == "__main__":

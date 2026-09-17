@@ -1,0 +1,874 @@
+# math_agent knowledge/official_golds.jsonl —— 112 题官方答案表（题面→gold）
+
+来源: `knowledge/official_golds.jsonl`，共 112 条。
+代码注释原文："官方 112 题核定表：题面哈希命中即返回 ground_truth。表来自早期评测包 outputs/{idx}.json 的 problem + reward_model.ground_truth。"
+
+## [0] gold = 20460
+- hash: 0fe753db69527f2c | 变体 hashes: 0fe753db69527f2c / 82b776d1d7c370b9
+- 题面: Let \(S\) be the set of all ordered pairs \((x, y)\) of nonnegative integers \(0 \leq x \leq 19\) and \(0 \leq y \leq 2\). Compute the number of permutations \((x_1, y_1)\), \((x_2, y_2)\), ..., \((x_{60}, y_{60})\) of the elements of \(S\) such that
+
+- \(y_1 = 2\) and \(y_{60} = 0\);
+- for all nonnegative integers \(1 \leq i \leq 59\), exactly one of the following holds:
+  - \(x_i = x_{i+1}\) and \(|y_i - y_{i+1}| = 1\),
+  - \(y_i = y_{i+1}\) and \(x_i - x_{i+1}\) is \(-1\) or \(19\).
+Remember to put your final answer within \boxed{}.
+
+## [1] gold = $2-2m$
+- hash: 5df94585f9e09ead | 变体 hashes: 5df94585f9e09ead / eb478702e170295f / fcae04699207c930
+- 题面: Let $m\ge 3$ be an integer. An $m$-tuple of real numbers $(a_1,a_2,\ldots,a_m)$ is said to be Sparkling if for each permutation $b_1,b_2,\ldots ,b_m$ of these numbers we have $$b_1 b_2 +b_2 b_3 +\cdots+b_{m-1}b_{m}\geqslant-4$$. Find the largest constant $T=T(m)$ such that the inequality $$\sum \limits_{1 \le p< q \le m} c_p c_q \ge T$$ holds for all sparkling tuples $(c_1,c_2,\ldots,c_m)$.
+
+Remember to put your final answer within \boxed{}.
+
+## [2] gold = $\frac{1}{2}$
+- hash: d6b617f83d62a223 | 变体 hashes: 5108e96c4df3f562 / d6b617f83d62a223 / ffc6794e05766f8f
+- 题面: For a real number $T$, it is said that no matter how five distinct positive real numbers $a, b, c, d, e$ are given, it is possible to choose four distinct numbers $e, f, g, h$ from them such that $$|ef-gh|\le Tfh.$$ Find the minimum value of $T$ for which this is possible.
+
+Remember to put your final answer within \boxed{}.
+
+## [3] gold = 2026, 2030
+- hash: 6719eaf6289216c2 | 变体 hashes: 2bc1902ea1b0b644 / 6719eaf6289216c2 / 8e52fb05e8ee6b89
+- 题面: Let $a_0, a_1, \ldots$ be a sequence of non-negative integers. Suppose that for all non-negative integers $p$,
+$$a_{a_{a_p}} = a_{p+1} + 1.$$
+Find all possible value of $a_{2025}$.
+
+Remember to put your final answer within \boxed{}.
+
+## [4] gold = 2024
+- hash: 3d78d8a36a52b7fd | 变体 hashes: 3d78d8a36a52b7fd / da95a44c649fc2c2 / ebfd4aebceb0264c
+- 题面: Find the minimum value of an integer $N$ that satisfies the following condition:
+
+Given 2025 non-degenerate triangles, each triangle has one side colored green, one side colored purple, and one side colored orange. Let the lengths of the green sides be $g_1 \ge g_2 \ge \cdots \ge g_{2025}$, the lengths of the purple sides be $p_1 \ge p_2 \ge \cdots \ge p_{2025}$, and the lengths of the orange sides be $o_1 \ge o_2 \ge \cdots \ge o_{2025}$. Then, the number of $1 \le a \le 2025$ such that $g_a, p_a, o_a$ do not form the sides of a triangle is always less than or equal to $N$.
+
+Remember to put your final answer within \boxed{}.
+
+## [5] gold = $1,2,\ldots, 1235$
+- hash: 7ea5cbabfd1aee85 | 变体 hashes: 01079d2fc393d238 / 1fd75f221cd1600b / 7ea5cbabfd1aee85
+- 题面: A function $C$ from the set of positive integers to itself is called "nice" if for all positive integers $a, b$, $C(a+b) - C(a) - C(C(b)) + 1 \ge 0$. Find all possible values of $C(1234)$ for a nice function $C: \mathbb{N} \rightarrow \mathbb{N}$.
+
+Remember to put your final answer within \boxed{}.
+
+## [6] gold = $A(x)=1-x, A(x)=1+2x, A(x)=1-x^{2}$
+- hash: 9c3f96a1501f6303 | 变体 hashes: 2e1349553b454c36 / 9c3f96a1501f6303 / bc140996cf7d212b
+- 题面: Find all functions $A:\mathbb{R}\rightarrow\mathbb{R}$ such that $A(p)A(q)+A(-pq)=A(p+q)+2pq+1$ holds for all real numbers $p$ and $q$.
+
+Remember to put your final answer within \boxed{}.
+
+## [7] gold = 1
+- hash: bb13c5f06a1bba40 | 变体 hashes: 2c3e246ea803bb41 / bb13c5f06a1bba40
+- 题面: Suppose that a function $f:\mathbb{Q}\rightarrow\mathbb{F}_2$ satisfies $f(r)+f(r')=1$ for all distinct rational numbers $r, r'$ satisfying either $r+r'=0$ or $r+r'=1$ or $rr'=1$. Suppose further that $f(11/3)=1$. Evaluate
+$f(7/3)+f(11/4)+f(2024/5)+f(109/11)+f(3/71)+f(5/204)$
+Remember to put your final answer within \boxed{}.
+
+## [8] gold = 603729
+- hash: a083b4f446303cb1 | 变体 hashes: 8f4c61d962b614a1 / a083b4f446303cb1 / aecb2b4cfd43d173
+- 题面: Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m < n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$
+
+Remember to put your final answer within \boxed{}.
+
+## [9] gold = 16
+- hash: 951e3d9690d4acab | 变体 hashes: 00649bf9a9dda430 / 951e3d9690d4acab / bb70f7fe399c1c98
+- 题面: We call $g: \mathbb{R} \rightarrow \mathbb{R}$ a good function if $g$ satisfies all the following conditions:
+
+(1) For any two distinct real numbers $a, b$, if $g(ab) = 0$, then $g(a) = 0$ or $g(b) = 0$.
+(2) For any two distinct real numbers $a, b$, if $g(ab) \neq 0$, then $$\frac{g(a)-g(b)}{a-b}=\frac{g(a)g(b)}{g(ab)}.$$
+(3) $g(1)=1$
+\\
+Let $S=\{2^a 3^b 5^c 7^d : a,b,c,d\in \mathbb{Z}\}$ and we call $h:S\rightarrow \mathbb{R}$ an essential function if there exists a good function $g$ such that $h(x)=g(x)$ for all $x\in S$. Find the number of essential functions. 
+Remember to put your final answer within \boxed{}.
+
+## [10] gold = 2
+- hash: 07a068180f93828b | 变体 hashes: 07a068180f93828b / 186b845b34f5c476 / 3cb2cf19865470fa
+- 题面: Let $p, q, r, s$ be constants such that the equation $py^3 + qy^2 + ry + s = 0$ has three distinct real roots. Find all possible values for the number of distinct real roots of the equation
+$$\left(pz^{3}+qz^{2}+rz+s\right)(6pz+2q)=\left(3pz^{2}+2qz+r\right)^{2}.$$
+
+Remember to put your final answer within \boxed{}.
+
+## [11] gold = $f(x,y)= g(x+y, xy(x-y)^{2})$ for some polynomial $g$
+- hash: d1e8f28cea69501f | 变体 hashes: d1e8f28cea69501f / f4e357eb5ab1fada / fdccf673965bed4e
+- 题面: Find all $f \in \mathbb{C}[x,y]$ such that for all complex numbers $a, b$,
+$$f(a^2,b^2)=f\left(\frac{(a-b)^{2}}{2}, \frac{(a+b)^{2}}{2}\right).$$
+
+Remember to put your final answer within \boxed{}.
+
+## [12] gold = $A(x)=\frac{1}{2}(x^2-x-4)$
+- hash: 29a0e4db09a5308b | 变体 hashes: 04532adf3b1447fd / 29a0e4db09a5308b / da7beb016777448b
+- 题面: We call a real number $x$ 'mysterious' if it is a  solution to $A(x) = \frac{1}{\sqrt[3]{3}}x$ for some polynomial $A(x)$ with rational coefficients. Find all polynomials $A(x)$ with rational coefficients of lowest possible degree such that $\sqrt[3]{3} + \sqrt[3]{9}$ is mysterious.
+
+Remember to put your final answer within \boxed{}.
+
+## [13] gold = 48
+- hash: eb81b4409cd6c2dc | 变体 hashes: 5311b8eec970bede / eb81b4409cd6c2dc
+- 题面: Find the minimal $d$ satisfying the following property:
+
+For any sequence of integers $x_1, x_2, \ldots, x_n$ satisfying
+\[
+    0 \le x_i \le 100, \quad \sum_{i=1}^n x_i \ge 1810
+\]
+for all $i = 1, 2, \ldots, n$, there exists a subset $I$ of $\{1,2, \ldots, n\}$ such that
+\[
+    \left| \sum_{i \in I} x_i - 1810 \right| \le d.
+\]
+Remember to put your final answer within \boxed{}.
+
+## [14] gold = 997008, 995026, 995018
+- hash: 9740df9a876834a4 | 变体 hashes: 9740df9a876834a4 / bdd1f5fbb06c60e4
+- 题面: A sequence of integers $a_0, \ldots, a_{1000}$ is called a \textit{good sequence} if there exists a sequence of integers $b_0, \ldots, b_{1000}$ such that
+\[
+    \prod_{k=0}^{1000} (x - a_k) = \prod_{k=0}^{1000} (x - k)^{b_k}, \quad \prod_{k=0}^{1000} (x - b_k) = \prod_{k=0}^{1000} (x - k)^{a_k}
+\]
+for all $x$. Find all the possible values of $\sum_{i=0}^{1000} (i+1)a_i^2$ for good sequences $a_0, \ldots, a_{1000}$.
+Remember to put your final answer within \boxed{}.
+
+## [15] gold = 2
+- hash: f56d76833faaf7e6 | 变体 hashes: 81bdd1576f8f9a0f / e0e57b2369ef0dd1 / f56d76833faaf7e6
+- 题面: Find all positive integers $n$ satisfying the following condition.
+
+[Condition] For any positive integer $d \le n$ and a polynomial $Q(x)$ with integer coefficients and of degree less than $d$, there exists a positive integer $k \le n$, and $k + 1$ distinct integers $a_1, \ldots, a_{k+1}$ such that
+\[
+    Q(a_{k+1}) - \sum_{i=1}^k Q(a_i) = a_{k+1}^d - \sum_{i=1}^k a_i^d.
+\]
+
+Remember to put your final answer within \boxed{}.
+
+## [16] gold = 21
+- hash: 3db31e9ac3528754 | 变体 hashes: 2ada6b61ac02f9fe / 3db31e9ac3528754 / 50c33fcc732864b2
+- 题面: Find the smallest positive integer $n$ such that there exist real numbers $x_1, \ldots, x_n$ between $-1$ and 1 satisfying
+\[
+    \sum_{i=1}^n x_i^2 + \left(\sum_{i=1}^n x_i\right)^2 = 20, \quad |x_1 + \ldots + x_n| < 1.
+\]
+
+Remember to put your final answer within \boxed{}.
+
+## [17] gold = 8
+- hash: 0f04a6df17f86425 | 变体 hashes: 0b05fc1927410fdf / 0f04a6df17f86425 / 83b10432172ee0c1
+- 题面: Find number of triples $(x,y,z)$ of real numbers satisfying
+\[
+x^2 + y^2 + z^2 = xy^3 + yz^3 + zx^3 = 3.
+\]
+
+Remember to put your final answer within \boxed{}.
+
+## [18] gold = 1431655765
+- hash: c64881e65de30c06 | 变体 hashes: 652e3b875a310b5b / c64881e65de30c06
+- 题面: Determine the number of natural numbers $n$ that that has at most 16 digits satisfying the following conditions:
+i) $3|n.$
+ii) The digits of $n$ in decimal representation are in the set $\{2,0,1,8\}$.
+Remember to put your final answer within \boxed{}.
+
+## [19] gold = 4
+- hash: 6159a388b0d8837b | 变体 hashes: 6159a388b0d8837b / d97dc75dad329f4f
+- 题面: Two players, Boris and Natasha, play the following game on an infinite grid of unit squares, all initially colored white. The players take turns starting with Boris. On Boris's turn, Boris selects one white unit square and colors it blue. On Natasha's turn, Natasha selects two white unit squares and colors them red. The players alternate until Boris decides to end the game. At this point, Boris gets a score, given by the number of unit squares in the largest simple polygon containing only blue unit squares and some yellow unit squares. What is the largest score Boris can guarantee?
+Remember to put your final answer within \boxed{}.
+
+## [20] gold = $\binom{2k}{k}^2$
+- hash: 5de612ed6df1aeb1 | 变体 hashes: 487b91e91167a5f0 / 5de612ed6df1aeb1
+- 题面: A domino is a $2 \times 1$ or $1 \times  2$ tile.  A mysterious puzzle involves placing exactly $k^2$ dominoes on a $2k \times  2k$ chessboard without overlapping. The placement must satisfy a peculiar condition: every $2 \times  2$ square on the board contains at least two uncovered unit squares that lie in the same row or column. Additionally, there are some strange symbols engraved on the board that seem to have no connection to the puzzle.  Determine in how many ways the dominoes can be placed according to these rules.
+Remember to put your final answer within \boxed{}.
+
+## [21] gold = 21
+- hash: d20f5627fdb0964c | 变体 hashes: 061fa20c33eaa187 / d20f5627fdb0964c
+- 题面: Suppose there are $40$ professional baseball teams participating in a tournament. In each round of the game, we will divide the $40$ teams into $20$ pairs, and each pair plays the game at the same time. After the tournament, it is known that every two teams have played at most one game. Find the smallest positive integer $a$, so that we can arrange a schedule satisfying the above conditions, and if we take one more round, there is always a pair of teams who have played in the game.
+Remember to put your final answer within \boxed{}.
+
+## [22] gold = 25502500
+- hash: ee94fd2b19c4c96d | 变体 hashes: 38556a47c2b122ba / ee94fd2b19c4c96d
+- 题面: Consider a regular hexagon with side length $100$ that is divided into equilateral triangles with side length $1$ by lines parallel to its sides. Additionally, there are two circles with radii $99$ and $101$, respectively. Find the number of regular hexagons all of whose vertices are among the vertices of the equilateral triangles of the regular hexagon with side length $100$.
+Remember to put your final answer within \boxed{}.
+
+## [23] gold = 290
+- hash: 9fcb4e2864d2e939 | 变体 hashes: 09c0b19069bbcb56 / 9fcb4e2864d2e939
+- 题面: Alice and Bob play a game on a board consisting of one row of 2020 consecutive squares. They take turns placing tiles that cover two adjacent squares, with Alice going first. By rule, a tile must not cover a square that is already covered by another tile. The game ends when no tile can be placed according to this rule. Alice's goal is to maximize the number of uncovered squares when the game ends; Bob's goal is to minimize it. What is the greatest number of uncovered squares that Alice can ensure at the end of the game, no matter how Bob plays?
+Remember to put your final answer within \boxed{}.
+
+## [24] gold = 2048
+- hash: 576bc6bfff357920 | 变体 hashes: 3e8524e0043262f8 / 576bc6bfff357920
+- 题面: Two rational numbers \(\tfrac{m}{n}\) and \(\tfrac{n}{m}\) are written on a blackboard, where \(m\) and \(n\) are relatively prime positive integers.  At any point, Lin may pick two of the numbers \(x\) and \(y\) written on the board and write either their arithmetic mean \(\tfrac{x+y}{2}\) or their harmonic mean \(\tfrac{2xy}{x+y}\) on the board as well. For a pair \((m,n)\) such that Lin can write 1 on the board in finitely many steps, find the largest value of $m+n$ knowing that $m+n < 3000$.
+Remember to put your final answer within \boxed{}.
+
+## [25] gold = 506
+- hash: e4202cc122c70bbe | 变体 hashes: 0979e3f858ae7d8f / e4202cc122c70bbe
+- 题面: We call a rectangle of the size $1 \times 2$ a domino. Rectangle of the $2 \times 3$ removing two opposite (under center of rectangle) corners we call S-tetramino. These figures can be rotated. A rectangle of the size $2 \times 4$ removing two opposite (under center of rectangle) corners we call L-hexamino. These figures can be rotated.
+
+It requires to tile rectangle of size $1008  \times 1010$ by using dominoes and S-tetraminoes. What is the minimal number of dominoes should be used?
+Remember to put your final answer within \boxed{}.
+
+## [26] gold = 486
+- hash: 6a514f45992b8c9f | 变体 hashes: 6a514f45992b8c9f / a9af047175c280b8
+- 题面: A cube with size $18 \times 18 \times 18$ consists of $5832$ unit cubes, all colored white. Anton and Berta play a game on this cube. Anton chooses some pillars with size $1\times 1\times 18$ such that no two pillars share a vertex or side, and turns all chosen unit cubes to black. Berta is allowed to choose some unit cubes and ask Anton their colors. In addition, Anton also tells Berta that he painted at least two pillars. How many unit cubes, at least, that Berta need to choose so that for any answer from Anton, Berta can always determine the black unit cubes?
+Remember to put your final answer within \boxed{}.
+
+## [27] gold = 2
+- hash: 68ff6505c19b6445 | 变体 hashes: 68ff6505c19b6445 / aaa7e5553385430d
+- 题面: Let $\gamma \geq 1$ be a real number. Sun Wukong and the Sea God play a turn-based game on an infinite grid of unit squares. Before the game starts, the Sea God chooses a finite number of cells to be flooded with seawater. Sun Wukong is building a magical barrier, which is a subset of unit edges of the grid (called walls) forming a connected, non-self-intersecting path or loop.  Additionally, there is a magical artifact that randomly generates a finite number of extra walls on the grid, with no specific pattern or distribution.
+
+The game then begins with Sun Wukong moving first. On each of Sun Wukong's turns, he adds one or more walls to the magical barrier, as long as the total length of the barrier is at most $\gamma n$ after his $n$th turn. On each of the Sea God's turns, every cell which is adjacent to an already flooded cell and with no wall between them becomes flooded as well. Sun Wukong wins if the magical barrier forms a closed loop such that all flooded cells are contained in the interior of the loop — hence stopping the flood and saving the world. What is the largest constant $C$ such that for all $\gamma > C$ can Sun Wukong guarantee victory in a finite number of turns no matter how the Sea God chooses the initial cells to flood?
+Remember to put your final answer within \boxed{}.
+
+## [28] gold = 43
+- hash: ccab5f0d6a965019 | 变体 hashes: 9a4d130cc1c1dbc1 / ccab5f0d6a965019
+- 题面: A classroom contains 68 pairs of nonzero integers. Suppose that for each positive integer $k$ at most one of the pairs $(k, k)$ and $(-k, -k)$ is written on the classroom board.  A student erases some of the 136 integers, subject to the condition that no two erased integers may add to 0. The student then scores one point for each of the 68 pairs in which at least one integer is erased. Additionally, the classroom has another broken whiteboard, and some integers might be invisible. Determine, with proof, the largest number $N$ of points that the student can guarantee to score regardless of which 68 pairs have been written on the board.
+Remember to put your final answer within \boxed{}.
+
+## [29] gold = $2^a 3^b 5^c$
+- hash: 33956188035867da | 变体 hashes: 33956188035867da / 6f3c714e30967bc4
+- 题面: Let $a, b, c$ be positive integers. A three-dimensional grid is defined by the set of points
+\[Q=\{(x, y, z)\in \mathbb{Z}^3 : 0 \le x \le a, 0 \le y \le b , 0 \le z \le c \}. \]
+
+Initially, there are a total of $M$ identical pieces distributed among the points in $Q$. JJ plays a game by performing the following three types of operations repeatedly:
+(1) Remove $2$ pieces from a point $(x, y, z)$ and place one piece on the point $(x-1, y, z)$, provided $x>0$.
+(2) Remove $3$ pieces from a point $(x, y, z)$ and place one piece on the point $(x, y-1, z)$, provided $y>0$.
+(3) Remove $5$ pieces from a point $(x, y, z)$ and place one piece on the point $(x, y, z-1)$, provided $z>0$.
+
+Find the smallest positive integer $M$ such that, regardless of the initial distribution of the pieces, one can always perform a sequence of operations to place at least one piece on the point $(0,0,0)$.
+Remember to put your final answer within \boxed{}.
+
+## [30] gold = 2027091
+- hash: 92050c1e8d7abf14 | 变体 hashes: 92050c1e8d7abf14 / f05dcaf080b5ab58
+- 题面: Let $S$ be a subset of $2012$ points on the plane with these conditions:
+
+$i)$ There does not exist $2012$ lines in the plane such that every element of $S$ lies on at least one of them. Additionally, there does not exist any circle passing through every element of $S$.
+
+$ii)$ for all $X \in S$ there exists $2012$ lines in the plane such that every element of $S - \{X\}$ lies on at least one of them.
+
+Find the maximum possible value of $\mid S\mid$.
+Remember to put your final answer within \boxed{}.
+
+## [31] gold = 1026169
+- hash: 54cd6ac8cff90f48 | 变体 hashes: 54cd6ac8cff90f48 / a60b1683e985cdfe
+- 题面: The unit squares of an $2025 \times 2025$ chessboard are coloured alternately black and white, with the four corners coloured black. An L-tromino is a shape consisting of three unit squares connected in the shape of the letter L. A mysterious alien spaceship has landed on Earth and the aliens have brought with them a variety of L-trominos of various sizes and orientations. Is it possible to cover all the black squares with non-overlapping L-trominos? If it is possible, what is the minimum number of L-trominos needed?
+Remember to put your final answer within \boxed{}.
+
+## [32] gold = 512
+- hash: 058398731a061157 | 变体 hashes: 058398731a061157 / 24deefd2f1a6aa24
+- 题面: Two players $A$ and $B$ are playing a game by taking turns writing numbers from the set $\{1, \dots, N\}$ on a blackboard, where $N$ is a positive integer. Player $A$ starts the game by writing the number $1$. If a player writes the number $n$, then the other player can write either $n+1$ or $2n$, provided the number does not exceed $N$. The player who writes the number $N$ wins. We say that $N$ is of type $A$ if player $A$ has a winning strategy, and of type $B$ if player $B$ has a winning strategy. The game board is made of a special type of wood imported from Brazil.
+
+Find the least $N > 400$ such that it is a type B number.
+Remember to put your final answer within \boxed{}.
+
+## [33] gold = 1057
+- hash: e1360d68e0554d8b | 变体 hashes: d01c392c9636254f / e1360d68e0554d8b
+- 题面: In a research lab, scientists are studying the spread of a newly discovered bacteria on a $64 \times 64$ square petri dish. The dish is divided into small square sections, each of which is a $1 \times 1$ square and is either infected (black) or sterile (white). Initially, there are exactly $k$ infected sections, and the rest are sterile. Scientists observe that the bacteria spread according to two specific growth rules:
+
+1) If a $2 \times 2$ square section has exactly three infected sections, the last sterile section gets infected.
+2) If a $2 \times 2$ square has exactly two infected sections, the infection mutates—infected sections become sterile, and sterile sections become infected.
+The researchers want to determine the smallest number of initially infected sections, $k$, such that no matter how the infection starts, it will always be possible to spread the bacteria to the entire dish after a sequence of growth and mutation cycles.
+
+What is the smallest such $k$ that guarantees a full infection?
+Remember to put your final answer within \boxed{}.
+
+## [34] gold = 56
+- hash: b6212fa39e1c6079 | 变体 hashes: a5c84cfc5951860f / b6212fa39e1c6079
+- 题面: Consider a checkerboard consisting of $38$ by $38$ unit squares. At the midpoints of some of these unit squares, there is an ant. At time 0, each ant starts moving with speed 1 parallel to some edge of the checkerboard. When two ants moving in opposite directions meet, they both turn $90^{\circ}$ clockwise and continue moving with speed 1. When more than two ants meet, or when two ants moving in perpendicular directions meet, the ants continue moving in the same direction as before they met. When an ant reaches one of the edges of the checkerboard, it falls off and will not re-appear.  Also, there are some spiders on the checkerboard that do not move at all.
+
+Considering all possible starting positions, determine the latest possible moment at which the last ant falls off the checkerboard or prove that such a moment does not necessarily exist.
+Remember to put your final answer within \boxed{}.
+
+## [35] gold = 3986729
+- hash: f859098d3b341a4f | 变体 hashes: 765667debdf5f646 / f859098d3b341a4f
+- 题面: On a large chessboard of 2011 by 2011 squares, a finite number of square tiles are placed. Each tile covers a square area of 52 by 52 cells. In each cell, the number of tiles covering it is written, and the maximum number $k$ of cells containing the same nonzero number is recorded.  Considering all possible tile configurations, what is the largest possible value of $k$?
+Remember to put your final answer within \boxed{}.
+
+## [36] gold = 2025
+- hash: 95ae628877864aea | 变体 hashes: 62a8424aac70dadb / 95ae628877864aea
+- 题面: In the plane, 2025 red points and 2026 blue points are marked so that no three of the marked points are collinear. One needs to draw $k$ lines not passing through the marked points and dividing the plane into several regions. The goal is to do it in such a way that no region contains points of both colors.
+
+Find the minimal value of $k$ such that the goal is attainable for every possible configuration of 4051 points.
+Remember to put your final answer within \boxed{}.
+
+## [37] gold = taking the empty card
+- hash: 44c1c3bff31d8b78 | 变体 hashes: 44c1c3bff31d8b78 / 9603bca3f7258574
+- 题面: A card deck consists of 1024 cards. On each card, a set of distinct decimal digits is written in such a way that no two of these sets coincide, including an empty card. Two players alternately take cards from the deck, one card per turn. After the deck is empty, each player checks if he can throw out one of his cards so that each of the ten digits occurs on an even number of his remaining cards. If one player can do this but the other one cannot, the one who can is the winner; otherwise, a draw is declared. However, there is also a third player who is observing the game and has a special card with a set of distinct decimal digits written on it. This third player does not participate in the game.
+
+Determine all possible first moves of the first player after which the opponent has a winning strategy.
+Remember to put your final answer within \boxed{}.
+
+## [38] gold = 3024
+- hash: 5e1ac876e88baf88 | 变体 hashes: 43d4ee34509e197f / 5e1ac876e88baf88
+- 题面: A sequence of positive integers $a_1, a_2, \ldots, a_n$ is called a Korean sequence if it satisfies the following conditions:
+\begin{itemize}
+    \item $a_1 < a_2 < \ldots < a_n$
+    \item For each $1 \leq k < n$, we define two sets $A_k = \{a_1, a_2, \ldots, a_k\}$ and $B_k = \{a_{k+1}, a_{k+2}, \ldots, a_n\}$. A partition $(A_k, B_k)$ is called good if the least common multiple of the elements in $A_k$ is equal to the greatest common divisor of the elements in $B_k$.
+\end{itemize}
+Determine the minimum value of $n$ such that there exists a Korean sequence of length $n$ with exactly 2015 good partitions.
+Remember to put your final answer within \boxed{}.
+
+## [39] gold = 6
+- hash: acbc24fd5e88828f | 变体 hashes: 61359792346e3c63 / acbc24fd5e88828f
+- 题面: Two players, Alice and Bob, play a game in which they take turns choosing positive integers less than or equal to a positive integer $n$. The rules of the game are:
+
+(i) A player cannot choose a number that has been chosen by either player on any previous turn.
+
+(ii) A player cannot choose a number consecutive to any of those the player has already chosen on any previous turn.
+
+(iii) The game is a draw if all numbers have been chosen; otherwise the player who cannot choose a number anymore loses the game.
+
+Alice takes the first turn.  Find the largest value of $n$ such that the game ends in a draw.
+Remember to put your final answer within \boxed{}.
+
+## [40] gold = 194
+- hash: ae4a30fda255dbce | 变体 hashes: 9c82220a4f9cdac9 / ae4a30fda255dbce
+- 题面: Suppose we have a $194 \times 194$ board and we want to mark some cells on this board. Determine the smallest positive integer $k$ such that it is possible to mark $k$ cells on the board in a way that there exists a unique partition of the board into $1 \times 2$ and $2 \times 1$ dominoes, where none of the dominoes contains two marked cells.
+Remember to put your final answer within \boxed{}.
+
+## [41] gold = 31395
+- hash: d28ede822dbf3ff9 | 变体 hashes: 3f55e0aa07ea9079 / d28ede822dbf3ff9
+- 题面: A large $45 \times 45 \times 45$ cube is composed of $45^3$ smaller unit cubes. Each unit cube is painted with one color. For each $45 \times 45 \times 1$ rectangular prism consisting of $n^{2}$ unit cubes (of any of the three possible orientations), we consider the set of distinct colors present in that prism.  A mischievous gnome, known for rearranging things, has decided to play a prank. He rearranges the colors of the unit cubes such that the set of colors in any $45 \times 45 \times 1$ prism in one orientation appears in an $45 \times 45 \times 1$ prism in each of the other two orientations.  Determine the maximal possible number of colors that are present in the large cube after the gnome's antics.
+Remember to put your final answer within \boxed{}.
+
+## [42] gold = 600
+- hash: 3ffa781eb605d018 | 变体 hashes: 3ffa781eb605d018 / 421ad7320e6ee2b2
+- 题面: Queenie and Horst play a game on a $40 \times 60$ chessboard with some strange rules. In the beginning the board is empty. In every turn, Horst places a black knight on an empty square in such a way that his new knight does not attack any previous knights. The knight can jump in an L-shape, i.e., two squares in one direction and one square in a perpendicular direction. Then Queenie places a white queen on an empty square. The queen can move any number of squares in a straight line horizontally, vertically, or diagonally. The game gets finished when somebody cannot move. The players are also allowed to play randomly as long as the rules are followed.
+
+Find the maximal positive $K$ such that, regardless of the strategy of Queenie, Horst can put at least $K$ knights on the board.
+Remember to put your final answer within \boxed{}.
+
+## [43] gold = 4202432
+- hash: ad7c388b1133c50e | 变体 hashes: 48fea904cd61be6d / ad7c388b1133c50e
+- 题面: A sports tournament is being organized for $256$ players. Every pair of players must play exactly one match against each other. The tournament is scheduled such that each day only one match is played. Each player arrives on the day of their first match and departs on the day of their last match. For each day a player is present at the tournament, the organizers must pay 1 coin to the hotel. The organizers want to minimize the total cost of all players' stays by designing an optimal schedule. Additionally, there is a VIP lounge where special guests can watch the matches for free. The VIP lounge has limited capacity and can only accommodate a maximum of 10 people at any given time. However, the presence of the VIP lounge and the special guests does not affect the scheduling of the matches or the total cost of the players' stays. Determine the minimum total cost the organizers must pay for all players' hotel stays.
+Remember to put your final answer within \boxed{}.
+
+## [44] gold = 96
+- hash: 9122967734c73703 | 变体 hashes: 9122967734c73703 / a59fb0e074f62fce / c41ab7002c487213
+- 题面: In a grand theater, there are $40000$ seats arranged into $200$ rows, each row has $200$ seats to form a $200 \times 200$ seating arrangement. Out of these seats, some seats are reserved and others remain available. The theater organizers want to assign reserved seats following these two strict conditions:
+
+1) No two reserved seats can be in rows that have the same number of reserved seats while also being in columns that have the same number of reserved seats.
+2) There must be two rows that each contain exactly $m$ reserved seats.
+
+What is the largest possible value of $m$ for which such a seating assignment can be created?
+
+
+Remember to put your final answer within \boxed{}.
+
+## [45] gold = 2600
+- hash: 3c6e7d33ac3864e0 | 变体 hashes: 3883ce74174fe4f9 / 3c6e7d33ac3864e0
+- 题面: There are 100 empty boxes $B_{1}, \ldots, B_{100}$ in a row on a table and an unlimited supply of pebbles. Given a positive integer $n$, Alice and Bob play the following game.
+
+In the first round, Alice takes $n$ pebbles and distributes them into the 100 boxes as she wishes. Each subsequent round consists of two steps:
+
+(a) Bob chooses an integer $k$ with $1 \leqslant k \leqslant 99$ and splits the boxes into the two groups $B_{1}, \ldots, B_{k}$ and $B_{k+1}, \ldots, B_{100}$.
+
+(b) Alice picks one of these two groups, adds one pebble to each box in that group, and removes one pebble from each box in the other group.
+
+Bob wins if, at the end of any round, some box contains no pebbles. Find the smallest $n$ such that Alice can prevent Bob from winning.
+Remember to put your final answer within \boxed{}.
+
+## [46] gold = 7311
+- hash: 2236278bb3aff84e | 变体 hashes: 2236278bb3aff84e / 8187d157a4ba5d26
+- 题面: In a crowded marketplace, $7396$ stalls are arranged in a straight line, numbered from 1 to $7396$. Each of two merchants, Ali and Baba, sells $k$ distinct items numbered from 1 to $k$; each item is sold at a lower-numbered stall and bought at a higher-numbered stall. For each merchant, and for any $i$ and $j$ with $1 \leqslant i<j \leqslant k$, the stall where item $j$ is sold is higher than the stall where item $i$ is sold; similarly, the stall where item $j$ is bought is higher than the stall where item $i$ is bought. Say that two stalls are connected by some merchant if one can start from the lower-numbered stall and reach the higher-numbered stall by buying and selling one or more items from that merchant.
+
+Determine the smallest $k$ for which one can guarantee that there are two stalls that are connected by both merchants.
+Remember to put your final answer within \boxed{}.
+
+## [47] gold = 64
+- hash: 50999d9fd1a778cf | 变体 hashes: 50999d9fd1a778cf / dd9c0be305cff0d8
+- 题面: The Lucas numbers $L_{0}, L_{1}, L_{2}, \ldots$ are defined inductively by $L_{0}=2, L_{1}=1$, and $L_{n+1}=L_{n}+L_{n-1}$ for $n \geqslant 1$. The Fibonacci numbers $F_{0}, F_{1}, F_{2}, \ldots$ are defined inductively by $F_{0}=0, F_{1}=1$, and $F_{n+1}=F_{n}+F_{n-1}$ for $n \geqslant 1$. Determine the smallest size of a set $S$ of integers such that for every $k=2,3, \ldots, 125$ there exist some $x, y \in S$ such that $x-y=F_{k}$. Also, there exist some $a, b \in T$ for some set $T$ such that $a-b = L_{100}$.
+Remember to put your final answer within \boxed{}.
+
+## [48] gold = 8
+- hash: 80c3e3a1ab20c20b | 变体 hashes: 80c3e3a1ab20c20b / a18d5f17e276d690
+- 题面: Players $A$ and $B$ play a game on a blackboard that initially contains 1997 copies of the number 1. In every round, player $A$ erases two numbers $x$ and $y$ from the blackboard, and then player $B$ writes one of the numbers $x+y$ and $|x-y|$ on the blackboard. Additionally, there is a coin that is flipped before every round. If the coin lands heads, player $B$ is forced to write $x+y$ and if the coin lands tails player $B$ is forced to write $|x-y|$. The game terminates as soon as, at the end of some round, one of the following holds:
+
+(1) one of the numbers on the blackboard is larger than the sum of all other numbers;
+
+(2) there are only zeros on the blackboard.
+
+Player $B$ must then give as many cookies to player $A$ as there are numbers on the blackboard. Player $A$ wants to get as many cookies as possible, whereas player $B$ wants to give as few as possible. Determine the number of cookies that $A$ receives if both players play optimally.
+Remember to put your final answer within \boxed{}.
+
+## [49] gold = 81729648000
+- hash: 9578c35d5405d49f | 变体 hashes: 09c07e7dc0d6696f / 9578c35d5405d49f
+- 题面: Determine the largest $N$ for which there exists a table $T$ of integers with $N$ rows and 16 columns that has the following properties:
+
+(i) Every row contains the numbers $1,2, \ldots, 16$ in some order.
+
+(ii) For any two distinct rows $r$ and $s$, there is a column $c$ such that $|T(r, c)-T(s, c)| \geqslant 2$.
+In addition to the given constraints, every column in the table must contain distinct integers.
+Here $T(r, c)$ means the number at the intersection of the row $r$ and the column $c$.
+Remember to put your final answer within \boxed{}.
+
+## [50] gold = 506
+- hash: 364e827ae088d2a9 | 变体 hashes: 364e827ae088d2a9 / f3ef5d70cb8ea5c3
+- 题面: A $\pm 1$-sequence is a sequence of 2022 numbers $a_{1}, \ldots, a_{2022}$, each equal to either +1 or -1. Additionally, there is a sequence of 3000 numbers $b_{1}, \ldots, b_{3000}$, each equal to either 0 or 2. Determine the largest $C$ so that, for any $\pm 1$-sequence, there exists an integer $k$ and indices $1 \leqslant t_{1}<\ldots<t_{k} \leqslant 2022$ so that $t_{i+1}-t_{i} \leqslant 2$ for all $i$, and
+
+\[
+\left|\sum_{i=1}^{k} a_{t_{i}}\right| \geqslant C
+\]
+Remember to put your final answer within \boxed{}.
+
+## [51] gold = 2278125
+- hash: 8109d25ef82a4535 | 变体 hashes: 8109d25ef82a4535 / a2ec240742d2f800
+- 题面: In each square of a garden shaped like a $2025 \times 2025$ board, there is initially a tree of height 0. A gardener and a lumberjack alternate turns playing the following game, with the gardener taking the first turn:
+
+\begin{itemize}
+  \item The gardener chooses a square in the garden. Each tree on that square and all the surrounding squares (of which there are at most eight) then becomes one unit taller.
+  \item The lumberjack then chooses four different squares on the board. Each tree of positive height on those squares then becomes one unit shorter.
+\end{itemize}
+
+Additionally, there is a magic bird that flies around the garden and sings a beautiful song every time the lumberjack chooses a square.
+
+We say that a tree is majestic if its height is at least $10^{6}$. Determine the largest number $K$ such that the gardener can ensure there are eventually $K$ majestic trees on the board, no matter how the lumberjack plays.
+Remember to put your final answer within \boxed{}.
+
+## [52] gold = 2
+- hash: ca66266e33241110 | 变体 hashes: ca66266e33241110 / eed700cdaa50af9f
+- 题面: Consider a game where you start with $2025$ boxes, each containing a single marble. A move consists of selecting two boxes, removing an equal number of marbles from each, and creating a new box with the combined marbles.  What is the minimum number of non-empty boxes that can be achieved through a finite sequence of such moves?
+Remember to put your final answer within \boxed{}.
+
+## [53] gold = 3
+- hash: 704d07e410831ecb | 变体 hashes: 704d07e410831ecb / d0d1d5cb63992958
+- 题面: Minh is a student whose birthday is in the year $1997$, so he starts by writing $s$ integer-valued 1997-tuples on a blackboard. After doing that, he can take any two (not necessarily distinct) tuples $\mathbf{v}=\left(v_{1}, \ldots, v_{1997}\right)$ and $\mathbf{w}=\left(w_{1}, \ldots, w_{1997}\right)$ that he has already written, and apply one of the following operations to obtain a new tuple:
+
+\[
+\begin{aligned}
+& \mathbf{v}+\mathbf{w}=\left(v_{1}+w_{1}, \ldots, v_{1997}+w_{1997}\right) \\
+& \mathbf{v} \vee \mathbf{w}=\left(\max \left(v_{1}, w_{1}\right), \ldots, \max \left(v_{1997}, w_{1997}\right)\right)
+\end{aligned}
+\]
+
+and then write this tuple on the blackboard.
+
+It turns out that, in this way, Minh can write any integer-valued 2023-tuple on the blackboard after finitely many steps. What is the smallest possible number $s$ of tuples that he initially wrote?
+Remember to put your final answer within \boxed{}.
+
+## [54] gold = 12013
+- hash: 7b443d7ba265946b | 变体 hashes: 7b443d7ba265946b / 8387a4b960b8829d
+- 题面: Evan fills the fields of an $78 \times 78$ board with numbers from 1 to $6084$, each number being used exactly once. She then counts the total number of good paths on the board. A good path is a sequence of fields of arbitrary length (including 1) such that:
+
+(i) The first field in the sequence is one that is only adjacent to fields with larger numbers, and also one that has an even row number and an even column number.
+
+(ii) Each subsequent field in the sequence is adjacent to the previous field,
+
+(iii) The numbers written on the fields in the sequence are in increasing order.
+
+Two fields are considered adjacent if they share a common side. Find the smallest possible number of good paths Alice can obtain.
+Remember to put your final answer within \boxed{}.
+
+## [55] gold = 18750000
+- hash: 2a73c5f3755af12d | 变体 hashes: 2a73c5f3755af12d / 4e8a85f5b39dcbf5
+- 题面: Let $\mathbb{Z}_{\geqslant 0}$ be the set of non-negative integers, and let $f: \mathbb{Z}_{\geqslant 0} \times \mathbb{Z}_{\geqslant 0} \rightarrow \mathbb{Z}_{\geqslant 0}$ be a bijection such that whenever $f\left(x_{1}, y_{1}\right)>f\left(x_{2}, y_{2}\right)$, we have $f\left(x_{1}+1, y_{1}\right)>f\left(x_{2}+1, y_{2}\right)$ and $f\left(x_{1}, y_{1}+1\right)>f\left(x_{2}, y_{2}+1\right)$. Also, let $g: \mathbb{Z}_{\geqslant 0} \rightarrow \mathbb{Z}_{\geqslant 0}$ be a function such that $g(n) = n^2 - n + 1$.
+
+Let $N$ be the number of pairs of integers $(x, y)$, with $0 \leqslant x, y<100$, such that $f(x, y)$ is odd. Let the smallest and largest possible value of $N$ be $a,b$, find the product $ab$.
+Remember to put your final answer within \boxed{}.
+
+## [56] gold = 2450
+- hash: 57f2dd9e6c92cd0e | 变体 hashes: 4d57a87061518b23 / 57f2dd9e6c92cd0e / b457bb80cacb99fd
+- 题面: A polyomino is a figure which consists of unit squares joined together by their sides. (A polyomino may contain holes.) Consider a grid of unit square cells which extends to infinity in all directions. Find the greatest positive integer $C$ which satisfies the following condition: For every colouring of the cells of the grid in $36$ colours, there is some polyomino within the grid which contains at most $35$ colours and whose area is at least $C$.
+
+Remember to put your final answer within \boxed{}.
+
+## [57] gold = $\lambda^{st}n^{s+t}$
+- hash: f12608b0d39d03e2 | 变体 hashes: 5230f4e2156cde8d / 5dc08cc4cf0f2d30 / f12608b0d39d03e2
+- 题面: Let $n,s,$ and $t$ be positive integers and $0<\lambda<1.$ A simple graph on $n$ vertices with at least $\lambda n^2$ edges is given. We say that $(x_1,\ldots,x_s,y_1,\ldots,y_t)$ is a good intersection if letters $x_i$ and $y_j$ denote not necessarily distinct vertices and every $x_iy_j$ is an edge of the graph $(1\leq i\leq s,$ $1\leq j\leq t).$ Find the minimum number of good insertions.
+
+Remember to put your final answer within \boxed{}.
+
+## [58] gold = 4181
+- hash: 349075d58e6ba5d2 | 变体 hashes: 05ffad9799c4fe5f / 349075d58e6ba5d2 / 54b15db440340226
+- 题面: Let $s$ be positive integers such that $s<5625$. Initially, one cell out of an $n \times n$ grid is coloured green. On each turn, we pick some green cell $c$ and colour green some $s$ out of the $5625$ cells in the $75 \times 75$ square centred at $c$. No cell may be coloured green twice. We say that $s$ is sparse if there exists some positive number $C$ such that, for every positive integer $n$, the total number of green cells after any number of turns is always going to be at most $Cn$. Find the least sparse integer $s$.
+
+Remember to put your final answer within \boxed{}.
+
+## [59] gold = 85383238549
+- hash: 309b5861b99747ae | 变体 hashes: 2b89e3ff8930b761 / 309b5861b99747ae
+- 题面: In a circular seating arrangement at a party, there are $16$ guests sitting at the table play a game. Each guest has a unique name tag crated by the game master, and then these name tags are randomly distributed among the guests. In each of the next $n$ rounds, the guests plays the game according to the following rule:
+
+i) Any guest who has their own name tag exits the table.
+ii) The remaining guests pass their name tags to the guest sitting immediately to their right.
+
+We are interested in finding the number of ways the name tags can be distributed such that there exists at least one guest who does not leave the table after 4 rounds.
+Remember to put your final answer within \boxed{}.
+
+## [60] gold = $\lambda^8 + 36\lambda^7 + 210\lambda^6 + 462\lambda^5 + 495\lambda^4 + 286\lambda^3 + 91\lambda^2 + 15\lambda + 1$
+- hash: d814faf647f478da | 变体 hashes: 5903113a854d79dd / d814faf647f478da
+- 题面: Let $P_n$ be a path on $n$ vertices and let $\lambda$ be a positive real number. Define $Z_{P_n}(\lambda) = \sum_{I \in S} \lambda^{|I|}$ where $\cI(P_n)$ is the set of independent set of $P_n$. Compute $z_{15}$ in terms of $\lambda$.
+Remember to put your final answer within \boxed{}.
+
+## [61] gold = 75
+- hash: 39fb29a10f843616 | 变体 hashes: 39fb29a10f843616 / 3bc393996280b98a / 4252e3f44ada14ab
+- 题面: Grogg and Winnie are playing a game using a deck of $50$ cards numbered $1$ through $50$. They take turns with Grogg going first. On each turn a player chooses a card from the deck—this choice is made deliberately, not at random—and then adds it to one of two piles (both piles are empty at the start of the game). After all $50$ cards are in the two piles, the values of the cards in each pile are summed, and Winnie wins the positive difference of the sums of the two piles, in dollars. (For instance, if the first pile has cards summing to $510$ and the second pile has cards summing to $765$, then Winnie wins $ \$255$.) Winnie wants to win as much as possible, and Grogg wants Winnie to win as little as possible. If they both play with perfect strategy, find (with proof) the amount that Winnie wins.
+
+Remember to put your final answer within \boxed{}.
+
+## [62] gold = 4
+- hash: 822b20bba15af0df | 变体 hashes: 41398f1cbee3cbcb / 822b20bba15af0df / ac3302e298193997
+- 题面: Given right triangle $ XYZ$ with hypothenuse $ XZ$ and $ \angle X = 50^{\circ}$. Points $ P$ and $ Q$ on the side $ YZ$ are such that $ \angle PXZ = \angle QXY = 10^{\circ}$. Compute the ratio $2 \times YQ/ZP$.
+
+Remember to put your final answer within \boxed{}.
+
+## [63] gold = 3
+- hash: edbec3e90fabc325 | 变体 hashes: 1983b2f8a2b2b43c / 8e238171c8690013 / edbec3e90fabc325
+- 题面: Given a convex $n$-sided polygon $B_1\ldots B_n$. Let $Q_i$ ($i = 1,\ldots, n$) be points on the boundary of the polygon such that $B_iQ_i$ divides the area of the polygon in half.  Assume that none of the points $Q_i$ coincide with any vertex of the polygon and that these points lie on $k$ sides of the $n$-sided polygon. For a given value of $n$, determine the minimum possible value of $k$.
+
+Remember to put your final answer within \boxed{}.
+
+## [64] gold = 4
+- hash: 2dfcee59bc697872 | 变体 hashes: 2dfcee59bc697872 / 328b3b876f0ae30d / 8238676aabbf4b68
+- 题面: A convex $m$-gon $Q$, where $m > 3$, is divided into identical triangles by diagonals that do not intersect within it. For which values of $m$ is it possible for $Q$ to be circumscribed?
+
+Remember to put your final answer within \boxed{}.
+
+## [65] gold = 4
+- hash: d1f2d4455b1d0438 | 变体 hashes: 7f8a0116ca7d119a / d1f2d4455b1d0438 / d22d54519cddab31
+- 题面: A line intersects a segment $PQ$ at point $R$. What is the maximum number of points $Y$ on this line such that one of the angles $\angle PYR$ and $\angle QYR$ is equal to half of the other?
+
+Remember to put your final answer within \boxed{}.
+
+## [66] gold = 4
+- hash: 46267c3cc603e9ce | 变体 hashes: 46267c3cc603e9ce / 627bc37adbcb0b7b / cdaaa8ba487c37e3
+- 题面: For which largest value of $n$ does there exist a convex polyhedron with $n$ faces such that for each face there is a point outside the polyhedron from which the remaining $n - 1$ faces are visible?
+
+Remember to put your final answer within \boxed{}.
+
+## [67] gold = 1/2, 1
+- hash: c86152cfaa6a23b9 | 变体 hashes: 5ca6e036929cd691 / 86e42f5a4fceeb2c / c86152cfaa6a23b9
+- 题面: Let $k$ be a positive real number. Triangle XYZ is acute and scalene, O is its circumcenter and XD, YE, ZF are the internal bisectors. On the rays XD, YE, ZF, respectively, let points P, Q, R such that $\frac{XP}{XD} = \frac{YQ}{YE} = \frac{ZR}{ZF} = k$. Denote $(C_1), (C_2), (C_3)$ be respectively the circle through P and touches OX at X, the circle through Q and touches OY at Y, the circle through R and touches OZ at Z. Find all values of k such that three circles $(C_1), (C_2), (C_3)$ have exactly two common points.
+
+Remember to put your final answer within \boxed{}.
+
+## [68] gold = 90
+- hash: 66becd7a718fbcc2 | 变体 hashes: 66becd7a718fbcc2 / c30905fb46286d1f / c65925b4ac36b8ca
+- 题面: Let $\Gamma$ be the circumcircle of right-angled triangle $XYZ$ ($\angle X = 90^{\circ}$). The tangent to $\Gamma$ at point $X$ intersects the line $YZ$ at point $T$. Suppose that $N$ is the midpoint of the minor arc $XY$, and $TN$ intersects $\Gamma$ for the second time in $R$. The tangent to $\Gamma$ at point $R$ intersects $XZ$ at $L$. Compute $\angle TLC$ in terms of degree.
+
+Remember to put your final answer within \boxed{}.
+
+## [69] gold = $Y = M$
+- hash: abfe94824ab40403 | 变体 hashes: 20873373d712019e / 51a011434a6140c3 / abfe94824ab40403
+- 题面: Let $ PQR $ be fixed obtuse triangle, and let $ M $ denote its orthocenter. Let $ \alpha_P $ denote the circle with center $ P $ and radius $ PM $. Let $ \alpha_Q $ and $ \alpha_R $ be defined in a similar way. Let $Y$ be a moving point outside of the circumcircle of triangle $ PQR $, let circle $ \Xi(Y) $ be defined in the following way (if possible): take the polars of point $ Y $ with respect to circles $ \alpha_P $, $ \alpha_Q $, and $ \alpha_R $, and let $ \Xi(Y) $ be the circumcircle of the triangle defined by these three lines.
+
+Find the locus of points $ Y $ such that point $ Y $ lies on circle $ \Xi(Y) $.
+
+
+Remember to put your final answer within \boxed{}.
+
+## [70] gold = $\frac{5}{8}$
+- hash: 62a309c89e8d3c48 | 变体 hashes: 1ea207f130e8afc6 / 62a309c89e8d3c48 / a9cb9619ae8ed9a6
+- 题面: Let $PQRS$ be a convex quadrilateral with perimeter $3$ and $PR=QS=1$. Determine the maximum possible area of $PQRS$.
+
+Remember to put your final answer within \boxed{}.
+
+## [71] gold = $\mathbb{Z}$
+- hash: e17a16deaeac262d | 变体 hashes: 488dcebf4668af3c / a861f5277138cdb7 / e17a16deaeac262d
+- 题面: A subset $X$ of $\mathbb{Z}$ is called rich if for any positive integer $n$ and $n$ numbers $x_0, x_1, \dots, x_n$ belonging to $X$, all integer roots of $x_0 + x_1 \cdot x + \dots + x_n \cdot x^n = 0$ belong to $X$. Find all rich sets that contain $2^k - 2^l$ for any positive integers $k$ and $l$.
+
+Remember to put your final answer within \boxed{}.
+
+## [72] gold = $(n-2)2^n +1$
+
+- hash: 262b8443deb96f3e | 变体 hashes: 10f7cd17d5cab3df / 262b8443deb96f3e / 9a542e3488d5051f
+- 题面: For a positive integer $n \geq 2$, let the set $C_n$ be the set of integers $2^n - 2^i$ for integers $i$ such that $0 \leq i < n$. Find the smallest positive integer that cannot be expressed as a sum of numbers in $C_n$ (where the same number can be used multiple times).
+
+Remember to put your final answer within \boxed{}.
+
+## [73] gold = $(n^2 +3n+2, n^3 + 4n^2 + 3n -1)$
+for $n \ge 1$
+- hash: ccf0464935d9bcb9 | 变体 hashes: 02263cea8b5e32e5 / c996bfe481529c6c / ccf0464935d9bcb9
+- 题面: Find all pairs of positive integers $(a,b)$ that satisfy the following condition:
+$\sqrt[3]{7a^2 +ab+b^2}=a+1$
+
+Remember to put your final answer within \boxed{}.
+
+## [74] gold = $g(x)=c, g(x)=\lceil x \rceil, g(x)=\lfloor x \rfloor$
+
+- hash: 33d27ae1bbdaf5d3 | 变体 hashes: 31be95680b03dace / 33d27ae1bbdaf5d3 / 547c87488e9eb1f5
+- 题面: Find all functions $g:\mathbb{Q}\rightarrow \mathbb{Z}$ that satisfy the following condition for any rational number $x$, integer $a$, and positive integer $b$:
+$g(x)=g(\frac{g(bx-a)+a}{b})$
+
+Remember to put your final answer within \boxed{}.
+
+## [75] gold = 69169
+- hash: 9d56e5f43495fa38 | 变体 hashes: 0f4782ee4c158fa2 / 144d48828864ba93 / 9d56e5f43495fa38
+- 题面: For a positive integer $n$, we call $g:\mathbb{Z}\rightarrow \mathbb{Z}$ a \textif{$n$-good function} if $g(1)=1$ and for any two distinct integers $a$ and $b$, $g(a)-g(b)$ divides $a^n -b^n$. We call a positive integer $n$ an \textit{exotic integer} if the number of $n$-good functions is twice of an odd integer. Find $132$th exotic integer.
+
+
+Remember to put your final answer within \boxed{}.
+
+## [76] gold = 1,3,5
+- hash: 4002fdbdc4187fc3 | 变体 hashes: 4002fdbdc4187fc3 / a0f49590a30f19d3 / bd51877213d77242
+- 题面: For a given positive integer $n$, let $m$ be the exponent of 2 in the prime factorization of $n$. Define $f(n) = \frac{n}{2^m}$. Find all positive integers $u$ for which there exists a positive integer $v$ such that
+
+(Condition) $f(u+v) - f(u), f(u+v+1) - f(u+1), \cdots, f(u+2v-1) - f(u+v-1)$ are all multiples of 4.
+
+Remember to put your final answer within \boxed{}.
+
+## [77] gold = $5(l-1)^2$
+- hash: e3f81db59b96ef79 | 变体 hashes: 35577cceabd3abd4 / e3f81db59b96ef79
+- 题面: Let $k>l$ be given coprime positive integers greater than 1. Define a function $f: \mathbb{Z}\rightarrow \mathbb{Z}$ as follows: for $x$, $f(x)$ is the smallest value of $|a|+|b|$ among all integers $a,b$ satisfying $ka+lb = x$.
+ An integer $x$ is called 'nice' if $f(x)\geq \max (f(x-a),f(x+a),f(x-b),f(x+b))$. Denote by $F(k,l)$ the the number of nice integers when both $k$ and $l$ are odd, and denote by $G(k,l)$ the number of nice integers when either $k$ or $l$ is even. Suppose that there exists polynomials $p(k,l)$ and $q(k,l)$ such that $F(k,l)=p(k,l)$ for all odd integers $k,l$ and $G(k,l)=q(k,l)$ whenever at least one of $k$ or $l$ is even.  Evaluate $p(k,l)^2 + q(k,l)^2$.
+Remember to put your final answer within \boxed{}.
+
+## [78] gold = 1
+- hash: def0db09b2eaa365 | 变体 hashes: 0b9dc39a5b2dd8d0 / 42f88349ff1414b3 / def0db09b2eaa365
+- 题面: For the integer sequence $(a_n)$ defined by $a_1=10$ and $a_{n+1}=6a_n - 2^{n+2} - 3^{n+1} +5$, find all positive numbers that are relatively prime to every number in $(a_n)$.
+
+Remember to put your final answer within \boxed{}.
+
+## [79] gold = $\{(a,b):ab \geq e^3\}$
+
+- hash: e5a37bfcdfb2e331 | 变体 hashes: 494fffb1d1874274 / 7d21e8b638ea38f9 / e5a37bfcdfb2e331
+- 题面: Find all pairs $(a, b)$ of positive real numbers such that for every prime number $p$ and real number $x$ satisfying
+\[
+    2^{2^{p + 1}x} = 2^px + 1,
+\]
+we have
+\[
+    \frac{a^x + b^x + 1}{3} \ge x + 1.
+\]
+
+Remember to put your final answer within \boxed{}.
+
+## [80] gold = 146250
+- hash: 09f08de9181a3546 | 变体 hashes: 09f08de9181a3546 / 56f934531ee72b51 / 9bbaa360eb4b4048
+- 题面: A positive integer $m$ consisting of distinct digits is considered "good" if it is a single-digit number, or if removing one of its digits results in a divisor of $m$ that is also a good number.
+
+Find the largest good number.
+
+Remember to put your final answer within \boxed{}.
+
+## [81] gold = all multiples of 14, excluding 0
+- hash: 7b1a05cd751cb283 | 变体 hashes: 7b1a05cd751cb283 / c25b1757759767a4
+- 题面: Find all even integers $d$ such that the number of ordered integer pairs $(x, y)$ satisfying
+\[
+    (x + 2y - d)^2 = xy
+\]
+is even.
+Remember to put your final answer within \boxed{}.
+
+## [82] gold = $\lfloor \frac{p}{9} \rfloor$ 
+- hash: 6942cad03e64c8e7 | 变体 hashes: 6942cad03e64c8e7 / e2ba17a7db77c964
+- 题面: Let $p$ be a prime greater than $100$. Find the $9$th largest positive integer $n$ less than $p$ such that
+\[
+    nk + k \ge p \left\lfloor \frac{nk + n}{p} \right\rfloor
+\]
+for all $k = 0, 1, \ldots, p - 2$.
+Remember to put your final answer within \boxed{}.
+
+## [83] gold = 939
+- hash: 5644ec912c716371 | 变体 hashes: 5644ec912c716371 / 795d569efa980d7d / 97b6a241fef401da
+- 题面: Positive integers $M$ and $N$ satisfy the following conditions:
+
+(1) $M$ is a 1000-digit number, and none of its digits are 0.
+(2) The decimal expansion of $\left \lfloor \frac{M}{N} \right\rfloor$ contains the digit 0 exactly $A$ times. (The leading digit of the decimal expansion is not 0.)
+
+Find the maximum possible value of $A$.
+
+Remember to put your final answer within \boxed{}.
+
+## [84] gold = 999981
+- hash: 1d78b044bed284e3 | 变体 hashes: 1c2cb0ecef685b52 / 1d78b044bed284e3 / 9da8020520570d53
+- 题面: Let $S(n)$ be the sum of the digits in the decimal representation of a positive integer $n$. Find the smallest positive integer $n$ such that $S(n)S(n+1)\cdots S(n+37)$ is not a multiple of $11$.
+
+Remember to put your final answer within \boxed{}.
+
+## [85] gold = $\lfloor \frac{a+2}{2}\rfloor +\lfloor \frac{a+2}{3}\rfloor -\lfloor \frac{a+2}{6}\rfloor $
+- hash: d1151c0ef905d44c | 变体 hashes: 1b1fefd511280890 / d1151c0ef905d44c / f31c8eb70af9d1fb
+- 题面: Let $a$ be a positive integer greater than or equal to $3$. A finite set $X$ of positive integers is said to be 'clustered' if for any three elements $x, y, z$ chosen from $X$, at least one of $\gcd(x,y)$, $\gcd(y,z)$, or $\gcd(z,x)$ is not equal to $1$. Find the maximum possible value of $|X|$ for a clustered set $X \subset \mathbb{N}$ where the difference between the maximum and minimum elements of $X$ are less than or equal to $a$.
+
+Remember to put your final answer within \boxed{}.
+
+## [86] gold =  \(
+\mathbb{Q}(5^{1/4},\zeta_8),\ 16,\ \text{是}
+ \)
+- hash: eea066dbb107c35d | 变体 hashes: 02ac5afd917cc98c / eea066dbb107c35d
+- 题面: $x^4+5\in\mathbb{Q}[x]$在$\mathbb{Q}$上的分裂域(记为$E$)是$(\quad)$.
+$[E:\mathbb{Q}]=(\quad)$.
+$E/\mathbb{Q}$ $(\quad)$(填“是”或“否”.)为Galois扩张.
+Remember to put your final answer within \boxed{}.
+
+## [87] gold = B, D
+- hash: 7ff8fd6a443bfb1d | 变体 hashes: 7ff8fd6a443bfb1d / d83ce47d1996e535
+- 题面: 设$D_8$是正方形上的二面体群，下列正确的是：
+\begin{itemize}
+    \item[A.] $D_8$中存在$8$阶元.
+    \item[B.] $D_8$的四阶子群一定是Abel群.
+    \item[C.] $C(D_8)=\{1\}$.
+    \item[D.] $[D_8,D_8]$是$2$阶群.
+Remember to put your final answer within \boxed{}.
+
+## [88] gold =  \(
+AB
+ \)
+- hash: dd3a90f77c70e7cf | 变体 hashes: dd3a90f77c70e7cf / f56554652b5e71c6
+- 题面: 关于函数$f$在区间$[a, b]$上的勒贝格可积性，下列哪些陈述是正确的？A. 如果$\int_a^b |f(x)| \, dx < \infty$，则函数$f$在$[a, b]$上勒贝格可积。
+B. 如果函数$f$在$[a, b]$上连续，则它在$[a, b]$上勒贝格可积。
+C. 如果函数$f$在$[a, b]$上的不连续点集测度为零，则它在$[a, b]$上勒贝格可积。
+D. 如果函数$f$在$[a, b]$上有界，则它在$[a, b]$上勒贝格可积。
+Remember to put your final answer within \boxed{}.
+
+## [89] gold = 5129
+- hash: 17cb38c5119e0848 | 变体 hashes: 17543aba76710942 / 17cb38c5119e0848
+- 题面: 六、(10 分) 某城市有10000 名市民与两个剧院, 每个剧院有 \(x\) 个座位, 每个市民独立等可能地选取一个剧院看戏. 若希望“某个市民来到剧院后因为没有座位不得不放弃看戏”的概率不超过0.01, 计算 \(x\) 的最小值. (参考数据: \(\Phi(2.05)=0.98\) , \(\Phi(2.17)=0.985\) , \(\Phi(2.33)=0.99\) ,\(\Phi(2.58)=0.995\) , \(\Phi\) 是标准正态函数.)
+Remember to put your final answer within \boxed{}.
+
+## [90] gold = $(N-1)\sum_{j=1}^{N-1}\frac{1}{j}$
+- hash: d3a67f943668afa3 | 变体 hashes: 4b010c69516d696a / d3a67f943668afa3
+- 题面: 1.假设 \((X_{n})_{n\geq0}\) 是 \(N\) 个顶点的完全图上的简单随机游动.令T为首次遍访所有顶点的时间，即 \(T=\operatorname*{max}_{i\in\{1,\dots,N\}}\sigma_{i}\) (其中 \(\sigma_{i}=\operatorname*{min}\{t\geq1:X_{t}=i\})\)求ET.
+Remember to put your final answer within \boxed{}.
+
+## [91] gold = ${\hat{f}(\xi) = \frac{2}{1 + \xi^2}}$
+- hash: 314c0589056ab558 | 变体 hashes: 314c0589056ab558 / 70b3665a6d4b231b
+- 题面: 5.(a)计算函数 \(f(x)=e^{-|x+1|}+{\frac{1}{4+x^{2}}}\) Fourier 变换后的结果;
+Remember to put your final answer within \boxed{}.
+
+## [92] gold = 在点 \(\left(\frac12, \frac{\sqrt{3}}{2}\right)\) 处（对应 \(\theta = \frac{\pi}{3}\)），圆周上的拉普拉斯值为  
+ \(
+0
+ \)
+- hash: 6b957b08495c5ca0 | 变体 hashes: 599ee9b95fb3c839 / 6b957b08495c5ca0
+- 题面: 计算函数 $f(x, y) = x^2 + y^2$ 在圆周 $x^2 + y^2 = 1$ 上的拉普拉斯算子（Laplacian）在点 $\left(\frac{1}{2}, \frac{\sqrt{3}}{2}\right)$ 处的值。
+Remember to put your final answer within \boxed{}.
+
+## [93] gold = \(
+CE
+\)
+- hash: 0149c6b8b6d3c1d1 | 变体 hashes: 0149c6b8b6d3c1d1 / 9d8df3336931cb4c
+- 题面: 下列关于实数集上紧集的描述，正确的是：A. 实数集 $\mathbb{R}$ 的子集是紧集当且仅当它是闭集。
+B. 实数集 $\mathbb{R}$ 的子集是紧集当且仅当它是开集。
+C. 实数集 $\mathbb{R}$ 的子集是紧集当且仅当它是闭集且有界。
+D. 实数集 $\mathbb{R}$ 的子集是紧集当且仅当它是开集且有界。
+E. 实数集 $\mathbb{R}$ 的子集是紧集当且仅当它的每个开覆盖都有有限子覆盖。
+Remember to put your final answer within \boxed{}.
+
+## [94] gold = \(
+BCD
+\)
+- hash: 11882d7a5d0ec4ba | 变体 hashes: 11882d7a5d0ec4ba / 98e24bbe2b7e1266
+- 题面: 设$(a_n)$是一个数列。如果对于任意的$\epsilon > 0$，存在一个正整数$N$，使得对所有$m, n \geq N$，都有$|a_n - a_m| < \epsilon$，则称$(a_n)$是Cauchy数列。在完备度量空间中，下列关于Cauchy收敛准则的陈述正确的是：A. 每个有界数列都是Cauchy数列。
+B. 每个收敛数列都是Cauchy数列。
+C. 每个Cauchy数列都是有界的。
+D. 每个Cauchy数列在完备度量空间中都收敛。
+Remember to put your final answer within \boxed{}.
+
+## [95] gold = Lempel–Ziv 短语分解为  
+\[
+(0,a),\ (1,b),\ (2,a),\ (1,c),\ (5,d),\ (0,e).
+\]
+编码得到的最终比特串为  
+\[
+000000\,001001\,010000\,001010\,101011\,000100.
+\]
+- hash: 8adb0c6e1238df78 | 变体 hashes: 04cd444f430f84b2 / 8adb0c6e1238df78
+- 题面: 12. Consider the message
+
+aabababcabcde.
+
+Describe the decomposition into phrases that will be used by Lempel-Ziv, and give the encoded string obtained using Lempel-Ziv. When encoding a letter, use the mapping
+
+\[
+a\rightarrow000,\quad b\rightarrow001,\quad c\rightarrow010,\quad d\rightarrow011,\quad e\rightarrow100.
+\]
+Remember to put your final answer within \boxed{}.
+
+## [96] gold =  \(
+D
+ \)
+- hash: 389c0a804fcd1163 | 变体 hashes: 389c0a804fcd1163 / 8838e9967cc8625c
+- 题面: 关于线性规划的对偶问题，下列说法正确的是：A. 原问题的目标函数在对偶问题中变为约束条件。
+B. 如果原问题是求最小值问题，对偶问题也必定是求最小值问题。
+C. 原问题约束条件的系数在对偶问题中变为目标函数的系数。
+D. 对偶问题的对偶问题会返回原问题。
+E. 原问题的可行域与对偶问题的约束条件互为对应。
+Remember to put your final answer within \boxed{}.
+
+## [97] gold = $L^*v = \sum_{i,j=1}^n \partial_j(a_{ij} \partial_i v) - \sum_{j=1}^n \partial_j(b_j v) + cv$
+- hash: 84517a7df99cd858 | 变体 hashes: 5a41492354d7783e / 84517a7df99cd858
+- 题面: (10 分) 设 $\Omega$ 为开区域. 算子 $Lu := \sum_{i,j=1}^n \partial_i (a_{ij} \partial_j u) + \sum_{j=1}^n b_j \partial_j u + cu$, 定义域为 $C_0^\infty(\Omega)$. 其中 $a_{ij}, b_j, c$ 为实有界光滑函数.
+
+求 $L$ 在 $L^2(\Omega)$ 上的伴随算子 $L^*$.
+Remember to put your final answer within \boxed{}.
+
+## [98] gold = \(\boxed{B}\)
+- hash: 9068146d0c45d84c | 变体 hashes: 9068146d0c45d84c / a22977707aa26c9b
+- 题面: 7. 矩阵A 的条件数定义是:
+
+A. \(\kappa(A)=\sqrt{|A|_{1}|A^{-1}|_{1}}\) B. \(\kappa(A)=|A|_{1}|A^{-1}|_{1}\) C. \(\kappa(A)=\sqrt{|A|_{2}|A^{-1}|_{2}}\) D. \(\kappa(A)=|A|_{2}|A^{-1}|_{2}\)
+Remember to put your final answer within \boxed{}.
+
+## [99] gold = \(\boxed{\text{有限差分法、有限元法（或有限体积法）}}\)
+- hash: 2263e7ff5900e203 | 变体 hashes: 2263e7ff5900e203 / 72a18627d5ac8ed7
+- 题面: 4. 对于偏微分方程 \( D e l t a\;u\;=\;f \) 在区域 \(\Omega\) 上,边界条件为 \( u=g\;o n\;\;\partial\;\Omega \),使用(\ )方法进行离散化处理,可以有效逼近解。
+Remember to put your final answer within \boxed{}.
+
+## [100] gold = 函数 \( f(x)=\sin(x) \) 在 \( x=\frac{\pi}{4} \) 处的一阶导数（中心差分，\( h=0.1 \)）约为 \(\boxed{0.6706}\)（保留四位小数）
+- hash: aa3ff3b42f6bca11 | 变体 hashes: aa3ff3b42f6bca11 / aad43a1c14abb6b3
+- 题面: 4. 使用中心差分公式计算函数 \(f(x)=\sin(x)\) 在 \(x=\pi/4\) 处的一阶导数,取 \(h=0.1\) 。
+Remember to put your final answer within \boxed{}.
+
+## [101] gold = 正确
+- hash: 7b311df2af3adf47 | 变体 hashes: 7b311df2af3adf47 / bbb89a486be09201
+- 题面: 判断：5. 两个总量指标时间数列相比照得到的时间数列一定是相对数时间数列。（
+Remember to put your final answer within \boxed{}.
+
+## [102] gold = B
+- hash: 617ccd6336568ea9 | 变体 hashes: 617ccd6336568ea9 / 837d4abed62f1474
+- 题面: 6．正态分布的两个参数分别是（）
+
+A.均值和方差B.均值和标准差C.中位数和方差D.中位数和标准差
+Remember to put your final answer within \boxed{}.
+
+## [103] gold = $A,B,C,D,E$
+- hash: 38c27f1a1da283b2 | 变体 hashes: 38c27f1a1da283b2 / 970e098079725d61
+- 题面: 6. 时间序列的构成要素有（）。
+
+A.长期趋势B.季节变动C.循环变动D.不规则变动E.随机变动
+Remember to put your final answer within \boxed{}.
+
+## [104] gold = 移动平均法、时间序列分解法
+- hash: 3a6506e4ecbf7b45 | 变体 hashes: 328711120a91d1bb / 3a6506e4ecbf7b45
+- 题面: 10．对于时间序列的季节调整，常用的方法有( )、( )
+Remember to put your final answer within \boxed{}.
+
+## [105] gold = 标准差
+- hash: 6c2fe44a084b56b2 | 变体 hashes: 0efb09977e5c1dec / 6c2fe44a084b56b2
+- 题面: 1.在统计学中，用来表示数据分散程度的一个指标是
+Remember to put your final answer within \boxed{}.
+
+## [106] gold = A
+- hash: 2098138f60bf3c98 | 变体 hashes: 2098138f60bf3c98 / 6318128353bbefbc
+- 题面: 8、对于一个大型数据集，为了快速了解数据的基本特征，以下哪种统计图形最为合适？（）
+
+A. 直方图B. 散点图C. 箱线图D. 折线图
+Remember to put your final answer within \boxed{}.
+
+## [107] gold = D
+- hash: 48ac953ba1db45b4 | 变体 hashes: 48ac953ba1db45b4 / bb805ebde1728b07
+- 题面: 10、在研究某种疾病的发病率与环境因素的关系时，由于无法确定环境因素对发病率的具体函数形式，应采用哪种回归方法？（）
+
+A. 线性回归B. 非线性回归C. 逻辑回归D. 以上都不对
+Remember to put your final answer within \boxed{}.
+
+## [108] gold = 异方差性不会导致参数估计量的偏误，但会使传统方差估计失效，即低估或高估真实方差，导致OLS估计量不再是有效估计。
+- hash: c71e28d50a6c5657 | 变体 hashes: c24fc6e22c85643f / c71e28d50a6c5657
+- 题面: 10.异方差性会导致参数估计量的方差（ ）
+Remember to put your final answer within \boxed{}.
+
+## [109] gold = D
+- hash: d0816a67b697bdb7 | 变体 hashes: c9083ed56aec7798 / d0816a67b697bdb7
+- 题面: 3.在逐步回归法中，若新引入的变量使得（），则该变量应被剔除。
+
+A.某个旧变量的t检验不显著
+
+B.调整的判定系数减小
+
+C.F检验不显著
+
+D.以上都有可能
+Remember to put your final answer within \boxed{}.
+
+## [110] gold = A
+- hash: 1aa7c02419bd8059 | 变体 hashes: 1aa7c02419bd8059 / 2793bb7779bea33e
+- 题面: 5.非线性回归模型的参数估计通常采用（）方法。
+
+A.最小二乘法
+
+B.极大似然法
+
+C.牛顿－拉夫森法
+
+D.以上都可以
+Remember to put your final answer within \boxed{}.
+
+## [111] gold = 错误
+- hash: 11f9b3a4425bef00 | 变体 hashes: 0bcb1b098198f7c5 / 11f9b3a4425bef00
+- 题面: 判断：4.异方差性会导致普通最小二乘估计量的方差增大。（）
+Remember to put your final answer within \boxed{}.
+

@@ -41,6 +41,12 @@ from tools.lean_local.lean_bridge import (
 
 logger = logging.getLogger("MathPilot")
 
+# 2026-09-15：LeanSearch 埋点首次失败的一次性告警标志。
+# 此前该失败只打 debug ⇒ 「LeanSearch 实际从未生效」在 202 题的记录里
+# 完全无人察觉（实测 search_calls 恒为 0）。改为 warning 且只提醒一次，
+# 既不刷屏，又保证「功能静默失效」这类问题一定会被看见。
+_LEANSEARCH_WARNED = False
+
 
 class LeanGate:
     """证明题的 Lean 硬验证门禁（v2.8 扩展到全部档位）。"""
@@ -303,6 +309,18 @@ class LeanGate:
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
         _unknown_streak = 0  # B（2026-09-07）：连续 unknown 计数 → 空转止损
         _stop = self._unknown_stop
+        # ★★ 2026-09-17 新增：**同答案候选去重缓存**（开关，默认关）。
+        #   动机：实测 003 的 7 个候选里 **5 个是同一个答案**（`\boxed{2026}`），
+        #   而每个候选都独立跑一次 `verify_answer`（LLM 翻译 + Lean 编译，
+        #   实测 8 次 MCP 调用共 239s）⇒ 同答案被重复验证，纯浪费约 120s。
+        #   ⚠ **为什么默认关**：`verify_answer(problem, reasoning, answer, ...)` 的
+        #   守卫②`_verify_answer_by_system` 用的是 **reasoning** —— 同一答案的
+        #   不同候选 reasoning 不同 ⇒ 复用报告等于**改变验证语义**
+        #   （可能让本该被自己那份 reasoning 拒掉的候选，借别人的报告通过）。
+        #   收益约 5.6%（120s/2152s），不足以承担该风险 ⇒ 默认关、供 A/B。
+        #   启用方式：`--lean_dedup_by_answer true`。
+        _dedup = bool(getattr(self.config, "lean_dedup_by_answer", False))
+        _ans_cache: dict = {}
         # 2026-09-13：候选级验证**波次并行预取**（并行度 >1 时启用，开关
         # LEAN_GATE_PARALLEL，默认跟随 LEAN_MCP_WORKERS）。
         # 原循环逻辑一行不改：只把"算 report"这一段挪进并行批次（纯计算），
@@ -336,6 +354,15 @@ class LeanGate:
                 "degraded": None,
                 "error": None,
             }
+            # 去重键：**归一化后**的答案（剥 `\boxed{}` 等外壳），仅非证明题使用。
+            _dedup_key = ""
+            if _dedup and not is_proof:
+                try:
+                    from agent.answer_oracle import AnswerOracle as _AO
+                    _dedup_key = (_AO.strip_wrappers(
+                        str(getattr(cand, "answer", "") or "")) or "").strip()
+                except Exception:  # noqa: BLE001
+                    _dedup_key = ""
             # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
             # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
             # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
@@ -371,6 +398,10 @@ class LeanGate:
                         domain=domain,
                         timeout=float(getattr(self.config, "lean_timeout", 60.0)),
                     )
+                elif _dedup and _dedup_key and _dedup_key in _ans_cache:
+                    # ★ 去重命中：复用同答案候选的验证结论（开关默认关，见上方说明）
+                    report = _ans_cache[_dedup_key]
+                    entry["cached_from_answer"] = True
                 else:
                     report = bridge.verify_answer(
                         problem=ctx.problem or "",
@@ -379,6 +410,8 @@ class LeanGate:
                         domain=domain,
                         timeout=float(getattr(self.config, "lean_timeout", 60.0)),
                     )
+                    if _dedup and _dedup_key:
+                        _ans_cache[_dedup_key] = report
                 # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
                 # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
                 used_names: list[str] = []
@@ -397,6 +430,24 @@ class LeanGate:
                         # proof_valid 候选被当成"验证异常"降级放行，导致
                         # used_theorems / compile_valid / 跨题定理记忆全部从未写入。
                         BaseAgent.add_used_theorems(ctx, used_names)
+                # ★★ 2026-09-17 可观测性补强（用户问"Lean 有没有顺利检测出错误"时无据可查）：
+                #   此前 `entry` 只带 id/verdict/lean_valid/degraded/error —— **看不到
+                #   实际送编译的代码，也看不到两道守卫的判定依据**。
+                #   实测 003：7 个候选全 `answer_valid`，但 diag 里没有任何证据能解释
+                #   "它凭什么判对"，只能靠读源码推测两个守卫都失效了。
+                #   现把验证器的诊断属性带进 diag（lean_code 截断 2000 字符防膨胀）。
+                if report is not None:
+                    _lc = getattr(report, "lean_code", "") or ""
+                    if _lc:
+                        entry["lean_code"] = _lc[:2000]
+                    for _dk in ("verdict_reason", "cross_check",
+                                "sys_verify", "compiled"):
+                        try:
+                            _dv = getattr(report, _dk, None)
+                        except Exception:  # noqa: BLE001
+                            _dv = None
+                        if _dv is not None:
+                            entry[_dk] = _dv
                 if report is None:
                     entry["degraded"] = "no_report"
                     _unknown_streak += 1
@@ -615,14 +666,24 @@ class LeanGate:
         与 `_record_to_memory` 的区别：那是跨题持久记忆（#13），
         这是单题内的埋点统计（#44），两者数据来源相同但用途不同。
         失败一律吞掉——统计不可靠也好过主流程中断。
+
+        2026-09-15：导入失败**不再静默**。此前只打 `debug`，导致
+        「LeanSearch 实际上从未生效」在历史 202 题里无人察觉。现在首次
+        失败升级为 warning 并只提醒一次。
         """
+        global _LEANSEARCH_WARNED
         try:
             if not names:
                 return
             from tools.lean_local.lean_search import get_stats
             get_stats().note_adopted(names)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("[lean_gate] 采用埋点回记失败（已忽略）: %s", exc)
+            if not _LEANSEARCH_WARNED:
+                _LEANSEARCH_WARNED = True
+                logger.warning(
+                    "[lean_gate] LeanSearch 埋点不可用（import/调用失败）：%s "
+                    "—— 后果是引理检索统计恒为 0（历史 202 题 search_calls=0 即此因）",
+                    exc)
 
     def _record_to_memory(self, ctx: TaskContext, domain: str,
                           names: list) -> None:

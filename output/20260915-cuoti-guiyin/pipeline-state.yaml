@@ -1,0 +1,33 @@
+request_id: 20260915-cuoti-guiyin
+entry_type: full_pipeline
+created_at: "2026-09-15T00:15:00+08:00"
+intent_len: 46
+output_docx_path: "D:\\挑战杯\\错题归因分析_给老师_0915.docx"
+output_docx_user_specified: true
+current_stage: S3
+stage_1:
+  name: doc-writer
+  status: completed
+  genre: general
+  expert_used: general-writer
+  route_tag: general_writing
+  critic_decision: null
+  output: stage1/final_draft.md
+stage_2:
+  name: doc-formatter
+  status: completed
+  route: html
+  html_sub: template
+  genre: business-report
+  html_review_attempts: 1
+  html_review_score: 100
+  output: stage2/formatted-错题归因分析.html
+  output_format: html
+  intermediate_dir: "D:\\挑战杯\\output\\20260915-cuoti-guiyin\\stage2\\intermediate\\"
+stage_3:
+  name: doc-converter
+  status: pending
+  input: stage2/formatted-错题归因分析.html
+  output: "D:\\挑战杯\\错题归因分析_给老师_0915.docx"
+consistency_check: null
+updated_at: "2026-09-15T00:16:00+08:00"

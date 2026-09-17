@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "time": "2026-09-05 23:05:29",
+    "model": "deepseek",
+    "model_label": "deepseek-v4-flash",
+    "mode": "dry",
+    "repeat": 1,
+    "lean_status": "已跳过（--no-lean）"
+  },
+  "summary": {
+    "counts": {
+      "E": 4
+    },
+    "total": 4,
+    "errors": 0,
+    "truncated": 0,
+    "lean_checked": 0,
+    "lean_ok_rate_all": 0.0,
+    "mean_elapsed": 0.0,
+    "E": {
+      "per_item": [
+        {
+          "eid": "E1",
+          "theorem": "拉格朗日中值定理",
+          "dimension": "条件完整性",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "在闭区间 [a,b] 上连续",
+            "在开区间 (a,b) 上可导",
+            "存在 ξ ∈ (a,b) 使 f'(ξ) = (f(b)-f(a))/(b-a)"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E2",
+          "theorem": "费马小定理",
+          "dimension": "量词与模运算",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "p 是素数",
+            "p 不整除 a（即 gcd(a,p) = 1）",
+            "a^(p-1) ≡ 1 (mod p)"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E3",
+          "theorem": "柯西-施瓦茨不等式",
+          "dimension": "适用范畴",
+          "n_cond": 3,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "在内积空间（或实数/复数的 n 维向量空间）上成立",
+            "|⟨u,v⟩| ≤ ‖u‖ · ‖v‖ 的形式",
+            "取等条件：u 与 v 线性相关（成比例）"
+          ],
+          "has_lean": 1,
+          "lean_ok": 0,
+          "both_pass": 0
+        },
+        {
+          "eid": "E4",
+          "theorem": "一致收敛与极限交换",
+          "dimension": "隐含条件",
+          "n_cond": 2,
+          "n_hit": 0,
+          "completeness": 0.0,
+          "full": 0,
+          "missing": [
+            "f_n 必须一致收敛于 f（而非仅仅逐点收敛）",
+            "结论：极限函数连续 / 极限与积分可交换"
+          ],
+          "has_lean": 0,
+          "lean_ok": 0,
+          "both_pass": 0
+        }
+      ],
+      "by_dimension": {
+        "条件完整性": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "适用范畴": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "量词与模运算": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        },
+        "隐含条件": {
+          "n": 1,
+          "completeness": 0.0,
+          "full_rate": 0.0
+        }
+      },
+      "aggregate": {
+        "n_items": 4,
+        "n_with_lean": 3,
+        "condition_completeness_rate": 0.0,
+        "full_statement_rate": 0.0,
+        "lean_special_ok_rate": 0.0,
+        "both_pass_rate": 0.0
+      }
+    }
+  }
+}

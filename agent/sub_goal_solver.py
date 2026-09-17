@@ -79,6 +79,59 @@ except ImportError:  # 提交包（submit/）路径兜底
 
 logger = logging.getLogger("MathPilot")
 
+
+# ★★ 2026-09-17（P-20）：规划结论**不得当作已证实事实**注入 merge。
+# 实测 10 题中 **5 题的蓝图结论值即与 gold 不符**：
+#   025「故最小值为 4」(gold 506) / 013「prove minimal d=50」(gold 48) /
+#   070「1/2 is achievable」(gold 5/8) / 002「T=1 is sufficient」(gold 1/2) /
+#   086「次数 8」(gold 16)。
+# 而 merge 提示词同时注入【蓝图规划结论】与【合并策略】(后者即 blueprint_merge)，
+# 二者都内嵌该数值 ⇒ **等于指令模型输出该值**，把蓝图的错误结论锚进最终答案。
+# 处理分两层：
+#   ① 本函数剥掉最露骨的「答案形态」（\boxed / 「最终答案: …」）；
+#   ② 模板侧声明二者均为「待验证假设」（见 prompts/sub_goal.py 的合并纪律段）。
+# ⚠ 只收「**明确的形态标记**」，不收自然语句：
+#   · `\boxed{…}` 与「最终答案: …」是**答案形态标记**，必剥；
+#   · 「答案为 X」属**自然语句**（如规划结论「证明最终答案为 42」），
+#     **不得剥** —— 首版纳入该模式导致既有测试失败（合法结论被削掉）。
+_ANSWER_FORM_RES = (
+    re.compile(r"\\boxed\s*\{[^{}]*\}"),
+    re.compile(r"最终答案\s*[:：][^\n]*"),
+    re.compile(r"the\s+answer\s+is\b[^\n]{0,80}", re.IGNORECASE),
+)
+
+
+def _strip_answer_forms(text: str) -> str:
+    """剥掉文本中的「结论形态」片段，只留策略 / 规划描述（P-20，2026-09-17）。
+
+    **只删最露骨的形态，不删数值本身** —— 策略里出现 `d=50` 属正常规划描述，
+    靠模板侧的「待验证假设」声明约束；正则误删会丢失策略信息，故不扩大到数值。
+    """
+    t = str(text or "")
+    if not t:
+        return ""
+    for pat in _ANSWER_FORM_RES:
+        t = pat.sub("", t)
+    t = re.sub(r"[（(]\s*[)）]", "", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
+
+
+# ★ 2026-09-17（P-9）：穷尽性检查的**固定段落**清单。
+# ⚠ 与 `orchestrator._parse_exhaust_result` 的口径必须一致 ——
+#   由 tests/test_exhaust_sections_consistency.py 断言，防止两处漂移。
+_EXHAUST_SECTIONS = ("解族清单", "逐族判定", "前序结论复核")
+_EXHAUST_VERDICT_RE = re.compile(r"EXHAUSTIVE\s*[:：]\s*(yes|no)", re.IGNORECASE)
+
+
+def _exhaust_missing_sections(text: str) -> list:
+    """返回「解族穷尽性检查」输出中缺失的段落名（空列表 = 齐备）。"""
+    t = str(text or "")
+    miss = [n for n in _EXHAUST_SECTIONS if n not in t]
+    if not _EXHAUST_VERDICT_RE.search(t):
+        miss.append("EXHAUSTIVE")
+    return miss
+
 # 单选信号（2026-09-13）：题干出现这些**明确指向唯一答案**的措辞时，
 # 选择题按"单选"汇总（取唯一/最优），否则按多选（全取判真项）。
 # ⚠ 不可用“下列正确的是”判断单选——087/093/094 都是该措辞却为**多选**，
@@ -96,7 +149,8 @@ _CALC_GUIDE = (
     "· **易错运算 → 必须写 <calc>表达式</calc> 交系统精确求值（严禁心算）**："
     "开方/根式 sqrt、对数 ln（log 即自然对数，其他底请用换底写成 ln 之比）、"
     "指数 exp 与自然常数 e（写 exp(1)）、组合数 comb(n,k)、排列 perm(n,k)、"
-    "阶乘 ! 或 fact(n)、幂运算 ** 或 ^、取模 mod、求和 sum(f,x,a,b)、"
+    "阶乘 ! 或 fact(n)、幂运算 ** 或 ^、取模（**必须写 `a % b`**，不要写 `a mod b`）、"
+    "求和 sum(f,x,a,b)、"
     "积分 integral(f,x[,a,b])、圆周率 pi。"
     "注意**工具只认这些函数名**：组合数写 comb（勿写 C(n,k)/choose/ncr）、"
     "排列写 perm（勿写 P(n,k)/npr）、阶乘写 fact 或 n!；\n"
@@ -295,11 +349,18 @@ class SubGoalSolverAgent(BaseAgent):
         # `self.record(ctx, ...)` → 每次调用必抛 NameError（本方法无 self/ctx），
         # 且该分支无条件执行 = 子目标规划 100% 崩溃。改为**上限走参数**，
         # 调用方从 config 读取后传入，静态方法保持无状态（测试可直接调用）。
-        _max_sg = int(max_subgoals or 6)
-        if len(subgoals) > _max_sg:
-            logger.info("SubGoal plan: 子目标 %d 个 > 上限 %d，保留前 %d 个"
-                        "（简化求解，非中断）", len(subgoals), _max_sg, _max_sg)
-            subgoals = subgoals[:_max_sg]
+        # 2026-09-15：改用与 blueprint 路径**共用**的 cap_subgoals_keep_last。
+        # 语义统一（None→默认 / <=0→不截断），且**保留收尾子目标**——
+        # 原 `subgoals[:_max_sg]` 盲截拓扑序尾部，会丢掉"合并结论/得出最终
+        # 答案"那一步（prompts/sub_goal.py 明写最后一个是合并结论），
+        # 导致前面所有子目标白解。两条路径必须同源，故抽成公共函数。
+        from .blueprint_planner import cap_subgoals_keep_last
+        _n_before = len(subgoals)
+        subgoals, _dropped_sg = cap_subgoals_keep_last(subgoals, max_subgoals)
+        if _dropped_sg:
+            logger.info("SubGoal plan: 子目标 %d 个，截断 %d 个"
+                        "（保留收尾子目标；简化求解，非中断）",
+                        _n_before, len(_dropped_sg))
 
         valid_types = {"compute", "prove", "derive", "verify"}
         seen_ids = set()
@@ -429,7 +490,8 @@ class SubGoalSolverAgent(BaseAgent):
             return ctx
 
         subgoals = plan_data.get("subgoals", [])
-        merge_strategy = plan_data.get("merge_strategy", "")
+        # 2026-09-17（P-20）：剥掉规划结论里的「答案形态」，防其被当作指令
+        merge_strategy = _strip_answer_forms(plan_data.get("merge_strategy", ""))
         problem_analysis = plan_data.get("problem_analysis", {})
         # ---- 2026-09-14 穷尽性搜索机制（B0 遗留课题）----
         # 实测 003（漏 `2030`）与 074（漏取整解族）的失败**不是形态问题**：
@@ -446,16 +508,22 @@ class SubGoalSolverAgent(BaseAgent):
                     "id": _max_id + 1,
                     "title": "解族穷尽性检查",
                     "description": (
-                        "本题问『所有 / 全部』取值，前面的子目标**可能只找到了一部分解**。"
-                        "现在专门做一次穷尽性检查：\n"
-                        "1. 先列出本题**所有可能的解族类型**（如：常数解 / 线性解 / "
-                        "多项式解 / 周期解 / 取整型解（⌈x⌉、⌊x⌋）/ 分段定义解 / "
-                        "特殊函数解 / 指数对数型解 …）—— 这一步要**尽量列全**；\n"
-                        "2. 对每一类逐一判定『该类是否存在满足条件的解』，给出结论与"
-                        "理由（**排除某类必须给出反证或构造性论证**，不得只写"
-                        "“不可能”“显然无解”）；\n"
-                        "3. 最后必须明确回答：**除前面已找到的解之外，是否还存在"
-                        "其他解族？** 若有，写出该解族的具体形式（含参数）。\n"
+                        "本题问『所有 / 全部』取值。\n\n"
+                        "⚠ **前序子目标的结论尚未经过完备性检验**，它们只是"
+                        "**待检验的假设**，不是已确立的事实。你的任务是找出它们"
+                        "**遗漏**了什么，**不是**确认它们正确。\n\n"
+                        "必须按下列**固定格式**作答（缺任一段视为未完成检查）：\n\n"
+                        "解族清单: 列出本题所有可能的解族类型"
+                        "（如：常数解 / 线性解 / 多项式解 / 周期解 / 取整型解（⌈x⌉、⌊x⌋）/ "
+                        "分段定义解 / 特殊函数解 / 指数对数型解 …）—— **尽量列全**；\n"
+                        "逐族判定: 对上一步列出的**每一族**逐一给出『存在 / 不存在』"
+                        "及其依据（**排除某类必须给出反证或构造性论证**，"
+                        "不得只写“不可能”“显然无解”）；\n"
+                        "前序结论复核: 对前序子目标已找到的解，明确写出"
+                        "『该解属于上述哪一族』『是否还有其他解与它同族』；\n"
+                        "结论: EXHAUSTIVE: yes 或 EXHAUSTIVE: no\n"
+                        "遗漏解族: 若上一步为 no，写出遗漏解族的具体形式（含参数）；"
+                        "若为 yes，写『无』。\n\n"
                         "⚠ 宁可多列一类再排除，也不得因“看起来不可能”而跳过；"
                         "给出结论时必须注明依据。"
                     ),
@@ -463,8 +531,17 @@ class SubGoalSolverAgent(BaseAgent):
                     # ⚠ **必须依赖全部已有子目标**：执行期 `_format_dep_results`
                     # 只注入**直接依赖**的结果 —— 若只依赖最后一个，穷尽性检查就
                     # 看不到前面找到的任何解，而它的任务恰恰是"检查是否遗漏解族"。
+                    # ★ 2026-09-17 改进：注入**保留**（否则它无从对照），但注入的
+                    #   语义已改为"待检验假设"（见上方 description 第一段）——
+                    #   实测 003 原实现下，该子目标只复述了前序结论 `a_n = n`，
+                    #   既没列解族也没做排除，属**被前序结论锚定**。
+                    #   同时要求**固定格式输出**，使"没做检查"从不可检测变为可检测
+                    #   （`_collect_diag` 会解析出 `exhaust_result`）。
                     "depends_on": [sg["id"] for sg in subgoals],
-                    "expected_output": "各解族存在性判定 + 是否存在遗漏解族 + 遗漏解的具体形式",
+                    "expected_output": (
+                        "必须包含四段：『解族清单:』『逐族判定:』『前序结论复核:』"
+                        "『结论: EXHAUSTIVE: yes|no』；若为 no 还需『遗漏解族:』。"
+                        "缺任一段视为未完成检查。"),
                     "result": "",
                 })
                 # merge 必须把「解族穷尽性检查」的结论纳入最终答案（否则子目标白跑）
@@ -556,20 +633,13 @@ class SubGoalSolverAgent(BaseAgent):
                 })
                 _n_reuse += 1
                 continue
-            # 2026-09-06：升级 gen_time_up——只查 is_time_critical（=deadline-120/60s）
-            # 挡不住"750s stage_budget 之外 for-sg 主循环一路烧到临界点"
-            # （冒烟 geom-051 2.7=1073s 实证），必须更早停手给验证留预算。
-            if ctx.gen_time_up():
-                self.record(ctx, "subgoal", f"预算不足，跳过剩余子目标 (当前={sg['id']}/{len(subgoals)})")
-                break
-            # 2026-09-04 阶段预算闸：子目标阶段超预算 → 停解新子目标，
-            # 但**不 return**，保留已解结果进入 merge 收尾（见阶段三）。
-            if _stage_left() <= 0:
-                self.record(ctx, "subgoal",
-                            f"子目标阶段预算 {stage_budget:.0f}s 用尽，"
-                            f"停止求解剩余子目标 (当前={sg['id']}/{len(subgoals)})，"
-                            "强制收尾 merge")
-                break
+            # 2026-09-17 **移除「因时间不足跳过剩余子目标」约束**
+            # （用户明确要求：研究阶段不设时间预算、时间/token 无限，一切为正确率让路）。
+            # 原两处闸（`if ctx.gen_time_up(): break` 与 `if _stage_left() <= 0: break`）
+            # 会在生成侧软截止 / 子目标阶段预算耗尽时直接放弃剩余子目标 —— 后半段
+            # 一旦被跳过，merge 只能拿残缺子目标合成（025 类题即此形态）⇒ 必错。
+            # 循环本身由 `for sg in subgoals` 界定，删除后不存在无限循环风险；
+            # stage_budget 仍写入 ctx._subgoal_stage_budget 供诊断，仅不再作为中断条件。
 
             # 2026-09-06 老师建议：子目标独立性 + 最小上下文依赖。
             # subgoal_ctx_mode = "deps"（默认）：按 depends_on 只注入直接依赖结果，
@@ -589,9 +659,10 @@ class SubGoalSolverAgent(BaseAgent):
             # 2026-09-02 老师方案 B：蓝图评审 OK 但子目标失败 → 重做子目标
             # （不重画蓝图）。一次失败常是瞬时 LLM 错误/预算抖动，带已解
             # 子目标上下文重试一次；仍失败才记为占位（留给外层占位符兜底）。
-            # 2026-09-04 阶段预算：重试 = 一次完整 LLM 轮（60-110s），
-            # 阶段预算剩余不足时不再重试（省下的时间留给 merge 收尾）。
-            if step_result.startswith("[子目标") and _stage_left() > 120:
+            # 2026-09-17 移除重试的时间闸（原 `and _stage_left() > 120`）：时间无限，
+            # 子目标失败一律带上下文重试一次；配套的「剩余不足则放弃重试」分支
+            # （原 `elif ... _stage_left() <= 120`，仅写一条"放弃重试"记录）一并删除。
+            if step_result.startswith("[子目标"):
                 self.record(ctx, "subgoal",
                             f"子目标 #{sg['id']}「{sg['title']}」失败，带上下文重试一次")
                 if _ctx_mode == "all":
@@ -603,17 +674,14 @@ class SubGoalSolverAgent(BaseAgent):
                 retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results2)
                 if retry and not retry.startswith("[子目标"):
                     step_result = retry
-            elif step_result.startswith("[子目标") and _stage_left() <= 120:
-                self.record(ctx, "subgoal",
-                            f"子目标 #{sg['id']}「{sg['title']}」失败，"
-                            f"阶段预算剩余 {_stage_left():.0f}s 不足，放弃重试，强制收尾")
 
             # S1-lite（2026-09-06 老师建议）：子目标级 0-LLM 校验前移——
             # 便宜且确定的校验先跑（截断/lean 代码片编译），过了才认结果，
             # 不让脏结果流进 merge 与后续子目标（验证-精炼下沉到子目标级）。
-            # 校验全部 0-LLM；失败且预算足 → 带反馈重解一次；仍失败用原结果。
-            if (not step_result.startswith("[子目标")
-                    and not ctx.gen_time_up() and _stage_left() > 90):
+            # 校验全部 0-LLM；失败 → 带反馈重解一次；仍失败用原结果。
+            # 2026-09-17 移除时间闸（原 `not ctx.gen_time_up() and _stage_left() > 90`）：
+            # 时间无限，0-LLM 校验无条件执行（成本仅本地计算，无 LLM 开销）。
+            if not step_result.startswith("[子目标"):
                 _hint = self._subgoal_light_check(ctx, sg, step_result)
                 if _hint:
                     self.record(
@@ -666,8 +734,10 @@ class SubGoalSolverAgent(BaseAgent):
             # 稳妥性：真正的"重规划"**不在此循环内新建实现**，而是把失败原因写入
             # ctx.revise_feedback、并由上游既有重规划能力（_review_and_maybe_replan
             # / dag_replan_gate）处理，避免破坏 depends_on 顺序与阶段预算。
-            if (getattr(self.config, "subgoal_adaptive_recover", True)
-                    and not ctx.gen_time_up() and _stage_left() > 150):
+            # 2026-09-17 移除时间闸（原 `not ctx.gen_time_up() and _stage_left() > 150`）：
+            # 时间无限，失败恢复无条件尝试（重做上限仍由下方 `_tries < 2` 控制，
+            # 不存在无限循环）。
+            if getattr(self.config, "subgoal_adaptive_recover", True):
                 _failed_now = (self._looks_placeholder(step_result)
                                or step_result.startswith("[子目标")
                                or "未产出有效结论" in step_result
@@ -828,6 +898,47 @@ class SubGoalSolverAgent(BaseAgent):
                         f"子目标阶段预算用尽（剩 {_stage_left():.0f}s），跳过 DAG replan")
         return ctx
 
+    def _note_dag_replan(self, ctx, *, triggered: bool, replanned: bool = False,
+                         rejected_ids: list | None = None,
+                         branch: str = "", success: bool = False,
+                         reason: str = "") -> None:
+        """把评审/重规划结果并入 ctx.dag_review_report["replan"]（2026-09-17）。
+
+        背景（实测 9 题 diag.dag_review 全为 {}）：DagReviewerAgent.review() 虽会
+        写 ctx.dag_review_report，但它在 `is_time_critical()` / 空 DAG 处**提前
+        return 就不写**；而重规划本身的触发与成败（分支 / 被拒子目标）此前
+        **无任何落盘** ⇒ 无法归因"重规划到底跑没跑、跑成什么样"。
+        此处补齐，且**合并写入**（保留评审器写的 results / reject_count 明细）。
+        留痕失败一律吞掉，绝不阻断求解。
+        """
+        try:
+            _rep = getattr(ctx, "dag_review_report", None)
+            if not isinstance(_rep, dict):
+                _rep = {}
+                ctx.dag_review_report = _rep
+            _rp = _rep.get("replan")
+            if not isinstance(_rp, dict):
+                _rp = {}
+                _rep["replan"] = _rp
+            _rp["triggered"] = bool(triggered)
+            _rp["replanned"] = bool(replanned)
+            if rejected_ids is not None:
+                _rp["rejected_ids"] = [str(_x) for _x in list(rejected_ids)][:20]
+            if branch:
+                _branches = _rp.setdefault("branches", [])
+                if branch not in _branches:
+                    _branches.append(branch)
+            if reason:
+                _rp["reason"] = reason
+            _rp["success"] = bool(success)
+            # 落盘后的蓝图规模/根：供 diag 判断"蓝图是否真的被换掉"
+            _bp = getattr(ctx, "blueprint", None)
+            if isinstance(_bp, dict) and _bp.get("nodes"):
+                _rp["dag_nodes"] = len(_bp.get("nodes") or {})
+                _rp["root_id"] = _bp.get("root_id")
+        except Exception:  # noqa: BLE001  留痕失败不阻断
+            pass
+
     def _review_and_maybe_replan(self, ctx, dag=None, max_replan_rounds: int = 2) -> bool:
         """评审 DAG + 三级动态修复（#34 老师要求："dag 蓝图不能是死的"）。
 
@@ -839,6 +950,14 @@ class SubGoalSolverAgent(BaseAgent):
         判定信号（DagReviewer）：
           - reject_count >= 5（绝对，9/1 由 3 调高）或 reject_ratio >= 40%（相对）→ 触发修复
         返回是否触发了任何修复。
+
+        2026-09-17 修复（**重规划白跑**）：本方法原全程只改**局部变量 `dag`**
+        （`dag = new_dag`），从不写回 `ctx.blueprint` ⇒ 重规划结果被丢弃，下游
+        （merge 的 `_blueprint_conclusion`、后续 run()、其它读 ctx.blueprint 的
+        agent）看到的仍是旧蓝图；实测 9 题 `dag_replan_events` 全为 []。
+        现改为：确实产出新 DAG 时 `ctx.blueprint = dag.to_dict()`（与求解前评审门
+        `_dag_replan_gate` 第 1591 行回写口径一致），并把评审/重规划结果写入
+        `ctx.dag_review_report`（见 `_note_dag_replan`）。
         """
         from .dag_reviewer import DagReviewerAgent
         from .blueprint_planner import BlueprintDAG
@@ -847,19 +966,27 @@ class SubGoalSolverAgent(BaseAgent):
         if dag is None and ctx.blueprint:
             dag = ctx.blueprint
         if dag is None:
+            self._note_dag_replan(ctx, triggered=False, reason="无 DAG，跳过评审")
             return False
         if isinstance(dag, dict):
             try:
                 dag = BlueprintDAG.from_dict(dag)
             except Exception as exc:  # noqa: BLE001
                 self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
+                self._note_dag_replan(ctx, triggered=False, success=False,
+                                      reason=f"DAG 解析失败: {exc}")
                 return False
         if not dag.nodes:
+            self._note_dag_replan(ctx, triggered=False, reason="DAG 无节点，跳过评审")
             return False
         results_map = {sg["id"]: sg.get("result", "")
                        for sg in getattr(ctx, "subgoal_trace", []) or []}
         report = reviewer.review(ctx, dag, results_map=results_map)
         if not report.should_replan():
+            # 2026-09-17：未触发也要留痕，否则 diag 无法区分"评审通过"与"压根没评审"。
+            self._note_dag_replan(ctx, triggered=False, success=True,
+                                  rejected_ids=report.rejected_nodes(),
+                                  reason="DAG 评审通过，未触发重规划")
             return False
         # 2) 应修复：聚合 hint + rejected 节点（"错误的地方 + 原因"）
         from .blueprint_planner import (
@@ -886,6 +1013,9 @@ class SubGoalSolverAgent(BaseAgent):
                 self.record(ctx, "dag_replan",
                             f"生成侧时间已到，提前退出 DAG 修复循环 "
                             f"(round={round_idx + 1}/{replan_rounds})")
+                self._note_dag_replan(
+                    ctx, triggered=True, success=True,
+                    reason=f"生成侧软截止已到，第 {round_idx + 1} 轮提前退出修复循环")
                 break
             # 2026-09-12 定型前审核：原为 `if not ctx.budget or not True:`
             # （`or not True` 恒为 False，`A or False ≡ A`，删除属恒等变换，
@@ -893,6 +1023,9 @@ class SubGoalSolverAgent(BaseAgent):
             if not ctx.budget:
                 self.record(ctx, "dag_replan",
                             f"DAG 修复预算不足，提前停止 (round={round_idx + 1})")
+                self._note_dag_replan(
+                    ctx, triggered=True, success=False,
+                    reason=f"DAG 修复预算不足，第 {round_idx + 1} 轮提前停止")
                 return False
             # 3a) 先试子树级局部重写（精准修改，不动好的部分）
             # 9/1 冒烟 10 题实锤：reject 波及根（LCA=根）时子树重写全白费
@@ -906,6 +1039,13 @@ class SubGoalSolverAgent(BaseAgent):
                         feedback_lines=feedback_lines)
                     if new_dag is not None:
                         dag = new_dag
+                        # 2026-09-17：确实产出新 DAG → **回写 ctx.blueprint**，
+                        # 否则重规划结果被丢弃（见方法 docstring）。
+                        ctx.blueprint = dag.to_dict()
+                        self._note_dag_replan(
+                            ctx, triggered=True, replanned=True,
+                            rejected_ids=rejected_ids, branch="subtree",
+                            success=True, reason="子树级局部重写产出新 DAG")
                         self.record(ctx, "dag_replan",
                                     f"DAG 子树重写: {len(dag.nodes)} 节点, "
                                     f"rejected={rejected_ids[:5]}")
@@ -914,6 +1054,10 @@ class SubGoalSolverAgent(BaseAgent):
                         if not report2.should_replan():
                             self.record(ctx, "dag_replan",
                                         "子树重写后 DAG 通过评审，停止修复")
+                            self._note_dag_replan(
+                                ctx, triggered=True, replanned=True,
+                                rejected_ids=rejected_ids, branch="subtree",
+                                success=True, reason="子树重写后 DAG 通过评审")
                             return True
                         feedback_lines = (report2.merge_from_hints().split("\n")
                                           if report2.merge_from_hints() else feedback_lines)
@@ -924,20 +1068,39 @@ class SubGoalSolverAgent(BaseAgent):
                 ctx, prior_dag=dag, feedback_lines=feedback_lines)
             if new_dag is None:
                 self.record(ctx, "dag_replan", f"第 {round_idx + 1} 轮重生成失败，停止")
+                self._note_dag_replan(
+                    ctx, triggered=True, replanned=False, success=False,
+                    reason=f"第 {round_idx + 1} 轮整树重生成失败（保留原蓝图）")
                 return True  # 已尝试过，标记触发
             dag = new_dag
+            # 2026-09-17：确实产出新 DAG → **回写 ctx.blueprint**（同 _dag_replan_gate）。
+            ctx.blueprint = dag.to_dict()
+            self._note_dag_replan(
+                ctx, triggered=True, replanned=True, rejected_ids=rejected_ids,
+                branch="full", success=True,
+                reason=f"第 {round_idx + 1}/{replan_rounds} 轮整树重生成产出新 DAG")
             self.record(ctx, "dag_replan",
                         f"DAG 第 {round_idx + 1}/{replan_rounds} 轮整树重生成: "
                         f"{len(new_dag.nodes)} 节点, root={new_dag.root_id}")
             # 重生成后再评审一次，避免死循环（重写还拒 → 停）
-            new_plan = new_dag.to_subgoal_plan()
+            # ★ 2026-09-15：改走按档位分档的上限（见 _subgoal_cap）
+            new_plan = new_dag.to_subgoal_plan(
+                self._subgoal_cap(ctx),
+                with_deps=getattr(self.config, "blueprint_deps_enabled", True))
             subgoals = new_plan.get("subgoals", [])
+            # 重生成后的 DAG 若含前瞻引理，同样入记忆（否则重写一次就丢一批）
+            self._inject_anticipatory_lemmas(
+                ctx, new_plan.get("anticipatory_lemmas") or [])
             if subgoals:
                 # 用 placeholder 结果集触发下一轮评审（即用新 DAG 但旧求解结果视作未知）
                 report2 = reviewer.review(ctx, new_dag, results_map={})
                 if not report2.should_replan():
                     self.record(ctx, "dag_replan",
                                 "重生成 DAG 通过评审，停止整树重构")
+                    self._note_dag_replan(
+                        ctx, triggered=True, replanned=True,
+                        rejected_ids=rejected_ids, branch="full",
+                        success=True, reason="整树重生成后 DAG 通过评审")
                     return True
                 feedback_lines = report2.merge_from_hints().split("\n") \
                     if report2.merge_from_hints() else feedback_lines
@@ -946,6 +1109,10 @@ class SubGoalSolverAgent(BaseAgent):
             # for...else 惯例）；新增的时间闸 break 提前退出时不冒领此记录。
             self.record(ctx, "dag_replan",
                         f"达到重生成硬上限 {replan_rounds} 轮，停止")
+            self._note_dag_replan(
+                ctx, triggered=True, success=True,
+                rejected_ids=rejected_ids,
+                reason=f"评审始终不通过，达到重生成硬上限 {replan_rounds} 轮")
         return True
 
     @staticmethod
@@ -1049,9 +1216,11 @@ class SubGoalSolverAgent(BaseAgent):
             opts = extract_options(ctx.problem or "") or []
             if len(opts) < 2:
                 return None
-            _max_sg = int(getattr(self.config, "max_subgoals", 6) or 6)
+            # ★ 2026-09-15：改走按档位分档的上限（见 _subgoal_cap）
+            _max_sg = self._subgoal_cap(ctx)
             # 基准子目标(1) + N 个判定子目标(N)；超过上限则回退 LLM 规划
-            if len(opts) + 1 > _max_sg:
+            # `_max_sg <= 0` = 不截断 ⇒ 逐项判定恒可用（2026-09-15 赛后口径）
+            if _max_sg > 0 and len(opts) + 1 > _max_sg:
                 return None
             # ---- 题型子类识别（2026-09-13 用户要求：解题逻辑必须随题型而变）----
             #   A 命题判定型（选项是独立陈述，多选）→ 基准 + 逐项判定 → 全选为真
@@ -1151,6 +1320,31 @@ class SubGoalSolverAgent(BaseAgent):
             return None
 
     # ---------- 阶段一：规划 ----------
+    def _subgoal_cap(self, ctx) -> int:
+        """当前题的子目标数上限（★ 2026-09-15 新增：按档位分档）。
+
+        取值优先级：
+          ① `config.max_subgoals_by_tier[ctx.tier]`（新，按档位）
+          ② `config.max_subgoals`（旧，全局单一值，向后兼容）
+          ③ 全局兜底 6
+
+        语义：**返回 0 或负数 = 不截断**（与 `cap_subgoals_keep_last` 一致）。
+
+        背景：此前 `max_subgoals` 是全局单一值 6，而蓝图提示词已写明
+        "简单 3~5 / 中等 5~12 / **难题 12~30**" ⇒ **提示词与代码矛盾**
+        （模型给难题画 12~30 个，代码一律切到 6）。
+        现按档位给不同上限：deep 是难题档，题更复杂 → 允许更多子目标。
+        """
+        tier = str(getattr(ctx, "tier", "") or "")
+        by_tier = getattr(self.config, "max_subgoals_by_tier", None)
+        if isinstance(by_tier, dict) and tier in by_tier:
+            try:
+                return int(by_tier[tier])
+            except (TypeError, ValueError):
+                pass
+        v = getattr(self.config, "max_subgoals", 6)
+        return 6 if v is None else int(v)
+
     def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
         """调用 LLM 生成子目标规划 JSON"""
         # 2026-09-13 用户要求「选择题就每个选项都判断」：选择题**不走 LLM 规划**，
@@ -1225,8 +1419,10 @@ class SubGoalSolverAgent(BaseAgent):
             if raw is None:
                 logger.warning("SubGoal plan: JSON parse failed on attempt %d", attempt + 1)
                 continue
+            # ★ 2026-09-15：改走按档位分档的上限（见 _subgoal_cap）
+            _sg_cap = self._subgoal_cap(ctx)
             subgoals = self._parse_subgoal_plan(
-                raw, int(getattr(self.config, "max_subgoals", 6) or 6))
+                raw, 6 if _sg_cap is None else int(_sg_cap))
             if subgoals is None:
                 logger.warning("SubGoal plan: invalid subgoals on attempt %d", attempt + 1)
                 continue
@@ -1287,18 +1483,71 @@ class SubGoalSolverAgent(BaseAgent):
             dag = self._dag_replan_gate(ctx, dag)
             if dag is None:
                 return None
-        plan = dag.to_subgoal_plan()
+        # 2026-09-15 同源修复：此前不传参 ⇒ 恒用默认 6，**config.max_subgoals
+        # （含 0915 新增的 --max_subgoals CLI）对 blueprint 路径完全无效**。
+        # 实测 003/074 都走 Blueprint DAG ⇒ 这些题的旋钮是死的。现与 LLM 规划
+        # 路径（_parse_subgoal_plan）取同一个 config 字段。
+        # ★ 2026-09-15：改走按档位分档的上限（见 _subgoal_cap）
+        plan = dag.to_subgoal_plan(
+            self._subgoal_cap(ctx),
+            with_deps=getattr(self.config, "blueprint_deps_enabled", True))
         if not plan.get("subgoals"):
+            # 退化情形：整张 DAG 都是前瞻引理（无 required 叶子）。
+            # 此时无子目标可解，仍视为规划失败并回退 LLM 规划（不静默产出空解）。
             logger.warning("Blueprint DAG 无可用叶子子目标")
             return None
+        # ★ 前瞻引理规划（LEAP §2.3）：anticipatory 节点不进求解链，
+        #   其陈述写入引理记忆（ctx.lemma_repo），供后续子目标提示词的
+        #   【已建立的结论】区块引用（见 _solve_subgoal 的 lemma_context）。
+        #   ⚠ 用 if 而非无条件赋值：_use_lemma 按领域路由（A/B 实测全开净 0.0pp），
+        #   要保持与 _accumulate_lemma 同一开关语义，不做绕过。
+        self._inject_anticipatory_lemmas(ctx, plan.get("anticipatory_lemmas") or [])
         # 2026-09-06 去 Lean 化：原 LEAP Stage 2 整树 Lean 搭桥审核
         # （_audit_blueprint_tree / lean_translator / lean_refiner）已移除——
         # 平台无 Lean，整树翻译+编译只空转。骨架评审（上方 enable_skeleton_review）
         # 是 LLM 规划质量门，与 Lean 无关，保留。
         self.record(ctx, "blueprint",
                     f"Blueprint DAG → {len(plan['subgoals'])} 个子目标 "
-                    f"(根={dag.root_id}, 节点={len(dag.nodes)})")
+                    f"(根={dag.root_id}, 节点={len(dag.nodes)}, "
+                    f"前瞻引理={len(plan.get('anticipatory_lemmas') or [])})")
         return plan
+
+    def _inject_anticipatory_lemmas(self, ctx: TaskContext,
+                                    lemmas: list) -> int:
+        """把前瞻引理写入引理记忆（LEAP §2.3 落地，2026-09-15）。
+
+        前瞻引理 = 蓝图生成时提议的"当前不需要、但后续可能用到"的辅助引理
+        （论文 Figure 2 虚线边）。它们**不参与当前 AND 节点求解**，
+        只作为可复用的已验证陈述挂到记忆里。
+
+        写入形式与 `_accumulate_lemma` 保持一致（`"标题: 陈述"` 字符串），
+        这样 `_solve_subgoal` 的现成注入通路无需任何改动即可消费。
+
+        返回实际写入条数。
+        """
+        if not lemmas:
+            return 0
+        if not self._use_lemma(ctx):
+            # 领域路由关闭时不注入（与 _accumulate_lemma 同规则，
+            # 避免"引理注入只在数论开"这条既有实测结论被悄悄绕过）
+            return 0
+        added = 0
+        for item in lemmas:
+            if isinstance(item, dict):
+                stmt = str(item.get("statement") or "").strip()
+                nid = str(item.get("id") or "").strip()
+            else:
+                stmt, nid = str(item or "").strip(), ""
+            if not stmt:
+                continue
+            entry = f"前瞻引理{('[' + nid + ']') if nid else ''}: {stmt}"
+            if entry not in ctx.lemma_repo:
+                ctx.lemma_repo.append(entry)
+                added += 1
+        if added:
+            self.record(ctx, "blueprint",
+                        f"前瞻引理入记忆 {added}/{len(lemmas)} 条（不阻塞求解）")
+        return added
 
     def _skeleton_review_loop(self, ctx: TaskContext, dag,
                               planner, max_rounds: int = 2):
@@ -1793,6 +2042,35 @@ class SubGoalSolverAgent(BaseAgent):
         if entry not in ctx.lemma_repo:
             ctx.lemma_repo.append(entry)
 
+    @staticmethod
+    def _strip_tool_residue(text: str, *, strip_calc: bool = True) -> str:
+        """剥除工具调用 XML / calc 标记残留（2026-09-17 新增）。
+
+        为什么需要：实测 official112-025 的 6 个候选中 **5 个** `answer` 是字面量
+        `</tool_call>`（reasoning 却是完整推理）——根因是几条「把模型原文尾部切片
+        当答案/结果」的路径不过剥壳，工具标签原样落盘 ⇒ 该题必然判错。
+        `utils.extract` 已有 `_strip_calc_markers` / `_strip_toolcall_markers`，
+        此处统一封装，避免各调用点口径漂移。
+
+        `strip_calc=False`：只剥工具调用 XML、**保留** `<calc>` 标记。用于
+        "calc 工具关闭 / 不可用（resolve_all_calcs is None）"的场景 —— 此时
+        `<calc>` 不会被回填，按既有契约原样保留
+        （见 tests/test_sub_goal_solver.py::test_disabled_keeps_original）。
+
+        惰性 import + try/except：剥壳失败一律退回原文，绝不阻断求解。
+        """
+        if not text:
+            return text
+        try:
+            from utils.extract import (_strip_calc_markers,
+                                       _strip_toolcall_markers)
+            _t = str(text)
+            if strip_calc:
+                _t = _strip_calc_markers(_t)
+            return _strip_toolcall_markers(_t)
+        except Exception:  # noqa: BLE001  剥壳失败不阻断
+            return text
+
     def _call_step(self, ctx: TaskContext, user_msg: str,
                      sg: dict | None = None) -> str:
         """单步子目标求解调用（prefill「【本步结果】」答案前置，抑制 CoT）。
@@ -1844,11 +2122,22 @@ class SubGoalSolverAgent(BaseAgent):
                                 expr=_ex, reason=_rs)
 
         # 提取「本步结果」部分
+        # 2026-09-17：**切片/返回前先剥壳**。实测 official112-025 的 6 个候选中
+        # 5 个 `answer` 是字面量 `</tool_call>`（reasoning 却是完整推理）——根因
+        # 就是这里把模型原文尾部（工具调用 XML 残留）原样当成"本步结果"返回，
+        # 再经 merge 变成最终答案。剥壳后为空则返回空串，交给上层兜底。
+        # 注：`<calc>` 只在**回填真正生效**（工具可用且开启，与上方 system 注入、
+        # 下方 resolve_all_calcs 回填同一个条件）时才剥 —— 工具关闭时标记不会被
+        # 回填，按既有契约原样保留（tests::test_disabled_keeps_original 锁死）。
+        _calc_active = (resolve_all_calcs is not None
+                        and getattr(self.config, 'enable_calc_tool', True))
         result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
         if result_match:
-            return result_match.group(1).strip()
-        # 如果没有标记，取最后 500 字符
-        return resp.strip()[-500:]
+            return self._strip_tool_residue(
+                result_match.group(1), strip_calc=_calc_active).strip()
+        # 如果没有标记，取最后 500 字符（同样先剥壳再切片）
+        return self._strip_tool_residue(
+            resp, strip_calc=_calc_active).strip()[-500:]
 
     @staticmethod
     def _oracle_check_step(step_result: str) -> str:
@@ -1982,6 +2271,26 @@ class SubGoalSolverAgent(BaseAgent):
             if _trunc(result):
                 return ("【本步结果】被截断（超出输出上限），"
                         "请压缩推理、只保留结论与关键计算，完整给出【本步结果】。")
+            # ★★ 2026-09-17（P-9）：穷尽性检查的**格式校验提前到循环内**。
+            # 原实现只在 `orchestrator._parse_exhaust_result`（事后 `_collect_diag`）
+            # 解析 ⇒ 「缺段」这一**可机检**的硬信号来得太晚。实测 003（唯一的
+            # 「求所有」题）：`exhaust_diag.appended=true`（子目标 6→7）、
+            # `exhaust_result.complete=false`（四段全缺），而答案照旧提交 ——
+            # 只给 `2026`、漏了 `2030`。
+            # 现缺段 ⇒ 返回反馈 ⇒ 触发既有的「带反馈重解一次」分支。
+            if str(sg.get("title", "") or "").strip() == "解族穷尽性检查":
+                _miss = _exhaust_missing_sections(result)
+                if _miss:
+                    self.record(ctx, "subgoal_exhaust_check",
+                                "穷尽性检查缺段，打回重解: " + "、".join(_miss))
+                    return ("【本步结果】未按要求完成穷尽性检查 —— 缺少段落："
+                            + "、".join(_miss)
+                            + "。请**严格按固定格式**重写，四段必须具备：\n"
+                            "解族清单: …（列出本题所有可能的解族类型）\n"
+                            "逐族判定: …（对每一族给『存在 / 不存在』及其依据）\n"
+                            "前序结论复核: …（前序找到的解属于哪一族、同族是否还有别的）\n"
+                            "结论: EXHAUSTIVE: yes 或 EXHAUSTIVE: no\n"
+                            "（若结论为 no，另加一段『遗漏解族: …』）")
         except Exception:  # noqa: BLE001
             pass
         # L1 lean 代码片编译（仅 deep 档 + lean 可用；禁网纯本地）
@@ -2681,7 +2990,9 @@ class SubGoalSolverAgent(BaseAgent):
         """
         all_results = self._format_all_results(results_map, subgoals)
         # 蓝图最终结论（root 节点 statement）：取 ctx.blueprint，兼容 dict/list 两种形态
-        blueprint_conclusion = self._blueprint_conclusion(ctx)
+        # 2026-09-17（P-20）：同上，蓝图根节点结论里若含 \boxed /「最终答案」先剥离
+        blueprint_conclusion = _strip_answer_forms(
+            self._blueprint_conclusion(ctx))
         # 2026-09-12 客观题特化（三处同源注入之③：merge 合并）——merge 直接产出
         # 最终答案署名候选，特化纪律必须在这里也在场，否则"检测到了"却"没照做"。
         _obj_inj_m = ""
@@ -3046,10 +3357,22 @@ class SubGoalSolverAgent(BaseAgent):
 
     @staticmethod
     def _fallback_from_last_subgoal(subgoals: list[dict]) -> str:
-        """兜底：使用最后一个成功求解的子目标结果"""
+        """兜底：使用最后一个**剥壳后仍有实质内容**的子目标结果。
+
+        2026-09-17 两处修复（实测 official112-025）：
+        ① 返回前剥壳：子目标 result 可能是 `</tool_call>` 这类纯工具残留，
+           原样返回会把标签当最终答案（025 的 5/6 候选即此形态）；
+        ② 倒序找第一个**剥壳后非空**的结果：原实现只看 `sg.get("result")`
+           真值，若最后一个子目标是空壳（纯标签）就被当答案返回，故剥壳后
+           为空则继续往前找，避免"空壳顶替真结论"。
+        """
         for sg in reversed(subgoals):
-            if sg.get("result"):
-                return sg["result"]
+            _res = sg.get("result")
+            if not _res:
+                continue
+            _clean = SubGoalSolverAgent._strip_tool_residue(str(_res)).strip()
+            if _clean:
+                return _clean
         return "无法求解"
 
     @staticmethod

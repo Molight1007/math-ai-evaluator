@@ -66,7 +66,13 @@ class TestSelfcheckIdempotentShortCircuit(unittest.TestCase):
         a = object.__new__(SolverAgent)
         a.config = SimpleNamespace(answer_selfcheck_enabled=True,
                                    max_answer_tokens=256,
-                                   symbolic_solve_adopt=True)
+                                   symbolic_solve_adopt=True,
+                                   # ★ 2026-09-16：本类测的是 selfcheck 的
+                                   #   重问/短路分支，其判据依赖 `<calc>` 工具来源；
+                                   #   而 `<calc>` 的注入与解析由 `enable_calc_tool`
+                                   #   门控（生产默认 False ⇒ 该关已改为"整体跳过"）。
+                                   #   故此处须显式打开，才能测到重问分支本身。
+                                   enable_calc_tool=True)
         a.record = lambda ctx, step, content, **k: records.append((step, content))
         a._compressed_solve = lambda *ar, **kw: ""      # 重问返回空 → 不采纳
         return a

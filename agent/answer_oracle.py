@@ -33,6 +33,7 @@ LLM 编排的最大增量（对应 LangGraph 的 oracle-in-the-loop 思想）。
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -154,15 +155,72 @@ class AnswerOracle:
     # ------------------------------------------------------------------
     # 工具方法
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # ★★ 2026-09-16 修复：`\boxed{...}` 外壳导致解析/等价**全面失效**
+    # ------------------------------------------------------------------
+    # 实测（0916 轮 003/013 两题同时命中）：
+    #   is_parseable('\boxed{2025}')            -> False   （而 '2025' -> True）
+    #   is_parseable('\boxed{50}')              -> False
+    #   answers_equivalent('\boxed{2025}','2025')-> False
+    # 底层原因：`utils/sympy_tools._try_parse` 的前处理把 `\boxed{2025}` 归一成
+    #   `\boxed2025`（删了花括号、留下 `\boxed`）⇒ SymPy `could not parse`。
+    # **而题目明确要求「put your final answer within \boxed{}」** —— 模型照做了，
+    # 却被判"无法解析"。后果是**两个机制同时废掉**：
+    #   ① 可解析性闸门 → 假判 incorrect → trace 记「客观复核判错，触发定向修正」
+    #      ⇒ 触发长达 10 分钟的徒劳修正（003 实耗 **775.9s** / 013 **591.4s**）；
+    #   ② `answers_equivalent` 归组失效 ⇒ 自洽共识（group_size）永远是 1 ⇒ 信号无用。
+    # 修法：在 oracle 内部先**剥掉外表壳**再解析/比较（不动 `sympy_tools` 全局行为，
+    # 避免影响 `run_eval.answers_match` 等其它调用方的既有语义）。
+    # ------------------------------------------------------------------
+    _BOXED_RE = re.compile(r"\\(?:boxed|fbox|overline)\s*\{")
+    _TEXT_RE = re.compile(r"\\text\s*\{")
+
+    @classmethod
+    def strip_wrappers(cls, answer: str) -> str:
+        """剥掉答案外部包装：`\\boxed{}`/`\\fbox{}`/`\\text{}`、`$`、`\\( \\)`、`\\[ \\]`。
+
+        只剥**最外层**的包裹，不改变内部数学内容。用于解析与等价比较前的归一。
+        """
+        s = (answer or "").strip()
+        # 数学定界符
+        for a, b in ((r"\(", r"\)"), (r"\[", r"\]"), ("$$", "$$"), ("$", "$")):
+            if s.startswith(a) and s.endswith(b) and len(s) > len(a) + len(b):
+                s = s[len(a):-len(b)].strip()
+        # \boxed{...} / \text{...}：用花括号配平取内层，可多层
+        for _ in range(4):
+            m = (cls._BOXED_RE.match(s) or cls._TEXT_RE.match(s))
+            if not m:
+                break
+            depth, end = 0, -1
+            for i, ch in enumerate(s[m.end() - 1:], start=m.end() - 1):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            if end < 0:
+                break
+            s = s[m.end():end].strip()
+        return s.strip()
+
     @staticmethod
     def is_parseable(answer: str) -> bool:
-        """答案能否被 SymPy 解析为有效表达式（纯本地，不消耗 LLM 预算）。"""
+        """答案能否被 SymPy 解析为有效表达式（纯本地，不消耗 LLM 预算）。
+
+        ⚠ 解析前**必须** `strip_wrappers`：否则 `\\boxed{...}`（题面要求的书写格式）
+        会被判为"无法解析"（2026-09-16 实测，详见类内注释）。
+        """
         if not answer:
             return False
         try:
             from utils.sympy_tools import _try_parse
-            parsed, _ = _try_parse(answer)
-            return parsed is not None
+            for cand in (AnswerOracle.strip_wrappers(answer), answer):
+                parsed, _ = _try_parse(cand)
+                if parsed is not None:
+                    return True
+            return False
         except Exception:  # noqa: BLE001
             return False
 
@@ -184,14 +242,25 @@ class AnswerOracle:
 
     @staticmethod
     def answers_equivalent(a: str, b: str) -> bool:
-        """两级答案等价：文本完全相同 → SymPy 符号等价。"""
+        """两级答案等价：文本完全相同 → SymPy 符号等价。
+
+        ⚠ 比较前**必须** `strip_wrappers`：否则 `\\boxed{2025}` 与 `2025` 会判为
+        不等价 ⇒ **自洽共识永远归不了组**（group_size 恒为 1，信号作废）。
+        2026-09-16 实测，详见 `is_parseable` 上方注释。
+        """
         if not a or not b:
             return False
         if a.strip() == b.strip():
             return True
+        ca, cb = AnswerOracle.strip_wrappers(a), AnswerOracle.strip_wrappers(b)
+        if ca and cb and ca == cb:
+            return True
         try:
             from utils.sympy_tools import are_expressions_equal
-            return bool(are_expressions_equal(a, b))
+            for x, y in ((ca, cb), (a, b)):
+                if x and y and are_expressions_equal(x, y):
+                    return True
+            return False
         except Exception:  # noqa: BLE001
             return False
 

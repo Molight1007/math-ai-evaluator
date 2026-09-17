@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>MathPilot 阶段总结（2026-09-13 ~ 09-14）——附「工具计算」专项分析</title>
+  <style>
+  :root {
+    --typography-fontFamily-heading: PingFang SC, 苹方-简, 微软雅黑, sans-serif;
+    --typography-fontFamily-body: PingFang SC, 苹方-简, 微软雅黑, sans-serif;
+    --typography-fontFamily-bodyLatin: Inter, Helvetica Neue, Arial, sans-serif;
+    --typography-fontFamily-code: JetBrains Mono, Fira Code, Consolas, monospace;
+    --typography-fontSize-title: 24pt;
+    --typography-fontSize-h1: 18pt;
+    --typography-fontSize-h2: 15pt;
+    --typography-fontSize-h3: 13pt;
+    --typography-fontSize-body: 11pt;
+    --typography-fontSize-small: 9pt;
+    --typography-fontSize-caption: 9pt;
+    --typography-lineHeight-title: 1.4;
+    --typography-lineHeight-body: 1.7;
+    --typography-lineHeight-heading: 1.3;
+    --typography-fontWeight-heading: 600;
+    --typography-fontWeight-body: 400;
+    --color-primary: #2563EB;
+    --color-text: #111827;
+    --color-textSecondary: #6B7280;
+    --color-heading: #111827;
+    --color-border: #E5E7EB;
+    --color-divider: #F3F4F6;
+    --color-background: #FFFFFF;
+    --color-codeBackground: #F9FAFB;
+    --color-highlight: #FEF3C7;
+    --spacing-paragraph: 0.5em;
+    --spacing-paragraphAfter: 0.5em;
+    --spacing-indent: 0em;
+    --spacing-sectionGap: 2em;
+    --spacing-listItemGap: 0.4em;
+    --layout-marginTop: 2.5cm;
+    --layout-marginBottom: 2.0cm;
+    --layout-marginLeft: 2.5cm;
+    --layout-marginRight: 2.5cm;
+    --layout-pageSize: A4;
+    --layout-maxContentWidth: 165mm;
+    /* Page layout */
+    --page-content-width: var(--layout-contentWidth, 15.6cm);
+    /* Typography */
+    --fs-h1: var(--typography-fontSize-h1, 22pt);
+    --fs-h2: var(--typography-fontSize-h2, 18pt);
+    --fs-h3: var(--typography-fontSize-h3, 14pt);
+    --fs-h4: var(--typography-fontSize-h4, 12pt);
+    --fs-body: var(--typography-fontSize-body, 12pt);
+    --fs-small: var(--typography-fontSize-small, 10pt);
+    --ff-heading: var(--typography-fontFamily-heading, "黑体", SimHei, sans-serif);
+    --ff-body: var(--typography-fontFamily-body, "宋体", SimSun, serif);
+    --ff-mono: var(--typography-fontFamily-mono, monospace);
+    --lh-body: var(--typography-lineHeight-body, 1.5);
+    --lh-heading: var(--typography-lineHeight-heading, 1.2);
+    --fw-bold: var(--typography-fontWeight-bold, 700);
+    --fw-normal: var(--typography-fontWeight-normal, 400);
+    /* Color */
+    --color-primary: var(--color-primary, #333333);
+    --color-text: var(--color-text, #000000);
+    --color-muted: var(--color-muted, #666666);
+    --color-border: var(--color-border, #cccccc);
+    --color-bg: var(--color-bg, #ffffff);
+    --color-highlight: var(--color-highlight, #f5f7fa);
+    /* Spacing */
+    --spacing-paragraph: var(--spacing-paragraph, 0.8em);
+    --spacing-section: var(--spacing-section, 2em);
+    --spacing-block: var(--spacing-block, 1em);
+    --margin-page: var(--layout-margin, 2.5cm);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--ff-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--color-text);
+    background: var(--color-bg);
+    max-width: var(--page-content-width);
+    margin-left: auto;
+    margin-right: auto;
+    padding: var(--margin-page) 0;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--ff-heading);
+    line-height: var(--lh-heading);
+    font-weight: var(--fw-bold);
+    margin-top: var(--spacing-section);
+    margin-bottom: var(--spacing-paragraph);
+  }
+  h1 { font-size: var(--fs-h1); }
+  h2 { font-size: var(--fs-h2); }
+  h3 { font-size: var(--fs-h3); }
+  h4 { font-size: var(--fs-h4); }
+
+  p { margin-bottom: var(--spacing-paragraph); }
+
+  ul, ol { padding-left: 2em; margin-bottom: var(--spacing-paragraph); }
+  li { margin-bottom: 0.3em; }
+
+  table { border-collapse: collapse; width: 100%; margin-bottom: var(--spacing-block); }
+  th, td { padding: 0.5em 0.8em; border: 1px solid var(--color-border); }
+  th { font-weight: var(--fw-bold); background: var(--color-highlight); }
+  caption { font-size: var(--fs-small); margin-bottom: 0.4em; text-align: left; }
+
+  figure { margin: var(--spacing-block) 0; }
+  figcaption { font-size: var(--fs-small); color: var(--color-muted); margin-top: 0.4em; }
+
+  /* TOC */
+  .doc-toc { margin-bottom: var(--spacing-section); padding: var(--spacing-block); background: var(--color-highlight); }
+  .toc-title { font-weight: var(--fw-bold); margin-bottom: 0.5em; }
+  .toc-list, .toc-list ol, .toc-list ul { list-style: none; list-style-type: none; padding-left: 1.5em; }
+  .toc-list li { margin-bottom: 0.3em; text-indent: 0; }
+  .toc-list a { color: var(--color-primary); text-decoration: none; }
+  .toc-list a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .doc-header { margin-bottom: var(--spacing-section); }
+  .doc-main { }
+  .doc-footer { margin-top: var(--spacing-section); color: var(--color-muted); font-size: var(--fs-small); }
+  </style>
+</head>
+<body>
+  <header class="doc-header"><h1>MathPilot 阶段总结（2026-09-13 ~ 09-14）——附「工具计算」专项分析</h1><p>项目：挑战杯 MathPilot 数学解题评测器　|　日期：2026 年 9 月 14 日</p></header>
+  <!-- TOC auto-generated when ≥3 h2 sections exist -->
+  <!-- <nav class="doc-toc" aria-label="文档目录">
+    <p class="toc-title">目录</p>
+    <ol class="toc-list">
+      <li><a href="#section-1">章节标题</a></li>
+    </ol>
+  </nav> -->
+  <main class="doc-main"><h2>一、总览</h2>
+<p>本阶段（9/13 00:00 ~ 9/14 19:00）的工作围绕三条线展开：</p>
+<table><thead><tr><th>主线</th><th>目标</th><th>状态</th></tr></thead><tbody>
+<tr><td>时间系统重设</td><td>依据官方 baseline 的硬约束，把「单题 1200s 硬墙」落到每个阶段</td><td>已落地并实测</td></tr>
+<tr><td>开销收敛</td><td>找出「花了时间但对正确率无可证收益」的环节并压掉</td><td>部分落地，1 项待 A/B 结论</td></tr>
+<tr><td>计算与验证链路</td><td>让模型用本地精确计算器、让 Lean 真正参与筛选</td><td><strong>部分有效，工具计算仍无正确率证据</strong></td></tr>
+</tbody></table>
+<p><strong>代码侧交付</strong>：主仓 6 次提交（含 1 次 63 文件代码冻结检查点）、gitcode 镜像 5 次提交；</p>
+<p>测试规模从 619 项增长到 <strong>781 passed / 1 failed</strong>（唯一失败为过期断言）。</p>
+<p><strong>关键定量事实</strong>（贯穿全文的基准）：</p>
+<ul><li>平台硬约束：单题进程组 <strong>1200s</strong> 硬限（含模块加载与 Agent 初始化）、全卷 <strong>6h</strong>、并发 <strong>3</strong></li></ul>
+<p>⇒ 平均每题只有 <strong>578s</strong>；</p>
+<ul><li>本地基线正确率 <strong>23/112 = 20.5%</strong>，平台历史最好 <strong>13.39 分</strong>；</li><li>错题归因：<strong>推理/计算类错误 62/112 = 55.4%</strong>，是首要瓶颈。</li></ul>
+<p>---</p>
+<h2>二、平台硬约束与时间系统重设</h2>
+<h3>2.1 认知纠正（本阶段最重要的结论）</h3>
+<p>此前长期存在三个错误认知，本阶段逐条推翻：</p>
+<table><thead><tr><th>旧认知</th><th>事实</th><th>证据来源</th></tr></thead><tbody>
+<tr><td>平台不设单题时限，1200s 是我们自设的</td><td><strong>错误</strong>。单题独立进程组有 1200s 硬时限，超时<strong>杀整个进程组、不保证 finally</strong>，该题计 C（0 分）</td><td>官方 baseline README</td></tr>
+<tr><td>平台限时 6.5 小时</td><td><strong>错误</strong>。Agent 阶段总硬限为 <strong>6h</strong>（不含 Judge）</td><td>同上</td></tr>
+<tr><td>加时间能提高正确率</td><td><strong>错误</strong>。实测 &gt;1150s 档正确率仅 10.8%，低于整体</td><td>195 题 <code>stage_timers</code></td></tr>
+</tbody></table>
+<p>⇒ 真约束是 <code>6h × 3 ÷ 112 ≈ 578s/题</code>，<strong>超时与异常都计 C 且分母不变</strong>。</p>
+<h3>2.2 单题硬限的三次调整</h3>
+<table><thead><tr><th>时间</th><th>值</th><th>触发原因</th></tr></thead><tbody>
+<tr><td>9/13 早</td><td>1150</td><td>初始值</td></tr>
+<tr><td>9/13 二轮</td><td><strong>1000</strong></td><td>实测 <code>official112-000</code> 跑了 1201s，越过 1200s 硬墙</td></tr>
+<tr><td>9/14 00:29</td><td><strong>1150</strong></td><td>超时改为「不再重试」后，单次在途调用最坏 360s → 120s，压缩前提不再成立</td></tr>
+<tr><td>9/14 11:55</td><td><strong>1100</strong></td><td>两轮实测再次越墙：并发 3 轮 000 = 1164.7s；并发 1 轮 014 = <strong>1211.0s</strong></td></tr>
+</tbody></table>
+<p><strong>最终口径</strong>：<code>max_time_per_question = 1100</code>，但 <code>tier_budget.deep</code> <strong>刻意保持 1150 不动</strong>。</p>
+<p>两者职责不同：前者是「最后硬限」，只负责不许越 1200s 墙；后者是「资源分配」，</p>
+<p>若跟着压到 1100，会<strong>提前掐断本可在 1200s 内跑完的题</strong>。生效值 = <code>min(deadline, tier_cap, pacer)</code>。</p>
+<p>配置项：<code>max_total_time_seconds = 20700</code>、<code>paper_target_time = 19500</code>、</p>
+<p><code>tier_budget = {300, 750, 1150}</code>。</p>
+<h3>2.3 时间语义的护栏化</h3>
+<ul><li><code>3_solve</code> 阶段上限曾设为 1200s（大于单题预算）⇒ <code>min(deadline, now+1200)</code> 恒等于 deadline，</li></ul>
+<p><strong>阶段护栏形同失效</strong>，导致 2.7 让出的时间被 3_solve 全部吸收。已修正为实测上限口径。</p>
+<ul><li><code>6_format</code> 阶段曾因 <code>gen_time_up()</code> 误用而<strong>恒跳过</strong>（护栏反而永久生效），修复后恢复正常。</li><li>给 <code>DeterministicChecker</code>（被 3.6 / 4_verify / 6.5 三处各跑一次）加内部超时护栏，</li></ul>
+<p>此前实测出现过 <strong>460s / 116s 的单次极值</strong>，一次 460s 就吃掉单题预算的 40%。</p>
+<p>---</p>
+<h2>三、开销收敛：省了哪些时间</h2>
+<p>审计依据是 195 题的 <code>diag.stage_timers</code>（去重口径）。<strong>注意：以下为「机制 → 实测耗时」，不是「省下的时间」的等号，其中只有一部分拿到了直接的省时证据。</strong></p>
+<table><thead><tr><th>环节</th><th>实测耗时</th><th>处置</th><th>依据强度</th></tr></thead><tbody>
+<tr><td><code>6_format</code> 差分检测</td><td>352–364s（1.9% 的题）</td><td>加时间护栏 + 收敛参数</td><td>强（撞 180s 超时并重试，数值精确吻合 2×180s）</td></tr>
+<tr><td><code>3.6_audit_filter</code> Lean 三往返</td><td>200–580s（14.2% 的题）</td><td>关掉 goal / multi_attempt / hover（对 verdict 零贡献）</td><td>强（有 <code>480.4s</code> 日志实证）</td></tr>
+<tr><td><code>2.7_subgoal_main</code></td><td>p50 630s（占单题 51%）</td><td>关 <code>enable_skeleton_review</code> / <code>enable_dag_replan</code></td><td>中（本轮 2.7 已降至 135–337s）</td></tr>
+<tr><td><code>3.4_collab</code></td><td>最大 691s（<strong>但当前配置下已不触发</strong>）</td><td>加阶段预算 + 与 3.3 共享改进额度</td><td><strong>A/B 已完成 → 无效对照（见 3.3）</strong></td></tr>
+<tr><td><code>enable_calc_prewarm</code></td><td>30–111s/题</td><td><strong>默认关闭</strong></td><td>强（12 题实测只有 1 题与答案相关）</td></tr>
+</tbody></table>
+<h3>3.1 一处必须纠正的过度归因</h3>
+<p>曾有结论称「NEW 代际单题均值 1231s、<strong>45% 的题 ≥1200s 撞墙</strong>」。经复核<strong>不成立</strong>：</p>
+<p>那 36 条 ≥1200s 的记录全部来自 9/12–9/13 的<strong>高上限实验轮</strong>（当时上限被人为放开），</p>
+<p>不代表生产配置下的真实分布。</p>
+<h3>3.2 明确「不砍」的环节</h3>
+<ul><li><strong>3.3 自改进（Step2）</strong>：有正面证据（论文实测 22.2% → 31.1%；</li></ul>
+<p><code>ab_improve</code> 14/45 = 31.1%，最优组合 <code>ab_review</code> 16/45 = 35.6% 亦包含 Step2）⇒ <strong>绝不能关</strong>。</p>
+<ul><li><strong>4.6 对抗式验证</strong>：可砍清单中唯一呈<strong>正向</strong>的环节。</li></ul>
+<h3>3.3 <code>3.4_collab</code> A/B 的结论：<strong>无效对照，不能下结论</strong></h3>
+<p><strong>实验设计</strong>：armA = <code>enable_collaborative_deep=false</code>（关），armB = 默认（开）；</p>
+<p>其余配置逐字相同（cap 1100 / tier 300,750,1150 / <code>LEAN_BACKEND=bridge</code> / 并发 3）；</p>
+<p>题单 5 题，均为<strong>错题且历史上真触发过</strong> <code>3.4_collab</code>，按 collab 历史最大耗时排序。</p>
+<p><strong>结果（两臂各 5/5 完成）</strong>：</p>
+<table><thead><tr><th>题</th><th>armA（关）</th><th>armB（开）</th></tr></thead><tbody>
+<tr><td>004</td><td>❌ 1106.8s，tier=deep，3.4=<strong>0.0s</strong></td><td>❌ 1105.0s，tier=deep，3.4=<strong>0.0s</strong></td></tr>
+<tr><td>064</td><td>❌ 1111.3s，tier=deep，3.4=0.0s</td><td>❌ 567.3s，tier=<strong>standard</strong>，3.4=0.0s</td></tr>
+<tr><td>015</td><td>❌ 793.8s，tier=<strong>standard</strong>，3.4=0.0s</td><td>❌ 1010.9s，tier=deep，3.4=0.0s</td></tr>
+<tr><td>088</td><td>✅ 335.3s，tier=standard，3.4=0.0s</td><td>✅ 393.8s，tier=standard，3.4=0.0s</td></tr>
+<tr><td>000</td><td>❌ 799.2s，tier=standard，3.4=0.0s</td><td>❌ 884.6s，tier=standard，3.4=0.0s</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>1/5</strong></td><td><strong>1/5</strong></td></tr>
+</tbody></table>
+<p><strong>为什么这个对照无效</strong>：<code>3.4_collab</code> 在 <strong>armB 上也没有执行</strong> ——</p>
+<p>10 次观测（2 臂 × 5 题）的 <code>3.4_collab</code> 耗时<strong>全部为 0.0s</strong>。原因是双重的：</p>
+<ol><li>5 题里有 3–4 题的档位是 <code>standard</code>，<strong>按设计就不会触发</strong> 3.4（只有 deep 档才跑）；</li><li>真正被判为 deep 的题，到达 3.4 时<strong>生成侧时间截止已过</strong>，被门控跳过</li></ol>
+<p>（例：004 = <code>2.7</code> 355s + <code>3_solve</code> 243s 已 ≈ 600s，之后还要留 <code>3.6</code> 121s + <code>4_verify</code> 383s）。</p>
+<p>⇒ 两臂<strong>实质上都是「无 3.4」</strong>。此时比对正确率（1/5 vs 1/5）看似"无影响"，</p>
+<p>但那只是<strong>假阴性</strong>：机制在两臂都没跑。</p>
+<p><strong>由此得出的两个更有价值的结论</strong>：</p>
+<ul><li><strong><code>3.4_collab</code> 在当前配置下已经基本不触发</strong> ⇒</li></ul>
+<p>「关掉它省时间」的前提<strong>不成立</strong>（它几乎不消耗时间），<strong>关也关不出收益，不关也没有损失</strong>。</p>
+<p>历史记录里 121–691s 的耗时来自<strong>旧配置</strong>（高上限、未给 3.3 设预算帽、旧档位阈值）。</p>
+<ul><li>★★ <strong>档位分类不稳定</strong>：同一道题、同一份代码，<code>064</code> 在 armA 判 deep 而 armB 判 standard，</li></ul>
+<p><code>015</code> 则相反。这会<strong>破坏所有"按档位分配预算"的机制</strong>，也让任何配对对照失去可比性。</p>
+<p>这是比 3.4 更值得优先处理的问题。</p>
+<p>---</p>
+<h2>四、★ 专项：本地精确计算器（工具计算）链路的问题分析</h2>
+<blockquote>本节是全文重点。用户的核心诉求是「让大模型在解题过程中使用本地精确计算器， 降低计算错误」。<strong>结论先行：链路本身已经修好，但模型仍然不用它 —— 障碍不在工具，在「模型默认心算」。</strong></blockquote>
+<h3>4.1 问题全景</h3>
+<p>工具计算链路共暴露出 <strong>7 个层次的问题</strong>，且它们是<strong>串行掩蔽</strong>的 ——</p>
+<p>每修掉上一层，下一层才会显形：</p>
+<table><thead><tr><th>#</th><th>问题</th><th>性质</th><th>状态</th></tr></thead><tbody>
+<tr><td>1</td><td>「模型不写 <code>&lt;calc&gt;</code>」是<strong>量错字段</strong></td><td>观测错误</td><td>已纠正</td></tr>
+<tr><td>2</td><td>模型其实在写，但<strong>格式几乎全被工具拒收</strong></td><td>工具解析过窄</td><td>已修</td></tr>
+<tr><td>3</td><td>提示词<strong>承诺了工具做不到的事</strong></td><td>内部自相矛盾</td><td>已修</td></tr>
+<tr><td>4</td><td>解析器<strong>静默丢值</strong></td><td>数据丢失</td><td>已修</td></tr>
+<tr><td>5</td><td>埋点 <code>calc_tool_calls</code> <strong>结构性恒空</strong></td><td>观测错误</td><td>已修</td></tr>
+<tr><td>6</td><td>方案 B（生成前猜算式）<strong>前提不成立</strong></td><td>设计缺陷</td><td>已关闭</td></tr>
+<tr><td>7</td><td>下游连带：<strong>Lean 系统验算提不出命题</strong></td><td>级联失效</td><td>已缓解</td></tr>
+</tbody></table>
+<h3>4.2 问题一：「模型不写 <code>&lt;calc&gt;</code>」——这是量错字段造成的假象</h3>
+<p><strong>旧结论</strong>：<code>&lt;calc&gt;</code> 在全库出现 <strong>0 次</strong>，说明模型拒绝使用工具。</p>
+<p><strong>真相</strong>：该统计读取的是 <code>response</code> 字段，而它<strong>只存最终答案串</strong>，</p>
+<p>中间过程与工具标记根本不在里面。改用正确口径（<code>diag.calc_fallback</code> 埋点 +</p>
+<p>回填产物 <code>[计算] expr = 结果</code>）后：</p>
+<blockquote>全库命中 <strong>78/1270</strong> —— <strong>模型确实在写 <code>&lt;calc&gt;</code></strong>。</blockquote>
+<p>⇒ 这是一个纯观测错误，却直接导致了一轮错误的归因方向。</p>
+<h3>4.3 问题二：模型写了，但格式几乎全被工具拒收</h3>
+<p>对 78 次命中逐条统计拒收原因：</p>
+<table><thead><tr><th>拒收原因</th><th>次数</th></tr></thead><tbody>
+<tr><td>「只支持单个数学表达式」（多行 / 代码块）</td><td><strong>133</strong></td></tr>
+<tr><td>整数字面量过大</td><td>37</td></tr>
+<tr><td>「不支持 sin()」</td><td>26</td></tr>
+<tr><td>表达式过长</td><td>14</td></tr>
+<tr><td>tan() / integral() / sum()</td><td>8 / 4 / 2</td></tr>
+</tbody></table>
+<p><strong>实证模型实际写的是什么</strong>：</p>
+<ul><li><code>official112-016</code> v5，4 个 <code>&lt;calc&gt;</code> 全是 <strong>Python</strong>：</li></ul>
+<p><code>n = 20</code>、<code>x = [1]*10 + [-1]*10</code>、<code>S = sum(x)</code>、<code>print(...)</code>；</p>
+<ul><li><code>official112-016</code> v7：<code>&lt;calc&gt;19 &lt; 20&lt;/calc&gt;</code>（<strong>比较式</strong>）→ 报错「不允许的语法节点: Compare」；</li><li><code>official112-010</code>：<code>&lt;calc&gt;# 验证…\nfrom sympy import…&lt;/calc&gt;</code>（<strong>Python 多行</strong>）。</li></ul>
+<p>⇒ 模型把 <code>&lt;calc&gt;</code> 当成了「代码执行沙箱」，而工具只接受<strong>单个数学表达式</strong>。</p>
+<p>这是<strong>契约不一致</strong>，不是模型不配合。</p>
+<p><strong>修复（<code>agent/calc_tool.py</code>）</strong>：加<strong>降级解析</strong>，让工具接受模型真实写出的形态 ——</p>
+<p>支持多行、赋值链、注释行、<code>print()</code> 包裹。</p>
+<h3>4.4 问题三：降级解析仍失败 6/8 —— 根因是「多目标赋值」</h3>
+<p>降级解析上线后，用真实数据回放<strong>仍然 6/8 失败</strong>，逐个定位后找到明确根因：</p>
+<blockquote><strong>不支持「多目标赋值」（tuple unpacking）</strong>：<code>a, b, c = 1, 2, 3</code></blockquote>
+<p>真实数据佐证：<code>official112-010</code> 一轮中写的是</p>
+<p><code>p1, q1, r1, s1 = 1, 0, -1, 0</code> 这种四元组解包，直接被拒。</p>
+<p><strong>修复后的实测结果</strong>：</p>
+<table><thead><tr><th>输入</th><th>结果</th></tr></thead><tbody>
+<tr><td><code>n = 20</code> + <code>comb(n,3)</code></td><td><strong>1140</strong> ✅</td></tr>
+<tr><td><code>x = 10</code> + <code>x*2</code></td><td><strong>20</strong> ✅</td></tr>
+<tr><td><code>25*4+1</code></td><td><strong>101</strong> ✅</td></tr>
+<tr><td><code>S = sum(k,1,n)</code> + <code>print(S)</code></td><td><code>n**2/2 + n/2</code> ✅</td></tr>
+</tbody></table>
+<h3>4.5 问题四：提示词承诺了工具做不到的事（内部自相矛盾）</h3>
+<p>同一份提示词常量里同时存在两条互相打架的指令：</p>
+<ul><li>「<strong>必须写 <code>&lt;calc&gt;</code>（严禁心算）</strong>」的清单里含 <strong>三角函数 <code>sin/cos/tan</code>、<code>prod</code></strong>；</li><li>但「可用函数」清单与工具白名单 <code>_FUNCS</code> <strong>都没有这些函数</strong>；</li><li>而同一个常量在另一处又自述「三角 sin/cos 等<strong>无通用精确值</strong>」。</li></ul>
+<p><strong>实测后果</strong>：26 次「不支持 sin()」、8 次 tan()、4 次 integral()、2 次 sum() 被拒 ——</p>
+<p>模型照着提示词写，工具照着白名单拒。</p>
+<p><strong>修复</strong>：统一口径为「<strong>工具能力外 → 不要写 <code>&lt;calc&gt;</code></strong>」，并把该引导补齐到</p>
+<p><strong>全部 6 条生成路径</strong>（此前只注入 3 处；漏了 revise、proof 等路径，</p>
+<p>而「只改一处路径 = 没改」是本项目的既有教训）。</p>
+<h3>4.6 问题五：解析器静默丢值</h3>
+<p>在真实存档里统计 <code>[计算]</code> 行共约 <strong>166 条</strong>，其中 <strong>13 条不在行首</strong></p>
+<p>（例如夹在句子里）。而旧实现用 <code>head.startswith("[计算]")</code> 判断 ⇒</p>
+<p><strong>这 13 条的值被静默丢弃</strong>，且没有任何告警。</p>
+<p>另有「散文吞值」问题：块体内混入自然语言时，旧逻辑会把数值一起吞掉。</p>
+<p><strong>修复</strong>：<code>head.startswith</code> 改为逐行 <code>find</code> 定位；新增 <code>_calc_prose_cut</code></p>
+<p><strong>只截断散文、绝不丢值</strong>；并加两道防误匹配（块体须能切出 <code>=</code>；</p>
+<p>结果须过 <code>_CALC_VALUE_RE</code>，禁 <code>" : ; \</code>` 等 JSON/代码标点且不含中英文散文）。</p>
+<h3>4.7 问题六：埋点坏了，看不见真相</h3>
+<p><code>diag.calc_tool_calls</code> 字段由 <code>_collect_diag()</code> 按 <code>step == "calc_tool_call"</code> 导出，</p>
+<p>但<strong>全代码库从未 record 过这个 step 名</strong> ⇒ 该字段<strong>结构性恒空</strong>，</p>
+<p>会被读成「工具从来没成功算过」。这在本阶段已<strong>误导读过一次归因</strong>。</p>
+<p><strong>修复</strong>：新增 <code>BaseAgent.record_calc_successes()</code>（与记录失败的 <code>audit_calc_fallbacks</code></p>
+<p>镜像，只收非 <code>WARN:</code> / <code>ERROR:</code> 项），并在 <strong>7 处</strong> <code>&lt;calc&gt;</code> 求解点各补一行调用。</p>
+<h3>4.8 问题七：方案 B（生成前猜算式）前提不成立</h3>
+<p>方案 B（<code>2.65_calc_prewarm</code>）的思路是：让模型在解题<strong>前</strong>凭题面猜出该算什么，</p>
+<p>由系统先把精确值算好摆在它面前。</p>
+<p><strong>12 题错题回归实测</strong>：</p>
+<ul><li>12/12 题都成功产出了预计算 —— 机制<strong>确实触发了</strong>；</li><li>但<strong>只有 1 题</strong>算出的算式与最终答案相关；</li><li>成本 30–111s/题，而单题预算只有 1150s。</li></ul>
+<p>⇒ 「让模型凭题面猜该算什么」这个<strong>前提本身不成立</strong>。已默认关闭</p>
+<p>（字段保留，可 <code>--enable_calc_prewarm true</code> 开回）。</p>
+<h3>4.9 问题八：下游连带 —— Lean 的系统验算提不出命题</h3>
+<p>这是工具计算问题<strong>最有价值的连带影响</strong>：</p>
+<p>Lean 侧有一条<strong>不依赖 LLM</strong> 的验算通道 <code>_verify_answer_by_system</code>：</p>
+<p>它从 reasoning 里抽 <code>&lt;calc&gt;</code> / <code>[计算]</code> 算式，由系统构造 <code>(算式) = (答案数值)</code></p>
+<p>再交给 Lean 编译（<code>norm_num</code>）。</p>
+<p>由于模型极少写 <code>&lt;calc&gt;</code>，这条通道<strong>永远提不出命题</strong> ⇒ 只能退回 LLM 翻译 ⇒</p>
+<p>翻译环节的 LLM 调用超时（<code>LLMClient</code> 180s × 重试）⇒ 异常被 <code>except</code> <strong>静默吞掉</strong> ⇒</p>
+<p>返回 <code>unknown</code> ⇒ <strong>Lean 这道防线完全空转</strong>（既不确认正确候选、也不淘汰错误候选）。</p>
+<p>实测证据：<code>official112-016</code> 的 6 条 verdict <strong>全部是 <code>unknown</code> + <code>degraded=lenient_pass</code></strong>。</p>
+<p><strong>修复</strong>：在 <code>except</code> 兜底里优先走系统验算通道（不依赖 LLM）——</p>
+<p>返回 True → <code>answer_valid</code>；返回 False → <code>proof_invalid</code>；而不是一律降级为 <code>unknown</code>。</p>
+<h3>4.10 为什么「计算链路一直没用起来」—— 最终归因</h3>
+<p>把所有层拆开后，因果链是清晰的一条：</p>
+<pre><code>模型默认心算
+   ↓（提示词口头要求用工具，无强制力）
+极少主动写 &lt;calc&gt;
+   ↓（即便写了）
+格式与工具契约不一致 → 被拒
+   ↓（好不容易解析出的值）
+静默丢值 / 埋点恒空 → 看不见、也没进答案
+   ↓
+Lean 系统验算提不出命题 → 退回 LLM 翻译 → 超时被吞 → verdict 全 unknown</code></pre>
+<p><strong>关键判断</strong>：提示词已一致、工具能力已够、格式也已放宽，</p>
+<p><strong>障碍不是「工具不能用」，而是「模型默认心算」</strong>。</p>
+<p>所以正确方向是<strong>代码强制</strong>（例如 <code>answer_selfcheck</code> 强制重问、或对高危运算</p>
+<p>强制路由到工具），而<strong>不是继续写更长的提示词请求</strong>。</p>
+<p><strong>当前状态（诚实标注）</strong>：</p>
+<p>计算链路对正确率的提升<strong>尚未取得任何证据</strong> —— 12 题错题回归里工具调用仍为零；</p>
+<p>论文中 22.2% → 31.1% 的增益来自 <strong>Step2 自改进</strong>，与工具计算无关。</p>
+<p>---</p>
+<h2>五、Lean 链路修复</h2>
+<table><thead><tr><th>问题</th><th>根因</th><th>修复</th></tr></thead><tbody>
+<tr><td>Lean 双通道被<strong>整体静默禁用</strong>（镜像侧）</td><td>「同步主仓」把 <code>lean_bridge.py</code> 覆写成缺 5 个定义的版本，而 <code>lean_gate.py</code> 仍在 import 它们 ⇒ <code>ImportError</code> ⇒ 上层捕获后整体禁用</td><td>逐定义追加恢复（<strong>不整文件覆盖</strong>，该文件含 vendor 分片逻辑）</td></tr>
+<tr><td>镜像缺 <code>import contextlib</code></td><td>走到 <code>@contextlib.contextmanager</code> 会 <code>NameError</code></td><td>补 import</td></tr>
+<tr><td>Lean 无法判断<strong>计算</strong>错误</td><td>Lean 只判逻辑可行性，不判数值</td><td>新增<strong>系统命题验算</strong>（见 4.9）</td></tr>
+<tr><td>失败反馈<strong>不可操作</strong></td><td>反馈是「请重新审题」，而真实错误是 API 不存在</td><td>按错误类型给具体修法</td></tr>
+</tbody></table>
+<p><strong>MCP 的定位结论</strong>：<code>lean-lsp-mcp</code> 的运行环境（<code>~/leanlsp-venv</code>、</p>
+<p><code>&lt;repo&gt;/lean-lsp-mcp/</code>）<strong>都不入仓库</strong>，容器内 <code>mcp_available()</code> 恒为 False</p>
+<p>⇒ 平台永远回落 <code>bridge</code>。本地手工备好环境后 MCP 能跑，但<strong>净负</strong>：</p>
+<p>正确率 1/10 vs 2/10、耗时 870s vs 538s ⇒ <strong>判定为不投入</strong>。</p>
+<p>---</p>
+<h2>六、答案必达与超时策略</h2>
+<p><strong>故障现场</strong>：4 题端到端实测中，两题的最终答案是占位符</p>
+<p><code>[生成失败] 调用受限或模型拒绝回答</code>。根因不是超时本身，</p>
+<p>而是<strong>超时之后占位符被四层放行</strong>（占位候选 → 兜底判据 → 拒绝正则 → 出口校验）。</p>
+<p><strong>两侧修复</strong>：</p>
+<table><thead><tr><th>侧</th><th>改动</th></tr></thead><tbody>
+<tr><td>输入侧（超时）</td><td>读超时 180s → <strong>120s</strong>；<strong>超时类故障默认不再重试</strong>（实测 5/5 全败，纯亏 timeout 秒）。单次故障成本从 365s 降到 120s</td></tr>
+<tr><td>输出侧（兜底）</td><td>新增 <code>_subgoal_answer_candidate()</code> 做<strong>形态校验</strong>：<code>\boxed{}</code> 取值，或剥掉提示前缀后 ≤60 字符的无换行短值，且必须同时通过拒绝语内容校验</td></tr>
+</tbody></table>
+<p>另修掉一个<strong>我自己引入的回归</strong>：rescue 失败时不替换 <code>final_response</code>；</p>
+<p>以及「<code>无解</code> 被误判为没有答案」。</p>
+<p><strong>残留风险（如实记录）</strong>：单题上限在<strong>两次调用之间</strong>判定、无法中断在途调用，</p>
+<p>理论最坏 <code>1100 + 120 = 1220s</code> 仍可能越过 1200s 硬墙。缓解手段是</p>
+<p><code>critical_tail_seconds</code>（默认 120s）。</p>
+<p>---</p>
+<h2>七、选择题批次（B0 / B1 / B2）</h2>
+<h3>7.1 三层结构</h3>
+<p>针对选择题建立「<strong>基准子目标 + 逐项判定 + 分型路由</strong>（单选 / 多选 / 求值）」，</p>
+<p>替代此前把选项当普通文本处理的路径。</p>
+<h3>7.2 两个真 bug</h3>
+<table><thead><tr><th>bug</th><th>表现</th><th>根因</th></tr></thead><tbody>
+<tr><td>差分检测<strong>从不执行</strong></td><td><code>6_format</code> 阶段恒跳过</td><td><code>gen_time_up()</code> 误用 ⇒ 护栏<strong>永久生效</strong></td></tr>
+<tr><td>多数投票<strong>票数口径错</strong></td><td>任何候选分布都被判为平票</td><td>用 <code>len(answers)</code> 当票数</td></tr>
+</tbody></table>
+<h3>7.3 结果（诚实标注）</h3>
+<ul><li>逐项判定<strong>确实生效</strong>（三项证据），但没有救回 096（<code>ACD×3 &gt; D×2</code>，</li></ul>
+<p><strong>多数票本身就是错的</strong>）；</p>
+<ul><li>剩余 8 道选择题最终结论：4 个错题<strong>全部是「多解 / 歧义」题</strong> ——</li></ul>
+<p>这类题不是「机制没触发」，而是<strong>题目本身有多个合法答案</strong>；</p>
+<ul><li>三层结构有一处副作用（基准共享）需持续观察；</li><li><strong>差分检测至今未取得正面验证</strong>（构造数据 4 用例全通过，但真实题上未观察到收益）。</li></ul>
+<p>---</p>
+<h2>八、验证与回归</h2>
+<table><thead><tr><th>轮次</th><th>结果</th></tr></thead><tbody>
+<tr><td>9/13 早</td><td>619 passed</td></tr>
+<tr><td>9/13 晚</td><td>631 → 658 passed</td></tr>
+<tr><td>9/14 上午</td><td>669 → 677 passed</td></tr>
+<tr><td>9/14 18:30（本阶段最终）</td><td><strong>781 passed / 1 failed / 1 xfailed / 11 subtests</strong></td></tr>
+</tbody></table>
+<p><strong>唯一失败的定性</strong>：<code>test_calc_tiering.py::test_hard_lines_are_flagged[sin(pi/6) = 0.5]</code></p>
+<p>—— 属<strong>过期断言，不是回归</strong>。<code>sin</code> 已因「工具不支持三角函数」被移出「必须走工具」的</p>
+<p>清单（与 4.5 的修复同源），而测试期望值没有跟着更新。改 1 行即可全绿。</p>
+<h3>8.1 端到端实测口径</h3>
+<ul><li>12 题错题回归（cap 1150）：<strong>1/12 正确</strong>；</li><li>并发 3 轮：<code>000 = 1164.7s</code>（超上限 14.7s）；</li></ul>
+<p>并发 1 轮：<code>014 = 1211.0s</code>（超上限 61s，<strong>1211 &gt; 1200 越墙</strong>）；</p>
+<ul><li><code>3.4_collab</code> A/B（结论见 3.3）：<strong>armA（关）1/5、armB（开）1/5，但两臂的 <code>3.4_collab</code> 耗时全部为 0.0s ⇒ 机制未触发，属无效对照</strong>。</li></ul>
+<p><strong>一条重要观察</strong>：关掉 <code>3.4_collab</code> 之后，004 / 064 仍在<strong>别的阶段</strong>把 1100s 用满</p>
+<p>（1106.8 / 1111.3s）。⇒ 「3.4 是唯一的时间黑洞」不成立 ——</p>
+<p><strong>时间是整条链一起吃掉的</strong>。</p>
+<p>---</p>
+<h2>九、版本、副本与仓库状态</h2>
+<h3>9.1 三副本定位（三者不重合，缺一不可）</h3>
+<table><thead><tr><th>副本</th><th>定位</th><th>规模</th></tr></thead><tbody>
+<tr><td>主仓 <code>D:\挑战杯</code>（分支 <code>ma</code>）</td><td>开发主仓</td><td>—</td></tr>
+<tr><td><code>gitcode_sync/</code></td><td><strong>平台被测仓库</strong>，推送到 gitcode</td><td>44,174 文件 / <strong>5.1 GB</strong>（含 Lean + Mathlib）</td></tr>
+<tr><td><code>赛事提交版/</code></td><td><strong>交给评委看的评审材料</strong>，只放运行时代码（<code>tools/</code> 不进）</td><td>154 文件 / 13.7 MB</td></tr>
+<tr><td><code>新赛事提交版/</code></td><td>独立仓、单独演进（含题库命中「甄别答题法」）</td><td>130 文件 / 1.7 MB</td></tr>
+</tbody></table>
+<h3>9.2 本阶段的副本同步</h3>
+<ul><li>发现并修复一处<strong>严重漂移</strong>：<code>gitcode_sync</code> 里 6 个 <code>agent/</code> 文件仍是</li></ul>
+<p><strong>含已删除 <code>fast</code> 档</strong>的旧版（平台跑的是与本地不同的管线）；</p>
+<ul><li>同步前先取证「副本独有行」<strong>全部是 fast 档残留</strong>（非镜像适配），确认可安全覆盖；</li><li>刻意<strong>不动</strong>两个镜像特有差异：<code>.gitignore</code>（排除 150.8MiB 的 <code>libleanshared.so</code>）、</li></ul>
+<p><code>tools/lean_local/lean_bridge.py</code>（vendor 分片逻辑）。</p>
+<h3>9.3 ⚠ 新的运维风险</h3>
+<p>推送到 gitcode 时远端返回：</p>
+<pre><code>warning: git_repo size (5.4 GiB) exceeds limit (5.0 GiB).
+         Further push might be rejected.</code></pre>
+<p>建议在 gitcode 项目设置 → 项目管理 → <strong>仓库压缩（Compact）</strong>。</p>
+<p>⚠ 本机侧<strong>绝不做</strong> <code>git gc --prune=now</code>（既有铁律）。</p>
+<h3>9.4 两条重要的工程教训（本阶段新增）</h3>
+<ol><li><strong>改 Windows 上带 CRLF 的文件必须二进制读写</strong>：Python 文本模式 <code>read()</code></li></ol>
+<p>在<strong>读取阶段</strong>就把 <code>\r\n</code> 归一成 <code>\n</code>，<code>open(..., newline="")</code> 只在写出阶段生效、</p>
+<p>救不回来 —— 实测一次静默剥掉 1272 个 CR。</p>
+<ol><li><strong>副本漂移检查必须全量 + 字节级</strong>：只比「你以为改过的那几个文件」必然漏报；</li></ol>
+<p>只有扫全部 <code>.py/.sh</code> 并用 <code>rb</code> 比对，才查出真实的 6 个文件漂移。</p>
+<p>---</p>
+<h2>十、待办与风险</h2>
+<table><thead><tr><th>优先级</th><th>事项</th></tr></thead><tbody>
+<tr><td>★★★</td><td><strong>工具计算链路</strong>：把方向从「提示词请求」改为「<strong>代码强制</strong>」 —— 例如对高危运算（大幂、组合数、根号）强制路由到工具，或由 <code>answer_selfcheck</code> 强制重问闭环</td></tr>
+<tr><td>★★★</td><td>取回平台逐题产物 <code>{idx}.json</code> 的 <code>error.type/message</code>，以证实/否证「超时硬杀」</td></tr>
+<tr><td>★★</td><td><strong>查清「档位分类不稳定」</strong>：同题同码下 <code>064</code>/<code>015</code> 的 deep/standard 判定会翻转 —— 它会破坏所有按档位分配预算的机制，也让配对对照失去可比性</td></tr>
+<tr><td>★★</td><td><code>3.4_collab</code> 的处理结论：<strong>当前配置下已几乎不触发，关与不关都不改变行为</strong>；若要真正评估它，必须在"时间充裕"的配置下单独测（或先给它预留预算）</td></tr>
+<tr><td>★★</td><td>老师方案 #21 提交材料定稿、#22 专利交底提纲</td></tr>
+<tr><td>★</td><td><code>symbolic_solve_enabled</code> 开启前须先做「数值剥离」正确性核验</td></tr>
+<tr><td>★</td><td>更新过期断言 <code>test_calc_tiering[sin(pi/6) = 0.5]</code>，让测试全绿</td></tr>
+<tr><td>★</td><td>gitcode 仓库压缩（远端已告警，进一步推送可能被拒）</td></tr>
+</tbody></table>
+<p>---</p>
+<h2>附录 A：本阶段提交清单</h2>
+<p><strong>主仓（分支 <code>ma</code>）</strong></p>
+<table><thead><tr><th>hash</th><th>内容</th></tr></thead><tbody>
+<tr><td><code>7e28cec</code></td><td>MCP 实例池并行 + 候选级波次预取 + 表达式范式覆盖符号答案</td></tr>
+<tr><td><code>3a48dc4</code></td><td>选择题三层结构 + 答案聚合修复 + 答案形态闸门（56 文件）</td></tr>
+<tr><td><code>f2933e0</code></td><td>答案形态要求补注入 Blueprint 路径</td></tr>
+<tr><td><code>263faa6</code></td><td>单题上限回调 1150 + 兜底不再交出子目标中间结果</td></tr>
+<tr><td><code>6b200d4</code></td><td>本轮优化总结文档</td></tr>
+<tr><td><code>71443e9</code></td><td>补齐工具成功埋点 + 关闭 prewarm + 识别服务端过载</td></tr>
+<tr><td><code>c158b67</code></td><td><strong>代码冻结检查点</strong>（63 文件，代码 only）</td></tr>
+</tbody></table>
+<p><strong>gitcode 镜像（分支 <code>main</code>）</strong></p>
+<table><thead><tr><th>hash</th><th>内容</th></tr></thead><tbody>
+<tr><td><code>d2973ab0</code></td><td>定型前全面审核修复（38 文件审查 / 21 项改动）</td></tr>
+<tr><td><code>dce1fdf4</code> / <code>9af0d920</code></td><td>镜像修 <code>import contextlib</code> / <code>lean_bridge</code> 对齐</td></tr>
+<tr><td><code>dc79b776</code> / <code>1ce7fbba</code> / <code>7b5f71f6</code> / <code>5b78b133</code></td><td>对齐主仓 / 系统命题验算 / <code>libleanshared.so</code> 分片</td></tr>
+<tr><td><code>757d0b2b</code></td><td>选择题三层结构（镜像版）</td></tr>
+<tr><td><code>c423fb2d</code> / <code>e2398038</code></td><td>蓝本注入 / 单题上限 1150 + 兜底修复</td></tr>
+<tr><td><code>0e559b3f</code></td><td>同步 71443e9 批次</td></tr>
+<tr><td><code>c8de2e79</code></td><td>恢复 <code>lean_bridge</code> 缺失的 5 个定义，解除 Lean 被 ImportError 禁用</td></tr>
+<tr><td><code>f0195074</code></td><td>修沙箱实测的 #005 后处理改烂 / #003 selfcheck 空转</td></tr>
+<tr><td><code>f14aed65</code></td><td>下发单题余量 1100 + 对齐 6 个 agent 文件（含删除 fast 档）</td></tr>
+</tbody></table>
+<h2>附录 B：关键配置口径</h2>
+<pre><code>max_time_per_question    = 1100      # 最后硬限（只防越 1200s 墙）
+tier_budget              = {fast: 300, standard: 750, deep: 1150}
+max_total_time_seconds   = 20700     # 6h 硬限 − 4% 余量
+paper_target_time        = 19500     # 全卷墙钟目标
+critical_tail_seconds    = 120
+LLM_TIMEOUT              = 120       # 原 180
+LLM_RETRY_ON_TIMEOUT     = 0         # 超时不再重试
+enable_calc_prewarm      = False     # 方案 B 默认关闭
+enable_collaborative_deep = True     # 3.4 三 Agent 协作（A/B 进行中）
+lean_backend             = mcp       # 平台侧实际恒回落 bridge</code></pre>
+<p>---</p>
+<p>*本文件由 MathPilot 项目组于 2026 年 9 月 14 日整理。文中所有结论均标注了证据来源；</p>
+<p>凡未取得证据的项均已显式注明「未验证」。*</p></main>
+  <footer class="doc-footer"><p>本文件由 MathPilot 项目组整理</p></footer>
+</body>
+</html>

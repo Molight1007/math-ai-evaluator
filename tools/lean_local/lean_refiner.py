@@ -31,6 +31,9 @@ from agent.lemma_memory import LemmaMemory
 
 logger = logging.getLogger("MathPilot")
 
+# 2026-09-15：LeanSearch 结构性不可用的一次性告警标志（防止刷屏）。
+_LEANSEARCH_WARNED = False
+
 # 单节点补全最大重试轮数（每次重试 1 次 LLM 调用 + 1 次编译）
 MAX_REFINE_ATTEMPTS = 3
 # 整题精炼 LLM 调用预算上限（防止成本失控，对应计划"单题硬上限"）
@@ -319,6 +322,7 @@ class LeanRefinerAgent(BaseAgent):
     # leansearch（#31）
     # ------------------------------------------------------------------
     def _search_mathlib(self, ctx: TaskContext, query: str, limit: int = 5):
+        global _LEANSEARCH_WARNED
         try:
             from tools.lean_local.lean_search import MathlibTheoremSearcher
             if getattr(self, "_searcher", None) is None:
@@ -331,7 +335,16 @@ class LeanRefinerAgent(BaseAgent):
                     ctx, [r["name"] for r in sr["results"]])
             return sr
         except Exception as e:  # noqa: BLE001
-            logger.warning("Mathlib 定理检索失败: %s", e)
+            # 2026-09-15：区分「导入失败（模块缺失）」与「检索失败」。
+            # 前者意味着 LeanSearch 结构性不可用（历史 202 题 search_calls=0
+            # 的根因），必须显式指出；用一次性标志避免刷屏。
+            if isinstance(e, ImportError) and not _LEANSEARCH_WARNED:
+                _LEANSEARCH_WARNED = True
+                logger.warning(
+                    "LeanSearch 模块不可用（tools.lean_local.lean_search 导入失败）：%s "
+                    "—— 检索将恒为空，use_leansearch=True 也不会生效", e)
+            else:
+                logger.warning("Mathlib 定理检索失败: %s", e)
             return None
 
     # ------------------------------------------------------------------

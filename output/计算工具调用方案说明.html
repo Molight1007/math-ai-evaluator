@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>计算工具调用方案说明</title>
+<style>
+body { font-family: SimSun, serif; }
+h1 { font-size: 20pt; font-family: SimHei, sans-serif; }
+h2 { font-size: 15pt; font-family: SimHei, sans-serif; }
+p { font-size: 12pt; font-family: SimSun, serif; }
+li { font-size: 12pt; font-family: SimSun, serif; }
+td, th { font-size: 11pt; font-family: SimSun, serif; }
+</style>
+</head>
+<body>
+<h1>关于"计算必须走工具"与原生工具调用方案的情况说明</h1>
+
+<h2>一、问题</h2>
+<p>按建议，系统应让大模型把所有数值、符号计算交给外部工具，禁止心算。现有实现采用<b>文本标签协议</b>（要求模型在推理文本中写出 <span style="font-family: Consolas">&lt;calc&gt;表达式&lt;/calc&gt;</span> 标记，系统回填精确结果）。</p>
+<p>但连续 4 轮本地评测（10+10+2+2 题）中，模型对 <span style="font-family: Consolas">&lt;calc&gt;</span> 的<b>遵从率为 0</b>——它从不主动输出该标记，计算结果仍以心算文本形式出现。提示词强化（角色声明、反例教育）均未奏效。</p>
+
+<h2>二、根因分析</h2>
+<p>对比智能体（如通用 AI 助手）调用搜索/计算工具的机制，差异在于<b>通道类型</b>：</p>
+<ul>
+<li><b>文本标签</b>：对模型只是"可写可不写的符号"，没有训练对齐信号，也不带执行承诺，遵从不稳定；</li>
+<li><b>原生工具调用（function calling / tool_calls）</b>：模型在训练与对齐阶段被教授过结构化工具输出，生成 tool_call 即等于声明"需要外部执行"，系统必须响应，因而遵从度高得多——这与"智能体检测到需求就调 WebSearch"是同一逻辑（检测→执行→回传→继续）。</li>
+</ul>
+
+<h2>三、方案：工具调用循环（calc_eval）</h2>
+<p>注册一个名为 calc_eval 的原生工具（参数：表达式 expr），求解主链与子目标步骤调用改为"带工具的多轮对话"：</p>
+<ul>
+<li>① 模型推理中检测到计算需求 → 生成结构化调用 calc_eval(expr)；</li>
+<li>② 系统拦截调用，用本地计算器（calc_tool/SymPy，精确/符号/近似四态，失败可见）求值；</li>
+<li>③ 结果以 tool 消息回传对话，模型基于结果继续推理；</li>
+<li>④ 不再调用工具时输出最终文本（≤3 轮护栏，防死循环）。</li>
+</ul>
+<p>本地评测所用 LLMClient 已原生支持 tools 参数与 tool_calls 往返（官方 Intern API 即 OpenAI 兼容 function calling），代码实现已完成并通过单测（47/47）。</p>
+
+<h2>四、比赛平台适配情况（需要老师了解的不确定性）</h2>
+<p>平台运行我方代码时注入的是<b>平台自研 client</b>（位于官方 API 与我们代码之间）。我方代码全部可上传、可修改；但平台 client 的内部实现不可见、不可改，其 chat 接口是否透传 tools 参数并原样返回 tool_calls <b>无法提前验证</b>（平台无外网、提交配额每日仅 2 次）。</p>
+<p>已采取的应对：<b>feature-detect 自适应</b>——代码中探测平台 client 是否接受 tools 参数：支持则走原生工具循环；不支持（抛 TypeError）则自动回落现有文本协议，行为与现状完全一致，<b>零回归风险</b>。评测日志记录 tools 是否激活，可事后审计。</p>
+
+<h2>五、当前状态与下一步</h2>
+<ul>
+<li>实现完成：base 层工具循环 + calc_eval + 两个求解点接线 + 单测 47/47 全绿；</li>
+<li><b>能力已验证</b>：单轮直测 Intern 模型在 tools 通道下正确生成结构化调用 calc_eval(comb(50,3)*2**10)，官方 API 对 function calling 支持确认；</li>
+<li>2 题全流程试点中模型 0 次工具调用（已定位为求解链路上的触发/配置问题，正在排查挂点生效条件，非模型能力问题）；</li>
+<li>修复后重测 → 有效则合入比赛代码（带自适应回落）→ 平台实测（占用配额前先与老师确认）。</li>
+</ul>
+</body>
+</html>

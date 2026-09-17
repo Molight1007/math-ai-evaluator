@@ -56,6 +56,37 @@ MAX_DAG_NODES = 50
 MAX_SUBGOALS = 6
 
 
+def cap_subgoals_keep_last(items: list, max_n) -> tuple:
+    """按上限截断子目标序列，**保留收尾子目标**。返回 (保留列表, 丢弃列表)。
+
+    为什么不是 `items[:max_n]`（2026-09-15 修正）：
+
+    - 子目标按**拓扑序**排列，最后一个通常是"合并结论 / 得出最终答案"那一步
+      （`prompts/sub_goal.py` 明写"最后一个子目标通常是'合并结论'或'得出最终答案'"）；
+    - 盲截尾部会把它丢掉 ⇒ **前面所有子目标都白解**（没有任何一步产出最终答案）。
+      实测 n_subgoals p90=9 / max=17、28% 的题超上限，即近三成题目受此影响。
+
+    保留策略：前 (max_n-1) 个 **+ 最后一个**。
+
+    `max_n <= 0` 表示**不截断**——与 `SubGoalSolver._parse_subgoal_plan` 的
+    2026-09-15 语义一致（旧写法 `int(x or 6)` 会把 0 吃成 6，"不截断"无法表达）。
+    本函数是两条路径（blueprint / LLM 规划）**共用**的截断实现，避免语义再次分叉。
+    """
+    if max_n is None:
+        max_n = MAX_SUBGOALS
+    try:
+        max_n = int(max_n)
+    except (TypeError, ValueError):
+        max_n = MAX_SUBGOALS
+    seq = list(items or [])
+    n = len(seq)
+    if max_n <= 0 or n <= max_n:
+        return seq, []
+    if max_n == 1:
+        return seq[-1:], seq[:-1]
+    return seq[:max_n - 1] + seq[-1:], seq[max_n - 1:-1]
+
+
 # ============================================================
 # 数据结构
 # ============================================================
@@ -66,12 +97,28 @@ class BlueprintNode:
 
     node_type: "and"（所有 children 都必须证）| "or"（任一 child 可证）
     children: 子节点 id 列表；空列表 = 叶子（原子子目标）
+    node_role: "required"（默认，进主求解链）| "anticipatory"（前瞻引理）
+        —— LEAP §2.3 / Figure 2 的"前瞻引理规划"（Anticipatory Lemma Planning）：
+        蓝图生成时可能提议**当前 sketch 不需要、但后续证明步骤可能用到**的
+        辅助引理；这些引理挂在图记忆中（Figure 2 用虚线边标注），
+        **不阻塞当前 AND 节点的完成**。
+        论文消融（Table 6）：DAG vs 朴素树 +10.0pp(Basic)/+16.7pp(Advanced)，
+        归因两条机制之一就是前瞻引理被下游子目标复用；增益集中在难类别
+        （Advanced 代数 75→100、数论 66.6→100）。
+        ⚠ 落地（2026-09-15）：anticipatory 节点**不进 `to_subgoal_plan()` 的
+        求解链**，只写入引理记忆（ctx.lemma_repo），供下游子目标提示词引用。
     """
     id: str
     node_type: str                      # "and" | "or"
     statement: str                      # 该节点的数学陈述（自然语言 / Lean 陈述）
     children: list = field(default_factory=list)
     rationale: str = ""                 # 分解依据（可选，用于 trace 与审查）
+    node_role: str = "required"         # "required" | "anticipatory"
+
+    @property
+    def is_anticipatory(self) -> bool:
+        """是否前瞻引理（不进主求解链，只入引理记忆）。"""
+        return str(self.node_role or "").strip().lower() == "anticipatory"
 
 
 @dataclass
@@ -138,30 +185,62 @@ class BlueprintDAG:
         return None
 
     # ---------------- 转子目标 ----------------
-    def to_subgoal_plan(self, max_subgoals: int | None = None) -> dict:
+    def to_subgoal_plan(self, max_subgoals: int | None = None,
+                        with_deps: bool = True) -> dict:
         """把 DAG 转成 SubGoalSolver 兼容的子目标规划。
 
         规则：
         - AND 节点 → 展开所有 children（全部必须求解）
         - OR 节点 → 取第一个可证 child（策略分支，先尝试主分支）
         - 叶子节点 → 作为原子子目标
-        - 输出按拓扑序排列，depends_on 依据 DAG 父子关系
+        - 输出按拓扑序排列，depends_on 依据 DAG **依赖锥**（见 `_preceding_leaves`）
+        - ★ 前瞻引理（node_role="anticipatory"）**不进求解链**：
+          只收集到返回值的 `anticipatory_lemmas` 字段，供调用方写入引理记忆
+          （LEAP §2.3：挂图但不阻塞当前节点；见 BlueprintNode.node_role 说明）
 
-        max_subgoals: 子目标数上限（默认 MAX_SUBGOALS=6，对齐 SubGoalSolver 的
-        config.max_subgoals）。超限**只截数量**，不改顺序与内容：拓扑序下前 n 个
-        子目标的祖先必然也在前 n 个内，故 depends_on 仍然有效。
+        max_subgoals: 子目标数上限。None → MAX_SUBGOALS（默认 6）；
+        **<=0 表示不截断**（与 SubGoalSolver._parse_subgoal_plan 同语义）。
+        超限时**保留收尾子目标**（见 cap_subgoals_keep_last），
+        depends_on 按存活节点重算（`d in order` 过滤），索引仍然有效。
+
+        with_deps: False 时**不产出**依赖边（depends_on 全空）。
+        默认 True=修复后的正确行为；设为 False 可复现旧行为做 A/B 对照。
+        ★ 2026-09-15 修复：旧实现用 `_ancestors(nid) & selected` 计算依赖，
+        而祖先全是**内部节点**、`selected` 只含**叶子**，交集恒为空 ⇒
+        `depends_on` 结构性恒空、DAG 结构完全没传到求解器
+        （2026-09-10 那批 112 题实测 dep_edges **全部为 0**）。
         """
         if not self.nodes:
-            return {"problem_analysis": {}, "subgoals": [], "merge_strategy": ""}
+            return {"problem_analysis": {}, "subgoals": [], "merge_strategy": "",
+                    "anticipatory_lemmas": []}
 
         # 1) 展开：从根出发，收集需要求解的叶子（AND 全展开，OR 取第一个分支）
         selected: set = set()      # 被选中的叶子节点 id
         expanded: set = set()      # 已展开的非叶节点 id（防重复）
         order: list = []           # 展开顺序（用于稳定拓扑）
+        anticipatory: list = []    # ★ 前瞻引理节点（收集陈述，不入 order）
+
+        # ★ 前瞻引理是"旁挂"的（不挂在任何节点的 children 里，见提示词规格），
+        #   因此**不能**靠从 root 的 DFS 发现——必须全量扫描。
+        #   （2026-09-15 实测踩到：只扫可达节点时 anticipatory_lemmas 恒为空。）
+        #   同时把这些节点从展开的入口排除，避免万一被登记为 child 时混入求解链。
+        anti_ids: set = set()
+        for nid, nd in self.nodes.items():
+            if nd.is_anticipatory:
+                anti_ids.add(nid)
+                anticipatory.append({
+                    "id": nid,
+                    "statement": nd.statement,
+                    "rationale": nd.rationale,
+                })
 
         def expand(nid: str) -> None:
             node = self.nodes[nid]
             if nid in expanded:
+                return
+            # ★ 前瞻引理：不展开、不进求解链（论文语义 = 挂图但不阻塞当前节点）
+            if nid in anti_ids:
+                expanded.add(nid)
                 return
             expanded.add(nid)
             if not node.children:
@@ -178,23 +257,33 @@ class BlueprintDAG:
         if self.root_id in self.nodes:
             expand(self.root_id)
 
-        # 1.5) 子目标数上限（对齐 SubGoalSolver 的 max_subgoals）
-        _max_sg = int(max_subgoals or MAX_SUBGOALS)
-        if len(order) > _max_sg:
+        # 1.5) 子目标数上限（2026-09-15 修正两处）
+        #   ① 去掉 `or` 陷阱：旧写法 `int(max_subgoals or MAX_SUBGOALS)` 把 0
+        #      （=不截断）吃成默认 6 ⇒ 与 SubGoalSolver 0915 修好的语义不一致，
+        #      同一个 knobs 在两条路径上行为不同。
+        #   ② 去掉盲截尾部：改由 cap_subgoals_keep_last 保留收尾子目标
+        #      （盲截会丢掉"合并结论/得出最终答案"那一步，导致全链白解）。
+        order, _dropped = cap_subgoals_keep_last(order, max_subgoals)
+        if _dropped:
             logger.warning(
-                "Blueprint 子目标数 %d 超上限 %d，截断 %d 个（仅截数量，顺序/内容不变）",
-                len(order), _max_sg, len(order) - _max_sg)
-            order = order[:_max_sg]
+                "Blueprint 子目标数超上限，截断 %d 个（保留收尾子目标）：丢弃 %s",
+                len(_dropped), _dropped)
 
         # 2) 构造子目标：拓扑序（父先于子）
         #    用展开顺序近似：expand 是前序 DFS，父节点先于子节点被访问。
         #    子目标按 order 排列即满足"依赖在前"。
         subgoals = []
+        # 位置索引（子目标编号从 1 开始），避免在循环里反复 order.index()
+        _pos = {nid: i for i, nid in enumerate(order, 1)}
         for idx, nid in enumerate(order, 1):
             node = self.nodes[nid]
-            # 依赖：该叶子在 DAG 中的祖先（已展开且在 order 中排在前面）
-            deps = self._ancestors(nid) & selected
-            deps = [order.index(d) + 1 for d in order if d in deps]
+            # 依赖：nid 的**依赖锥** = 必须早于它求解的叶子集合（见 _preceding_leaves）。
+            if with_deps:
+                deps = [p for d, p in _pos.items()
+                        if d in self._preceding_leaves(nid, selected) and p != idx]
+            else:
+                deps = []
+            deps.sort()
             subgoals.append({
                 "id": idx,
                 "title": f"子目标{idx}: {self._short(node.statement)}",
@@ -208,7 +297,54 @@ class BlueprintDAG:
             "problem_analysis": self.problem_analysis,
             "subgoals": subgoals,
             "merge_strategy": self.merge_strategy,
+            "anticipatory_lemmas": anticipatory,   # ★ 前瞻引理（供引理记忆消费）
         }
+
+    def _preceding_leaves(self, nid: str, selected: set) -> set:
+        """依赖锥：必须在 `nid` **之前**求解的叶子节点集合（2026-09-15 新增）。
+
+        定义（与拓扑序语义一致）：自 `nid` 沿父边**上溯到根**，对路径上的每个祖先 A，
+        取 A 的 children 中**排在"通往 nid 的那个孩子"之前**的兄弟 C，
+        把 C 子树下所有被选中的叶子计入依赖。
+
+        ★ 为什么不能沿用 `_ancestors(nid) & selected`：
+        祖先集合里全是**内部节点**（因为只有非叶节点才可能有 children），
+        而 `selected` 只收录**叶子**，两者交集**恒为空** ⇒ `depends_on` 结构性恒空，
+        整张 DAG 的结构信息完全没传到求解器。实测佐证：2026-09-10 那批 112 题
+        `subgoal_stats.dep_edges` **全部为 0**（111 道走蓝图 + 1 道不走）。
+
+        例（AND(g)→[n1(AND)→[n1a,n1b], n2(OR)→[n2a,n2b]]，OR 取首分支）：
+            展开顺序 n1a, n1b, n2a ⇒ 依赖锥分别为 {}、{n1a}、{n1a,n1b}
+            （策略 A 位于 n2 之下，必须晚于 n1 整棵子树的两步）。
+        """
+        if not self.nodes:
+            return set()
+        parents: dict = {}
+        for pid, node in self.nodes.items():
+            for c in node.children:
+                parents.setdefault(c, []).append(pid)
+
+        deps: set = set()
+        visited: set = set()
+        frontier = [nid]
+        while frontier:
+            cur = frontier.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            for pid in parents.get(cur, []):
+                pnode = self.nodes.get(pid)
+                if pnode is None:
+                    continue
+                try:
+                    pos = pnode.children.index(cur)
+                except ValueError:      # 父边与 children 不一致（脏数据）→ 视作排在最后
+                    pos = len(pnode.children)
+                for sib in pnode.children[:pos]:
+                    deps |= self._subtree_ids(sib) & selected
+                frontier.append(pid)
+        deps.discard(nid)               # 自依赖不合法
+        return deps
 
     def _ancestors(self, nid: str) -> set:
         """返回 nid 的所有祖先节点 id。"""
@@ -357,7 +493,8 @@ class BlueprintDAG:
             "problem_analysis": self.problem_analysis,
             "nodes": [
                 {"id": n.id, "type": n.node_type, "statement": n.statement,
-                 "children": n.children, "rationale": n.rationale}
+                 "children": n.children, "rationale": n.rationale,
+                 "node_role": n.node_role}
                 for n in self.nodes.values()
             ],
         }
@@ -372,6 +509,8 @@ class BlueprintDAG:
                 statement=nd.get("statement", nd.get("description", "")),
                 children=list(nd.get("children", [])),
                 rationale=nd.get("rationale", ""),
+                # 缺省 required：旧 DAG 序列化（无该字段）行为不变
+                node_role=nd.get("node_role", nd.get("role", "required")) or "required",
             )
         return cls(
             nodes=nodes,
@@ -535,12 +674,24 @@ class BlueprintPlannerAgent(BaseAgent):
 
         作为独立 Agent 被调用时使用；SubGoalSolver 内部直接调
         generate_blueprint() 更高效（避免重复实例化）。
+
+        ⚠ 前瞻引理（node_role="anticipatory"）**不在此处注入引理记忆**：
+        写入记忆需要走 SubGoalSolver._inject_anticipatory_lemmas 的领域路由
+        （_use_lemma），本 Agent 不持有该规则。前瞻引理随
+        ctx.blueprint_plan["anticipatory_lemmas"] 一并下传，由 SubGoalSolver
+        消费；此处只记录条数，便于 trace 核对是否漏传。
         """
         dag = self.generate_blueprint(ctx)
         if dag is not None:
-            ctx.blueprint_plan = dag.to_subgoal_plan()
+            ctx.blueprint_plan = dag.to_subgoal_plan(
+                getattr(self.config, "max_subgoals", None),
+                # 2026-09-15：依赖边开关（默认开＝修复后的正确行为）
+                with_deps=getattr(self.config, "blueprint_deps_enabled", True))
+            _anti = len(ctx.blueprint_plan.get("anticipatory_lemmas") or [])
             self.record(ctx, "blueprint",
-                        f"Blueprint DAG → {len(ctx.blueprint_plan['subgoals'])} 个子目标")
+                        f"Blueprint DAG → {len(ctx.blueprint_plan['subgoals'])} 个子目标"
+                        + (f"（含前瞻引理 {_anti} 条，待 SubGoalSolver 注入）"
+                           if _anti else ""))
         return ctx
 
     def generate_blueprint(self, ctx: TaskContext,

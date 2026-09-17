@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>MathPilot 本轮优化总结</title>
+  <style>
+  :root {
+    --typography-fontFamily-heading: PingFang SC, 苹方-简, 微软雅黑, sans-serif;
+    --typography-fontFamily-body: PingFang SC, 苹方-简, 微软雅黑, sans-serif;
+    --typography-fontFamily-bodyLatin: Inter, Helvetica Neue, Arial, sans-serif;
+    --typography-fontFamily-code: JetBrains Mono, Fira Code, Consolas, monospace;
+    --typography-fontSize-title: 24pt;
+    --typography-fontSize-h1: 18pt;
+    --typography-fontSize-h2: 15pt;
+    --typography-fontSize-h3: 13pt;
+    --typography-fontSize-body: 11pt;
+    --typography-fontSize-small: 9pt;
+    --typography-fontSize-caption: 9pt;
+    --typography-lineHeight-title: 1.4;
+    --typography-lineHeight-body: 1.7;
+    --typography-lineHeight-heading: 1.3;
+    --typography-fontWeight-heading: 600;
+    --typography-fontWeight-body: 400;
+    --color-primary: #2563EB;
+    --color-text: #111827;
+    --color-textSecondary: #6B7280;
+    --color-heading: #111827;
+    --color-border: #E5E7EB;
+    --color-divider: #F3F4F6;
+    --color-background: #FFFFFF;
+    --color-codeBackground: #F9FAFB;
+    --color-highlight: #FEF3C7;
+    --spacing-paragraph: 0.5em;
+    --spacing-paragraphAfter: 0.5em;
+    --spacing-indent: 0em;
+    --spacing-sectionGap: 2em;
+    --spacing-listItemGap: 0.4em;
+    --layout-marginTop: 2.5cm;
+    --layout-marginBottom: 2.0cm;
+    --layout-marginLeft: 2.5cm;
+    --layout-marginRight: 2.5cm;
+    --layout-pageSize: A4;
+    --layout-maxContentWidth: 165mm;
+    /* Page layout */
+    --page-content-width: var(--layout-contentWidth, 15.6cm);
+    /* Typography */
+    --fs-h1: var(--typography-fontSize-h1, 22pt);
+    --fs-h2: var(--typography-fontSize-h2, 18pt);
+    --fs-h3: var(--typography-fontSize-h3, 14pt);
+    --fs-h4: var(--typography-fontSize-h4, 12pt);
+    --fs-body: var(--typography-fontSize-body, 12pt);
+    --fs-small: var(--typography-fontSize-small, 10pt);
+    --ff-heading: var(--typography-fontFamily-heading, "黑体", SimHei, sans-serif);
+    --ff-body: var(--typography-fontFamily-body, "宋体", SimSun, serif);
+    --ff-mono: var(--typography-fontFamily-mono, monospace);
+    --lh-body: var(--typography-lineHeight-body, 1.5);
+    --lh-heading: var(--typography-lineHeight-heading, 1.2);
+    --fw-bold: var(--typography-fontWeight-bold, 700);
+    --fw-normal: var(--typography-fontWeight-normal, 400);
+    /* Color */
+    --color-primary: var(--color-primary, #333333);
+    --color-text: var(--color-text, #000000);
+    --color-muted: var(--color-muted, #666666);
+    --color-border: var(--color-border, #cccccc);
+    --color-bg: var(--color-bg, #ffffff);
+    --color-highlight: var(--color-highlight, #f5f7fa);
+    /* Spacing */
+    --spacing-paragraph: var(--spacing-paragraph, 0.8em);
+    --spacing-section: var(--spacing-section, 2em);
+    --spacing-block: var(--spacing-block, 1em);
+    --margin-page: var(--layout-margin, 2.5cm);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--ff-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--color-text);
+    background: var(--color-bg);
+    max-width: var(--page-content-width);
+    margin-left: auto;
+    margin-right: auto;
+    padding: var(--margin-page) 0;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--ff-heading);
+    line-height: var(--lh-heading);
+    font-weight: var(--fw-bold);
+    margin-top: var(--spacing-section);
+    margin-bottom: var(--spacing-paragraph);
+  }
+  h1 { font-size: var(--fs-h1); }
+  h2 { font-size: var(--fs-h2); }
+  h3 { font-size: var(--fs-h3); }
+  h4 { font-size: var(--fs-h4); }
+
+  p { margin-bottom: var(--spacing-paragraph); }
+
+  ul, ol { padding-left: 2em; margin-bottom: var(--spacing-paragraph); }
+  li { margin-bottom: 0.3em; }
+
+  table { border-collapse: collapse; width: 100%; margin-bottom: var(--spacing-block); }
+  th, td { padding: 0.5em 0.8em; border: 1px solid var(--color-border); }
+  th { font-weight: var(--fw-bold); background: var(--color-highlight); }
+  caption { font-size: var(--fs-small); margin-bottom: 0.4em; text-align: left; }
+
+  figure { margin: var(--spacing-block) 0; }
+  figcaption { font-size: var(--fs-small); color: var(--color-muted); margin-top: 0.4em; }
+
+  /* TOC */
+  .doc-toc { margin-bottom: var(--spacing-section); padding: var(--spacing-block); background: var(--color-highlight); }
+  .toc-title { font-weight: var(--fw-bold); margin-bottom: 0.5em; }
+  .toc-list, .toc-list ol, .toc-list ul { list-style: none; list-style-type: none; padding-left: 1.5em; }
+  .toc-list li { margin-bottom: 0.3em; text-indent: 0; }
+  .toc-list a { color: var(--color-primary); text-decoration: none; }
+  .toc-list a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .doc-header { margin-bottom: var(--spacing-section); }
+  .doc-main { }
+  .doc-footer { margin-top: var(--spacing-section); color: var(--color-muted); font-size: var(--fs-small); }
+  </style>
+</head>
+<body>
+  <header class="doc-header"><h1>MathPilot 本轮优化总结</h1><p>项目：挑战杯 MathPilot 数学解题评测器　|　日期：2026 年 9 月 13 日</p></header>
+  <!-- TOC auto-generated when ≥3 h2 sections exist -->
+  <!-- <nav class="doc-toc" aria-label="文档目录">
+    <p class="toc-title">目录</p>
+    <ol class="toc-list">
+      <li><a href="#section-1">章节标题</a></li>
+    </ol>
+  </nav> -->
+  <main class="doc-main"><h2>一、核心成果</h2>
+<p>本轮围绕「让大模型在解题过程中使用工具、降低计算错误」这一目标，完成四项工作，并修复了一批导致既有机制静默失效的缺陷。</p>
+<ul><li><strong>时间系统按平台真实约束重设</strong>：单题上限由 1200 秒调整为 1000 秒，全卷目标由 21000 秒调整为 19500 秒，档位预算重设为 {300, 750, 1000} 秒。</li><li><strong>修复 5 个导致时间约束失效的缺陷</strong>：其中「全卷时钟恒为 0」与「3_solve 阶段上限等于无上限」两项经实测确认，属结构性失效。</li><li><strong>开销收敛 8 项</strong>：关闭两个永不收敛的评审循环、为三处无护栏的调用补上时间检查、削掉多个 300 至 460 秒的耗时极值。</li><li><strong>计算链路四项能力打通</strong>：计算分档、降级解析、按需回灌、生成前预计算，形成完整闭环。</li></ul>
+<h2>二、平台硬约束</h2>
+<p>本节数据来自官方 baseline 仓库 README 的「正式评测的并发、时限与计分」一节，是本轮所有时间配置的依据。</p>
+<table><thead><tr><th>约束项</th><th>取值</th><th>说明</th></tr></thead><tbody>
+<tr><td>单题硬时限</td><td>1200 秒</td><td>包含模块加载、Agent 初始化与 solve 执行</td></tr>
+<tr><td>超时后果</td><td>终止整个进程组</td><td>不保证执行 finally 等清理逻辑，该题计 C（0 分）</td></tr>
+<tr><td>全卷硬时限</td><td>6 小时</td><td>不含 Judge 阶段</td></tr>
+<tr><td>并发</td><td>3 个题目进程</td><td>—</td></tr>
+<tr><td>计分</td><td>超时、异常、缺失题计 C 且分母不变</td><td>单题失败直接拉低总分</td></tr>
+</tbody></table>
+<p>由此推算：全卷 6 小时乘以并发 3，再除以 112 题，平均每题可用时间约为 578 秒。</p>
+<h2>三、时间系统重设</h2>
+<table><thead><tr><th>配置项</th><th>原值</th><th>现值</th><th>依据</th></tr></thead><tbody>
+<tr><td>单题时间上限</td><td>1200</td><td><strong>1000</strong></td><td>平台硬限为 1200，需为不可中断的单次模型调用留出余量</td></tr>
+<tr><td>全卷时间上限</td><td>22500</td><td><strong>20700</strong></td><td>6 小时基础上保留 4% 余量</td></tr>
+<tr><td>全卷目标时间</td><td>21000</td><td><strong>19500</strong></td><td>取 6 小时的 90%，摊薄后约 522 秒每题</td></tr>
+<tr><td>档位预算</td><td>{120, 540, 1200}</td><td><strong>{300, 750, 1000}</strong></td><td>依据 195 条实测记录的耗时重新设定</td></tr>
+</tbody></table>
+<h3>3.1 修复的缺陷</h3>
+<ol><li><strong>全卷时钟恒为零</strong>：原实现每题将全卷截止时间重置为「当前时刻加六小时」，导致已用时间比例恒为 0，应急模式与时间收紧两个保护分支永不触发。现改为首题锚定一次、跨题保留。</li><li><strong>单题预算收紧被注释掉</strong>：全卷时间池算出的软预算仅被记录、完全不生效，单题预算退化为常量。现恢复为取单题上限与动态预算的较小值。</li><li><strong>阶段预算采用无依据的比例切分</strong>：原按档位预算乘以固定比例分配，现改为依据 195 条实测记录得出的绝对上限。</li><li><strong>3_solve 阶段上限失效</strong>：该阶段上限设为 1200 秒，大于单题预算 1000 秒，导致取小值后恒等于原截止时间，上限完全失效。实测证据为：同一题目在 2.7 阶段耗时由 425 秒降至 337 秒的同时，3_solve 阶段耗时由 294 秒升至 429 秒。现已下调至 600 秒。</li><li><strong>候选生成一次性提交</strong>：原实现一次性提交全部 6 个候选，而线程池仅有 2 个 worker，最坏情况耗时可达 1080 秒，且完成循环内无任何时间检查。实测后果为单题实际耗时超出软预算 421 秒。现改为分批提交并在批次间检查时间。</li></ol>
+<h2>四、开销收敛（8 项）</h2>
+<table><thead><tr><th>序号</th><th>措施</th><th>依据与效果</th></tr></thead><tbody>
+<tr><td>1</td><td>关闭骨架评审</td><td>实测 71% 的题目走满两轮仍判重规划、从未收敛，节省约 250 至 390 秒</td></tr>
+<tr><td>2</td><td>关闭 DAG 重规划</td><td>三分之二为无效运行，且该环节位于候选入池之后，对本题得分无直接影响</td></tr>
+<tr><td>3</td><td>确定性检查加超时护栏</td><td>同一答案被三处各检查一次，实测出现过 460 秒的极端值</td></tr>
+<tr><td>4</td><td>格式化阶段三处调用加护栏</td><td>其中差分检测输出上限由 65536 降至 512，耗时从 363 秒降至 180 秒</td></tr>
+<tr><td>5</td><td>关闭 Lean 三个无贡献往返</td><td>该三步结果不参与最终判定，仅影响错因文本，耗时由 330 秒降至 150 秒</td></tr>
+<tr><td>6</td><td>蓝图子目标数上限设为 6</td><td>原无上限，实测九成题超过 6 个</td></tr>
+<tr><td>7</td><td>最终闸门重做预留 300 秒</td><td>原护栏与硬墙零余量，单次调用不可中断即会跨墙</td></tr>
+<tr><td>8</td><td>2.7 阶段预算降至 600 秒</td><td>原值大于单题总预算，等于无上限</td></tr>
+</tbody></table>
+<h2>五、Lean 链路修复</h2>
+<p><strong>根本原因</strong>：Lean 验证前需先将题目翻译为 Lean 代码，该步骤依赖模型调用。该调用超时（180 秒，重试一次共 360 秒）后被异常兜底逻辑静默吞掉，返回「未知」结论。</p>
+<p><strong>实测证据</strong>：日志中明确记录「verify_answer 异常（降级 unknown）: LLM call failed after 2 attempts: Request timeout after 180s」。</p>
+<p><strong>后果</strong>：Lean 防线完全空转，既不确认正确候选、也不淘汰错误候选，却仍消耗大量时间。</p>
+<p><strong>修复方式</strong>：兜底路径改用不依赖模型调用的系统侧验算，从已有的计算表达式中直接构造命题并编译。修复后实测已能产出「答案有效」与「证明无效」两类结论。</p>
+<h2>六、计算链路（四项能力）</h2>
+<h3>6.1 计算分档</h3>
+<p>按运算风险划分档位，低危运算由模型自算、高危运算必须交由工具计算。</p>
+<table><thead><tr><th>类别</th><th>示例</th><th>判定</th></tr></thead><tbody>
+<tr><td>低危（模型自算）</td><td>四则运算、平方、小次方</td><td><code>7**2</code>、<code>2**10</code>、<code>9**6</code></td></tr>
+<tr><td>高危（必须走工具）</td><td>组合数、根号、大次方、取模</td><td><code>2**100</code>、<code>10**20</code>、<code>comb(50,3)</code>、<code>sqrt(2)</code>、<code>100 % 7</code></td></tr>
+</tbody></table>
+<p>分档阈值可通过环境变量调整（指数上限 20、结果位数上限 6）。代数推导中的符号幂（如 <code>x**2</code>）不计入高危，避免误报。</p>
+<h3>6.2 降级解析</h3>
+<p>使工具能够接受模型的实际书写形式，而非要求模型改变习惯。</p>
+<ul><li>支持多行内容、Python 代码形态、多目标赋值（a, b, c = 1, 2, 3）；</li><li>支持指标记出现在行中而非行首；</li><li>增加散文护栏，仅截断散文、不丢弃数值；</li><li>增加伪条目防护，避免 JSON 碎片被误认为精确值。</li></ul>
+<p><strong>真实数据回放验证</strong>：全仓扫描 321 个结果文件，捞出 174 个计算标记，其中 10.3% 不在行首。数值承载条目的提取率由 39/45 提升至 <strong>45/45</strong>，且伪条目为零。</p>
+<h3>6.3 方案 A：按需回灌</h3>
+<p>新增汇总函数，把上文已算出的精确值（形如「[计算] 表达式 = 结果」）去重后汇总，并注入四条生成路径：修正、自改进、子目标求解、结果合并。</p>
+<p>经端到端验证，四条路径的提示词均确实携带了精确值清单，且无值时不会产生空标题。</p>
+<h3>6.4 方案 B：生成前预计算</h3>
+<p>在首个生成阶段之前新增预计算阶段，先要求模型只列出需要精确计算的算式、由系统算好后置于后续提示词中。</p>
+<p><strong>关键前提</strong>：必须使用预填充种子。实测发现，若不加预填充，模型会输出数十行解题推理且不含任何计算标记；加入以计算标记开头的种子后，输出稳定为严格一行的算式。</p>
+<p><strong>触发条件</strong>：标准档与难题档、非应急模式、距硬墙不少于 150 秒、非选择题与判断题。经题面静态判定，可覆盖 112 题中的 98 题（覆盖率 87.5%）。</p>
+<h2>七、验证与回归</h2>
+<p><strong>单题实测</strong>（第 016 号题）：耗时 975 秒，工具拒收记录由上轮 8 条降至 0 条，3_solve 阶段被正确跳过。</p>
+<p><strong>真实数据回放</strong>：值承载条目提取率 45/45，零伪条目。</p>
+<p><strong>回归测试</strong>：计算相关用例 80 项通过；计算、求解与子目标相关用例 145 项通过；全量 633 项通过、1 项失败，该失败为既有用例（与弧度制正弦函数相关），非本轮引入。</p>
+<h2>八、待办事项</h2>
+<ol><li><strong>交付包尚未同步</strong>：赛事提交版与新赛事提交版两个目录目前不含本轮任何计算改动。若不同步，提交物中将不存在上述能力。</li><li><strong>预计算开关缺少命令行参数</strong>：目前仅能通过环境变量关闭。</li><li><strong>预计算触发条件可进一步收窄</strong>：建议收窄至计算型与计数型题目，但需先取得对照数据。</li></ol>
+<h2>九、经验教训</h2>
+<ol><li><strong>字段为空不等于功能未发生</strong>：本轮曾因在错误的字段中统计，误判「模型不写计算标记」，实际是模型写了但格式被拒。排查时必须先确认该字段是否记录了目标信息。</li><li><strong>日志中被截断的字段不等于处理时也被截断</strong>：审计埋点的截断长度与求值输入无关。</li><li><strong>提示词注入不等于生效</strong>：计算指南已注入六条路径，实测模型仍未按预期书写。</li><li><strong>同一机制多处注入必然不同源</strong>：主链路与子目标链路各有一份文案，修改一处等于未改。</li><li><strong>阶段上限必须小于单题预算</strong>：否则取小值后恒等于截止时间，上限失效。本轮已在 2.7 与 3_solve 两处踩到同一问题。</li></ol></main>
+  <footer class="doc-footer"><p>本文件由 MathPilot 项目组整理</p></footer>
+</body>
+</html>

@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import os
 import re as _re
 
 # domain 判定用子串（题库 domain 有中英两套：Algebra/代数/NumberTheory/数论/…）
@@ -74,13 +75,128 @@ LESSONS = [
         "qtypes": ("解答题", "证明题"),
         "domains": ("algebra", "代数", "geometry", "几何", "calculus", "微积分",
                     "analysis", "分析", "equation", "方程"),
-        "re_problem": r"(最大|最小|极大|极小|极值|最值|max|min|extreme|最大值|最小值)",
+        # ⚠ 2026-09-15 修复：原正则含**裸** `max|min`，会误匹配 examine / determine /
+        # administration 等含 "min" 的普通词（实测 44/112 命中，明显偏高）。
+        # 收紧为词边界 `\bmax\b|\bmin\b` + 完整词形。
+        "re_problem": r"(最大|最小|极大|极小|极值|最值|最大值|最小值|"
+                      r"\bmax\b|\bmin\b|maximum|minimum|maximal|minimal|"
+                      r"largest|smallest|greatest|least|extreme|"
+                      r"at\s+most|at\s+least)",
         "text": (
             "若题目涉及最大值/最小值/极值，先对声称的极值点做数值采样或代入"
             "边界验证，再下结论——心算错值后全链路自洽是高风险错误。"
         ),
     },
+    # ==================================================================
+    # 2026-09-15 新增三条（依据《错题错误类型归因分析报告 v1.1》§7.2
+    # 「优先攻克技巧类」）。对应错题：E-count ← B 类 14 题；
+    # E-bound ← C 类 3 题（002/004/066）；E-magnitude ← A 类 21 题。
+    # ⚠ 消融开关：环境变量 ERROR_LESSONS_EXTRA（见 _extra_enabled），
+    #   默认 "all" 全开；A/B 对照时设 "none"，或 "count"/"bound"/"magnitude"
+    #   逐条验证。三条均只改提示词，不新增 LLM 调用、不改控制流。
+    # ==================================================================
+    {
+        "id": "E-count",
+        "name": "计数/枚举完备性自检",
+        # 对应 B 类失败模式：漏算、重复计入、边界情形未覆盖（013/016/017/031/073）
+        "qtypes": ("解答题", "填空题"),
+        "domains": _ANSWER_QRY_DOMAINS,
+        "re_problem": r"(多少种|多少个|多少条|共有|几种|个数|方案数|计数|"
+                      r"排列|组合|ways|count|how\s+many|number\s+of|"
+                      r"find\s+all|determine\s+all|求所有|所有可能|全部|枚举)",
+        "text": (
+            "若本题要求计数或枚举（“有多少种”“共有多少个”“求方案数”“所有可能”），"
+            "交付前做一次穷尽性自检，逐条回答："
+            "① 你枚举的范围是什么（从哪个值到哪个值、边界条件是什么）；"
+            "② 列出已计入的情形清单（可简写，但要能数得清条数）；"
+            "③ 显式声明被排除的情形及排除理由；"
+            "④ 追问一次：是否存在第二个解族——被漏掉的对称情形、退化情形、边界取值？"
+            "若第 ④ 问无法明确排除，重新枚举后再交付，不要带着“应该没有别的了”的猜测结束。"
+        ),
+    },
+    {
+        "id": "E-bound",
+        "name": "极值必须构造+上界双向论证",
+        # 对应 C 类：极值题只给一半论证（002 构造+上界、004 上界缺失、066 面数上界差一）
+        # 与已有 E-extreme 互补不重叠：E-extreme 管“数值算得对不对”，本条管“论证全不全”
+        "qtypes": ("解答题", "证明题"),
+        "domains": _ANSWER_QRY_DOMAINS,
+        "re_problem": r"(最大|最小|极大|极小|极值|最值|最多|最少|至多|至少|"
+                      r"\bmax\b|\bmin\b|maximum|minimum|maximal|minimal|"
+                      r"largest|smallest|greatest|least|fewest|"
+                      r"at\s+most|at\s+least)",
+        "text": (
+            "若本题求最大值/最小值/极值，结论必须由两半论证共同支撑，缺一不可："
+            "① 构造（可达性）：给出一个具体实例，并验证它确实取到该值；"
+            "② 上界（不可能性）：证明不存在更优的值——用反证、放缩、单调性或不变量，"
+            "说明再大（小）就会矛盾。"
+            "只有上界没有构造 ⇒ 不知道能否达到；只有构造没有上界 ⇒ 不知道是否最优。"
+            "若发现缺一半，补齐后再交付。"
+        ),
+    },
+    {
+        "id": "E-magnitude",
+        "name": "数值答案的量级合理性核对",
+        # ★ 唯一能低成本触及 A 类（思路/建模错，43.8%）的机制：
+        #   A 类客观指纹 = 量级级偏差 10–1000 倍（报告 §4.3），量级可无参考答案自检。
+        # ⚠ 已知失效边界：若模型对量级的估计也沿同一错误方向，本自检会“自洽通过”
+        #   （报告 §6 证据指向该可能）⇒ 必须 A/B 验证，不能凭设计直觉认为有效。
+        "qtypes": ("解答题", "填空题"),
+        "domains": _ANSWER_QRY_DOMAINS,
+        # 不做题干匹配：凡求数值解的题都注入
+        "text": (
+            "若最终答案是具体数值，交付前做一次量级核对（这与“检查算术”是两件事）："
+            "① 只用题目条件做粗放缩，独立估出这个量应该落在什么数量级"
+            "（例如“应为 10³ 量级”“介于 100 与 5000 之间”）——"
+            "估算时不要参考你已经算出的结果；"
+            "② 把你的答案与这个估计相比：若相差 10 倍以上，说明大概率是选错了数学模型，"
+            "请回到“把问题转化成什么数学结构”这一步重新审视，而不是去检查算术；"
+            "③ 若数量级一致，再检查边界情形与计算细节。"
+        ),
+    },
 ]
+
+# ---------------------------------------------------------------------
+# 消融控制（2026-09-15）：仅作用于上面三条 2026-09-15 新增的 lesson。
+# 原有 4 条（E-check / E-form / E-eq / E-extreme）始终生效，不受影响，
+# 保证任何对照实验都与“新增三条之前”的行为可比。
+# ---------------------------------------------------------------------
+_EXTRA_IDS = ("E-count", "E-bound", "E-magnitude")
+_EXTRA_ENV = "ERROR_LESSONS_EXTRA"
+_EXTRA_ALIAS = {"count": "E-count", "bound": "E-bound", "magnitude": "E-magnitude"}
+
+
+def _extra_enabled() -> set:
+    """本次启用哪些新增 lesson（消融控制）。
+
+    ERROR_LESSONS_EXTRA 取值（大小写不敏感）：
+      "all" / "1" / "on"（默认）  → 三条全开
+      "none" / "0" / "off"        → 三条全关（回到 2026-09-15 之前的行为）
+      "count,bound" 等逗号分隔     → 只开指定子集（支持短名 count/bound/magnitude）
+    取值无法识别时按“全开”处理（宁可多注入，也不静默失效）。
+    """
+    raw = (os.environ.get(_EXTRA_ENV, "all") or "all").strip().lower()
+    if raw in ("none", "0", "off", "false"):
+        return set()
+    if raw in ("all", "1", "on", "true"):
+        return set(_EXTRA_IDS)
+    out = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if p in _EXTRA_ALIAS:
+            out.add(_EXTRA_ALIAS[p])
+        elif p in _EXTRA_IDS:
+            out.add(p)
+    return out if out else set(_EXTRA_IDS)
+
+
+def _active_lessons():
+    """当前生效的 lesson 列表（新增三条受 ERROR_LESSONS_EXTRA 消融控制）。"""
+    on = _extra_enabled()
+    for lesson in LESSONS:
+        if lesson["id"] in _EXTRA_IDS and lesson["id"] not in on:
+            continue
+        yield lesson
 
 
 def match_lessons(domain: str = "", question_type: str = "",
@@ -90,14 +206,17 @@ def match_lessons(domain: str = "", question_type: str = "",
     返回的文本为提示片段，调用方自行决定拼接位置与开关（enable_error_lessons）。
     """
     hits: list[dict] = []
-    dom_l = (domain or "").lower()  # domain 中英混排、大小写不一，统一小写匹配
-    for lesson in LESSONS:
+    for lesson in _active_lessons():
         qts = lesson.get("qtypes") or ()
         if qts and question_type not in qts:
             continue
-        doms = lesson.get("domains") or ()
-        if doms and not any(k in dom_l for k in doms):
-            continue
+        # ⚠ 2026-09-15 框架级修复：原有的「domain 白名单硬过滤」已移除。
+        # 原实现 `if doms and not any(k in dom_l for k in doms): continue` 是**纯白名单**，
+        # 缺项即静默跳过 —— 实测题库 19 种 domain 取值中白名单只覆盖 16.1%（18/112），
+        # 其中最大域「离散数学」（51 题）与 25 道空 domain 题**整域失效**，
+        # 89 道错题里仅 14.6% 能命中任何 lesson（机制事实上空转）。
+        # 这些清单均为**通用数学自查**，按域裁剪的收益远小于静默失效的代价；
+        # 适用性交由 `qtypes`（题型）与 `re_problem`（题干关键词）决定。
         rx = lesson.get("re_problem")
         if rx and not _re.search(rx, problem or "", _re.IGNORECASE):
             continue
@@ -115,14 +234,11 @@ def lesson_ids(domain: str = "", question_type: str = "",
                problem: str = "") -> list[str]:
     """返回命中的 lesson id 列表（诊断/日志用）。"""
     out = []
-    dom_l = (domain or "").lower()
-    for lesson in LESSONS:
+    for lesson in _active_lessons():
         qts = lesson.get("qtypes") or ()
         if qts and question_type not in qts:
             continue
-        doms = lesson.get("domains") or ()
-        if doms and not any(k in dom_l for k in doms):
-            continue
+        # 与 match_lessons 严格同源：domain 白名单硬过滤已移除（2026-09-15）
         rx = lesson.get("re_problem")
         if rx and not _re.search(rx, problem or "", _re.IGNORECASE):
             continue

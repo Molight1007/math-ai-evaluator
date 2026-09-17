@@ -1,0 +1,35 @@
+request_id: brief0912
+entry_type: beautify_only
+current_stage: 3
+intent: 将已定稿的工作简报（md）排版并导出为 Word 文档
+stage_1:
+  status: skipped
+  reason: 内容已定稿，无需创作
+stage_2:
+  status: completed
+  route: html
+  html_sub: template
+  genre: business-report
+  output_path: stage2/formatted-brief0912.html
+  output_format: html
+  skills_invoked:
+    - design-token   # 静态查表 tokens/compiled/business-report.json
+    - doc-typeset    # prompts/business-report.md + templates/business-report.html
+  fallback: false
+  fallback_reason: null
+stage_3:
+  status: completed
+  output_path: 工作简报_0912.docx
+  converter: html-to-docx
+  page_size: A4
+  warnings: []
+output_docx_path: D:/挑战杯/工作简报_0912.docx
+output_docx_user_specified: true
+consistency_check:
+  stages_completed: [2, 3]
+  final_artifact_exists: true
+  notes: >
+    html-to-docx 托管 venv 缺失依赖（setup 脚本因调用 wsl.exe 被安全策略拦截，
+    无法执行）；改用主 Python + 依赖装入隔离目录（--target
+    C:/Users/35174/.venv-html-to-docx/Lib/site-packages）完成转换。
+    注意：pip 包名是 html-for-docx（非 html4docx），导入名为 html4docx。

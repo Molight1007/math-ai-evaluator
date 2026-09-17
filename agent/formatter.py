@@ -67,6 +67,111 @@ _INCOMPLETE_RE = re.compile(
 )
 
 
+# ★ 2026-09-16 新增：**伪枚举**识别（枚举优先分支专用）。
+# 背景：`enum_preferred` 原先只判"含逗号即枚举"，于是把 `0,1,2,3,\ldots`
+# 这类**省略号糊弄式答案**当成合法枚举，还因为"推理最长"而胜出
+# （实测 003：conf=0.667 的正确候选 `\boxed{2026}` 输给了 conf=0.000 的它）。
+# 真正的枚举答案必须**逐项列出具体值**，出现省略号即说明未写全 ⇒ 排除。
+_PSEUDO_ENUM_RE = re.compile(
+    r"\\ldots|\\cdots|\\dots|\.\.\.|…|⋯|"
+    r"等等|其余|以此类推|依此类推|以下省略|"
+    r"such\s+that|and\s+so\s+on",
+    re.IGNORECASE,
+)
+
+
+# ★ 2026-09-17 新增：工具调用 XML 残留标签（用于判定"这不是答案"）。
+# 实测 official112-025：6 个候选里 5 个 answer 就是字面量 `</tool_call>`；
+# 而原 `_REFUSAL_RE` / `_MISSING_ANSWER_RE` / `_INCOMPLETE_RE` 全是"拒绝词
+# 词表"，对这类结构残留**全部漏检**，脏文本被当合法答案直接提交。
+_TOOL_TAG_RE = re.compile(
+    r"</?tool_calls?>|</?function\b|<parameter=|</parameter>",
+    re.IGNORECASE,
+)
+
+# ★★ 2026-09-17 补强：实测发现上面的判据**只拦得住工具标签** —— 配套的
+# `utils.extract._looks_like_reasoning_fragment` 对下列全部 5 类真实脏答案
+# **都返回 False**（已逐例实测）。故此处按**实测形态**补三类结构信号：
+#   · `步骤8：重新思考——正确的下界构造`（002 候选）→ 步骤/思考标签
+#   · `从 $N$ 倒推：若从位置 $k`（032 最终答案）→ 推理连接词
+#   · `a_wins = analyze_game(N)`（032 候选）→ Python 代码
+#   · `subset sum approximation bounded integers ...`（013 候选）→ 英文检索词
+# ⚠ 已知未覆盖（有意）：`509040-2*169680` 这类**未求值表达式** —— 它与
+#   `\binom{2k}{k}^2` 等合法表达式答案形态难分，判错代价高于收益，故不拦。
+_STEP_LABEL_RE = re.compile(
+    r"^\s*(?:步骤\s*\d|第\s*[0-9一二三四五六七八九十]+\s*步|Step\s*\d"
+    r"|\d+\s*[.、)]\s*【)"
+    r"|重新思考|让我们(?:来)?(?:看|想|计算|考虑)",
+    re.IGNORECASE,
+)
+# 推理连接词：正常"答案"不会带"倒推 / 由此 / 综上"这类**过程**措辞。
+# 实测 032 提交的最终答案就是 `从 $N$ 倒推：若从位置 $k` 这样的推理碎片。
+# 放在 has_math 闸门**之外**：该碎片含 `$`，会被"疑似数学式"跳过。
+_REASONING_CONNECTIVE_RE = re.compile(
+    r"倒推|由此可见|同理可得|可以看出|注意到|综上|我们需要")
+_PY_ASSIGN_CALL_RE = re.compile(r"^[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*\s*\(")
+_PY_KEYWORD_RE = re.compile(
+    r"(?<![\w.])(?:def|import|return|assert|print|lambda|while|elif)\b")
+# 英文检索词：足够长、足够多空格、纯 ASCII 且只含词/数字/连字符/斜杠/加号。
+_ENGLISH_QUERY_MIN_LEN = 50
+_ENGLISH_QUERY_MIN_SPACES = 7
+_ENGLISH_QUERY_ALLOWED = re.compile(r"^[A-Za-z0-9\s\-+/]+$")
+# 含这些记号即视为"疑似数学式"，**不再**按代码/英文词串判定，避免误杀。
+_MATH_MARKERS = ("\\", "{", "}", "$", "^")
+
+
+def _looks_like_non_answer(text: str) -> bool:
+    """2026-09-17 新增：结构化"是否像合法答案"检查（拒绝词表之外的脏答案）。
+
+    背景：本文件原只有三条**拒绝词**正则，实测对下列脏答案全部漏检：
+      - `</tool_call>`（official112-025：5/6 候选）；
+      - `a_wins = analyze_game(N)`（032：代码片段）；
+      - `从 $N$ 倒推：若从位置 $k`（032：推理碎片）；
+      - `步骤8：重新思考——正确的下界构造`（002：步骤标签）；
+      - `subset sum approximation bounded integers ...`（013：英文搜索词）。
+    这里只做"明显不是答案"的**结构**判定：空串 / 工具标签 / 步骤与思考标签 /
+    推理连接词 / Python 代码 / 英文检索词串 / 推理碎片。
+    刻意**不**使用 `is_valid_final_answer` —— 它会误杀合法中文答案
+    （如 gold `有限差分法、有限元法`）。import 惰性化并 try/except 兜底。
+    """
+    if not text or not str(text).strip():
+        return True
+    t = str(text).strip()
+    try:
+        if _TOOL_TAG_RE.search(t):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    # —— 步骤 / 思考标签 / 推理连接词：推理过程的措辞，不可能是答案 ——
+    try:
+        if _STEP_LABEL_RE.search(t) or _REASONING_CONNECTIVE_RE.search(t):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    # —— 含 LaTeX 记号（\ { } $ ^）时视为疑似数学式，跳过代码/英文词串判定 ——
+    has_math = any(ch in t for ch in _MATH_MARKERS)
+    if not has_math:
+        try:
+            if _PY_ASSIGN_CALL_RE.match(t) or _PY_KEYWORD_RE.search(t):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if (len(t) >= _ENGLISH_QUERY_MIN_LEN
+                    and t.count(" ") >= _ENGLISH_QUERY_MIN_SPACES
+                    and _ENGLISH_QUERY_ALLOWED.match(t)):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        from utils.extract import _looks_like_reasoning_fragment
+        if _looks_like_reasoning_fragment(t):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
 class FormatterAgent(BaseAgent):
     name = "Formatter"
 
@@ -74,11 +179,31 @@ class FormatterAgent(BaseAgent):
         # 2026-09-02 bug 修复：0 票兜底路径（orchestrator 5) 段）预设的答案
         # （direct_solve 直答结果）优先——该路径候选全 0 票不可信，重选候选
         # 反而会把直答的好答案换掉。预设答案仍需过拒绝/占位/截断检查。
+        # 2026-09-17 补强（实测 10 题中 5 题命中本路径；且 best=None 导致
+        # `ctx._pick_diag` 永不写入，答案来源事后无法追溯）：
+        #   ① 直答 preset 必须**自身合法**才允许早退 —— 命中 `_looks_like_non_answer`
+        #      （工具标签 / 推理碎片 / 空）或拒绝 / 不完整 / 占位正则时，改走 `_pick_best`；
+        #   ② 两条分支都保证 `ctx._pick_diag` 有值，来源可追溯。
         preset = (getattr(ctx, 'final_response', '') or '')
-        if (getattr(ctx, '_zero_vote_fallback', False) and preset.strip()):
+        #   ⚠ 判据**有意不含 `_REFUSAL_RE`**：该正则含 `无解` / `暂无`，
+        #     而"无解"是**合法**数学答案（见本文件既有口径），纳入会把正确答案
+        #     误判为脏答案而改走 _pick_best，属于"修复引入误杀"。
+        _preset_ok = bool(preset.strip()) and not (
+            _looks_like_non_answer(preset)
+            or _INCOMPLETE_RE.search(preset)
+            or _MISSING_ANSWER_RE.search(preset)
+        )
+        if (getattr(ctx, '_zero_vote_fallback', False) and _preset_ok):
             answer = preset
             confidence = 0.0
             best = None
+            try:
+                ctx._pick_diag = {
+                    "branch": "zero_vote_fallback_direct",
+                    "picked": (preset or "")[:60],
+                }
+            except Exception:  # noqa: BLE001
+                pass
         else:
             best = self._pick_best(ctx)
             if best is None:
@@ -104,6 +229,17 @@ class FormatterAgent(BaseAgent):
                 if best_cluster and getattr(best_cluster, 'confidence', 0.0) > 0:
                     confidence = best_cluster.confidence
 
+        # 2026-09-17：兜底埋点 —— 无论走直答还是 `_pick_best`，都保证 `_pick_diag`
+        # 有值，便于事后追溯答案来源（此前零票兜底分支 best=None ⇒ 永不写入）。
+        if not getattr(ctx, "_pick_diag", None):
+            try:
+                ctx._pick_diag = {
+                    "branch": "formatter_pick_best",
+                    "picked": (answer or "")[:60],
+                }
+            except Exception:  # noqa: BLE001
+                pass
+
         # 答案过长检测：如果答案超过300字符，尝试从推理尾部重新提取
         if answer and len(answer) > 300:
             for c in (ctx.candidates or []):
@@ -117,8 +253,10 @@ class FormatterAgent(BaseAgent):
                         confidence = max(confidence, 0.5)  # 重提取成功，给默认置信度
                         break
 
-        # 如果最佳答案是拒绝类 / 明显不完整，尝试从其他候选找更好答案
-        if not answer or _REFUSAL_RE.search(answer) or _INCOMPLETE_RE.search(answer):
+        # 如果最佳答案是拒绝类 / 明显不完整 / 结构上不像答案，尝试从其他候选找更好答案
+        # （2026-09-17：并入 `_looks_like_non_answer`，覆盖 `</tool_call>` 等脏答案）
+        if (not answer or _looks_like_non_answer(answer)
+                or _REFUSAL_RE.search(answer) or _INCOMPLETE_RE.search(answer)):
             fallback = self._pick_fallback(ctx, exclude_answer=answer)
             if fallback:
                 answer = fallback
@@ -142,7 +280,8 @@ class FormatterAgent(BaseAgent):
         # 而这条兜底路径因条件太窄**从未被触发** ⇒ 占位符被原样交出去。
         # 现在只要最终答案不可用，就再博一次直答；直答也拿不到才交给上层最终兜底。
         _ans_txt = (answer or "").strip()
-        if (not _ans_txt) or _MISSING_ANSWER_RE.search(_ans_txt):
+        if ((not _ans_txt) or _looks_like_non_answer(_ans_txt)
+                or _MISSING_ANSWER_RE.search(_ans_txt)):
             direct = self._emergency_answer(ctx)
             if direct and not _MISSING_ANSWER_RE.search(direct):
                 self.record(ctx, "finalize", f"占位符答案 → 紧急直答: {direct[:120]}")
@@ -202,7 +341,10 @@ class FormatterAgent(BaseAgent):
             _mv: dict = {}
             for _c in (ctx.candidates or []):
                 _a = (getattr(_c, "answer", "") or "").strip()
-                if _a and len(_a) > 3 and not _REFUSAL_RE.search(_a):
+                # ★ 2026-09-16 审计修复：去掉 `len(_a) > 3` 门槛。本文件 95-98 行
+                #   已论证"单字符是**合法且完整**的答案"，且选择题多为 `A`/`AB`/`BCD`
+                #   ⇒ 长度门槛会把多数投票的候选答案整条筛掉（客观题必判错）。
+                if _a and not _REFUSAL_RE.search(_a):
                     _mv[_a] = _mv.get(_a, 0) + 1
             if _mv:
                 # 2026-09-13 用户设计：**平票时做差分检测**——
@@ -278,6 +420,17 @@ class FormatterAgent(BaseAgent):
         # **把正确的枚举丢掉了**，最终只剩 `\boxed{2026}`。
         # 依据：题面明确要求"所有/全部"时，**枚举形态的候选天然优于单值候选**
         # （单值必然不满足题意）。故在常规选答之前先做一次"枚举优先"。
+        #
+        # ★★★ 2026-09-16 修复（用户直接质问"为什么有正确答案却选了错的"）：
+        #   原实现有**三重缺陷**，导致它反而成了错误来源。实测 003：
+        #     候选1 `\boxed{2026}` 票 2/3 conf=0.667（**2026 是正确答案之一**）
+        #     候选5 `\boxed{0,1,2,3,\ldots}` 票 0/3 conf=0.000（**省略号糊弄式伪答案**）
+        #     本分支却选中了后者。
+        #   ① "枚举"判据只是**含逗号** ⇒ 伪答案也算枚举；
+        #   ② 排序**只看推理长度**，完全不看票数/置信度 ⇒ 0 票的长文本胜过 2 票；
+        #   ③ 直接 `return` ⇒ **绕过后面全部正常选答逻辑**（聚类/置信度/多数票）。
+        #   修法：加"伪枚举"过滤 + 排序改为 (票数, 置信度, 推理长度) 词典序。
+        #   保留原设计意图：枚举形态确实优于单值（单值必然不满足"求所有"）。
         try:
             from .question_type import asks_all_values as _aav2
             if _aav2(ctx.problem or ""):
@@ -291,21 +444,33 @@ class FormatterAgent(BaseAgent):
                     if _mb2:
                         _core2 = _mb2.group(1)
                     if re.search(r"[,，;；、]", _core2):
+                        # ① 伪枚举过滤：省略号 / "等等" / 未写全的形式（如
+                        #    `0,1,2,3,\ldots`）**不是**合法枚举答案，必须排除。
+                        if _PSEUDO_ENUM_RE.search(_core2):
+                            continue
                         _enum_c.append(_c)
                 if _enum_c:
-                    _enum_c.sort(key=lambda c: len(c.reasoning or ""),
-                                 reverse=True)
+                    # ② 排序：先票数、再置信度、最后推理长度（原实现只看长度）
+                    _enum_c.sort(
+                        key=lambda c: (
+                            int(getattr(c, "correct_votes", 0) or 0),
+                            float(getattr(c, "confidence", 0.0) or 0.0),
+                            len(getattr(c, "reasoning", "") or ""),
+                        ),
+                        reverse=True)
                     try:
                         ctx._pick_diag = {
                             "branch": "enum_preferred",
                             "picked": (getattr(_enum_c[0], "answer", "") or "")[:60],
                             "n_enum_candidates": len(_enum_c),
+                            "enum_votes": int(getattr(_enum_c[0], "correct_votes", 0) or 0),
                         }
                     except Exception:  # noqa: BLE001
                         pass
                     self.record(ctx, "finalize",
                                 "题面要求『所有』→ 枚举形态候选优先"
-                                "（{} 个枚举候选，取推理最详细者）".format(len(_enum_c)))
+                                "（{} 个**合法**枚举候选，按票数/置信度/推理长度排序）".format(
+                                    len(_enum_c)))
                     return _enum_c[0]
         except Exception:  # noqa: BLE001
             pass
@@ -490,7 +655,10 @@ class FormatterAgent(BaseAgent):
         if valid_verdicts:
             for v in sorted(valid_verdicts, key=lambda x: x.confidence, reverse=True):
                 ans = getattr(v, "answer", "") or ""
-                if (ans and len(ans) > 3
+                # ★ 2026-09-16 审计修复：去掉 `len(ans) > 3`（同 :205 的理由）。
+                #   本函数是**兜底换候选**路径，门槛过严会把合法短答案（A/AB/BCD）
+                #   全部跳过、退回推理尾部散文 ⇒ 客观题必错。
+                if (ans.strip()
                         and ans != exclude
                         and not _REFUSAL_RE.search(ans)
                         and not _INCOMPLETE_RE.search(ans)):
@@ -499,7 +667,8 @@ class FormatterAgent(BaseAgent):
         if ctx.candidates:
             for c in sorted(ctx.candidates, key=lambda x: len(x.reasoning or ""), reverse=True):
                 ans = c.answer or ""
-                if (ans and len(ans) > 3
+                # ★ 2026-09-16 审计修复：去掉 `len(ans) > 3`（同 :493 的理由）。
+                if (ans.strip()
                         and ans != exclude
                         and not _REFUSAL_RE.search(ans)
                         and not _INCOMPLETE_RE.search(ans)):
@@ -532,7 +701,13 @@ class FormatterAgent(BaseAgent):
                 # 2026-09-13 超时护栏（既有失败语义 = 原样返回 answer）：
                 # deadline / 生成侧软截止已到 → 不再续写，直接落到函数末尾
                 # `return answer`，与原有"补全失败不阻断"语义一致。
-                if ctx.is_timed_out() or ctx.gen_time_up():
+                # ⚠ 2026-09-16 修复（老逻辑漏改）：本行原先用 `ctx.gen_time_up()`，
+                #   而**同文件 414-418 行已明确论证不能这么用** ——
+                #   formatter 是流程最后一个阶段，走到这里 `gen_time_up()` **必然为 True**
+                #   ⇒ 截断答案续写**从未真正执行过**，只能原样交截断答案。
+                #   414-421 与 589-593 两处当时都改了，**这处漏改**，属典型"同一 bug
+                #   修了两处漏第三处"。现对齐 421 行的口径：只看硬限与真实剩余时间。
+                if ctx.is_timed_out() or ctx.time_remaining() < 120:
                     self.record(ctx, "finalize",
                                 "截断答案续写：时间已到，跳过续写（原样返回）")
                     break

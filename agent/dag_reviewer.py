@@ -253,6 +253,14 @@ class DagReviewerAgent(BaseAgent):
         ctx.dag_review_report = report.to_dict()
         replan_flag = report.should_replan(self._reject_thr,
                                            self._reject_count_thr)
+        # 2026-09-15：Purpose 覆盖率（LEAP §2.1）。
+        # 用途：核实"rationale 必填"这条提示词约束是否**真的生效**——
+        # 否则无法区分"模型没写"与"评审器没看"（后者已由第 6 维修复）。
+        # 只做观测计数，不改变 verdict（避免与既有启发式语义冲突）。
+        _missing_rationale = sum(
+            1 for n in dag.nodes.values()
+            if len((getattr(n, "rationale", "") or "").strip()) < 4)
+
         self.record(
             ctx, "dag_review",
             f"DAG 评审: total={len(results)} "
@@ -260,11 +268,13 @@ class DagReviewerAgent(BaseAgent):
             f"({report.reject_ratio:.0%}), "
             f"llm_skipped={len(llm_skipped)}, "
             f"degraded={report.degraded}, "
+            f"missing_rationale={_missing_rationale}/{len(dag.nodes)}, "
             f"should_replan={replan_flag}",
             dag_review_replan=replan_flag,
             dag_review_reject_ratio=round(report.reject_ratio, 3),
             dag_review_reject_count=report.reject_count,
             dag_review_degraded=report.degraded,
+            dag_review_missing_rationale=_missing_rationale,
         )
         return report
 
@@ -373,6 +383,9 @@ class DagReviewerAgent(BaseAgent):
             node_id=node.id,
             node_type=node.node_type,
             statement=node.statement[:400],
+            # LEAP §2.1：Purpose 是评审器判断"子目标是否真的简化了问题"的唯一依据。
+            # 2026-09-15 前该字段**根本没有传给评审器** ⇒ 第 6 维"分解依据"无从判断。
+            rationale=(getattr(node, "rationale", "") or "（未给出）")[:400],
             parent_statement="\n".join(parent_stmts) or "  （根节点 / 无父）",
             children_statements="\n".join(child_stmts) or "  （叶子节点 / 无子）",
             deps_statements="\n".join(dep_stmts) or "  （无前置依赖）",

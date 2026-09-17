@@ -124,23 +124,48 @@ class ToSubgoalPlanTest(unittest.TestCase):
         self.assertEqual(ids, [1, 2, 3])
 
     def test_depends_on_reflects_ancestors(self):
+        """★ 2026-09-15 修正：本测试此前**把 bug 断言成了正确行为**。
+
+        旧实现 `deps = _ancestors(nid) & selected` 中，祖先全是内部节点、
+        `selected` 只含叶子 ⇒ 交集恒空 ⇒ 断言 `depends_on == []` 永远成立，
+        于是"依赖边结构性恒空"被测试**固化**，112 题实测 dep_edges 全 0 也无人察觉。
+        现按**依赖锥**（`_preceding_leaves`）计算，期望值如下。
+        """
         plan = sample_dag().to_subgoal_plan()
-        # 所有叶子都是 g 的子孙，g 是根（不产生子目标），无跨祖先依赖
+        by_desc = {sg["description"]: sg for sg in plan["subgoals"]}
+        # 展开顺序：n1a, n1b, n2a（n1 是 AND 全展开，n2 是 OR 取首分支）
+        self.assertEqual(by_desc["x^2 >= 0 对实数 x 成立"]["depends_on"], [])
+        self.assertEqual(by_desc["x^2 在 R 上定义"]["depends_on"], [1])
+        # 策略A 位于 n2 之下 ⇒ 必须晚于 n1 整棵子树的两步
+        self.assertEqual(by_desc["策略A：利用平方定义"]["depends_on"], [1, 2])
+        # 编号必须严格小于自身（无自依赖、无前向依赖）
+        for i, sg in enumerate(plan["subgoals"], 1):
+            for d in sg["depends_on"]:
+                self.assertLess(d, i)
+
+    def test_with_deps_false_reproduces_old_behavior(self):
+        """A/B 对照开关：with_deps=False 必须复现"依赖恒空"的旧行为。"""
+        plan = sample_dag().to_subgoal_plan(with_deps=False)
         for sg in plan["subgoals"]:
             self.assertEqual(sg["depends_on"], [])
-        # 构造含依赖场景：g -> [a, b]，b 依赖 a（a 是 b 的祖先）
+
+    def test_internal_ancestor_is_not_a_dependency(self):
+        """子目标只能依赖**同样是子目标（叶子）**的节点。
+
+        g(and)→[a,b] 且 a→b：b 的祖先 a 是**内部节点**（不在求解链里），
+        因此不产生依赖边——这与此前的空结果一致，但**原因不同**
+        （以前是恒空，现在是"内部节点不可作为依赖目标"）。
+        """
         nodes = {
             "g": BlueprintNode("g", "and", "目标", ["a", "b"]),
             "a": BlueprintNode("a", "and", "第一步", []),
             "b": BlueprintNode("b", "and", "第二步依赖第一步", []),
         }
-        # 让 b 的祖先含 a：a 是 b 的父节点的兄弟 —— 这里直接构造 a->b 边
         nodes["a"].children = ["b"]
         dag = BlueprintDAG(nodes, root_id="g")
         plan = dag.to_subgoal_plan()
         by_desc = {sg["description"]: sg for sg in plan["subgoals"]}
-        # 展开顺序：g(and)→a(and→b 叶子) → b 是 a 的子节点
-        self.assertEqual(len(plan["subgoals"]), 1)  # 只有 b 是叶子
+        self.assertEqual(len(plan["subgoals"]), 1)      # 只有 b 是叶子
         self.assertEqual(by_desc["第二步依赖第一步"]["depends_on"], [])
 
     def test_infer_type(self):

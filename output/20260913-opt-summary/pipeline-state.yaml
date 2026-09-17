@@ -1,0 +1,32 @@
+request_id: 20260913-opt-summary
+created_at: 2026-09-13T21:44:36
+entry_type: full_pipeline
+intent_len: 1480
+current_stage: 3
+output_docx_path: 'D:\挑战杯\本轮优化总结_0913.docx'
+output_docx_user_specified: true
+stage_1:
+  status: completed
+  output: stage1/final_draft.md
+  genre: work-report
+  expert_used: work-report-expert
+  route_tag: expert_work_report
+  critic_decision: DEGRADED
+  fallback: true
+  fallback_reason: expert_no_critic_config
+  note: 无评分尺规文件，按引擎核心机制（信息隔离 + 强制否定配额）做了一轮自查，修正 2 处
+stage_2:
+  status: completed
+  output: stage2/formatted-本轮优化总结.html
+  route_used: html-template
+  theme: general / modern-minimal
+  entry_type: stage2_flow
+  note: md→html 转换器修 2 个 bug（行内代码被加粗正则侵蚀；H1 与 header 重复）
+stage_3:
+  status: completed
+  output: D:/挑战杯/本轮优化总结_0913.docx
+  converter: tencent-docx/skills/html-to-docx (python -m html_to_docx convert)
+  page: A4 / portrait / 边距 T2.5 B2.5 L2.2 R2.2 cm
+  warnings: []
+  postprocess: 合并同格式 run + 规范化 CJK 边界空白（28 runs / 24 paragraphs）
+  verify: 1×H1 + 9×H2 + 5×H3 + 4 表；zip 完整性 OK；无 markdown/HTML 残留

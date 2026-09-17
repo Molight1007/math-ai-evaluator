@@ -142,6 +142,15 @@ class _Cfg:
     def __init__(self, enabled):
         self.answer_selfcheck_enabled = enabled
         self.max_answer_tokens = 1024
+        # ★ 2026-09-16：本文件的用例都在测 `_maybe_answer_selfcheck` 的**内部分支**
+        #   （时间墙 / 工具来源 / 非数值 / 预算判定），而该关的判据是
+        #   "涉高危运算却无 `<calc>` 工具来源" —— `<calc>` 的**引导注入**与
+        #   **标记解析**都由 `enable_calc_tool` 门控。
+        #   实测生产默认 `enable_calc_tool=False`（2026-09-15 关闭）⇒ 该关要求
+        #   **结构性无法满足** ⇒ 已在生产代码里加了"工具关闭即整体跳过"的修复
+        #   （避免徒劳重问把好答案改坏，实测 003 的 2026→1013→0）。
+        #   因此**测内部分支的用例必须显式把工具打开**，否则测的是"跳过分支"。
+        self.enable_calc_tool = True
 
 
 class _Stub:

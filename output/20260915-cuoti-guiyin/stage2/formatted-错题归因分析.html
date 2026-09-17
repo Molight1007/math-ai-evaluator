@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>MathPilot 错题错误类型归因分析报告</title>
+  <style>
+  /* --- CSS @page 页面模型（S-26060126E）：正文页脚居中页码 --- */
+  @page {
+    @bottom-center { content: counter(page); }
+  }
+  @page cover {
+    @bottom-center { content: none; }
+  }
+  section[role="cover"] { page: cover; }
+
+  :root {
+    --fs-h1: var(--typography-fontSize-h1, 28pt);
+    --fs-h2: var(--typography-fontSize-h2, 18pt);
+    --fs-h3: var(--typography-fontSize-h3, 14pt);
+    --fs-body: var(--typography-fontSize-body, 12pt);
+    --fs-small: var(--typography-fontSize-small, 10pt);
+    --ff-heading: var(--typography-fontFamily-heading, "黑体", SimHei, sans-serif);
+    --ff-body: var(--typography-fontFamily-body, "宋体", SimSun, serif);
+    --lh-body: var(--typography-lineHeight-body, 1.6);
+    --fw-bold: var(--typography-fontWeight-bold, 700);
+    --color-primary: var(--color-primary, #1a73e8);
+    --color-text: var(--color-text, #000000);
+    --color-muted: var(--color-muted, #666666);
+    --color-border: var(--color-border, #cccccc);
+    --color-bg: var(--color-bg, #ffffff);
+    --color-highlight: var(--color-highlight, #f5f7fa);
+    --color-accent: var(--color-primary, #1a73e8);
+    --color-summary-bg: var(--color-highlight, #f5f7fa);
+    --color-summary-border: var(--color-primary, #1a73e8);
+    --summary-border-width: 4px;
+    --radius-card: var(--spacing-block, 8px);
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
+    --spacing-paragraph: var(--spacing-paragraph, 0.8em);
+    --spacing-section: var(--spacing-section, 2em);
+    --spacing-block: var(--spacing-block, 1em);
+    --margin-page: var(--layout-margin, 2.5cm);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--ff-body); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--color-text); background: var(--color-bg); }
+
+  /* Cover */
+  .report-cover {
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    min-height: 60vh; padding: var(--margin-page);
+    background: var(--color-highlight);
+  }
+  .cover-logo-placeholder { width: 80px; height: 40px; background: var(--color-border); margin-bottom: var(--spacing-section); }
+  .cover-category { font-size: var(--typography-fontSize-coverCategory, 14pt); font-family: var(--ff-heading); font-weight: var(--fw-bold); color: var(--color-primary); letter-spacing: 0.08em; margin-bottom: var(--spacing-paragraph, 0.8em); text-align: left; }
+  .cover-title { font-size: var(--fs-h1); font-family: var(--ff-heading); font-weight: var(--fw-bold); color: var(--color-primary); margin-bottom: var(--spacing-paragraph, 0.5em); }
+  .cover-subtitle { font-size: var(--fs-h2); color: var(--color-muted); margin-bottom: var(--spacing-section); }
+  .cover-meta { font-size: var(--fs-small); color: var(--color-muted); }
+
+  /* TOC */
+  .doc-toc { padding: var(--spacing-block) var(--margin-page); background: var(--color-bg); border-bottom: 1px solid var(--color-border); }
+  .toc-title { font-weight: var(--fw-bold); margin-bottom: var(--spacing-paragraph, 0.5em); }
+  .toc-list, .toc-list ol, .toc-list ul { list-style: none; list-style-type: none; padding-left: var(--spacing-cardPadding, 1.5em); }
+  .toc-list li { margin-bottom: var(--spacing-paragraph, 0.3em); text-indent: 0; }
+  .toc-list a { color: var(--color-primary); text-decoration: none; }
+
+  /* Executive summary */
+  .executive-summary {
+    margin: var(--spacing-section) var(--margin-page);
+    padding: var(--spacing-section);
+    border-left: var(--summary-border-width) solid var(--color-summary-border);
+    background: var(--color-summary-bg);
+    border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  }
+  .summary-header { display: flex; align-items: center; gap: 1em; margin-bottom: var(--spacing-block); }
+  .summary-header h2 { font-size: var(--fs-h2); font-family: var(--ff-heading); }
+  .summary-badge { font-size: var(--fs-small); color: var(--color-muted); font-style: italic; }
+  .summary-highlights { display: flex; gap: var(--spacing-block); flex-wrap: wrap; margin-bottom: var(--spacing-block); }
+
+  /* Progress table */
+  .progress-table { width: 100%; border-collapse: collapse; margin-bottom: var(--spacing-block); }
+  .progress-table th, .progress-table td { padding: var(--spacing-paragraph, 0.5em) var(--spacing-paragraph, 0.8em); border: 1px solid var(--color-border); }
+  .progress-table th { background: var(--color-highlight); }
+  .progress-bar { background: var(--color-border); border-radius: 4px; height: 12px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--color-primary); border-radius: 4px; }
+  .status-badge { display: inline-block; padding: var(--spacing-paragraph, 0.2em) var(--spacing-paragraph, 0.6em); border-radius: 4px; font-size: var(--fs-small); }
+  .status-done { background: var(--color-success, #2e7d32); color: var(--color-rating-buy, #2e7d32); }
+  .status-in-progress { background: var(--color-warning, #e65100); color: var(--color-rating-hold, #e65100); }
+  .status-pending { background: var(--color-highlight); color: var(--color-muted); }
+
+  /* Main body */
+  .report-body { padding: var(--spacing-section) var(--margin-page); }
+  .report-body h2 { font-size: var(--fs-h2); font-family: var(--ff-heading); font-weight: var(--fw-bold); margin-top: var(--spacing-section); margin-bottom: var(--spacing-paragraph); }
+  .report-body h3 { font-size: var(--fs-h3); font-family: var(--ff-heading); font-weight: var(--fw-bold); margin-top: var(--spacing-block); margin-bottom: var(--spacing-paragraph); }
+  .report-body p { margin-bottom: var(--spacing-paragraph); }
+
+  /* Appendix */
+  .appendix { padding: var(--spacing-section) var(--margin-page); border-top: 1px solid var(--color-border); }
+  </style>
+</head>
+<body>
+  <!-- 封面与正文是相邻顶层 section，正文会自动另起一页。 -->
+  <section role="cover" class="report-cover">
+    <div class="cover-logo-placeholder"></div>
+    <p class="cover-category">技术分析报告</p>
+    <h1 class="cover-title">MathPilot 错题错误类型归因分析报告</h1>
+    <p class="cover-subtitle">基于 89 道错题的三维机理分解与改进方向建议</p>
+    <div class="cover-meta">
+      <p>MathPilot 项目组 | 2026 年 9 月 15 日 | v1.0</p>
+    </div>
+  </section>
+
+  <section role="body" class="report-body" data-page-restart="1">
+    <nav class="doc-toc" aria-label="文档目录">
+      <p class="toc-title">目录</p>
+      <ol class="toc-list"><li><a href="#sec1">一、结论摘要</a></li>
+<li><a href="#sec2">二、数据来源与统计口径</a></li>
+<li><a href="#sec3">三、错误类型的总体分布</a></li>
+<li><a href="#sec4">四、错误机理的三维分解</a></li>
+<li><a href="#sec5">五、第一项细分：究竟是"结构错"还是"数错"</a></li>
+<li><a href="#sec6">六、验证：方向错误是否带来耗时空转</a></li>
+<li><a href="#sec7">七、方向错 vs 技巧没对：主攻方向建议</a></li>
+<li><a href="#sec8">八、方法局限</a></li></ol>
+    </nav>
+
+    <div class="executive-summary">
+      <div class="summary-header">
+        <h2>执行摘要</h2>
+        <span class="summary-badge">Executive Summary</span>
+      </div>
+      <div class="summary-highlights"><div data-component="data-card" data-title="计算执行错误"><span class="card-value">4.2%</span><span class="card-unit">仅 2 / 48 题</span></div>
+<div data-component="data-card" data-title="思路 / 建模错误"><span class="card-value">43.8%</span><span class="card-unit">21 / 48 题</span></div>
+<div data-component="data-card" data-title="计数 / 枚举错误"><span class="card-value">29.2%</span><span class="card-unit">14 / 48 题</span></div>
+<div data-component="data-card" data-title="对题 vs 错题耗时"><span class="card-value">946 / 992s</span><span class="card-unit">几乎相同</span></div></div>
+      <div class="summary-body">
+<p>本报告对全量 112 道测试题中 89 道错题做了错误机理归因。核心发现是：<strong>推理与思维层面的错误是主体，计算几乎不是瓶颈</strong>——真正的计算执行错误仅占 <span class="data-emphasis">4.2%</span>，而思路／建模错误占 <span class="data-emphasis">43.8%</span>。</p>
+<p>进一步把"计数类错误"细分后可见：<strong>数学结构选错的占 60%，"结构对了、数错了"仅占 40%</strong>，说明多数错误发生在"把问题转化成数学模型"这一步。</p>
+<p>此外，数据显示<strong>方向错误并不会带来明显的额外耗时</strong>（对题与错题耗时分别为 946 秒与 992 秒，相差约 5%），模型表现为沿错误方向一致地推导到结束，而非卡住空转。</p>
+<p>据此建议：<strong>优先攻克可工程化的"技巧类"问题</strong>（占 56.2%），"方向类"问题（43.8%）作为中期课题。</p>
+</div>
+    </div>
+
+    <main><h2 id="sec1">一、结论摘要</h2>
+<p>对测试题目全量 112 题的作答结果做了错误归因分析，主要结论如下：</p>
+<ol><li><strong>推理与思维层面的错误是主体，计算几乎不是瓶颈。</strong> 在 89 道错题中，真正的"计算执行错误"仅 <strong>2 题（4.2%）</strong>，而"思路/建模错误"占 <strong>43.8%</strong>、"计数/枚举错误"占 <strong>29.2%</strong>。</li></ol>
+<ol><li><strong>"计数类"错题中，结构错多于数错。</strong> 把通常笼统称为"计数模型错"的题目细分后发现：<strong>数学结构选错的有 21 题（占该类 60%）</strong>，而"结构对了、数错了"只有 14 题（40%）。也就是说，多数错误发生在"把问题转化成什么数学模型"这一步。</li></ol>
+<ol><li><strong>方向错误不会带来明显的额外耗时。</strong> 数据显示对题与错题的耗时几乎相同（均值 946 秒 vs 992 秒）；且历史实验表明<strong>放开时限后错题答案不变</strong>。这说明模型不是"卡住空转"，而是<strong>沿着错误方向一致地推导到结束</strong>。</li></ol>
+<ol><li><strong>主攻方向建议</strong>：优先攻克"技巧类"问题（占 56.2%，可工程化程度高），"方向类"问题（43.8%）需要更长周期的范式改造。</li></ol>
+<h2 id="sec2">二、数据来源与统计口径</h2>
+<table class="doc-table"><thead><tr><th>项目</th><th>说明</th></tr></thead><tbody><tr><td>数据源</td><td>全量跑批结果记录 + 错题攻克台账（89 题）</td></tr><tr><td>统计样本</td><td>错题 89 道（占全量 112 题的 79.5%）</td></tr><tr><td>归因方法</td><td>逐题依据"模型输出 → 正确解"的偏差形态与卡点描述判定主因</td></tr><tr><td>可核验性</td><td>每题判定与判据均逐条记录，统计可由明细表复算</td></tr></tbody></table>
+<p>需要说明的是，归因属于<strong>人工判断</strong>而非自动分类，存在少量边界情形，详见第八节。</p>
+<h2 id="sec3">三、错误类型的总体分布</h2>
+<table class="doc-table"><thead><tr><th>错误类型</th><th>题数</th><th>占比</th></tr></thead><tbody><tr><td>推理 / 建模 / 计数错误</td><td>约 50</td><td>56%</td></tr><tr><td>正确解或判分口径问题（非模型能力所致）</td><td>约 11</td><td>12%</td></tr><tr><td>答案形式 / 完整性问题</td><td>约 11</td><td>12%</td></tr><tr><td>知识盲区（概念混淆）</td><td>约 7</td><td>8%</td></tr><tr><td>纯计算 / 数值错误</td><td>约 3</td><td>3.4%</td></tr><tr><td>完全无输出</td><td>1</td><td>1%</td></tr></tbody></table>
+<p><strong>要点</strong>：约 <strong>12% 的错题并非模型能力问题</strong>——包括正确解本身存在争议、或判分器无法识别等价的答案写法（例如系数书写顺序不同、符号表达式完全等价）。这部分已单独归档，不计入能力改进的范畴。</p>
+<h2 id="sec4">四、错误机理的三维分解</h2>
+<p>为回答"究竟是算错还是想错"，把第一项（约 50 题）按<strong>三种互斥机理</strong>分解。</p>
+<h3>4.1 判定标准</h3>
+<table class="doc-table"><thead><tr><th>维度</th><th>定义</th><th>可观测信号</th></tr></thead><tbody><tr><td>建模错误</td><td>把实际问题转化为数学对象的环节出错（选错数学结构、假设不成立、约束遗漏）</td><td>答案出现<strong>量级级偏差</strong>（10—1000 倍）</td></tr><tr><td>推理错误</td><td>模型选择正确，但推导链出错（漏解支、归纳错、上界论证缺失）</td><td>答案<strong>接近但不等</strong>（差一、差 1—2 倍）</td></tr><tr><td>计算错误</td><td>建模与推导均正确，仅数值符号运算出错</td><td>过程可追溯，只差最后一步</td></tr></tbody></table>
+<h3>4.2 分解结果（48 题有效）</h3>
+<table class="doc-table"><thead><tr><th>维度</th><th>题数</th><th>占比</th></tr></thead><tbody><tr><td>思路 / 建模错误</td><td>21</td><td>43.8%</td></tr><tr><td>计数 / 枚举错误</td><td>14</td><td>29.2%</td></tr><tr><td>构造 / 上界论证缺失</td><td>3</td><td>6.2%</td></tr><tr><td>推导 / 逻辑错误</td><td>8</td><td>16.7%</td></tr><tr><td><strong>计算执行错误</strong></td><td><strong>2</strong></td><td><strong>4.2%</strong></td></tr></tbody></table>
+<h3>4.3 两类错误的"指纹"</h3>
+<p><strong>建模错误 → 量级级偏差</strong>：</p>
+<table class="doc-table"><thead><tr><th>题目</th><th>模型输出 → 正确解</th><th>倍数</th></tr></thead><tbody><tr><td>六边形计数</td><td>23,341 → 25,502,500</td><td>约 1000 倍</td></tr><tr><td>最大 good number</td><td>9,867,312 → 146,250</td><td>约 67 倍</td></tr><tr><td>商人可达性</td><td>86 → 7,311</td><td>约 85 倍</td></tr></tbody></table>
+<p><strong>计数错误 → 同数量级、接近但不等</strong>：</p>
+<table class="doc-table"><thead><tr><th>题目</th><th>模型输出 → 正确解</th><th>偏差</th></tr></thead><tbody><tr><td>瓷砖计数</td><td>4,000,000 → 3,986,729</td><td>0.3%</td></tr><tr><td>最小整数 n</td><td>20 → 21</td><td>差一</td></tr><tr><td>骑士游戏</td><td>800 → 600</td><td>1.33 倍</td></tr></tbody></table>
+<h2 id="sec5">五、第一项细分：究竟是"结构错"还是"数错"</h2>
+<p>针对"计数类错误"这一最大类别，进一步区分两种性质：</p>
+<table class="doc-table"><thead><tr><th>细分</th><th>题数</th><th>占该类比例</th><th>典型表现</th></tr></thead><tbody><tr><td><strong>思路 / 建模错</strong>（结构选错）</td><td>21</td><td><strong>60%</strong></td><td>把带约束的排列当自由排列；博弈状态空间建错；公式结构错</td></tr><tr><td><strong>计数 / 枚举错</strong>（结构对、数错）</td><td>14</td><td><strong>40%</strong></td><td>漏算、重复计入、边界情形未覆盖</td></tr></tbody></table>
+<p><strong>结论</strong>：<strong>多数计数类错题在"转化"环节就已经错了</strong>，而不是"结构对了、数算错了"。这意味着仅靠"检查算术"无法解决这类问题。</p>
+<h2 id="sec6">六、验证：方向错误是否带来耗时空转</h2>
+<p>这是一个值得验证的直觉——<strong>方向错了，是不是会消耗大量时间或反复空转？</strong></p>
+<h3>6.1 对题与错题的耗时对比</h3>
+<table class="doc-table"><thead><tr><th>组别</th><th>题数</th><th>平均耗时</th><th>中位耗时</th></tr></thead><tbody><tr><td>作答正确</td><td>23</td><td>946 秒</td><td>1,069 秒</td></tr><tr><td>作答错误</td><td>89</td><td>992 秒</td><td>1,089 秒</td></tr></tbody></table>
+<p><strong>两者几乎相同（相差约 5%）</strong>。</p>
+<h3>6.2 按耗时区间看错误率</h3>
+<table class="doc-table"><thead><tr><th>耗时区间</th><th>题数</th><th>错误率</th></tr></thead><tbody><tr><td>0—300 秒</td><td>6</td><td>83.3%</td></tr><tr><td>300—600 秒</td><td>13</td><td>69.2%</td></tr><tr><td>600—900 秒</td><td>10</td><td>90.0%</td></tr><tr><td>900—1100 秒</td><td>31</td><td>74.2%</td></tr><tr><td>1100—1200 秒</td><td>27</td><td>77.8%</td></tr><tr><td>超过 1200 秒</td><td>25</td><td>88.0%</td></tr></tbody></table>
+<p><strong>各区间错误率均在 69%—90% 之间，没有"耗时越长越容易错"的趋势。</strong></p>
+<h3>6.3 结论与限制</h3>
+<p>数据显示：<strong>方向错误不会导致明显的时间空耗</strong>。模型表现为<strong>沿错误方向一致地推导到结束</strong>，而不是卡住或反复折腾。</p>
+<p>补充证据：前期实验做过"放开时限"的对照——<strong>答案完全不变</strong>。说明增加预算并未引发任何自我修正。</p>
+<p><strong>限制说明</strong>：上述耗时数据中位数已达 1,089 秒、多数题目接近上限，存在"天花板效应"，因此该对比<strong>不能完全排除</strong>"错题本应需要更久"。要严格验证，需在放开时限的条件下重跑。</p>
+<h2 id="sec7">七、方向错 vs 技巧没对：主攻方向建议</h2>
+<p>把五类细分按性质重新归拢：</p>
+<table class="doc-table"><thead><tr><th>性质</th><th>对应类别</th><th>题数</th><th>占比</th></tr></thead><tbody><tr><td><strong>方向错</strong>（数学结构选错）</td><td>思路 / 建模错</td><td>21</td><td>43.8%</td></tr><tr><td><strong>技巧没对</strong>（方向对，执行/边界/论证未兜住）</td><td>计数枚举 + 构造上界 + 推导逻辑 + 计算</td><td>27</td><td>56.2%</td></tr></tbody></table>
+<h3>7.1 两类问题的性质差异</h3>
+<table class="doc-table"><thead><tr><th>对比项</th><th>方向错（43.8%）</th><th>技巧没对（56.2%）</th></tr></thead><tbody><tr><td>表现</td><td>选错数学结构，后续全错</td><td>结构正确，但边界、穷尽性、构造性论证不足</td></tr><tr><td>改进难度</td><td>高——需要改变解题范式</td><td>中——可通过检查机制工程化</td></tr><tr><td>可否快速验证</td><td>否</td><td>是</td></tr><tr><td>典型样例</td><td>误自由排列、量级差 1000 倍</td><td>差一、漏解支、缺上界证明</td></tr></tbody></table>
+<h3>7.2 建议的主攻顺序</h3>
+<p><strong>优先攻克"技巧类"（56.2%）</strong>，理由如下：</p>
+<ol><li><strong>可工程化</strong>：枚举穷尽性自检、强制"构造 + 上界"双向论证、边界情形专项检查，都是可以明确实现的机制。</li><li><strong>见效快</strong>：可直接对应"差一""漏解支""缺上界"这几类高频表现。</li><li><strong>验证成本低</strong>：可用小样本快速验证机制是否触发、是否有效。</li></ol>
+<p><strong>"方向类"（43.8%）建议作为中期课题</strong>：</p>
+<ul><li>核心是建立"<strong>题型 → 数学结构</strong>"的显式路由（先判定这是计数问题还是博弈问题还是极值问题，再选择对应工具）。</li><li>工程量大、验证周期长，不宜在临近交付阶段启动。</li></ul>
+<h2 id="sec8">八、方法局限</h2>
+<ol><li><strong>归因是人工判断</strong>：依据是"模型输出与正确解的偏差形态"加题面卡点描述，不是自动分类。已尽量采用客观判据（量级差 / 偏差倍数），但仍存在边界情形。</li></ol>
+<ol><li><strong>存在判定争议的样本</strong>：例如某题偏差 0.3%，归入"计数不精确"还是"计算错误"存在讨论空间；若从严只计"纯运算错误"，计算类占比为 6%。已按较宽口径归入第 4.2 节的统计并单独标注。</li></ol>
+<ol><li><strong>数据时效</strong>：基础统计基于 9 月 13 日的台账；此后已修复若干答案形式类与客观题类问题（选择题正确率由 7/12 提升至 8/12），因此<strong>当前实际分布会更偏向纯推理错误</strong>。</li></ol>
+<ol><li><strong>缺少推理过程记录</strong>：现有跑批结果只保存最终答案，未保存模型的完整推理链。因此"具体在哪一步开始偏离"只能由答案差异反推。<strong>建议后续跑批保存推理过程字段</strong>，以便给出更精确的归因证据。</li></ol></main>
+
+    <div class="appendix"><h2>附录：数据来源</h2><p>全量跑批结果记录与错题攻克台账（2026-09-13 版）；逐题归因明细见配套表格文件。</p></div>
+  </section>
+</body>
+</html>

@@ -118,6 +118,34 @@ class AgentConfig:
     # 验证模型（评判）
     verifier_voting_times: int = 1     # 每个候选只投 1 票（避免无效重复投票）
     verifier_temperature: float = 0.0  # 验证温度（贪婪解码）
+    # ★★ 2026-09-16 投票方差（针对实测的「零否决」）：
+    #   实测 standard 档 `verifier_voting_times=1` 且 `_vote_one` 温度**硬编码 0.0**
+    #   ⇒ 每题只有一次分类判断，多票也无方差（"多票"= 同一判断重复 N 次）；
+    #   后果是 6 道错题中 5 道的**全部候选被全票判 A**。
+    #   现：当**候选答案之间存在分歧**时，自动提高票数并启用非零温度；
+    #   候选答案一致时保持原样（加票无意义且费时）。
+    verifier_diversify_enabled: bool = True
+    verifier_disagreement_votes: int = 3          # 有分歧时的每候选票数
+    verifier_disagreement_temperature: float = 0.7  # 有分歧时的采样温度
+    # ★ 2026-09-15 新增：带推理的最终复核（回应"验证器偏松"）。
+    # 依据：常规投票走 prefill 强制单行输出（自述实测 0.8s vs 普通 70.2s），
+    # **0.8 秒不可能完成"独立重算 + 逐条攻击"** ⇒ 投票退化成"看一眼点头"。
+    # 实测后果：10 题里 5 道错题的**全部候选全票 A**，叠加 AuditGate 候选审核
+    # 100% unknown、LeanGate 判 valid / 降级放行 ⇒ 三道闸门对错答**零否决**。
+    # 本项对**最终选定答案**做一次不 prefill 的复核（1 次调用/题，可否决）。
+    # ⚠ 默认关：未 A/B 前行为完全不变。
+    verifier_deep_final_enabled: bool = False
+    verifier_deep_final_min_remaining: float = 150.0  # 剩余时间低于此值则跳过复核
+    verifier_deep_review_max_tokens: int = 16384      # 复核输出上限（需容纳推理链）
+    # ★ 2026-09-15 实测教训：用投票模板做复核时，模型只吐 **12 个字**
+    # （一行 `VERDICT: A`）——因为投票模板写着"在心里完成即可，不输出"+
+    # "请只输出 VERDICT"。该长度的输出**必须视为"未完成复核"**，
+    # 否则"没做检查"会被当成"检查通过"。
+    verifier_deep_review_min_chars: int = 200
+    # ★ 2026-09-15 审计补漏：此键原先只被 `getattr(cfg, ..., 0.0)` 读取、
+    # **没有声明、也不在白名单** ⇒ CLI/overrides 传它会被静默丢弃
+    # （与 enable_dag_replan / symbolic_solve_adopt 同一类坑）。
+    verifier_deep_review_temperature: float = 0.0
 
     # 题型分类（可选）
     enable_domain_hint: bool = True    # 是否启用领域提示增强
@@ -127,24 +155,58 @@ class AgentConfig:
     # 绝对化措辞找反例+回定义核对 / 按空序逗号分隔），与"证明题不分流"的既有
     # 结论互不冲突（那一条针对 IMO 证明题）。回退：设为 False 即恢复旧行为。
     objective_tactic_enabled: bool = True
+    # ★ 2026-09-16 审计修复（原为"假开关"）：solver.py 的注释承诺
+    #   「`enable_question_type_hint`（默认 False）仍可**全题型强制开启**」用于 A/B，
+    #   但该键此前**未在 AgentConfig 声明、不在白名单、无 CLI**
+    #   ⇒ 只能走 `getattr(..., False)` 兜底，A/B 路径结构上不可用。
+    #   现补全声明 + 白名单 + CLI（`--enable_question_type_hint true`）。
+    enable_question_type_hint: bool = False
+    # ★ 2026-09-16 审计修复（原为"假开关"）：orchestrator 注释称
+    #   「config.verify_reserve_seconds 可覆盖」生成侧预留，但同样三处皆缺。
+    #   实际语义：`_gen_deadline = deadline − verify_reserve`，
+    #   生成侧软截止 = 该值；deep 档默认 540s、其余 480s。
+    verify_reserve_seconds: float = 0.0  # 0 = 用按档位的默认（deep 540 / 其他 480）
+    # ★ 2026-09-16 新增：联网搜索工具开关（`agent/base.py::llm_with_calc` 注册）。
+    #   默认 **False** —— 工具已实现并接线，但不经 A/B 不改变主链行为。
+    #   开启后模型可在原生 tool_calls 里自行调用 `web_search(query)`；
+    #   逐题效果见 `tool_calls.web_search`（calls/ok/fail/results/verdict）。
+    #   ⚠ 后端实测可用性（2026-09-16）：Math StackExchange ✓ / arXiv ✓ /
+    #     Bing △（能连通但结果不可用）⇒ 已按此次序回退。
+    enable_web_search: bool = False
+    # ★ 2026-09-17 新增：Lean 同答案候选去重缓存（**默认关**）。
+    #   实测 003 的 7 候选里 5 个同答案，重复验证浪费约 120s；
+    #   但复用报告会绕过"按各自 reasoning 判定"的守卫② ⇒ **改变验证语义**，
+    #   收益（5.6%）不足以承担 ⇒ 默认关，供 A/B（`--lean_dedup_by_answer true`）。
+    lean_dedup_by_answer: bool = False
 
     # ---- calc_tool 确定性计算（2026-09-01，治 value_wrong）----
-    enable_calc_tool: bool = True      # 提示词引导 <calc> 标记 + 输出精确求值回填
+    # ★ 2026-09-15 关闭（用户指示「没有解决计算问题就关掉」）。实测依据：
+    #   ① **工具几乎零使用**：多次实测 `<calc>` 回填 = 0、`[计算]` = 0
+    #      （09-13「实测 `<calc>` 出现 0 次」；09-14「12/12 题 [计算]回填=0」）；
+    #   ② **计算错本就不是瓶颈**：错题归因 v1.1 的 E 类（计算执行错）
+    #      仅 2 题 / 4.2%（分母 48）；
+    #   ③ 其变体 `enable_calc_prewarm` 09-14 实测**净负**（12 题仅 1 题相关）。
+    #   ⇒ 关掉**能省调用**（`calc_mandatory` 的对"无 <calc> 的数值断言"重问实测
+    #     无效：模型下一轮仍不写），且因本就未生效，**正确率无损失**。
+    #   回退：置 True 即恢复（代码已保证 False 时行为与旧版完全一致）。
+    enable_calc_tool: bool = False
     # 2026-09-09 P1-1（老师拍板"计算必须用工具"）：行级**裸数值断言**
     # （如 `25*4 = 100`，两侧无字母/中文、无 <calc> 来源）→ 判定心算/自算，
     # 带反馈打回重写一次（方程/结论式含变量放行，不打断推导）。
     # 2026-09-12 用户要求「强制、一定、绝对用工具算」→ **默认开启**：
     # 命中"未用 <calc> 的心算数值断言"即定向重问，要求改写成 <calc>。
+    # ★ 2026-09-15 关闭：随 enable_calc_tool 一起关（实测重问无效、纯烧调用）。
     # 回退：`--calc_mandatory false`（或 config 覆盖）。
-    calc_mandatory: bool = True
+    calc_mandatory: bool = False
     # 2026-09-12 用户要求「不是不让模型算，而是让易错的根号/组合数/log 走工具」：
     # True → 打回判据只认**易错算子**（开方/根式、对数、指数与自然常数 e、
     # 组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π），简单加减乘除
     # 允许模型自算；False → 恢复"任何数值计算都必须走工具"的旧行为。
     # 作用点：calc_tool.find_naked_numeric_asserts(hard_only=...) +
     # solver._maybe_answer_selfcheck 的高危算子门槛。
+    # ★ 2026-09-15 关闭：随 enable_calc_tool 一起关。
     # 回退：`--calc_hard_only false`。
-    calc_hard_only: bool = True
+    calc_hard_only: bool = False
     # 2026-09-14 改为**默认关闭**：实测无价值 + 有明确成本。
     # 关闭依据（12 题错题回归 `results/wrong12_v1_0914_out.jsonl`）：
     #   · 12/12 题都产出了 1 条预计算，但**只有 1 题（015 的 `fact(2)=2`）与答案相关**，
@@ -204,8 +266,9 @@ class AgentConfig:
     # 在架构上由本地计算器产生，模型无法心算。设 False 回到"仅比对/回传"旧行为。
     symbolic_solve_adopt: bool = True
 
-    # 解析
-    extraction_mode: str = "auto"      # auto | last_line | regex
+    # ★ 2026-09-16 删除死字段 `extraction_mode`：AgentConfig 声明了、
+    #   override 白名单里也列了，但**全仓 0 个读取点**（实测确认）⇒
+    #   CLI/kwargs 传它会被静默丢弃，只给人"可调"的假象。
 
     # ---- 自主调控（大幅缩减）----
     max_revise_rounds: int = 1         # 自纠错 1 轮（A/B 验证 6/6 无损失，输出更易读）
@@ -277,11 +340,15 @@ class AgentConfig:
 
     # ---- 智能体补充部件配置 ----
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
-    # 2026-09-04：平台不限 token → max_tokens 65536；max_tokens_cap=0 关闭 base.llm 二次裁剪
-    max_tokens: int = 65536            # 单次最大 token 数（匹配 policy_max_tokens）
+    # 2026-09-04：max_tokens_cap=0 关闭 base.llm 二次裁剪
     max_tokens_cap: int = 0            # 内部 token 裁剪上限：0=不裁剪（base.llm 语义）
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
-    temperature: float = 0.3           # 默认 LLM 温度
+    # ★ 2026-09-16 删除两个**死字段**（全仓 0 读取点，已实测确认）：
+    #   · `max_tokens`  —— 实际生效的是 `max_answer_tokens`（solver 侧）
+    #      与 `policy_max_tokens`；此处那份从未被读。
+    #   · `temperature` —— 各调用点都显式传字面量（如 user_agent 直答
+    #      `temperature=0.0`、verifier 走 `verifier_temperature`），此处那份从未被读。
+    # 保留它们只会给人"可调"的假象（改了不起作用），属"老代码逻辑堆叠"。
 
     # ---- 自纠错参数 ----
     max_answer_tokens: int = 65536    # solver 单次调用最大 token 数（9/4 放开，防答案腰斩）
@@ -389,6 +456,34 @@ class AgentConfig:
     # AgentConfig（sub_goal_solver getattr 兜底 750），现补全可配。
     subgoal_stage_budget_sec: float = 750.0     # deep 档子目标阶段预算
     subgoal_stage_budget_sec_std: float = 450.0  # standard/fast 档子目标阶段预算
+    # ★★ 2026-09-15（用户指示「预算都删了，没意义，还卡正确率」）：
+    # **阶段预算总开关，默认关闭**（关 = 不再有任何"阶段时间帽"）。
+    # 关闭依据（用户判断 + 代码实测）：
+    #   `_phase_budget` 给 2.7 的帽是 **600s**，而 2.7 实测 mean 513 / p50 537 /
+    #   **max 1168s** ⇒ **一半以上的题会被这个帽砍断子目标链**。
+    #   ⇒ 这不是"慢"，是**链没跑完 = 缺项 = 错**，直接损害正确率。
+    # 关闭后的行为：`_phase_budget` 返回「无穷大」⇒ `_phase_deadline_guard` 做的
+    #   `min(ctx.deadline, now + cap)` 退化为原 deadline ⇒ 阶段帽不再生效。
+    # ⚠ **不影响"防卡死"类护栏**：LLM 超时重试、`lean_timeout`、符号求解线程超时、
+    #   各类死循环硬上限（`max_revise_rounds` 等）**均保留** —— 那些不是配额，是"别挂住"。
+    # 回退：置 True 即恢复赛期口径（12 个阶段帽全生效）。
+    phase_budget_enabled: bool = False
+    # ★ 2026-09-15（用户：「子目标上限太少了；不同档位的最佳数量不同吗？」）：
+    # **子目标上限按档位分档**。此前 `max_subgoals` 是**全局单一值 6**，
+    # 而蓝图提示词已写明"简单 3~5 / 中等 5~12 / 难题 12~30" ⇒ **提示词与代码矛盾**。
+    # 现按档位给不同上限（deep 是难题档，题更复杂 → 允许更多子目标）。
+    # ⚠ 具体数值**无 A/B 依据**，取"比原 6 放宽但不失控"的保守值；
+    #   验证方法：同一 commit 下对照 max_subgoals ∈ {6, 8/16, 0} 跑错题集。
+    # 取值优先级：本字典 → `max_subgoals` → 全局兜底 6。
+    max_subgoals_by_tier: dict = None  # {"standard": 8, "deep": 16}；None=用 max_subgoals
+    # 2026-09-15（赛后无约束评测）：子目标规划数上限纳入 AgentConfig。
+    # 此前该值**不在本类中**，全部靠 `getattr(self.config, "max_subgoals", 6)` 回退，
+    # 而 ReasoningAgent.__init__ 的覆盖白名单只认本类已有字段
+    # ⇒ CLI/overrides 传 max_subgoals **会被静默丢弃**（同 enable_calc_prewarm 那次的坑）。
+    # 截断点 agent/sub_goal_solver.py:298 `subgoals = subgoals[:_max_sg]`——砍的是**拓扑序尾部**，
+    # 可能正好丢掉 merge 所需的收尾子目标。6 是比赛期"少而精"口径；
+    # 放开该值是验证「子目标冗余是否必要」的前置条件。
+    max_subgoals: int = 6               # 子目标规划数上限（比赛口径 6；0/负 = 不截断）
     # 2026-09-06 老师建议（子目标独立性/最小上下文）：子目标上下文注入模式。
     # "deps"（默认）= 按 depends_on 只注入直接依赖结果，无依赖子目标零前序上下文
     # （可独立、可并行校验、不被无关中间量污染）；"all" = 旧行为全量前序注入。
@@ -463,9 +558,48 @@ class AgentConfig:
     lean_executable: str = ""               # lean.exe 绝对路径（空=自动探测：LEAN_EXE env>elan>vendor/lean-toolchain）
     lean_project_dir: str = ""              # 带 Mathlib 的 lake 工程目录（空=自动探测）
     theorem_memory_enable: bool = False     # 跨题定理记忆（9/6 关闭维持；LeanGate 写入按此开关）
+    # ==================================================================
+    # LeanSearch 引理检索（2026-09-15 重启）
+    # ------------------------------------------------------------------
+    # 背景：老师建议「求解子目标关键在定理的 Mathlib 搜索」；且李平老师担心
+    # 模型「硬套定理」。实测证据（2026-09-15）：历史 3 批共 202 题
+    # `mathlib_usage_stats.search_calls` **恒为 0** —— 此前三重静默失效：
+    #   ① 主仓 tools/lean_local/ 下**没有 lean_search.py**（只有 vendor 归档副本）；
+    #   ② AgentConfig **没有 use_leansearch 字段** ⇒ getattr(...,False) 永远 False；
+    #   ③ lean_gate/lean_refiner 的 import 被裸 except 吞掉（只打 debug）。
+    # 2026-09-15 已补齐 ①（复制归档实现到主仓）与 ②（本字段）。
+    # ⚠ 后端优先级：官方语义 API（leansearch.net，实测 1.7-2.8s，质量最高）
+    #   → 本地 lsv2 语料（**HuggingFace 被本机代理挡死，暂时取不到**）
+    #   → 本地 mathlib 源码扫描（D:/mathlib4-last_bump_for_v4.31.0，8.6 万条声明）。
+    # ⚠ **默认关**：未做开/关 A/B 前不得默认启用（沿用本项目「未验证不上」纪律）。
+    # ⚠ 接线点说明：原调用点 lean_refiner._search_mathlib 所在的 LeanRefinerAgent
+    #   **不在主链上**（orchestrator 从不实例化它）⇒ 本开关实际生效的是
+    #   `leansearch_inject_verifier`（方案 A：把定理原文注入验证器）。
+    # ==================================================================
+    use_leansearch: bool = False            # LeanSearch 总开关（默认关，A/B 验证后再定）
+    leansearch_top_k: int = 5               # 每次检索返回条数（老师 #46 要求扫 {3,5,10}）
+    leansearch_max_calls_per_q: int = 2     # 单题检索次数上限（护栏：防时间膨胀）
+    # ⚠ 原 `leansearch_timeout` 已**删除**（2026-09-15 上线审计）：
+    #   检索器把官方 API 超时**硬编码为 10 秒**（`lean_search.py` 的
+    #   `requests.post(..., timeout=10)`），既无 `__init__` 参数也无 `search` 参数
+    #   可以透传 ⇒ 该配置**全仓无任何读取点 = 假开关**。
+    #   因为 `lean_search.py` 刻意保持与 vendor 归档**逐字节相同**（避免 diff 噪声），
+    #   不值得为它改实现；且其硬编码值本就等于原声明默认值 10.0，删掉无行为影响。
+    # 方案 A 接线：把检索到的定理原文注入验证器，让验证器"对着原文"核查前提是否成立。
+    # 这是把「凭记忆想起定理」变成「读到定理原文」，直接服务「硬套定理」判定。
+    leansearch_inject_verifier: bool = True  # 仅在 use_leansearch=True 时才有意义
+
     enable_subgoal_main_path: bool = True   # 子目标细化作为主路径
     # ---- Blueprint DAG 分解（LEAP Stage 1，#27）----
     use_blueprint_dag: bool = True          # 子目标规划先用 BlueprintPlanner 生成 AND-OR DAG 再求解（失败自动回退原规划）
+    # ★ 2026-09-15 修复：DAG 的**依赖边**此前结构性恒空。
+    # 旧实现 `deps = _ancestors(nid) & selected`：祖先全是内部节点、selected 只含
+    # 叶子 ⇒ 交集恒空 ⇒ `depends_on` 全为 []，**整张 DAG 的结构没传到求解器**。
+    # 实测佐证：2026-09-10 那批 112 题 `subgoal_stats.dep_edges` 全部为 0。
+    # 讽刺的是既有测试 `test_depends_on_reflects_ancestors` 把"恒空"断言成了正确行为。
+    # 现改为按**依赖锥**计算（见 BlueprintDAG._preceding_leaves）。
+    # 本开关用于 A/B 对照：False = 复现旧行为（不产出依赖边）。
+    blueprint_deps_enabled: bool = True
     # ---- 求解前 DAG 强制门（#34；2026-09-08 起默认关闭）----
     # 45 题实证：门"拦得住、修不好"（21/45 触发重写，净正确率贡献≈0，
     # 总耗时 +23%、触发组人均 +245s）。默认去掉前置强制评审-重写循环，
@@ -503,6 +637,14 @@ class AgentConfig:
 
     def __post_init__(self):
         """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
+        if self.max_subgoals_by_tier is None:
+            # ★ 2026-09-15（用户：「子目标上限太少了；不同档位的最佳数量不同吗？」）：
+            # 按档位分档。deep 是难题档（题更复杂）→ 允许更多子目标；
+            # standard 适度放宽。对标蓝图提示词的复杂度分档（简单 3~5 /
+            # 中等 5~12 / 难题 12~30）。
+            # ⚠ 具体数值**无 A/B 依据**，取"比原 6 放宽但不失控"的保守值。
+            #   验证方法：同 commit 下对照 {6, 8/16, 0=不截断} 跑错题集。
+            self.max_subgoals_by_tier = {"standard": 8, "deep": 16}
         if self.tier_sample_times is None:
             # 2026-09-04：deep 4→3（配每候选 3 票，验证成本 12→9 票 ≈ -25%；
             # 平台实测堆候选边际收益低，杠杆在验证器错因质量，不在候选数量）
@@ -656,7 +798,31 @@ class ReasoningAgent:
         for key in (
             "policy_sample_times", "policy_temperature", "policy_max_tokens",
             "verifier_voting_times", "verifier_temperature",
-            "enable_domain_hint", "enable_question_type", "extraction_mode",
+            # 2026-09-16 投票方差（候选分歧 → 提高票数 + 非零温度）
+            "verifier_diversify_enabled", "verifier_disagreement_votes",
+            "verifier_disagreement_temperature",
+            # 2026-09-15：带推理的最终复核（验证器偏松的止血阀）
+            "verifier_deep_final_enabled", "verifier_deep_final_min_remaining",
+            "verifier_deep_review_max_tokens",
+            "verifier_deep_review_min_chars",
+            "verifier_deep_review_temperature",
+            "enable_domain_hint", "enable_question_type",
+            # ★ 2026-09-16 审计修复：以下两个键此前**只有 getattr 兜底、未声明也未列白名单**
+            #   ⇒ 注释承诺的"回退/A-B 开关"实际无效（典型假开关）。
+            #   `enable_question_type_hint`：solver 注释称"仍可全题型强制开启做 A/B"；
+            #   `verify_reserve_seconds`：orchestrator 注释称"可覆盖生成侧预留"。
+            "enable_question_type_hint", "verify_reserve_seconds",
+            "enable_web_search",  # 2026-09-16 联网搜索工具（默认 False）
+            "lean_dedup_by_answer",  # 2026-09-17 Lean 同答案去重缓存（默认 False）
+            # ★★ 2026-09-16 审计修复（**关键断链**）：以下三键此前
+            #   **有 argparse、有 AgentConfig 声明，却不在白名单** ⇒
+            #   `--max_subgoals 13` 之类传进来会被 `__init__` **静默丢弃**。
+            #   实测证据：日志反复出现「Blueprint 子目标数超上限，截断 13 个」
+            #   —— 卡在默认值（standard 6 / deep 12），CLI 根本调不动。
+            "max_subgoals", "max_subgoals_by_tier",
+            #   `tool_calc_enabled` 是工具循环的总闸；它不在白名单 ⇒
+            #   无法从 CLI 打开 calc 工具循环，也无法验证 web_search 接线。
+            "tool_calc_enabled",
             "enable_calc_tool",  # 2026-09-01 calc_tool 确定性计算
             "calc_mandatory",  # 2026-09-09 P1-1 裸数值断言打回（计算必须走工具）
             "calc_hard_only",  # 2026-09-12 计算分档（只强制易错算子走工具）
@@ -682,6 +848,8 @@ class ReasoningAgent:
             "lemma_domains",
             "max_answer_tokens", "revise_sample_times",
             "use_blueprint", "use_blueprint_dag", "use_sub_goal",
+            # 2026-09-15：DAG 依赖边开关（修复 depends_on 结构性恒空）
+            "blueprint_deps_enabled",
             # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
             # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
             "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
@@ -710,6 +878,10 @@ class ReasoningAgent:
             "subgoal_conflict_gate", "subgoal_crosscheck_llm",
             # L2 子目标数值/代数断言 Lean 验证（2026-09-08 去门后新钩子）
             "enable_numeric_lean_verify", "lean_numeric_max_per_q",
+            # LeanSearch 引理检索（2026-09-15 重启；★ 必须在此白名单，否则 CLI 传参
+            # 会被静默丢弃 —— 本项目已因漏加白名单踩过多次，见上方 720/733 行注释）
+            "use_leansearch", "leansearch_top_k", "leansearch_max_calls_per_q",
+            "leansearch_inject_verifier",
             # 时间预算（2026-08-28 新增：让动态预算真正生效）
             "critical_tail_seconds", "deep_critical_tail_seconds",
             "deep_quota_ratio",

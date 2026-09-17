@@ -150,10 +150,35 @@ def extract_final_answer(text: str) -> str:
     2026-09-06 P4：出口增加 calc 工具标记剥除——模型截断在 `<calc>` 处时
     产物是裸标记（comb-022 实测 pred='<calc>' 整题格式丢分），resolve 正则需要
     闭合标签所以不处理，这里统一剥除后按空壳走调用方兜底。
+
+    ★★ 2026-09-17 修复（**剥壳顺序错误**，实测捕获）：原先的写法是
+        ans = _extract_final_answer_impl(text)   # ← 在**未剥壳**的原文上抽
+        if ans:
+            ans = _strip_calc_markers(ans)
+            ans = _strip_toolcall_markers(ans)
+    ⇒ **只剥"抽出来的结果"，不剥"抽取用的原文"**。
+    实测 `<parameter=query>\\nsubset sum …1810\\n</parameter>`：
+    `_extract_final_answer_impl` 先在第 3 步「行兜底」里把**参数内容**
+    （`subset sum …1810`）当成"含数学内容的有效行"抽出来，
+    然后 `_strip_toolcall_markers` 作用在**已抽出的纯文本**上——里面早就没有标签了
+    ⇒ 剥了个寂寞，参数内容照样作为答案返回。
+    （013 的候选 id=0 就是这个形态：答案 = 搜索 query 原文。）
+
+    ⇒ 改为**先剥原文、再抽取**。这样第 3 步行兜底看到的原文里已无标签，
+    整段纯标签输入直接变成空串，`impl` 无从抽取。
+    保留出口的二次剥壳（幂等，防止 impl 内部自行拼出带标签的结果）。
     """
+    # ★ 第一步：先对**原文**剥壳（顺序是关键，见上）
+    text = _strip_toolcall_markers(_strip_calc_markers(text)) if text else text
+    if not text or not text.strip():
+        return ""
     ans = _extract_final_answer_impl(text)
     if ans:
         ans = _strip_calc_markers(ans)
+        # ★ 2026-09-17：再剥**工具调用 XML 残留**（`<parameter=query>…</parameter>` 等）。
+        #   实测 013：模型把 web_search 调用写成 XML 风格文本（非标准 tool_calls
+        #   JSON），工具层不识别 ⇒ 原样留在响应里 ⇒ 被当成了"候选答案"。
+        ans = _strip_toolcall_markers(ans)
     if ans and not _has_answer_content(ans):
         return ""
     return ans
@@ -161,6 +186,52 @@ def extract_final_answer(text: str) -> str:
 
 _CALC_BLOCK_RE = re.compile(r"<calc\b[^>]*>.*?</calc>", re.DOTALL | re.IGNORECASE)
 _CALC_STRAG_RE = re.compile(r"</?calc\b[^>]*>?", re.IGNORECASE)
+
+# ★★ 2026-09-17 新增：**工具调用 XML 残留**剔除。
+#   实测 official112-013（E 轮）：候选答案里出现了
+#     `<parameter=query>`           ← 工具调用的参数标签
+#     `subset sum逼近 1810 0≤x_i≤100 minimal d 竞赛题`  ← 该参数的内容
+#     `看起来 d = 10 是候选答案。让我验证是否 d = 10 足够。` ← 推测语气
+#   根因：模型有时**不用标准 `tool_calls` JSON**，而是把工具调用写成
+#   **XML 风格的文本**（`<parameter=query>…</parameter>`）。而
+#   `agent/base.py::llm_with_calc` **只处理 `resp["tool_calls"]`**（标准格式）
+#   ⇒ 这段 XML 既没被执行、也没被剥除，**原样留在响应文本里**，
+#   随后被答案抽取当成"答案"。003 的 `<parameter=que` 同源。
+#   修法：与 `<calc>` 同样在答案抽取前剥除（完整块 + 裸标签残留）。
+# ★★ 2026-09-17 修复（回归测试实测捕获）：原模式的 `tool_call` 后跟 `\b`，
+#   而 `<tool_calls>` 里 `tool_call` 后面是 `s`（单词字符）⇒ `\b` **不成立**
+#   ⇒ **复数形式 `<tool_calls>` / `</tool_calls>` 完全没被匹配**，
+#   原样返回成答案（新写的 `test_no_path_returns_bare_tag` 当场抓到）。
+#   ⇒ 改为 `tool_calls?`（可选复数），并把 `function` 一并允许复数。
+_TOOLCALL_BLOCK_RE = re.compile(
+    r"<(?:parameter|function|tool_calls?)\b[^>]*>.*?</(?:parameter|function|tool_calls?)>",
+    re.DOTALL | re.IGNORECASE)
+_TOOLCALL_OPEN_RE = re.compile(
+    r"<(?:parameter|function|tool_calls?)\b[^>]*>?(?!.*?</(?:parameter|function|tool_calls?)>)",
+    re.DOTALL | re.IGNORECASE)
+_TOOLCALL_STRAG_RE = re.compile(
+    r"</?(?:parameter|function|tool_calls?|invoke|antml:parameter|"
+    r"antml:function_calls|antml:invoke)\b[^>]*>?",
+    re.IGNORECASE)
+
+
+def _strip_toolcall_markers(text: str) -> str:
+    """剥除工具调用的 XML 残留（完整块优先，再处理裸标签及其参数内容）。
+
+    ⚠ 三步顺序重要：
+      ① 先删**成对块**；
+      ② 再处理**裸开标签** —— 实测泄漏形态是 `<parameter=query>参数值`
+         且**没有闭合标签**，仅删标签会留下参数值（`subset sum逼近 1810…`）
+         照样被当成答案 ⇒ **必须连同其后的参数内容一起截断**；
+      ③ 最后清残留的孤立标签。
+    """
+    if not text:
+        return text
+    text = _TOOLCALL_BLOCK_RE.sub("", text)
+    _m = _TOOLCALL_OPEN_RE.search(text)
+    if _m:
+        text = text[:_m.start()]      # 裸开标签之后全属工具参数 ⇒ 截断
+    return _TOOLCALL_STRAG_RE.sub("", text).strip()
 
 
 def _strip_calc_markers(text: str) -> str:
@@ -319,10 +390,21 @@ def smart_fallback_answer(text: str) -> str:
     当 extract_final_answer 返回空或不理想时的智能回退。
     从文本尾部找最后一个有实质内容（数学/答案关键词）的行，
     优于盲目的 [-500:] 截取——避免长 CoT 中取到验证/总结文字而非答案。
+
+    ★★ 2026-09-17 修复（official112-013 实况）：与 `rescue_final_answer` 同源缺陷
+    ——本函数原先也不剥工具调用 XML。实测 013 的 `</tool_call>` 残留正是从这条
+    兜底路径落盘成候选答案的（策略 2「第一个有实质内容的非空行」命中标签本身）。
+    ⇒ 入口统一剥壳；剥完为空则直接返回空串，让调用方的兜底链继续往下走。
     """
     if not text or not text.strip():
         return ""
+    # ★ 先剥工具调用残留 + calc 标记（与 extract_final_answer 口径一致）
+    text = _strip_toolcall_markers(_strip_calc_markers(text)).strip()
+    if not text:
+        return ""
     text = _strip_continuation_markers(text).strip()
+    if not text:
+        return ""
 
     # 先试 extract_final_answer，有时它内部的多级策略能命中
     ans = extract_final_answer(text)
@@ -722,6 +804,17 @@ def rescue_final_answer(text: str) -> tuple[str, str]:
     同步自 测试工具/intern_s1.py::_rescue_answer，但去掉了 DeepSeek 跨模型
     通道（赛事提交版只有平台注入的单一 client，竞赛禁止硬编码 API Key）。
 
+    ★★ 2026-09-17 修复（official112-013 实况）：本函数原先**没剥工具调用 XML**，
+    而 `extract_final_answer` 只在自身出口剥 ⇒ 当响应是**纯工具调用残留**
+    （`<tool_call>…</tool_call>` 或裸 `</tool_call>`）时：
+      · `extract_final_answer` 正确返回空串（已剥壳）；
+      · 但调用方随即回退到本函数，本函数**不剥** ⇒ 三个子策略全部命中原样标签，
+        行兜底直接返回 `'</tool_call>'` 当成答案落盘。
+    实测 013：6 个候选里 **4 个 `answer=='</tool_call>'`**、其完整推导（2683 字）
+    留在 `reasoning` 里被丢弃 ⇒ **池里只剩垃圾 + 一个错值**，直接导致该题判错。
+    ⇒ 在两处入口（本函数 + `smart_fallback_answer`）统一先剥壳，与
+    `extract_final_answer` 口径对齐。剥壳后再判空壳，避免把标签当答案。
+
     参数:
         text: LLM 原始输出
 
@@ -730,7 +823,10 @@ def rescue_final_answer(text: str) -> tuple[str, str]:
     """
     if not text:
         return "", ""
-    text = text.strip()
+    # ★ 先剥工具调用残留 + calc 标记，否则 `</tool_call>` 会被当答案返回
+    text = _strip_toolcall_markers(_strip_calc_markers(text)).strip()
+    if not text:
+        return "", ""
 
     # 1) 嵌套 boxed 提取
     answer = _extract_boxed_nested(text)

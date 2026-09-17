@@ -1092,9 +1092,11 @@ def _avail_ram_gb() -> float:
     return 1e6
 
 
-# 再建一个 Lean server 的内存门槛（GiB）。低于它就不再扩池，宁可回落 bridge —— 
+# 再建一个 Lean server 的内存门槛（GiB）。低于它就不再扩池，宁可回落 bridge ——
 # 单个 Lean+Mathlib 常驻 1.5–4 GB，深夜/繁忙机器上硬开会把整台机器拖垮（OOM = 全盘失败）。
-_MIN_FREE_GIB_FOR_NEW = 1.5
+# ★ 2026-09-16 用户要求「统一改为可用内存」。原值 1.5 偏低：1.5 GiB 空闲就放行新建，
+#   而单实例实测可占 750 MB ~ 4 GB ⇒ 放行了照样可能 OOM。提到 2.5 GiB。
+_MIN_FREE_GIB_FOR_NEW = 2.5
 _NO_ROOM_WARNED = False
 
 
@@ -1111,22 +1113,30 @@ def _mcp_room_for_new_instance() -> bool:
 
 
 def _auto_workers() -> int:
-    """自动并行度：**由内存定，其次核数**（每个 Lean server 都把 Mathlib 载进内存）。
+    """自动并行度：**由可用内存定，其次核数**（每个 Lean server 都把 Mathlib 载进内存）。
 
-    K = clamp(1, min(8, 总内存GiB//4, max(1, 核数//4)))
+    K = clamp(1, min(8, 可用内存GiB//4, max(1, 核数//4)))
     - 硬上限 8：与 lean-lsp-mcp 自身的 `_MAX_SHARED_CLIENTS = 8` 对齐；
     - ``//4``：单个 Lean+Mathlib 常驻约 1.5–4 GB，按 4 GB 留量最保守；
       核数按 4 核/实例（Lean 载入 Mathlib 是多线程的）。
-    例：本机 32 核 / 15.2 GiB ⇒ min(8, 3, 8) = **3**；
-        平台 32 核 / 32 GiB ⇒ min(8, 8, 8) = **8**。
-    ⚠ 这是"能开几个"的上界估算；真值仍要量单实例 RSS。
-      另有运行期护栏 `_mcp_room_for_new_instance()`：可用内存 <1.5 GiB 即停止扩池。
+
+    ★★ 2026-09-16 用户要求「统一改为可用内存」。**此前用 `_total_ram_gb()`（总内存）
+    定容，而运行期护栏 `_mcp_room_for_new_instance()` 用可用内存 —— 两个口径打架**：
+    本机总 15.2 GiB ⇒ K 恒算成 3，但用户侧常驻 B站 1.5 GB + QQ 0.86 GB +
+    WorkBuddy 2.1 GB ⇒ 实际可用常低到 1–3 GB，**K 却仍按 15.2 GB 在算**，
+    护栏又只会"不再扩"、**不会把 K 调小** ⇒ 结构性超配、触发 OOM 护栏后回落 bridge。
+
+    例：可用 3.4 GiB / 32 核 ⇒ min(8, 0, 8) → clamp 后 = **1**（保守但不会 OOM）。
+    取不到可用内存（哨兵值）时**退回总内存口径**，避免误判成"内存无限"。
     """
     try:
         cores = os.cpu_count() or 2
     except Exception:  # noqa: BLE001
         cores = 2
-    by_ram = int(_total_ram_gb() // 4)
+    avail = _avail_ram_gb()
+    if avail >= 1e5:            # `_avail_ram_gb` 取不到时返回 1e6 哨兵
+        avail = _total_ram_gb()  # → 退回总量口径（宁可保守，不可误放行）
+    by_ram = int(avail // 4)
     by_cpu = max(1, int(cores) // 4)
     return max(1, min(8, by_ram, by_cpu))
 
@@ -1482,15 +1492,27 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 2026-09-13：本次调用计时入账（这是唯一可信的 MCP 耗时口径；
             # 此前全仓无埋点，耗时要靠日志时间戳反推）
             _t0 = time.monotonic()
-            # 2026-09-13 时间预算收敛：地板 150s → 90s。
-            # 依据：实测 "LeanGate: 并行预取 3 个候选耗时 480.4s（K=3）"，
-            # 而 diag.lean_gate 显示 6 个候选全部 verdict=unknown —— 说明
-            # 经常撞 150s 地板却一个都没确认/淘汰，纯属浪费（单题硬时限 1200s）。
-            # 降地板只省时间、不改变 verdict；保守起见不降到 20s（真编译确需时间）。
-            # lean_timeout 默认 60.0（user_agent.py:346）⇒ 实际为 max(90, 90)=90s。
+            # ★★ 2026-09-16 恢复 MCP 超时地板（还赛期的债）。
+            # 历史沿革：2026-09-13 为省时间把地板 150s → 90s（见下方原注释）。
+            # 但**本段注释自己就写着**「首文件冷启动（lean server 加载 Mathlib）
+            # 可达 60-90s」⇒ Mathlib 冷启动本身就 60–90s，而超时也是 90s，
+            # **卡在边界上必然频繁失败**。
+            # 实测后果（0916 轮 `results/verify10_0916.log`）：
+            #   [LeanBridge] mcp 后端异常（proxy 读响应失败: proxy 响应超时（>90s））
+            #     → 回落 bridge        （连续 3 次）
+            #   [LeanBridge] mcp 诊断失败（诊断输出非 JSON: Error executing tool
+            #     lean_diagnostic_messages: File worker fo…）→ 回落 bridge
+            # ⇒ **MCP 从未真正生效，全部退回 bridge**。用户明确要求"用 mcp 不用 bridge"，
+            #   而这条超时就是最直接的拦路石。
+            # 赛后无时间限制（用户方针：凡依据是时间的条款一律重新审视）⇒ 地板恢复。
+            # 可用 `LEAN_MCP_TIMEOUT_FLOOR` 覆盖（默认 300s，覆盖冷启动 90s 有 3 倍余量）。
+            try:
+                _floor = float(os.environ.get("LEAN_MCP_TIMEOUT_FLOOR", "300") or 300)
+            except (TypeError, ValueError):
+                _floor = 300.0
             try:
                 resp = _px.request(lean_file,
-                                   timeout=max(timeout + 30.0, 90.0))
+                                   timeout=max(timeout + 30.0, _floor))
             except BaseException:
                 _mcp_note(time.monotonic() - _t0, False)
                 raise
@@ -2241,31 +2263,54 @@ class LeanBridge:
         - 翻译问题 / 答案无法形式化 / 环境缺失 / 超时 → verdict='unknown' 降级放行
 
         返回的 BugReport 附加 ``lean_code`` 属性（供上层埋点提取 import/example）。
+
+        ★ 2026-09-17 可观测性补强：此前**所有早退分支都只返回光秃秃的
+        `BugReport(verdict="unknown")`，不带任何原因** —— 实测 003 时
+        `diag.lean_gate` 只有 id/verdict/lean_valid/degraded/error，**无 lean_code、
+        无守卫依据** ⇒ 完全无法回答"它为什么这样判"。现统一附加：
+          · `verdict_reason` —— 本判定的成因（早退原因 / 守卫结论）
+          · `lean_code`      —— 实际送编译的代码（全部路径都带，含早退）
+          · `cross_check`    —— 守卫①`_cross_check_problem_numbers` 的取值
+          · `sys_verify`     —— 守卫②`_verify_answer_by_system` 的取值
+          · `compiled`       —— Lean 编译是否通过
         """
+        def _mk(verdict: str, findings=None, reason: str = "",
+                code: str = "", **extra):
+            """构造带诊断属性的 BugReport（早退与正常路径统一走这里）。"""
+            r = BugReport(verdict=verdict, findings=findings or [])
+            try:
+                setattr(r, "verdict_reason", reason)
+                setattr(r, "lean_code", code or "")
+                for _k, _v in extra.items():
+                    setattr(r, _k, _v)
+            except Exception:  # noqa: BLE001
+                pass
+            return r
+
         deadline = time.monotonic() + max(1.0, timeout)
         try:
             # 1) Lean 环境缺失 → 降级 unknown
             if not self.lean_available:
                 logger.warning("[LeanBridge] Lean 环境不可用，答案验证降级 unknown")
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="lean_unavailable")
 
             # 2) 无答案 / 选项字母答案（选择题）→ 无法 norm_num 验证，降级放行
             answer = (answer or "").strip()
             if not answer:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="empty_answer")
             if re.fullmatch(r"[A-Da-d][.、)]?|第[一二三四]个|（[A-Da-d]）", answer):
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="option_letter_answer")
 
             # 3) 阶段一：答案 + 关键计算 → 轻量 Lean example
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="deadline_before_convert")
             lean_code = self._convert_answer_to_lean(problem, reasoning, answer)
             if not lean_code:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="convert_to_lean_failed")
 
             # 4) 阶段二：编译验证（不允许 sorry —— 答案必须被 tactic 证出）
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="deadline_before_compile", code=lean_code)
             project_dir = self._lean_project_dir
             use_mathlib = self._mathlib_ready()
             code_to_compile = (_prepend_mathlib_import(lean_code)
@@ -2315,6 +2360,9 @@ class LeanBridge:
                                  "无法证明答案与题目相关。请重写：把题目条件与答案一起形式化"
                                  "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
                     setattr(report, "lean_code", lean_code)
+                    setattr(report, "verdict_reason", "cross_check_failed")
+                    setattr(report, "cross_check", False)
+                    setattr(report, "compiled", True)
                     setattr(report, "suggestion",
                             "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
                     logger.warning("[LeanBridge] 答案验证疑似自证，拒绝（代码未引用题目数字）")
@@ -2338,6 +2386,10 @@ class LeanBridge:
                                  "复算你给出的算式，结果与最终答案不一致。"
                                  "请重新核对计算并修正答案。")])
                     setattr(_r, "lean_code", lean_code)
+                    setattr(_r, "verdict_reason", "sys_verify_conflict")
+                    setattr(_r, "cross_check", True)
+                    setattr(_r, "sys_verify", False)
+                    setattr(_r, "compiled", True)
                     setattr(_r, "suggestion",
                             "重算该算式，确保最终答案与之逐字一致")
                     logger.warning(
@@ -2345,12 +2397,20 @@ class LeanBridge:
                     return _r
                 report = BugReport(verdict="answer_valid", findings=[])
                 # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
+                # ★ 2026-09-17：同时附加**守卫判定依据**，使"为什么判 valid"可事后核查
+                #   —— 实测 003 的 `sys_verify` 恒为 None（calc 工具已关 ⇒ 推理里没有
+                #   `<calc>` 标记 ⇒ 该守卫结构性不生效），这一事实此前完全不可见。
                 setattr(report, "lean_code", lean_code)
+                setattr(report, "verdict_reason", "compiled_and_guards_passed")
+                setattr(report, "cross_check", True)
+                setattr(report, "sys_verify", _sys)
+                setattr(report, "compiled", True)
                 return report
 
             # 5) 阶段三：错误分析（把最终答案并入 reasoning 上下文，定位更准）
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk("unknown", reason="deadline_before_error_analysis",
+                           code=lean_code, compiled=False)
             return self._analyze_error(
                 problem,
                 reasoning + "\n## 最终答案\n" + answer,
@@ -2375,6 +2435,9 @@ class LeanBridge:
                 # 与上方正常路径的 answer_valid 分支（:2346-2348）返回结构保持一致
                 _ok_report = BugReport(verdict="answer_valid", findings=[])
                 setattr(_ok_report, "lean_code", locals().get("lean_code", None))
+                setattr(_ok_report, "verdict_reason",
+                        "llm_exception_but_sys_verify_passed")
+                setattr(_ok_report, "sys_verify", True)
                 logger.warning(
                     "[LeanBridge] 翻译异常，但系统侧命题验算通过 → 兜底 answer_valid")
                 return _ok_report
@@ -2388,13 +2451,17 @@ class LeanBridge:
                              "复算你给出的算式，结果与最终答案不一致。"
                              "请重新核对计算并修正答案。")])
                 setattr(_bad_report, "lean_code", locals().get("lean_code", None))
+                setattr(_bad_report, "verdict_reason",
+                        "llm_exception_and_sys_verify_conflict")
+                setattr(_bad_report, "sys_verify", False)
                 setattr(_bad_report, "suggestion",
                         "重算该算式，确保最终答案与之逐字一致")
                 logger.warning(
                     "[LeanBridge] 翻译异常，但系统侧命题验算判定答案与算式矛盾 → 拒绝")
                 return _bad_report
             logger.warning("[LeanBridge] verify_answer 异常（降级 unknown）: %s", exc)
-            return BugReport(verdict="unknown", findings=[])
+            return _mk("unknown", reason="exception_" + type(exc).__name__,
+                       code=locals().get("lean_code") or "")
 
     # ------------------------------------------------------------------
     # 前置形式化验证：题目 → Lean 定理声明 → 声明模式编译

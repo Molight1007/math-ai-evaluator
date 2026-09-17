@@ -1,0 +1,12 @@
+detected_doc_type: "技术分析报告（面向指导老师）"
+target_length: 2600
+target_tone: "第三人称，正式度★★★★☆，结论先行、数据支撑"
+target_reader: "指导老师（关心错误性质归因与主攻方向）"
+core_points:
+  - 错误类型总体分布（89 题）
+  - 三维分解：推理 / 建模 / 计算
+  - 第一项细分：思路建模错 vs 计数枚举错
+  - 方向错是否导致耗时空转（数据验证）
+  - 方向错 vs 技巧没对的区分与主攻建议
+research_skipped: true
+research_skip_reason: "全部数据来自本地跑批结果与错题台账，无需外部检索"

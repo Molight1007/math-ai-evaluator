@@ -1,0 +1,89 @@
+{"id": "official112-003", "batch": "B0", "level": "L4", "pred": "2026", "gold": "2026, 2030", "cls": "FORM", "evidence": "子集漏解：求全部取值只给一支", "scope": "other"}
+{"id": "official112-015", "batch": "B0", "level": "L3", "pred": "n ≥ 2", "gold": "2", "cls": "FORM", "evidence": "条件式代替具体值（超集）", "scope": "other"}
+{"id": "official112-064", "batch": "B0", "level": "L2", "pred": "m is even", "gold": "4", "cls": "FORM", "evidence": "条件式代替具体值", "scope": "other"}
+{"id": "official112-074", "batch": "B0", "level": "L4", "pred": "g(x)=c", "gold": "c, ⌈x⌉, ⌊x⌋", "cls": "FORM", "evidence": "漏解：未考虑取整函数族", "scope": "other"}
+{"id": "official112-099", "batch": "B0", "level": "L1", "pred": "有限差分法", "gold": "有限差分法、有限元法", "cls": "FORM", "evidence": "填空漏答（gold 含'或'）", "scope": "other"}
+{"id": "official112-014", "batch": "B0", "level": "L4", "pred": "993024", "gold": "997008, 995026, 995018", "cls": "FORM", "evidence": "不相交+漏解（兼推理错）", "scope": "other"}
+{"id": "official112-067", "batch": "B0", "level": "L4", "pred": "2", "gold": "1/2, 1", "cls": "FORM", "evidence": "不相交（兼推理错）", "scope": "other"}
+{"id": "official112-076", "batch": "B0", "level": "L3", "pred": "u ≥ 3", "gold": "1,3,5", "cls": "FORM", "evidence": "部分相交：漏 1、含 4+", "scope": "other"}
+{"id": "official112-086", "batch": "B0", "level": "L2", "pred": "度数8", "gold": "度数16", "cls": "FORM", "evidence": "度数错+未逐空（兼知识错）", "scope": "other"}
+{"id": "official112-104", "batch": "B0", "level": "L1", "pred": "X-11方法, SEATS方法", "gold": "移动平均法、时间序列分解法", "cls": "FORM", "evidence": "术语不符（知识口径）", "scope": "other"}
+{"id": "official112-093", "batch": "B1", "level": "L3", "pred": "C", "gold": "CE", "cls": "OBJ", "evidence": "漏选 E —— 9/13 已转正", "scope": "other"}
+{"id": "official112-103", "batch": "B1", "level": "L3", "pred": "ABCD", "gold": "ABCDE", "cls": "GG", "evidence": "gold 口径争议：D/E 为同一要素两种称谓", "scope": "other"}
+{"id": "official112-096", "batch": "B1", "level": "L3", "pred": "AD", "gold": "D", "cls": "OBJ", "evidence": "误加 A（LP 对偶对应关系记错）", "scope": "other"}
+{"id": "official112-102", "batch": "B1", "level": "L2", "pred": "A", "gold": "B", "cls": "OBJ", "evidence": "单选错；6 候选 4 个为 B，最终取 A（候选聚合缺陷）", "scope": "other"}
+{"id": "official112-105", "batch": "B1", "level": "L2", "pred": "方差", "gold": "标准差", "cls": "GG", "evidence": "gold 区分度不足：方差同为离散程度指标", "scope": "other"}
+{"id": "official112-101", "batch": "B1", "level": "L2", "pred": "×", "gold": "正确", "cls": "OBJ", "evidence": "判断错，6/6 候选一致 ⇒ 系统性知识错误", "scope": "other"}
+{"id": "official112-111", "batch": "B1", "level": "L2", "pred": "正确", "gold": "错误", "cls": "OBJ", "evidence": "判断错 —— 9/13 已转正（采样运气）", "scope": "other"}
+{"id": "official112-108", "batch": "B1", "level": "L2", "pred": "增大", "gold": "完整论述", "cls": "GG", "evidence": "gold 形态与题目不匹配", "scope": "other"}
+{"id": "official112-016", "batch": "B2", "level": "L2", "pred": "20", "gold": "21", "cls": "B", "evidence": "边界枚举不全，差一", "scope": "main48"}
+{"id": "official112-021", "batch": "B2", "level": "L2", "pred": "39", "gold": "21", "cls": "A", "evidence": "赛程轮次建模错", "scope": "main48"}
+{"id": "official112-039", "batch": "B2", "level": "L2", "pred": "4", "gold": "6", "cls": "D", "evidence": "博弈终局分析不全", "scope": "main48"}
+{"id": "official112-047", "batch": "B2", "level": "L2", "pred": "11", "gold": "64", "cls": "A", "evidence": "差集构造理解错", "scope": "main48"}
+{"id": "official112-052", "batch": "B2", "level": "L2", "pred": "3", "gold": "2", "cls": "D", "evidence": "最少步归纳错", "scope": "main48"}
+{"id": "official112-060", "batch": "B2", "level": "L2", "pred": "系数逆序", "gold": "正序", "cls": "JJ", "evidence": "判分器未做多项式符号比较（完全等价）", "scope": "other"}
+{"id": "official112-062", "batch": "B2", "level": "L1", "pred": "1", "gold": "4", "cls": "D", "evidence": "角度几何关系用错", "scope": "main48"}
+{"id": "official112-066", "batch": "B2", "level": "L2", "pred": "3", "gold": "4", "cls": "C", "evidence": "面数上界差一", "scope": "main48"}
+{"id": "official112-089", "batch": "B2", "level": "L2", "pred": "5117", "gold": "5129", "cls": "E", "evidence": "正态近似边界/连续性修正", "scope": "main48"}
+{"id": "official112-095", "batch": "B2", "level": "L2", "pred": "分解错误", "gold": "标准 LZ 分解", "cls": "D", "evidence": "算法流程错", "scope": "main48"}
+{"id": "official112-000", "batch": "B3", "level": "L3", "pred": "2^19·19!", "gold": "20460", "cls": "A", "evidence": "圆柱网格哈密顿路径，误自由排列", "scope": "main48"}
+{"id": "official112-002", "batch": "B3", "level": "L3", "pred": "√5−2", "gold": "1/2", "cls": "C", "evidence": "5 选 4 极值需构造+上界", "scope": "main48"}
+{"id": "official112-004", "batch": "B3", "level": "L3", "pred": "674", "gold": "2024", "cls": "C", "evidence": "三色三角形失效上界缺失", "scope": "main48"}
+{"id": "official112-007", "batch": "B3", "level": "L3", "pred": "0", "gold": "1", "cls": "E", "evidence": "F₂ 上 6 项求值纯运算错", "scope": "main48"}
+{"id": "official112-008", "batch": "B3", "level": "L3", "pred": "2×777²", "gold": "603729", "cls": "B", "evidence": "分解时因子多乘 2", "scope": "main48"}
+{"id": "official112-010", "batch": "B3", "level": "L3", "pred": "0", "gold": "2", "cls": "D", "evidence": "三次方程实根个数判断错", "scope": "main48"}
+{"id": "official112-013", "batch": "B3", "level": "L3", "pred": "50", "gold": "48", "cls": "B", "evidence": "枚举不全，差 2", "scope": "main48"}
+{"id": "official112-017", "batch": "B3", "level": "L3", "pred": "6", "gold": "8", "cls": "B", "evidence": "漏对称解支", "scope": "main48"}
+{"id": "official112-022", "batch": "B3", "level": "L3", "pred": "23341", "gold": "25502500", "cls": "A", "evidence": "量级差 1000 倍（六边形顶点计数）", "scope": "main48"}
+{"id": "official112-023", "batch": "B3", "level": "L3", "pred": "674", "gold": "290", "cls": "A", "evidence": "骨牌博弈状态空间建错", "scope": "main48"}
+{"id": "official112-025", "batch": "B3", "level": "L3", "pred": "2", "gold": "506", "cls": "A", "evidence": "铺砖最少多米诺，量级完全错", "scope": "main48"}
+{"id": "official112-028", "batch": "B3", "level": "L3", "pred": "45", "gold": "43", "cls": "B", "evidence": "差 2（保证分）", "scope": "main48"}
+{"id": "official112-031", "batch": "B3", "level": "L3", "pred": "683109", "gold": "1026169", "cls": "B", "evidence": "差 1.5 倍（L-tromino 覆盖漏/重）", "scope": "main48"}
+{"id": "official112-032", "batch": "B3", "level": "L3", "pred": "402", "gold": "512", "cls": "A", "evidence": "博弈类型判定错", "scope": "main48"}
+{"id": "official112-033", "batch": "B3", "level": "L3", "pred": "2016", "gold": "1057", "cls": "A", "evidence": "细菌扩散，量级差 2 倍", "scope": "main48"}
+{"id": "official112-034", "batch": "B3", "level": "L3", "pred": "2850", "gold": "56", "cls": "A", "evidence": "量级差 50 倍（蚂蚁最晚时刻）", "scope": "main48"}
+{"id": "official112-035", "batch": "B3", "level": "L3", "pred": "4000000", "gold": "3986729", "cls": "B", "evidence": "差 0.3%（瓷砖计数近似）", "scope": "main48"}
+{"id": "official112-038", "batch": "B3", "level": "L3", "pred": "2016", "gold": "3024", "cls": "B", "evidence": "差 1.5 倍（序列长度）", "scope": "main48"}
+{"id": "official112-041", "batch": "B3", "level": "L3", "pred": "2025", "gold": "31395", "cls": "A", "evidence": "量级差 15 倍（立方体最大颜色数）", "scope": "main48"}
+{"id": "official112-042", "batch": "B3", "level": "L3", "pred": "800", "gold": "600", "cls": "B", "evidence": "差 1.33 倍", "scope": "main48"}
+{"id": "official112-044", "batch": "B3", "level": "L3", "pred": "197", "gold": "96", "cls": "B", "evidence": "差 2 倍（座位最大 m）", "scope": "main48"}
+{"id": "official112-045", "batch": "B3", "level": "L3", "pred": "100", "gold": "2600", "cls": "A", "evidence": "量级差 26 倍（石子博弈）", "scope": "main48"}
+{"id": "official112-046", "batch": "B3", "level": "L3", "pred": "86", "gold": "7311", "cls": "A", "evidence": "量级差 85 倍（商人可达性）", "scope": "main48"}
+{"id": "official112-048", "batch": "B3", "level": "L3", "pred": "3", "gold": "8", "cls": "D", "evidence": "黑板游戏分析不全", "scope": "main48"}
+{"id": "official112-050", "batch": "B3", "level": "L3", "pred": "674", "gold": "506", "cls": "B", "evidence": "差 1.33 倍（±1 序列）", "scope": "main48"}
+{"id": "official112-051", "batch": "B3", "level": "L3", "pred": "2023²", "gold": "2278125", "cls": "A", "evidence": "2023²=4092529 却给出 2278125(=1515²)，差 1.8 倍 ⇒ 结构错（0914 23:50 由 E 改判）", "scope": "main48"}
+{"id": "official112-053", "batch": "B3", "level": "L3", "pred": "1998", "gold": "3", "cls": "A", "evidence": "完全不相交（最小生成元数）", "scope": "main48"}
+{"id": "official112-054", "batch": "B3", "level": "L3", "pred": "1521", "gold": "12013", "cls": "A", "evidence": "量级差 8 倍（good paths）", "scope": "main48"}
+{"id": "official112-056", "batch": "B3", "level": "L3", "pred": "36", "gold": "2450", "cls": "A", "evidence": "量级差 68 倍（多联骨牌着色）", "scope": "main48"}
+{"id": "official112-058", "batch": "B3", "level": "L3", "pred": "1876", "gold": "4181", "cls": "B", "evidence": "差 2.2 倍（最小稀疏 s）", "scope": "main48"}
+{"id": "official112-059", "batch": "B3", "level": "L3", "pred": "16!−15655", "gold": "85383238549", "cls": "A", "evidence": "计数公式结构错（座位排列）", "scope": "main48"}
+{"id": "official112-061", "batch": "B3", "level": "L3", "pred": "1", "gold": "75", "cls": "A", "evidence": "完全不相交（卡片游戏最优化）", "scope": "main48"}
+{"id": "official112-070", "batch": "B3", "level": "L3", "pred": "1/2", "gold": "5/8", "cls": "D", "evidence": "几何极值推导错", "scope": "main48"}
+{"id": "official112-072", "batch": "B3", "level": "L3", "pred": "1", "gold": "(n−2)2^n+1", "cls": "FORM", "evidence": "未化简（答案形式问题）", "scope": "other"}
+{"id": "official112-073", "batch": "B3", "level": "L3", "pred": "No solutions", "gold": "无限族", "cls": "B", "evidence": "漏解：判'无解'实有无限族", "scope": "main48"}
+{"id": "official112-075", "batch": "B3", "level": "L3", "pred": "264", "gold": "69169", "cls": "A", "evidence": "量级差 262 倍（第 132 个 exotic 整数）", "scope": "main48"}
+{"id": "official112-080", "batch": "B3", "level": "L3", "pred": "9867312", "gold": "146250", "cls": "A", "evidence": "量级差 67 倍（最大 good number）", "scope": "main48"}
+{"id": "official112-082", "batch": "B3", "level": "L3", "pred": "p−9", "gold": "⌊p/9⌋", "cls": "D", "evidence": "公式形式错（第 9 大 n）", "scope": "main48"}
+{"id": "official112-083", "batch": "B3", "level": "L3", "pred": "499", "gold": "939", "cls": "B", "evidence": "差 1.88 倍（最大零个数）", "scope": "main48"}
+{"id": "official112-085", "batch": "B3", "level": "L3", "pred": "a+1", "gold": "容斥式", "cls": "A", "evidence": "公式结构性质错（clustered set 最大）", "scope": "main48"}
+{"id": "official112-001", "batch": "B4", "level": "L4", "pred": "−4", "gold": "2−2m", "cls": "A", "evidence": "把参数题当数值题（同 100 型错误）", "scope": "other"}
+{"id": "official112-009", "batch": "B4", "level": "L4", "pred": "1", "gold": "16", "cls": "A", "evidence": "good function 计数", "scope": "other"}
+{"id": "official112-011", "batch": "B4", "level": "L4", "pred": "", "gold": "对称多项式刻画", "cls": "NONE", "evidence": "完全无输出（空答案）", "scope": "other"}
+{"id": "official112-020", "batch": "B4", "level": "L4", "pred": "2^{k²}", "gold": "C(2k,k)²", "cls": "A", "evidence": "多米诺计数闭式，结构错", "scope": "other"}
+{"id": "official112-030", "batch": "B4", "level": "L4", "pred": "4024", "gold": "2027091", "cls": "A", "evidence": "量级差 500 倍（2012 点集）", "scope": "other"}
+{"id": "official112-043", "batch": "B4", "level": "L4", "pred": "2816", "gold": "4202432", "cls": "A", "evidence": "量级差 1500 倍（锦标赛日程）", "scope": "other"}
+{"id": "official112-049", "batch": "B4", "level": "L4", "pred": "5", "gold": "81729648000", "cls": "A", "evidence": "量级完全错（整数表最大 N）", "scope": "other"}
+{"id": "official112-055", "batch": "B4", "level": "L4", "pred": "250000", "gold": "18750000", "cls": "A", "evidence": "差 75 倍（双射奇值对）", "scope": "other"}
+{"id": "official112-057", "batch": "B4", "level": "L4", "pred": "带 o(1)", "gold": "λ^{st}n^{s+t}", "cls": "FORM", "evidence": "输出纪律：多加不必要渐近项", "scope": "other"}
+{"id": "official112-069", "batch": "B4", "level": "L4", "pred": "外接圆", "gold": "Y=M", "cls": "D", "evidence": "轨迹判断错", "scope": "other"}
+{"id": "official112-077", "batch": "B4", "level": "L4", "pred": "2", "gold": "5(l−1)²", "cls": "A", "evidence": "公式结构错（nice 整数）", "scope": "other"}
+{"id": "official112-079", "batch": "B4", "level": "L4", "pred": "ab≥e²", "gold": "ab≥e³", "cls": "D", "evidence": "指数算错（e²↔e³）", "scope": "other"}
+{"id": "official112-100", "batch": "GG", "level": "L2", "pred": "0.70701", "gold": "0.6706", "cls": "GG", "evidence": "gold 与题面矛盾（要中心差分却给前向差分值）", "scope": "other"}
+{"id": "official112-091", "batch": "GG", "level": "L3", "pred": "数学正确", "gold": "只写一项", "cls": "GG", "evidence": "gold 不完整（漏平移因子）", "scope": "other"}
+{"id": "official112-092", "batch": "GG", "level": "L2", "pred": "欧氏=4", "gold": "曲面=0", "cls": "GG", "evidence": "口径歧义（圆周拉普拉斯）", "scope": "other"}
+{"id": "official112-110", "batch": "GG", "level": "L1", "pred": "D(最小二乘外)", "gold": "A", "cls": "GG", "evidence": "gold 存疑（教材通说为 D）", "scope": "other"}
+{"id": "official112-106", "batch": "GG", "level": "L1", "pred": "—", "gold": "A", "cls": "GG", "evidence": "题干区分度不足（统计图形选择）", "scope": "other"}
+{"id": "official112-037", "batch": "GG", "level": "L4", "pred": "—", "gold": "taking the empty card", "cls": "GG", "evidence": "措辞不明", "scope": "other"}
+{"id": "official112-090", "batch": "JJ", "level": "L3", "pred": "(N−1)H_{N−1}", "gold": "(N−1)Σ1/j", "cls": "JJ", "evidence": "调和数定义，完全等价", "scope": "other"}
+{"id": "official112-081", "batch": "JJ", "level": "L3", "pred": "d=14k (k≠0)", "gold": "all multiples of 14, excluding 0", "cls": "JJ", "evidence": "完全等价", "scope": "other"}
+{"id": "official112-097", "batch": "JJ", "level": "L3", "pred": "伴随算子形式一", "gold": "伴随算子形式二", "cls": "JJ", "evidence": "分部积分恒等，完全等价", "scope": "other"}

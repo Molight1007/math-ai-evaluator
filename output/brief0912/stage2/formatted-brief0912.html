@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>MathPilot 工作简报 · 2026-09-12</title>
+  <style>
+  @page {
+    @bottom-center { content: counter(page); }
+  }
+  @page cover {
+    @bottom-center { content: none; }
+  }
+  section[role="cover"] { page: cover; }
+
+  :root {
+    --fs-h1: 26pt;
+    --fs-h2: 17pt;
+    --fs-h3: 13pt;
+    --fs-body: 11pt;
+    --fs-small: 9pt;
+    --ff-heading: "黑体", SimHei, sans-serif;
+    --ff-body: "宋体", SimSun, serif;
+    --lh-body: 1.6;
+    --fw-bold: 700;
+    --color-primary: #1a73e8;
+    --color-text: #000000;
+    --color-muted: #666666;
+    --color-border: #cccccc;
+    --color-bg: #ffffff;
+    --color-highlight: #f5f7fa;
+    --color-emphasis: #c62828;
+    --color-success: #2e7d32;
+    --color-warn: #e65100;
+    --spacing-paragraph: 0.7em;
+    --spacing-section: 1.6em;
+    --spacing-block: 0.9em;
+    --margin-page: 2.2cm;
+    --page-content-width: 15.6cm;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--ff-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--color-text);
+    background: var(--color-bg);
+    max-width: var(--page-content-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .report-cover {
+    display: block;
+    min-height: 20cm;
+    padding: var(--margin-page);
+    background: var(--color-highlight);
+  }
+  .cover-category {
+    font-size: 13pt; font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    color: var(--color-primary); letter-spacing: 0.08em;
+    margin-top: 6cm; margin-bottom: 0.8em; text-align: center;
+  }
+  .cover-title {
+    font-size: var(--fs-h1); font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    color: var(--color-primary); margin-bottom: 0.6em; text-align: center;
+  }
+  .cover-subtitle {
+    font-size: var(--fs-h2); color: var(--color-muted);
+    margin-bottom: 3em; text-align: center;
+  }
+  .cover-meta { font-size: var(--fs-small); color: var(--color-muted); text-align: center; }
+  .cover-meta p { margin-bottom: 0.3em; text-align: center; }
+
+  .report-body h2 {
+    font-size: var(--fs-h2); font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    margin-top: var(--spacing-section); margin-bottom: var(--spacing-paragraph);
+    color: var(--color-primary);
+  }
+  .report-body h3 {
+    font-size: var(--fs-h3); font-family: var(--ff-heading); font-weight: var(--fw-bold);
+    margin-top: var(--spacing-block); margin-bottom: var(--spacing-paragraph);
+  }
+  .report-body p { margin-bottom: var(--spacing-paragraph); }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: var(--spacing-block); font-size: var(--fs-small); }
+  th, td { border: 1px solid var(--color-border); padding: 0.4em 0.6em; vertical-align: top; text-align: left; }
+  th { background: var(--color-highlight); font-family: var(--ff-heading); font-weight: var(--fw-bold); }
+
+  .metrics { margin-bottom: var(--spacing-block); }
+  .metrics td { text-align: center; background: var(--color-highlight); }
+  .metrics .metric-value { font-size: 16pt; font-weight: var(--fw-bold); color: var(--color-primary); display: block; }
+  .metrics .metric-label { font-size: var(--fs-small); color: var(--color-muted); display: block; }
+
+  .data-emphasis { color: var(--color-emphasis); font-weight: var(--fw-bold); }
+  .ok { color: var(--color-success); font-weight: var(--fw-bold); }
+  .warn { color: var(--color-warn); font-weight: var(--fw-bold); }
+
+  .toc { margin-top: var(--spacing-block); margin-bottom: var(--spacing-section); }
+  .toc-title { font-family: var(--ff-heading); font-weight: var(--fw-bold); font-size: var(--fs-h3); margin-bottom: 0.4em; }
+  .toc table td { border: none; padding: 0.15em 0.4em; font-size: var(--fs-body); }
+  </style>
+</head>
+<body>
+  <section role="cover" class="report-cover">
+    <p class="cover-category">技术工作简报</p>
+    <h1 class="cover-title">数学 AI 评测器 · 工作简报</h1>
+    <p class="cover-subtitle">门控修复 · 判分器缺陷修复 · 强制用工具计算落地</p>
+    <div class="cover-meta">
+      <p>报告日期：2026-09-12</p>
+      <p>覆盖时段：当日全天</p>
+    </div>
+  </section>
+
+  <section role="body" class="report-body" data-page-restart="1">
+
+    <div class="toc">
+      <p class="toc-title">目录</p>
+      <table>
+        <tr><td>一、</td><td>今日主线</td></tr>
+        <tr><td>二、</td><td>已验证有效（有实证，可放心采信）</td></tr>
+        <tr><td>三、</td><td>已实现但未验证</td></tr>
+        <tr><td>四、</td><td>关键数据</td></tr>
+        <tr><td>五、</td><td>待办事项</td></tr>
+        <tr><td>六、</td><td>待上传清单</td></tr>
+        <tr><td>七、</td><td>诚实边界</td></tr>
+        <tr><td>八、</td><td>测试状态声明</td></tr>
+        <tr><td>九、</td><td>经验记录</td></tr>
+      </table>
+    </div>
+
+    <h2>一、今日主线</h2>
+    <p>接手 <strong>BUG 检测与修复交接文档</strong>，完成 6 项缺陷的修复；过程中<strong>发现并修复判分器两个系统性缺陷</strong>；并落地用户核心诉求——<strong>「强制用模型工具计算」</strong>（含符号化通道与表达式范式）。</p>
+
+    <h2>二、已验证有效（有实证，可放心采信）</h2>
+    <table>
+      <thead>
+        <tr><th style="width:6%">#</th><th style="width:26%">交付</th><th>证据</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>门控修复（mcp 平台结构性不可达）</td>
+          <td>冒烟 <span class="data-emphasis">20/20 全部成功</span>，回落计数 <span class="ok">0</span>，未生效告警 <span class="ok">0</span>。修复前平台该计数恒为 0</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>判分假阴性①：LaTeX 定界符未剥离</td>
+          <td>断言函数不剥 <code>\( … \)</code> → 标准答案 <code>\( BCD \)</code> 与作答 <code>BCD</code> 判不等。修复后基准集 <span class="data-emphasis">21→22（+0.9pp）</span>、冒烟各轮 <span class="data-emphasis">1/6 → 3/6</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>判分假阴性②：<code>A, B</code> ↔ <code>AB</code></td>
+          <td>新增字母组合互通匹配（集合比较、顺序无关）。修复的是当日<strong>自身引入的副作用</strong>（答案规范要求"多值逗号分隔"→ 模型把 <code>AB</code> 写成 <code>A, B</code>）</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>重做上限（deep 档 6.5 阶段）</td>
+          <td>该阶段耗时 <span class="data-emphasis">531s → 41s</span>（原先无上限）</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>未触发原因埋点</td>
+          <td>6/6 题记录「未触发：无硬信号」→ 根因确证为<strong>信号源稀疏</strong>（与触发点位置、剩余时间无关）</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>埋点导出缺口修复</td>
+          <td>4 类埋点补导出至结果文件（此前仅写内部 trace，<strong>结果文件中不可见</strong>）</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>形式化验证工具三项能力本机实证</td>
+          <td>闭包形态 + 最小工程根 → 服务 38s 启动 → 错误诊断正常返回（含行列号）</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>回归测试：<span class="data-emphasis">574 passed / 0 failed</span>。</p>
+
+    <h2>三、已实现但未验证</h2>
+    <p style="border-left:4px solid var(--color-warn);background:#fff5e6;padding:8px">
+      &nbsp;&nbsp;<strong>说明</strong>：以下四项代码已完成并通过单元回归，但因服务端延迟问题，<strong>端到端效果尚未验证</strong>，<strong>不得当作结论使用</strong>。
+    </p>
+    <table>
+      <thead>
+        <tr><th style="width:6%">#</th><th style="width:30%">交付</th><th>未验证原因</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>8</td><td>强制用工具计算：提示词硬性纪律 + 两个强制开关默认开启 + 答案取工具值</td><td>服务端延迟导致测试轮次全部作废</td></tr>
+        <tr><td>9</td><td>符号化通道「答案直接取工具值」（原设计仅做事后比对）</td><td>同上</td></tr>
+        <tr><td>10</td><td><strong>表达式范式</strong>：默认"先符号、后代入"，模型输出变量赋值 + 最终表达式，系统代入求值</td><td>本地解析单元实测通过（<code>2*x+y</code> + <code>{x:5,y:3}</code> → <code>13</code>），端到端未验证</td></tr>
+        <tr><td>11</td><td>B 类通用表达式通道（覆盖不可剥离但需计算的题）</td><td>同上</td></tr>
+      </tbody>
+    </table>
+
+    <h2>四、关键数据</h2>
+
+    <h3>4.1 测试题目「工具计算覆盖」审核</h3>
+    <table>
+      <thead>
+        <tr><th>类别</th><th>含义</th><th>题数</th><th>占比</th><th>其中纯数值答案</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>A</strong></td><td>可剥离 → 走符号化通道（已有实现）</td><td>42</td><td><span class="data-emphasis">37.5%</span></td><td>37</td></tr>
+        <tr><td><strong>B</strong></td><td>需数值计算但不可剥离（新增通用通道覆盖）</td><td>60</td><td><span class="data-emphasis">53.6%</span></td><td>20</td></tr>
+        <tr><td><strong>C</strong></td><td>无需数值计算（证明 / 概念）</td><td>10</td><td>8.9%</td><td>4</td></tr>
+      </tbody>
+    </table>
+    <p>结论：可覆盖 <strong>A + B = 102 题 = <span class="data-emphasis">91.1%</span></strong>。</p>
+
+    <h3>4.2 B 类为何"不可剥离"</h3>
+    <p>逐题诊断结果显示：<strong>全部为"五类剥离模式零命中"，且剥离器判断正确</strong>。题面数字均为<strong>结构性常数</strong>——下标、上下限、指数、不等式界、方程右端 0、系数等。</p>
+    <p>本质区别：A 类题面含<strong>具体给定数据</strong>，B 类<strong>参数是变量</strong>，题面<strong>没有"给定数据"可剥离</strong>。故并非剥离器保守，而是题型性质不同。</p>
+
+    <h3>4.3 服务端延迟：当前最硬的约束</h3>
+    <table>
+      <thead><tr><th style="width:36%">观测项</th><th>数值</th></tr></thead>
+      <tbody>
+        <tr><td>手工请求单次响应</td><td>简单请求 <strong>11.6s</strong>（同期基准）→ 实测 <span class="data-emphasis">62.5s / 77.4s / 112.1s</span></td></tr>
+        <tr><td>配额用量</td><td>输入 43.26M / 90M，输出 14.14M / 90M —— <span class="ok">配额充足，非欠费或限流</span></td></tr>
+        <tr><td>调用预算推算</td><td>单题 <strong>1200s</strong> 时间墙 ÷ 90s/次 ≈ <strong>每题仅约 13 次</strong> LLM 调用</td></tr>
+      </tbody>
+    </table>
+    <p>由此推论：<strong>任何"增加调用次数"的机制在当前延迟下都会失败</strong>——时间预算会被烧光，导致后续环节全部跳过、答案退化为生成失败。</p>
+
+    <h3>4.4 原生工具调用（协议级通道）：能力具备，但预算不允许</h3>
+    <p>手工实测确认模型<strong>支持</strong>工具调用协议（返回合法的工具调用结构与结束原因）；完整两轮循环亦正常收尾。但三轮循环累计 180–336 秒，会撞上 180 秒客户端超时上限，触发异常回落并再次消耗超时时间，最终耗尽单题预算。</p>
+    <p>结论：<strong>能力没有问题，是延迟预算不允许</strong>。该通道保持默认关闭。</p>
+
+    <h2>五、待办事项</h2>
+    <table>
+      <thead><tr><th style="width:6%">#</th><th style="width:34%">事项</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>服务端恢复后重跑表达式范式（7 题）</td><td>唯一未验证的核心功能；题集已备好</td></tr>
+        <tr><td>2</td><td>用新判分器重算测试题目基线</td><td>现基线应为 <span class="data-emphasis">19.6%</span>（含定界符修复），而非 18.8%；否则后续对比均带 1 题偏差</td></tr>
+        <tr><td>3</td><td>定位审计过滤阶段的 529s</td><td>6.5 阶段被治理后，耗时转移至此，占单题 43%</td></tr>
+        <tr><td>4</td><td>单题耗时超 1200s 硬墙问题</td><td>稳定性问题</td></tr>
+        <tr><td>5</td><td>剥离器正确性逐题核验</td><td>适用率仅为"命中率"；曾有"命中但剥错"的反例</td></tr>
+        <tr><td>6</td><td>同步三副本（等授权）</td><td>见下节清单</td></tr>
+      </tbody>
+    </table>
+
+    <h2>六、待上传清单</h2>
+    <p>以下文件均已修改完成、回归通过，<strong>尚未推送、尚未同步三副本</strong>：</p>
+    <table>
+      <thead><tr><th style="width:44%">文件</th><th>改动摘要</th></tr></thead>
+      <tbody>
+        <tr><td><code>agent/solver.py</code></td><td>提示词硬性纪律 + 表达式范式 + 答案取工具值 + 腾位埋点</td></tr>
+        <tr><td><code>agent/orchestrator.py</code></td><td>重做上限 + 未触发埋点 + 4 类埋点导出</td></tr>
+        <tr><td><code>agent/symbolic_solve.py</code></td><td>剥离器 3 处修复（含求和下标误剥）</td></tr>
+        <tr><td><code>run_eval.py</code></td><td>判分器 2 处修复 + 新增命令行开关</td></tr>
+        <tr><td><code>user_agent.py</code></td><td>3 个开关默认值调整</td></tr>
+        <tr><td><code>prompts/policy.py</code></td><td>答案规范 4 条（含"选项字母必须连写"例外）</td></tr>
+        <tr><td><code>tools/lean_local/lean_bridge.py</code></td><td>门控修复（闭包自动补最小工程根）</td></tr>
+        <tr><td><code>tools/check_mechanisms.py</code></td><td>4 项新检查 + 修正子串匹配缺陷</td></tr>
+        <tr><td><code>tests/test_mcp_gate.py</code></td><td>新增 11 项单元测试</td></tr>
+      </tbody>
+    </table>
+    <p>新增文档：测试题目工具计算覆盖审核、B 类不可剥离原因分析、判分假阳性量化与答案规范、冒烟结果记录。</p>
+
+    <h2>七、诚实边界</h2>
+    <table>
+      <thead><tr><th style="width:6%">#</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><strong>判分器修复改的是"读数"</strong>：所有历史冒烟成绩均被系统性低估约一倍，<strong>任何历史对比必须用新判分器重算</strong></td></tr>
+        <tr><td>2</td><td>表达式范式<strong>端到端未验证</strong>，仅有本地解析单元实测</td></tr>
+        <tr><td>3</td><td>"模型是否仍在心算"目前<strong>仍无干净证据</strong>：文本标记回填发生在后处理、模型看不到结果，故该机制<strong>本质上无法阻止心算</strong>；真正"把计算拿走"依赖<strong>答案取工具值</strong>（已实现，待验证）</td></tr>
+        <tr><td>4</td><td>服务端延迟为<strong>不可控外部因素</strong>，当日多轮测试因此作废；判断测试有效性须先检查超时 / 空响应 / 时间不足计数</td></tr>
+        <tr><td>5</td><td>形式化验证工具的平台可用性：本地实证通过，<strong>平台侧仍待一次真实评测确认</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h2>八、测试状态声明</h2>
+    <p style="border-left:4px solid var(--color-emphasis);background:#fdecea;padding:8px">
+      &nbsp;&nbsp;<strong>目前服务端情况不允许进行有效测试。</strong>
+    </p>
+    <table>
+      <thead><tr><th style="width:36%">观测项</th><th>实测值</th></tr></thead>
+      <tbody>
+        <tr><td>单次 LLM 响应耗时</td><td><span class="data-emphasis">60–112 秒</span>（同期正常时段同一端点仅 <strong>11.6 秒</strong>）</td></tr>
+        <tr><td>配额</td><td>输入 43.26M / 90M、输出 14.14M / 90M —— <span class="ok">配额充足</span></td></tr>
+        <tr><td>调用预算推算</td><td>单题 <strong>1200s</strong> 时间墙 ÷ 90s/次 ≈ <strong>每题仅约 13 次</strong> LLM 调用</td></tr>
+      </tbody>
+    </table>
+    <p>后果：当日多轮测试全部作废——超时累计 40 次、时间不足 23 次，答案统一退化为「生成失败：调用受限或模型拒绝回答」。</p>
+    <p>结论：</p>
+    <table>
+      <tbody>
+        <tr><td style="width:6%">1</td><td>在服务端延迟恢复正常前，本机<strong>不具备运行有效对比测试的条件</strong></td></tr>
+        <tr><td>2</td><td>相关功能（强制用工具计算、表达式范式、通用表达式通道）<strong>已完成代码实现与本地单元验证</strong>（回归 574 passed），端到端效果<strong>待服务端恢复后确认</strong></td></tr>
+        <tr><td>3</td><td>当日所有"未验证"项<strong>不得当作结论使用</strong>；已验证项不受影响</td></tr>
+      </tbody>
+    </table>
+
+    <h2>九、经验记录</h2>
+    <p style="border-left:4px solid var(--color-primary);background:var(--color-highlight);padding:8px">
+      &nbsp;&nbsp;<strong>看到超时先查自己的路径，再怀疑服务端。</strong>当日先误判为"服务端变慢"，凭用量面板（配额充足）才定位到真因是自身新增的工具循环通道。<br>
+      &nbsp;&nbsp;判据：<strong>提示词/代码改动不会导致网络超时</strong>；若超时与某开关同时出现，先查那个开关。
+    </p>
+
+  </section>
+</body>
+</html>

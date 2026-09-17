@@ -176,6 +176,9 @@ class AuditGate(BaseAgent):
 
         n_fail = 0
         rejected: list[tuple] = []
+        # ★ 2026-09-16：空答案身份集（见循环内注释）。用 id() 而非值比较，
+        #   因为候选可能是 dataclass 或 dict，且允许"同值不同对象"。
+        _empty: set = set()
         for cand in candidates:
             # 时间保护：单题接近 deadline → 提前退出逐候选审核（Level0 数值代回不再
             # 触发），与下方 rubric 分支的 is_time_critical 口径一致；留痕便于区分
@@ -186,7 +189,32 @@ class AuditGate(BaseAgent):
                 break
             ans = (cand.get("answer", "") if isinstance(cand, dict)
                    else getattr(cand, "answer", ""))
-            if not ans or not str(ans).strip():
+            # ★★★ 2026-09-16 修复（实测驱动）：空答案此前只是 `continue`（**跳过不拒绝**），
+            #   于是空答案留在候选池里进了投票 —— 实测 official112-003 的候选 3
+            #   `\boxed{}`（**空**）**吃掉了 3 张票**、稀释了共识，还占用 LeanGate 时间。
+            #   它还一路通过所有闸门（`audit_gate` 跳过、LeanGate 因 `unknown`
+            #   走非 strict 的 `lenient_pass` 放行），只在最后 formatter 的
+            #   `not answer.strip()` 才被丢弃。
+            #   本函数跑在**投票之前**，是剔除它的正确位置。
+            #   注意：不放进 `rejected`——那条路会触发"全部被否 → 回退保留"，
+            #   反而把空答案放回来。这里单独记身份集，最后统一排除。
+            # ⚠ 关键：`\boxed{}` **不是**空字符串（`.strip()` 非空），但它是**空答案**，
+            #   而这正是模型实际吐出的形态（实测 003 候选 3 的 `answer` 就是 `\boxed{}`）。
+            #   ⇒ 必须**剥壳后**再判空，否则本守卫形同虚设（首版就是这样漏掉的）。
+            try:
+                from .answer_oracle import AnswerOracle as _AO
+                _core = _AO.strip_wrappers(str(ans))
+            except Exception:  # noqa: BLE001
+                _core = str(ans)
+            if not _core or not _core.strip():
+                _empty.add(id(cand))
+                self._record_ctx(ctx, {
+                    "step": "candidate_audit", "tier": tier,
+                    "cand_id": (cand.get("id", "?") if isinstance(cand, dict)
+                                else getattr(cand, "id", "?")),
+                    "answer": "", "verdict": "empty_answer",
+                    "note": "空/纯空白答案：不参与投票，剔出候选池",
+                })
                 continue
             entry = {"step": "candidate_audit", "tier": tier,
                      "cand_id": (cand.get("id", "?") if isinstance(cand, dict)
@@ -224,12 +252,27 @@ class AuditGate(BaseAgent):
                 except Exception as e:  # noqa: BLE001
                     entry["rubric"] = "exception"
                     logger.debug("AuditGate: rubric 审核异常（放行）: %s", e)
+            # ★ 2026-09-17 语义澄清：区分「检查了但无法判定」与「该路径对本题型不适用」。
+            #   此前两者都写 `verdict="unknown"` ⇒ 读诊断的人会以为"审核跑了但判不了"，
+            #   实际原因是 **Level 2 rubric 只对证明题运行**（见上方 `is_proof and
+            #   use_rubric` 分支），而 Level 0 确定性检查对解答题极少判 fail。
+            #   实测 003/013（均为解答题）：6/6 候选全 unknown ⇒ **结构性无输出**。
+            #   这里**不改变 verdict 取值**（避免破坏下游按 verdict 统计的消费方），
+            #   只补 `applicable` 与 `note` 两个说明性字段。
+            if entry.get("verdict") == "unknown":
+                entry["applicable"] = bool(is_proof)
+                entry["note"] = (
+                    "证明题：Level2 rubric 已运行但未达否决阈值"
+                    if is_proof else
+                    "解答题：Level2 rubric 不适用（仅对证明题运行），"
+                    "Level0 确定性检查未否决 ⇒ 本闸门对该题型结构性无输出")
             self._record_ctx(ctx, entry)
 
         # 全部被否 → 回退保留（宁 unknown 不误杀，绝不整批清空）
         if rejected and n_fail < len(candidates):
             kept = [c for c in candidates
-                    if not any(c is rc for rc, _ in rejected)]
+                    if not any(c is rc for rc, _ in rejected)
+                    and id(c) not in _empty]
             for rc, evidence in rejected:
                 feedbacks.append(
                     f"[AuditGate 客观审核] 候选被程序硬核验否决："
@@ -240,11 +283,22 @@ class AuditGate(BaseAgent):
         elif rejected:
             self.record(ctx, "audit_gate",
                         "全部候选被客观否决 → 回退保留（宁 unknown 不误杀）")
-            kept = list(candidates)
+            kept = [c for c in candidates if id(c) not in _empty]
             feedbacks = []
         else:
+            kept = [c for c in candidates if id(c) not in _empty]
             self.record(ctx, "audit_gate",
                         f"候选审核通过 {len(candidates)}（无程序否决）")
+        # ★ 2026-09-16：空答案剔除（投票前）——记录并守住"绝不整批清空"的不变量。
+        if _empty:
+            self.record(ctx, "audit_gate",
+                        "剔除 %d 个空/空白答案候选（不参与投票）" % len(_empty))
+            if not kept:
+                # 退化情形：所有候选都是空的。此时**恢复原列表**，把"无可用答案"
+                # 交给下游既有兜底路径（直答/续写）处理，避免在此处制造空池。
+                kept = list(candidates)
+                self.record(ctx, "audit_gate",
+                            "所有候选答案均为空 → 恢复原列表交由下游兜底处理")
         return kept, feedbacks
 
     # ------------------------------------------------------------------

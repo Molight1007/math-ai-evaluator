@@ -146,7 +146,8 @@ _CALC_GUIDE = (
     "1. **易错运算 → 必须写 <calc>表达式</calc> 交系统精确求值（严禁心算）**："
     "开方/根式 sqrt、对数 ln（log 即自然对数，其他底请用换底写成 ln 之比）、"
     "指数 exp 与自然常数 e（写 exp(1)）、组合数 comb(n,k)、排列 perm(n,k)、"
-    "阶乘 ! 或 fact(n)、幂运算 ** 或 ^、取模 mod、求和 sum(f,x,a,b)、"
+    "阶乘 ! 或 fact(n)、幂运算 ** 或 ^、取模（**必须写 `a % b`**，不要写 `a mod b`）、"
+    "求和 sum(f,x,a,b)、"
     "积分 integral(f,x[,a,b])、圆周率 pi。"
     "这些运算心算极易出错，**即使你确信数值正确也必须交工具确认**；"
     "注意**工具只认上述函数名**：组合数请写 comb（勿写 C(n,k)/choose/ncr），"
@@ -806,6 +807,29 @@ class SolverAgent(BaseAgent):
         try:
             if not getattr(self.config, "answer_selfcheck_enabled", False):
                 return resp, answer
+            # ★★★ 2026-09-16 修复（实测驱动的"老逻辑打架"）：
+            #   本关的判据是"答案涉高危运算却**无 `<calc>` 工具来源**"，
+            #   而 `<calc>` 的**引导注入**（`_CALC_GUIDE`）与**标记解析**
+            #   （`resolve_all_calcs` → `resolved`）**全部**受
+            #   `enable_calc_tool` 门控（见 :1536 / :1779 / :1976 / :2105 /
+            #   :2191 / :2371）。默认 `enable_calc_tool=False`（2026-09-15 用户
+            #   指示"没有解决计算问题就关掉"关闭）。
+            #   ⇒ **`resolved` 恒为空** ⇒ 任何含高危算子的答案**结构性无法满足**
+            #   本关要求 ⇒ 必然触发"定向重问"，而重问本身**也拿不到工具来源**
+            #   ⇒ **注定徒劳**，且会把好答案改坏。
+            #   实测代价（official112-003）：
+            #     `answer_selfcheck_events` 记 3 次重问，
+            #     答案被越改越差 `\boxed{2026} → \boxed{1013} → \boxed{0}`
+            #     （2026 是**正确答案之一**）；且 orchestrator.py:1821 会据此
+            #     把 `g_ok` 置 False → 进**重做循环**（deep 最多 3 轮）
+            #     ⇒ 3 次重问 + 3 轮重做，是该题 184 次 LLM 调用/69 分钟的大头。
+            #   修法：工具关闭时本关**整体跳过**——要求不可能被满足，
+            #   继续检查只会白烧调用并劣化答案。
+            if not getattr(self.config, "enable_calc_tool", False):
+                self.record(ctx, "answer_selfcheck_skip",
+                            "enable_calc_tool=False ⇒ `<calc>` 引导与标记解析均未启用，"
+                            "本关要求结构性无法满足 → 整体跳过（不再徒劳重问）")
+                return resp, answer
             # 2026-09-12 逻辑堆叠治理（定型前审核）：答案已由表达式范式（本地
             # 计算器）产出 —— 本关不再以"看不到 <calc> 来源"为由重复打回，
             # 否则同一题会白烧一次定向重问（该关的工具调用不写 <calc> 标记）。
@@ -1405,7 +1429,17 @@ class SolverAgent(BaseAgent):
         if not answer:
             answer = smart_fallback_answer(raw)
         if not is_valid_final_answer(answer) and len(raw) > 0:
-            answer = raw[-500:]
+            # 2026-09-17：与文件内其它答案路径统一口径 —— **切片前先剥壳**。
+            # 否则 `raw[-500:]` 会把尾部工具残留（实测 official112-025：
+            # `</tool_call>`）当作答案落盘。惰性 import + 兜底：剥壳失败退回原切片。
+            _raw_clean = raw
+            try:
+                from utils.extract import (_strip_calc_markers,
+                                           _strip_toolcall_markers)
+                _raw_clean = _strip_toolcall_markers(_strip_calc_markers(raw))
+            except Exception:  # noqa: BLE001  剥壳失败不阻断
+                pass
+            answer = _raw_clean.strip()[-500:]
         cid = len(ctx.candidates)
         return Candidate(id=cid, reasoning=raw, answer=answer)
 
@@ -1575,6 +1609,26 @@ class SolverAgent(BaseAgent):
                                 ctx.question_type, len(_inj))
             except Exception:  # noqa: BLE001
                 pass
+
+        # ★ 2026-09-15 补：**答案形态要求此前只注入子目标 / 蓝图路径，solver 主路径缺失**。
+        # 本项目教训「只改一处路径 = 没改」：solver 是一条**独立的生成路径**，
+        # 而上面注入的 `objective_injection` 只覆盖客观题（选择/判断/填空），
+        # 于是解答题的形态要求（求所有→必须枚举 / 具体值→禁条件式 / 极值→严格性 /
+        # 2026-09-15 新增的「哪些→完备性」）在**纯 solver 路径下根本没注入**。
+        # 实测对应错题：099（"…离散化方法**有哪些**"，正解为多个，只答了一个）。
+        # ⚠ 位置刻意放在 objective 注入之后、_ANSWER_GUIDE 之前：既不在提示词最末尾
+        #   （避免模型进入续写模式），也不与客观题特化冲突（该函数对选择题/证明题返回空串）。
+        try:
+            from .question_type import answer_form_requirement as _afr_sv
+            _afr_txt = _afr_sv(ctx.problem, getattr(ctx, 'question_type', '') or '')
+            if _afr_txt:
+                user_content = user_content + _afr_txt
+                if isinstance(getattr(ctx, "metadata", None), dict):
+                    ctx.metadata["answer_form_injected_solver"] = len(_afr_txt)
+                self.record(ctx, "answer_form",
+                            "solver 主路径注入答案形态要求 %d 字符" % len(_afr_txt))
+        except Exception:  # noqa: BLE001
+            pass
 
         base_cid = len(ctx.candidates)
         if temperatures is None:
@@ -2287,7 +2341,9 @@ class SolverAgent(BaseAgent):
         # 1) 推理过短 → 可能不完整
         if len(text) < 400:
             # 有明确答案 → 仍然算完整
-            if answer and len(answer) > 3 and not _is_refusal(text):
+            # ★ 2026-09-16 审计修复：`len(answer) > 3` → 非空即可。
+            #   单字母/个位数是合法完整答案（选择 A、判断 T、填空 7）。
+            if answer and answer.strip() and not _is_refusal(text):
                 return True
             return False
         # 2) 末尾是否完整结束
