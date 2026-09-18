@@ -6,6 +6,46 @@
 
 ---
 
+## 零、运行档位：**默认是「赛期受限档」，不是「研究版」**（重要）
+
+代码默认值与「研究版（无时间限制 + 联网可用）」**不是一回事**。仓库里的默认值刻意与**平台约束对齐**：
+
+| 配置项 | **代码默认（赛期受限档）** | **研究版（`run_research.py`）** |
+|---|---|---|
+| `max_time_per_question` | **1100s** | **86400s**（语义=不限） |
+| `tier_budget` | **{fast:120, standard:540, deep:1150}** | **86400 × 3** |
+| `paper_target_time` | **8438s**（45 题卷折算） | **86400000** |
+| `max_total_time_seconds` | **20700s**（6h 硬限 − 4%） | **86400000** |
+| **`enable_web_search`** | **False（联网关闭）** | **true** |
+| **`use_leansearch`** | **False（联网检索关闭）** | **true** |
+| `verifier_deep_final_enabled` | **False** | **true** |
+| `verifier_diversify_enabled` | True | true |
+| `enable_calc_tool` | False | False（研究档亦未开，原因见下） |
+| `phase_budget_enabled` | False | False |
+
+⇒ **直接 `python run_eval.py ...` 或 `python main.py ...` 跑出来的是「单题 1100s、无网络」的受限档。**
+研究阶段（比赛已结束，目标是**正确率**而非平台得分）应该用：
+
+```bash
+python run_research.py --test_file <题单.jsonl> --output <结果.jsonl>
+```
+
+该脚本把"无时间限制 + 联网可用"这组配置**固化**下来（`--max_time_per_question 86400`、
+`--tier_budget 86400,86400,86400`、`--paper_target_time/--max_total_time_seconds 86400000`、
+`--enable_web_search true`、`--use_leansearch true`、`--verifier_deep_final_enabled true`、`--verbose`），
+并自动：① 从仓库根 `.env` / 环境变量准备密钥；② 设置 `LEAN_MCP_ALLOW_NET=1`、
+`LEAN_MCP_TIMEOUT_FLOOR=300`、`LLM_TIMEOUT=300`；③ 打印实际生效配置的横幅。
+
+**为什么不在代码里直接把默认值改成"不限"**：`user_agent.py` 是**平台固定入口**，
+其默认值必须与平台 1200s 硬限对齐；把研究档写进默认值会污染提交语义。
+故研究档只作为**显式选择**存在（这也是为什么需要这个脚本）。
+
+**`enable_calc_tool` 为何研究档也默认关**：该工具链关闭时 `<calc>` 引导与标记解析
+**一并停用**（见 `agent/solver.py` 的 `answer_selfcheck` 注释），历史上导致"要求结构性
+无法满足 ⇒ 徒劳重问且把好答案改坏"。要开启需连带评估该链路，不宜在研究档里静默打开。
+
+---
+
 ## 一、未上传清单（一眼看懂）
 
 | # | 未上传项 | 体积 | 是否必需 | 补齐方式 |
