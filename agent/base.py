@@ -11,6 +11,7 @@ from __future__ import annotations
 """
 
 import logging
+import os        # 2026-09-18：F1 开关（TOOLCALL_TEXT_FALLBACK）需要
 import re
 import threading
 import time
@@ -110,6 +111,43 @@ _register_truncation_listener()
 # ============================================================
 # 响应归一化（P0-1 契约防线）
 # ============================================================
+# ★★ 2026-09-18（F1）：**文本通道工具调用**的开关与解析器。
+#   默认**关**（`TOOLCALL_TEXT_FALLBACK=0`）—— 它直接改主链生成行为，
+#   必须先开/关 A/B。开启后：解析文本形态的调用 → 真正执行 → 把结果以
+#   `role=user` 追加后 `continue`，让模型基于真实检索结果继续推导。
+_TEXT_TOOLCALL_FALLBACK = os.environ.get("TOOLCALL_TEXT_FALLBACK", "0") == "1"
+_TEXT_FN_RE = re.compile(r"<function\s*=\s*([A-Za-z_]\w*)\s*>", re.I)
+_TEXT_PARAM_RE = re.compile(
+    r"<parameter\s*=\s*([A-Za-z_]\w*)\s*>(.*?)"
+    r"(?:</parameter>|</function>|</tool_call>|$)",
+    re.I | re.S)
+
+
+def _parse_text_toolcall(text: str):
+    """从文本通道解析工具调用，返回 `(函数名, 参数字典)`；解析不到返回 None。
+
+    兼容三种实测形态（025/032/086 的真实输出）：
+      · `<tool_call><function=web_search><parameter=query>Q</parameter></function></tool_call>`
+      · 同上但 `</parameter>` 缺失（未闭合）
+      · 标签内/外有空白或换行
+    """
+    if not text:
+        return None
+    _t = str(text)
+    if "<function" not in _t.replace(" ", ""):
+        return None
+    m = _TEXT_FN_RE.search(_t)
+    if not m:
+        return None
+    name = m.group(1)
+    args = {}
+    for pm in _TEXT_PARAM_RE.finditer(_t[m.end():]):
+        args[pm.group(1)] = str(pm.group(2)).strip()
+    if not args:
+        return None
+    return name, args
+
+
 def _normalize_chat_response(resp) -> Optional[str]:
     """把 client.chat 的返回值统一成字符串。
 
@@ -886,6 +924,10 @@ class BaseAgent(ABC):
                         "（主后端 Math StackExchange、次 arXiv），返回标题/链接/摘要。"
                         "**仅在遇到不熟悉的定义、术语、公式或需要查证已知结论时调用**，"
                         "不要滥用；检索结果仅供参考，**必须自行验证，不得直接照搬**。"
+                        "\n⚠ **调用方式**：必须使用**原生函数调用通道**（框架提供的 function calling）；"
+                        "**严禁**在正文或推理里手写 `<tool_call>` / `<function=...>` / "
+                        "`<parameter=...>` 这类文本标记 —— 实测它们**不会被框架执行**，"
+                        "只会作为乱码残留在答案里，并把整段推导毁掉。"
                     )
             except Exception:  # noqa: BLE001
                 pass
@@ -958,6 +1000,45 @@ class BaseAgent(ABC):
                         except Exception:  # noqa: BLE001
                             pass
                     continue
+                # ★★ 2026-09-18（F1，开关 TOOLCALL_TEXT_FALLBACK，默认关）：
+                #   **文本通道工具调用回填**。本模型把调用写在正文/推理里，
+                #   平台不填原生 `tool_calls` ⇒ 调用不执行、不回填，本轮生成到此
+                #   结束，前面的散文被 `extract_final_answer` 当答案抽出
+                #   （实测 official112-025 的 5/5、032 的 4/4 候选因此退化为散文）。
+                #   解析文本形态 → 真正执行 → 以 `role=user` 追加结果后 `continue`。
+                if _TEXT_TOOLCALL_FALLBACK and n_calls < max_rounds:
+                    _tc = _parse_text_toolcall(
+                        resp if isinstance(resp, str)
+                        else str(resp.get("content", "") or "")
+                        if isinstance(resp, dict)
+                        else _normalize_chat_response(resp))
+                    if _tc:
+                        n_calls += 1
+                        _fname, _args = _tc
+                        if _fname == "web_search":
+                            _q = str(_args.get("query", "") or "")
+                            _res = self._web_search_tool_exec(_q)
+                            _ev = "<web_search:text> %s -> %s" % (_q[:60], _res[:50])
+                        else:
+                            _expr = str(_args.get("expr", "") or "")
+                            _res = self._calc_tool_exec(_expr)
+                            _ev = "<calc_tool:text> %s -> %s" % (_expr, _res[:50])
+                        _prev = (resp if isinstance(resp, str)
+                                 else str(resp.get("content", "") or "")
+                                 if isinstance(resp, dict)
+                                 else _normalize_chat_response(resp))
+                        msgs.append({"role": "assistant", "content": _prev})
+                        msgs.append({
+                            "role": "user",
+                            "content": ("【系统工具执行结果】\n" + _res +
+                                        "\n\n请基于以上真实结果继续推导，"
+                                        "并在最后给出最终答案。"),
+                        })
+                        try:
+                            self.record(ctx, "toolcall_text_exec", _ev)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
                 # 无 tool_calls：str（文本）或 dict（content）
                 if isinstance(resp, str):
                     last_text = resp
@@ -965,6 +1046,21 @@ class BaseAgent(ABC):
                     last_text = str(resp.get("content", "") or "")
                 else:
                     last_text = _normalize_chat_response(resp)
+                # ★★ 2026-09-18（可观测性，审核发现）：本分支**只认原生 `tool_calls`**
+                #（见上方 `isinstance(resp, dict) and resp.get("tool_calls")`），而模型
+                # 可能在**文本通道**手写 `<tool_call><function=…>`。此时调用**不执行、不回填**，
+                # 且此前**一行 record 都没有** ⇒ "模型想调用却被协议挡住"在 diag 里完全不可见。
+                # 实测代价：025 的 5/5、032 的 4/4 候选答案因此退化为散文
+                #（`步骤11：搜索已知结论`），并被选为最终答案。
+                # 此处补埋点使该现象可量化（白名单同步见 `_DIAG_MONITORED_KEYS`）。
+                try:
+                    if last_text and "<tool_call" in last_text:
+                        self.record(ctx, "toolcall_text_detected",
+                                    "文本通道出现 <tool_call> 而原生 tool_calls 为空 "
+                                    "⇒ 未执行、未回填："
+                                    + str(last_text)[:120].replace("\n", " "))
+                except Exception:  # noqa: BLE001
+                    pass
                 if last_text and last_text.strip():
                     return last_text
             # 达 max_rounds（仍连续调工具）→ 取最后一次文本兜底

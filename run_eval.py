@@ -194,6 +194,13 @@ def _norm_candidate(text: str) -> str:
     _dom = re.search(r"\(\s*(?:[A-Za-z]\s*)?(?:\\?in|∈)[^)]*\)\s*$", text)
     if _dom:
         text = text[:_dom.start()].rstrip("，,;；、 ") or text
+    # ★★ 2026-09-18（判分器修复 S1，默认生效）：剥 `\text{...}` 外壳（纯排版）。
+    #   实测 official112-086：gold `\(\mathbb{Q}(\sqrt[4]{5},i),\ 8,\ \text{是}\)`
+    #   与模型 `\boxed{\mathbb{Q}(\sqrt[4]{5}, i), 8, 是}` 经 `_multi_value_match`
+    #   逐项比对，**前 3 项全等**，唯独第 4 项 `\text{是}` ≠ `是` ⇒ 整题判 expr_wrong。
+    #   `_clean_answer` 的既有注释自述"只剥 \boxed/\operatorname，不剥 \text"，此处补上。
+    #   ⚠ 必须放在中文尾注处理**之后**（尾注逻辑依赖 `\text{其中…}` 的原始形态）。
+    text = re.sub(r"\\text\s*\{([^{}]*)\}", r"\1", text)
     return _laTeX_to_py_frac(text)
 
 
@@ -469,6 +476,9 @@ def answers_match(pred: str, gold: str) -> bool:
     # 判分器拿整段过程当答案比，模型切平面正确却被判 expr_wrong。
     if _match_gold_process_tail(pred_f, gold, gold_f):
         return True
+    # ★ 2026-09-18（S3，默认关）：变量 α-等价（ξ≡ω）。仅 `EVAL_ALPHA_EQUIV=1` 时启用。
+    if _EVAL_ALPHA_EQUIV and _alpha_equivalent(pred_f, gold_f):
+        return True
     return False
 
 
@@ -623,14 +633,150 @@ def _strip_set_braces(s: str) -> str:
     return s.strip()
 
 
+# ★ 2026-09-18（判分器修复 S2/S3）：两项**默认关**的开关，纯为 A/B 用。
+#   S2 多值分隔符：gold 用**顿号** `、` 时，只按 ASCII 逗号拆会拆成 1 项 ⇒
+#      `_multi_value_match` 因 `len(g_items) < 2` 直接判否
+#      （official112-099 实况：gold `有限差分法、有限元法（或有限体积法）`）。
+#   S3 变量 α-等价：`𝓕[e^{-|x|}]` 结果的哑变量用 ξ 还是 ω 命名是**任意的**，
+#      但 SymPy 视之为不同符号 ⇒ 数学等价却判错（official112-091 实况）。
+# ★ 2026-09-18 复核：单独开 S2 **不产生误判**（099 仍为 False，因 pred 只拆出 1 项
+#   而 `_multi_value_match` 要求两侧都 ≥2 项）⇒ 可安全启用为默认。
+_EVAL_SPLIT_CN = os.environ.get("EVAL_SPLIT_CN", "1") == "1"
+_EVAL_ALPHA_EQUIV = os.environ.get("EVAL_ALPHA_EQUIV", "0") == "1"
+
+_SPLIT_SEP_RE = re.compile(r"[,，、;；]")
+
+
 def _split_multi(s: str) -> List[str]:
-    """多值答案拆分（逗号分隔）；元素数 ≥2 才有意义（调用方保证）。
+    """多值答案拆分；元素数 ≥2 才有意义（调用方保证）。
 
     _norm_candidate 会把 LaTeX 空格 `,\\ ` 压成 `,\\`，故需剥元素前导反斜杠
     （official112-006 实况：拆出 '\\A(x)=1-x'）。
+
+    S2（`EVAL_SPLIT_CN=1`）：额外支持中文顿号 / 全角逗号 / 分号作分隔符。
     """
     s = _strip_set_braces(_normalize_ellipsis(s))
-    return [p.lstrip("\\").strip() for p in s.split(",") if p.lstrip("\\").strip()]
+    parts = _SPLIT_SEP_RE.split(s) if _EVAL_SPLIT_CN else s.split(",")
+    return [p.lstrip("\\").strip() for p in parts if p.lstrip("\\").strip()]
+
+
+def _alpha_equivalent(a: str, b: str) -> bool:
+    """S3（`EVAL_ALPHA_EQUIV=1`）：**变量重命名下的符号等价**（α-等价）。
+
+    数学答案里的哑变量命名是任意的（`ξ` 与 `ω` 表示同一自变量），
+    但 SymPy 视之为不同符号 ⇒ 数学等价却判错（091 实况）。
+
+    做法：取两侧自由符号，按**名称排序后一一对应**把 b 的符号替换成 a 的，
+    再作差化简。保守约束：两侧自由符号数相同且 1..3 个；同名时**不走本路径**
+    （交给原有逻辑）；替换后必须 `simplify(a-b)==0`。
+    仅在 `EVAL_ALPHA_EQUIV=1` 时被 `answers_match` 调用。
+    """
+    try:
+        import sympy as _sp
+    except Exception:  # noqa: BLE001
+        return False
+
+    # ★★ 2026-09-18 修（S3 自身缺陷）：**必须先判"是不是数学表达式"**。
+    #   否则两个中文串（如 gold `有限差分法、有限元法…` 与 pred `有限差分法`）
+    #   会被 `sympify` 各自当成一个 **Symbol**，自由符号数都是 1、名字不同
+    #   ⇒ 替换后必然相等 ⇒ **把"只答了一项"误判为对**（099 实测）。
+    #   判据：两侧都必须含**数字或运算符**，否则不是可比较的表达式。
+    _EXPR_HINT_RE = re.compile(r"[0-9+\-*/^=()]")
+    if not (_EXPR_HINT_RE.search(a) and _EXPR_HINT_RE.search(b)):
+        return False
+    # 两侧不得含空白分隔的自然语言（中文/英文单词成片出现）——防"长句被当符号"
+    if len(re.findall(r"[\u4e00-\u9fff]", a)) > 12 or \
+            len(re.findall(r"[\u4e00-\u9fff]", b)) > 12:
+        return False
+
+    def _read_group(src: str, k: int):
+        """从 src[k] 起读一个**花括号配对**的组（k 指向 '{'），返回 (内容, 新位置)。"""
+        depth, buf = 0, []
+        while k < len(src):
+            c = src[k]
+            if c == "{":
+                depth += 1
+                if depth == 1:
+                    k += 1
+                    continue
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return "".join(buf), k + 1
+            buf.append(c)
+            k += 1
+        return "".join(buf), k
+
+    def _frac_to_py(t: str) -> str:
+        """`\\frac{A}{B}` → `((A)/(B))`，A/B **支持嵌套花括号**
+        （091 实况：A = `2e^{i\\omega}` 含 `{}`，正则 `[^{}]*` 匹配不到 ⇒ parse 失败）。"""
+        out, i = [], 0
+        while i < len(t):
+            m = re.match(r"\\d?frac\s*\{", t[i:])
+            if not m:
+                out.append(t[i])
+                i += 1
+                continue
+            i += m.end() - 1        # 定位到第一个 '{'
+            a, i = _read_group(t, i)
+            if i < len(t) and t[i] == "{":
+                b, i = _read_group(t, i)
+            else:
+                b = ""
+            out.append("((%s)/(%s))" % (a, b))
+        return "".join(out)
+
+    def _strip_outer_braces(t: str) -> str:
+        """剥掉最外层成对的 `{...}`（gold 常写成 `{\\hat f(\\xi)=...}`）。"""
+        while len(t) > 1 and t.startswith("{") and t.endswith("}"):
+            inner, _ = _read_group(t, 0)
+            if len(inner) != len(t) - 2:      # 外层花括号并不配对包裹整体
+                break
+            t = inner.strip()
+        return t
+
+    def _prep(t: str) -> str:
+        t = t.replace("$", "").strip()
+        t = _strip_outer_braces(t)
+        t = _frac_to_py(t)                                   # \frac{A}{B}（配对版）
+        t = re.sub(r"\\hat\s*\{([^{}]*)\}", r"\1", t)     # \hat{f} → f
+        t = re.sub(r"\|([^|]{1,40})\|", r"Abs(\1)", t)        # |x| → Abs(x)
+        t = re.sub(r"\\([A-Za-z]+)", r" \1", t)                # \xi → xi（命令名作符号）
+        # ★ 2026-09-18（S3 最后一处）：相邻标识符之间的**空格 → 乘号**。
+        #   `i\omega` 经上一步变 `i omega`，SymPy 无法解析 ⇒ 需 `i*omega`
+        #   （official112-091 实况：`e^{i\xi}` → `e**(i xi)` 解析失败的直接原因）。
+        #   前一个字符是 `(` 或运算符时**不**匹配，保留函数调用与加减语义。
+        t = re.sub(r"([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)", r"\1*\2", t)
+        # ★★ 2026-09-18（S3 真正的最后一步）：**必须先把 `=` 拆成 `(左)-(右)`**。
+        #   实测 `sp.sympify("f(omega)=1")` → SympifyError —— Python 表达式里 `=` 不是运算符。
+        #   拆成作差式即可解析；两侧都拆 ⇒ 等式等价性判定依然成立。
+        if "=" in t:
+            _l, _sep, _r = t.partition("=")
+            t = "((%s)-(%s))" % (_l, _r)
+        # 括号内多余空白（`f( omega)`）会让解析器困惑 ⇒ 统一压掉
+        t = re.sub(r"\(\s+", "(", t)
+        t = re.sub(r"\s+\)", ")", t)
+        t = re.sub(r"\s+,\s*", ",", t)
+        t = re.sub(r"\^\{([^{}]*)\}", r"**(\1)", t)
+        t = t.replace("^", "**")
+        t = re.sub(r"(?<![A-Za-z0-9_.])(\d)([A-Za-z])", r"\1*\2", t)
+        return t
+
+    try:
+        fa = _sp.sympify(_prep(a))
+        fb = _sp.sympify(_prep(b))
+        if not isinstance(fa, _sp.Expr) or not isinstance(fb, _sp.Expr):
+            return False
+        sa = sorted(fa.free_symbols, key=lambda x: x.name)
+        sb = sorted(fb.free_symbols, key=lambda x: x.name)
+        if not sa or len(sa) != len(sb) or len(sa) > 3:
+            return False
+        if [x.name for x in sa] == [x.name for x in sb]:
+            return False
+        fb2 = fb.subs({y: x for x, y in zip(sa, sb)})
+        return bool(_sp.simplify(fa - fb2) == 0)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _poly_equal(a: str, b: str) -> bool:

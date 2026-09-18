@@ -116,6 +116,32 @@ _PY_KEYWORD_RE = re.compile(
 _ENGLISH_QUERY_MIN_LEN = 50
 _ENGLISH_QUERY_MIN_SPACES = 7
 _ENGLISH_QUERY_ALLOWED = re.compile(r"^[A-Za-z0-9\s\-+/]+$")
+# ★★ 2026-09-18 再补强：实测**最终答案**本身是"过程叙述"——模型把
+#   "我接下来要做什么"当成答案提交，且因句子含 `$` 而穿过 has_math 闸门：
+#     · `搜索已知结论：这个问题看起来像是一个已知的组合数学问题。也许答案是
+#        $2^{k+1}$ 或 $2 \\cdot 4^{k-1}$ 之类的。让我用 web_search 查找类似问题。`（020）
+#     · `继续找规律，目前 type B：2, 8, 10。`（032）
+#     · `步骤11：搜索已知结论`（025）
+#     · `让我搜索 $x^4 + 5$ 的分裂域次数。`（086 候选）
+#   ⚠ 原 `_STEP_LABEL_RE` 只写了 `让我们`，**漏了 `让我`** —— 这一字之差是本轮
+#     020/025/086 三题漏检的直接原因。
+#   与 `_REASONING_CONNECTIVE_RE` 同样放在 has_math 闸门**之外**执行。
+_PROCESS_NARRATIVE_RE = re.compile(
+    r"让我(?:们)?(?:先|再|来)?(?:搜索|用|查|看看|想|计算|考虑|尝试|重新审视|重新思考)"
+    r"|搜索(?:一下|已知结论|相关(?:数学)?结论|类似)"
+    r"|继续(?:找规律|寻找|搜索)"
+    r"|目前\s*(?:type|类型|得到|发现|只)"
+    r"|文本提到"
+    r"|也许答案(?:是|可能)"
+    r"|这个(?:问题|题)看起来"
+    r"|看起来像是(?:一个)?已知"
+    # ★ 2026-09-18（审计发现，086 实测仍漏）：
+    r"|在答案中[，,]?\s*通常接受"
+    r"|但通常这类题的标准答案"
+    r"|通常这类题的?标准答案"
+    r"|对于[^，。]{0,12}类似",
+    re.IGNORECASE,
+)
 # 含这些记号即视为"疑似数学式"，**不再**按代码/英文词串判定，避免误杀。
 _MATH_MARKERS = ("\\", "{", "}", "$", "^")
 
@@ -142,9 +168,10 @@ def _looks_like_non_answer(text: str) -> bool:
             return True
     except Exception:  # noqa: BLE001
         pass
-    # —— 步骤 / 思考标签 / 推理连接词：推理过程的措辞，不可能是答案 ——
+    # —— 步骤 / 思考标签 / 推理连接词 / 过程叙述：推理过程的措辞，不可能是答案 ——
     try:
-        if _STEP_LABEL_RE.search(t) or _REASONING_CONNECTIVE_RE.search(t):
+        if (_STEP_LABEL_RE.search(t) or _REASONING_CONNECTIVE_RE.search(t)
+                or _PROCESS_NARRATIVE_RE.search(t)):
             return True
     except Exception:  # noqa: BLE001
         pass
@@ -331,7 +358,17 @@ class FormatterAgent(BaseAgent):
                 self.record(ctx, "finalize",
                             "答案不可用（空/占位符）且紧急直答未得，交上层最终兜底")
 
-        ctx.final_response = format_response(answer)
+        # ★ 2026-09-18（审核发现）：**这是 `ctx.final_response` 的第 4 个直写点**。
+        # 另外 3 个（零票兜底直答 / 6.5 重做 / 6.5 换候选）已改用
+        # `Orchestrator._set_final_response`（带非答案闸门），本行此前是漏网的。
+        # 本模块自带 `_looks_like_non_answer`，直接复用，避免跨模块反向 import。
+        _fr_txt = format_response(answer)
+        if str(_fr_txt or "").strip() and not _looks_like_non_answer(_fr_txt):
+            ctx.final_response = _fr_txt
+        else:
+            self.record(ctx, "finalize",
+                        "最终答案被判为非答案形态 → 不覆盖 ctx.final_response，"
+                        "交上层最终兜底：%s" % str(_fr_txt)[:80])
         self.record(
             ctx, "finalize",
             f"最终答案: {ctx.final_response[:200]} (置信度: {confidence:.2f})",

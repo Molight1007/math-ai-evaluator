@@ -68,7 +68,7 @@
 {"id": "official112-067", "answer": "1/2, 1"}
 {"id": "official112-068", "answer": "90"}
 {"id": "official112-069", "answer": "$Y = M$"}
-{"id": "official112-070", "answer": "$\\frac{1}{2}$", "meta": {"defect": "[独立数学复核 2026-09-18] gold 与题面矛盾（已独立复核）", "original_answer": "$\\frac{5}{8}$", "verified_answer": "$\\frac{1}{2}$", "verified_by": "独立数学推导复核（2026-09-18，三人独立 + 本仓再核）", "verified_reason": "凸四边形面积 = 1/2·d1·d2·sinθ，题面 PR=QS=1 为两条对角线 ⇒ S ≤ 1/2·1·1 = 1/2；而原 gold 5/8 = 0.625 > 0.5 数学上不可能。θ=90° 时面积恒为 0.5，且对角线交点偏置可使周长从 2√2≈2.83 连续增至 3（如 a=0.8,b=0.25 时周长≈3.03）⇒ 0.5 可达。故最大面积为 1/2。"}}
+{"id": "official112-070", "answer": "$\\frac{5}{8}$"}
 {"id": "official112-071", "answer": "$\\mathbb{Z}$"}
 {"id": "official112-072", "answer": "$(n-2)2^n +1$"}
 {"id": "official112-073", "answer": "$(n^2 +3n+2, n^3 + 4n^2 + 3n -1)$\nfor $n \\ge 1$"}
@@ -84,12 +84,12 @@
 {"id": "official112-083", "answer": "939"}
 {"id": "official112-084", "answer": "999981"}
 {"id": "official112-085", "answer": "$\\lfloor \\frac{a+2}{2}\\rfloor +\\lfloor \\frac{a+2}{3}\\rfloor -\\lfloor \\frac{a+2}{6}\\rfloor $"}
-{"id": "official112-086", "answer": "\\(\\mathbb{Q}(\\sqrt[4]{5},\\,i),\\ 8,\\ \\text{是}\\)", "meta": {"defect": "[独立数学复核 2026-09-18] gold 与题面矛盾（已独立复核）", "original_answer": "\\(\n\\mathbb{Q}(5^{1/4},\\zeta_8),\\ 16,\\ \\text{是}\n \\)", "verified_answer": "\\(\\mathbb{Q}(\\sqrt[4]{5},\\,i),\\ 8,\\ \\text{是}\\)", "verified_by": "独立数学推导复核（2026-09-18，三人独立 + 本仓再核）", "verified_reason": "x^4+5 在 5 处 Eisenstein ⇒ 不可约；根为 α=5^{1/4}ζ8（α^4=-5），E=ℚ(α,i)。resolvent cubic x^3-20x 有有理根 0 ⇒ G ⊆ D4；disc = 256·5^3 = 32000，√32000 = 80√5 ∉ ℚ ⇒ G ⊄ A4 ⇒ G = D4（8 阶）⇒ [E:ℚ] = 8。又 ℚ(α,i) = ℚ(⁴√5, i)（ζ8 = (1+i)/√2 ∈ ℚ(i)）。原 gold 的 ℚ(5^{1/4},ζ8) 与 ℚ(⁴√5,i) 交集为 ℚ、次数 16，且 E 不含 ζ8 ⇒ 原 gold 是 16 次过域、非分裂域。"}}
+{"id": "official112-086", "answer": "\\(\n\\mathbb{Q}(5^{1/4},\\zeta_8),\\ 16,\\ \\text{是}\n \\)"}
 {"id": "official112-087", "answer": "B, D"}
 {"id": "official112-088", "answer": "\\(\nAB\n \\)"}
 {"id": "official112-089", "answer": "5129"}
 {"id": "official112-090", "answer": "$(N-1)\\sum_{j=1}^{N-1}\\frac{1}{j}$"}
-{"id": "official112-091", "answer": "${\\hat{f}(\\xi) = \\frac{2e^{i\\xi}}{1+\\xi^{2}} + \\frac{\\pi}{2}e^{-2|\\xi|}}$", "meta": {"defect": "[独立数学复核 2026-09-18] gold 与题面矛盾（已独立复核）", "original_answer": "${\\hat{f}(\\xi) = \\frac{2}{1 + \\xi^2}}$", "verified_answer": "${\\hat{f}(\\xi) = \\frac{2e^{i\\xi}}{1+\\xi^{2}} + \\frac{\\pi}{2}e^{-2|\\xi|}}$", "verified_by": "独立数学推导复核（2026-09-18，三人独立 + 本仓再核）", "verified_reason": "平移性质：𝓕[e^{-|x+1|}](ξ) = e^{iξ}·2/(1+ξ²)；𝓕[1/(4+x²)](ξ) = (π/2)e^{-2|ξ|}（由 𝓕[1/(a²+x²)]=(π/a)e^{-a|ξ|}，a=2）。故正解 = e^{iξ}·2/(1+ξ²) + (π/2)e^{-2|ξ|}。原 gold 2/(1+ξ²) 只是 e^{-|x|} 的变换 —— 既丢平移因子 e^{iξ}，又整项丢掉第二个函数。"}}
+{"id": "official112-091", "answer": "${\\hat{f}(\\xi) = \\frac{2}{1 + \\xi^2}}$"}
 {"id": "official112-092", "answer": "在点 \\(\\left(\\frac12, \\frac{\\sqrt{3}}{2}\\right)\\) 处（对应 \\(\\theta = \\frac{\\pi}{3}\\)），圆周上的拉普拉斯值为  \n \\(\n0\n \\)"}
 {"id": "official112-093", "answer": "\\(\nCE\n\\)"}
 {"id": "official112-094", "answer": "\\(\nBCD\n\\)"}

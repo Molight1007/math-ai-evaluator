@@ -213,7 +213,19 @@ _DIAG_MONITORED_KEYS = (
     "calc_prewarm_events", "calc_rewrite", "calc_fallback", "lemma_repo",
     "preverify_trace", "symbolic_solve_events", "objective_check_events",
     "numericize_events", "expression_eval_events",
+    # 2026-09-18：文本通道工具调用（模型想调用但被协议挡住，此前不可见）
+    "toolcall_text_detected",
 )
+
+
+# 属性型埋点键 → ctx 属性名（不经 `self.record` 写入，须单独查）
+_DIAG_ATTR_KEYS = {
+    "pick_diag": "_pick_diag",
+    "formal_spec": "formal_spec",
+    "formal_gaps": "formal_gaps",
+    "lemma_repo": "lemma_repo",
+    "preverify_trace": "preverify_trace",
+}
 
 
 def _diag_completeness(ctx) -> dict:
@@ -235,7 +247,19 @@ def _diag_completeness(ctx) -> dict:
         _tr = []
     for _k in _DIAG_MONITORED_KEYS:
         _hits = [t for t in _tr if str(t.get("step", "")) == _k]
+        # ★ 2026-09-18 修（审计发现）：受监控键里有**属性型**的（不经 trace 写入），
+        #   如 `pick_diag` 实为 `ctx._pick_diag`。原实现只查 trace step ⇒ 对它们
+        #   **恒报 `not_ran`**，与事实矛盾（实测 10/10 题 `pick_diag` 非空却报 not_ran）。
+        #   属性存在且非空 ⇒ 视为有产出。
         if not _hits:
+            _attr = _DIAG_ATTR_KEYS.get(_k)
+            if _attr:
+                try:
+                    if getattr(ctx, _attr, None):
+                        out[_k] = "ran_with_data"
+                        continue
+                except Exception:  # noqa: BLE001
+                    pass
             out[_k] = "not_ran"
             continue
         _has = False
@@ -1756,17 +1780,39 @@ class Orchestrator(BaseAgent):
             # 因其 len>3 且不含拒绝词，被计入选择题投票 ⇒ **污染投票分布**。
             # 只过滤**明确的行首结构标记**（标题/列表/引用/表格），
             # 不碰正文类长答案（统计学的论述题 gold 本就是长文本）。
+            # ★★ 2026-09-18（审核发现）：原判据**只认 Markdown 行首标记**
+            #   （`#`/`-`/`*`/`数字.`/`>`/`|`），而实测大量脏候选是「过程叙述」
+            #   （`步骤11：搜索已知结论`、`继续找规律，目前 type B：2, 8, 10。`），
+            #   于是 032 记录"过滤 5 → 4"只滤掉 `- ` 开头那一条，其余全部留存
+            #   并进入投票 ⇒ **污染票型、进而被选为最终答案**。
+            #   现改为**复用 formatter 的 `_looks_like_non_answer`**（单一判据来源，
+            #   避免两处口径分叉），Markdown 标记作为兜底保留。
             try:
-                _clean = [
-                    _c for _c in (ctx.candidates or [])
-                    if not _re.match(
-                        r"^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|\|\s)",
-                        (getattr(_c, "answer", "") or ""))]
-                if _clean and len(_clean) < len(ctx.candidates or []):
+                try:
+                    from .formatter import _looks_like_non_answer as _nma36
+                except Exception:  # noqa: BLE001
+                    _nma36 = None
+
+                def _keep_cand(_c):
+                    _a = getattr(_c, "answer", "") or ""
+                    if _re.match(r"^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|\|\s)", _a):
+                        return False
+                    if _nma36 is not None and _nma36(_a):
+                        return False
+                    return True
+
+                _before36 = list(ctx.candidates or [])
+                _clean = [_c for _c in _before36 if _keep_cand(_c)]
+                if _clean and len(_clean) < len(_before36):
                     self.record(ctx, "control",
-                                "过滤非答案形态候选 {} → {}".format(
-                                    len(ctx.candidates), len(_clean)))
+                                "过滤非答案形态候选 {} → {}（复用 _looks_like_non_answer，"
+                                "2026-09-18）".format(len(_before36), len(_clean)))
                     ctx.candidates = _clean
+                elif not _clean and _before36:
+                    # 全被滤掉时不清空池（保持与 M2 同一原则），只记录
+                    self.record(ctx, "control",
+                                "候选池 %d 个全部呈非答案形态（未清空，保持 M2 原则，"
+                                "2026-09-18）" % len(_before36))
             except Exception:  # noqa: BLE001
                 pass
             ver_result = self.verifier.run(
@@ -1846,10 +1892,15 @@ class Orchestrator(BaseAgent):
                     # 由 formatter 校验/修复（候选都差时保留预设答案），
                     # 再进 6.5 AuditGate 闸门把关，最后统一 return。
                     direct_answer = self.solver.direct_solve(ctx)
-                    if direct_answer:
-                        ctx.final_response = direct_answer
-                    else:
-                        ctx.final_response = self._pick_best_from_candidates(ctx) or ""
+                    # 2026-09-18：过 `_set_final_response`（非答案闸门）
+                    if not self._set_final_response(ctx, direct_answer, "zero_vote_direct"):
+                        if str(direct_answer or "").strip():
+                            self.record(ctx, "control",
+                                        "零票兜底直答被判为非答案（过程叙述/脏文本）"
+                                        "→ 退回候选池择优")
+                        self._set_final_response(
+                            ctx, self._pick_best_from_candidates(ctx) or "",
+                            "zero_vote_pick_best")
                     # 标记 0 票兜底路径：formatter 需要它来判断是否保留预设答案
                     ctx._zero_vote_fallback = True
 
@@ -2080,7 +2131,13 @@ class Orchestrator(BaseAgent):
                                     if len(ctx.candidates or []) > _before:
                                         _tried += 1
                                         _fresh = ctx.candidates[-1]
-                                        ctx.final_response = _fresh.answer
+                                        # 2026-09-18：过闸门；脏答案不采纳、回 while 继续
+                                        if not self._set_final_response(
+                                                ctx, _fresh.answer, "gate_rework"):
+                                            self.record(ctx, _gk,
+                                                        f"重生成候选 #{_fresh.id} 的答案被判为"
+                                                        "非答案（过程叙述/脏文本）→ 不采纳")
+                                            continue
                                         g_ok = _gate.gate_final_answer(
                                             ctx, tier, _fresh.answer,
                                             getattr(_fresh, "reasoning", "") or "")
@@ -2105,7 +2162,12 @@ class Orchestrator(BaseAgent):
                             break
                         _tried += 1
                         ctx._gate_tried = list(getattr(ctx, "_gate_tried", []) or []) + [_next.id]
-                        ctx.final_response = _next.answer
+                        # 2026-09-18：过闸门；脏答案不采纳、继续换下一个候选
+                        if not self._set_final_response(ctx, _next.answer, "gate_next"):
+                            self.record(ctx, _gk,
+                                        f"换候选 #{_next.id} 的答案被判为非答案"
+                                        "（过程叙述/脏文本）→ 不采纳，继续换")
+                            continue
                         g_ok = _gate.gate_final_answer(
                             ctx, tier, _next.answer,
                             getattr(_next, "reasoning", "") or "")
@@ -2842,6 +2904,36 @@ class Orchestrator(BaseAgent):
         "答案只写数值、表达式或选项字母，不要写任何解释或推理。"
     )
 
+    @staticmethod
+    def _set_final_response(ctx: TaskContext, ans: str, reason: str = "") -> bool:
+        """统一写入 `ctx.final_response`，**先过非答案闸门**（2026-09-18 补）。
+
+        背景：`ctx.final_response` 原有 **6 个赋值点**，其中三个**完全没有校验**：
+          · `direct_answer`（零票兜底直答）
+          · `_fresh.answer`（6.5 重做循环读审核反馈重生成的候选）
+          · `_next.answer`（6.5 换下一个候选）
+        ⇒ 6.5 重做循环在 **formatter 之后**运行，可以把一个"过程叙述"覆盖成最终答案。
+        实测 official112-020/032/025 的最终答案正是这样变成
+        `搜索已知结论：…` / `继续找规律，目前 type B：2, 8, 10。` / `步骤11：搜索已知结论`
+        （而 `pick_diag.picked` 记录的是另一个值 ⇒ 说明确实被后写覆盖）。
+
+        这与 09-17 已修的"三条切片路径绕过剥壳"是**同一族问题**：
+        同一语义有多个写入点，只修了一部分。⇒ 收敛为**单一入口**。
+
+        返回 True = 已写入；False = 被闸门拦下（调用方应换候选或继续重做）。
+        """
+        a = str(ans or "").strip()
+        if not a:
+            return False          # 空答案一律拒绝（不覆盖已有值）
+        try:
+            from .formatter import _looks_like_non_answer as _na
+            if _na(a):
+                return False
+        except Exception:  # noqa: BLE001  判据不可用则放行（不阻断主流程）
+            pass
+        ctx.final_response = a
+        return True
+
     def _collect_diag(self, ctx: TaskContext) -> dict:
         """逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）。
 
@@ -3005,6 +3097,16 @@ class Orchestrator(BaseAgent):
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
                               and t.get("step") == "calc_fallback"][:20],
+            # ★ 2026-09-18（可观测性）：**文本通道工具调用** —— 模型在正文/推理里
+            #   手写 tool_call / function= / parameter= 这类**文本标记**，而平台未填
+            #   原生 `tool_calls` ⇒ 调用**不执行、不回填**，答案退化为散文
+            #   （实测 official112-025 的 5/5、032 的 4/4 候选）。
+            #   该现象此前在 diag 中**完全不可见**（本键为新增）。
+            "toolcall_text_detected": [
+                str(t.get("content", ""))[:160]
+                for t in (getattr(ctx, "trace", None) or [])
+                if isinstance(t, dict)
+                and t.get("step") == "toolcall_text_detected"][:20],
             # ⑦''' calc 强制打回审计（2026-09-09 P1-1：心算打回是否真触发——
             # solver 主链定向重问 / 子目标 L0C 重解 / 二次裸算标注，全部可观测）
             "calc_rewrite": [str(t.get("content", ""))[:120]
