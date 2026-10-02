@@ -1,6 +1,20 @@
-# tools/lean_local —— Lean 系工具归档（去 Lean 化，2026-09-06）
+# tools/lean_local —— Lean 形式化集成层
 
-## 背景
+> ## ⚠ 2026-09-20 更正（本节优先于下方"背景"）
+>
+> 下方"背景"称 2026-09-06 起**平台链路彻底去 Lean、本包仅作归档** —— 该结论
+> **与代码事实相反**，请勿据此判断接线状态：
+>
+> - `agent/orchestrator.py` 每次评测都会构造并调用 `LeanGate` 与 `LeanPreVerifier`
+>   （2.6 前置形式化 / 3.6 候选闸门 / 6.5 最终闸门），仅当 `_lean_active()` 为假才回落 AuditGate；
+> - `agent/verifier.py` 经本包的 `lean_search` 做 Mathlib 定理检索
+>   （实测已产出 `results/leansearch_calls.jsonl`，7 次调用走官方 API 后端）；
+> - `deploy/_manifest.tsv` 中有 26 行在打包本目录。
+>
+> 即 AuditGate 与 Lean 通道是**并存的双通道**，而非"用 AuditGate 顶替 Lean"。
+> 只有 `lean_refiner` / `lean_translator`（LEAP Stage2/3）目前确无生产调用点。
+
+## 背景（2026-09-06 的历史记录；接线状态以顶部更正为准）
 
 平台无 Lean 可执行文件（历史归因实证）。2026-09-06 起，平台检测链彻底去 Lean：
 

@@ -90,6 +90,27 @@ class AuditGate(BaseAgent):
             return {"kept": kept, "feedbacks": fb}
         if stage == "understanding":
             return self.confirm_understanding(ctx)
+        # ★ 2026-09-23 新增：**非证明题早退**。
+        #   依据（0923 环节效能审计实测）：本闸门 37/46 题触发、235 条 verdict
+        #   **全 unknown**（本文件 255-268 行已自陈是"结构性无输出"——
+        #   Level2 rubric 只对证明题运行，Level0 确定性检查对解答题极少判 fail），
+        #   召回 3%、误杀 0% ⇒ **纯空转**，却仍耗 0.37h 并向 diag 注入 234 条噪音。
+        #   早退同时达成"省时"与"去噪"两件事，且**不改变任何判定结果**（原本也全是 unknown）。
+        if stage == "final" and getattr(self.config, "audit_gate_skip_non_proof", True):
+            _qt = str(getattr(ctx, "question_type", "") or "")
+            _dom = str(getattr(ctx, "domain", "") or "")
+            if not ((_qt == "证明题") or ("证明" in _dom)):
+                try:
+                    self._record_ctx(ctx, {
+                        "step": "final_gate", "skipped": "non_proof_early_exit",
+                        "verdict": "unknown", "applicable": False,
+                        "note": "解答题：Level2 rubric 不适用、Level0 确定性检查"
+                                "极少判 fail ⇒ 本闸门对该题型结构性无输出，早退"})
+                except Exception:  # noqa: BLE001
+                    pass
+                self.record(ctx, "audit_gate",
+                            "非证明题早退（结构性无输出，原为全 unknown 空转）")
+                return {"ok": True, "skipped": "non_proof"}
         ok = self.gate_final_answer(
             ctx, getattr(ctx, "tier", "standard") or "standard",
             getattr(ctx, "final_response", "") or "")
@@ -121,7 +142,9 @@ class AuditGate(BaseAgent):
             raw = self.llm(ctx, prefill_messages(
                 [{"role": "system", "content": sys_p},
                  {"role": "user", "content": ctx.problem[:1500]}], '{"'),
-                           0.0, 4096)
+                           # ★ 2026-10-02：4096→8192（DeepSeek 适配方案 A，统一上限）。
+                           #   本处输出为小 JSON，抬上限只增安全余量、不改行为。
+                           0.0, 8192)
             if not raw:
                 return {"understood": True, "degraded": "empty_llm"}
             raw = stitch('{"', raw)
@@ -294,11 +317,24 @@ class AuditGate(BaseAgent):
             self.record(ctx, "audit_gate",
                         "剔除 %d 个空/空白答案候选（不参与投票）" % len(_empty))
             if not kept:
-                # 退化情形：所有候选都是空的。此时**恢复原列表**，把"无可用答案"
-                # 交给下游既有兜底路径（直答/续写）处理，避免在此处制造空池。
-                kept = list(candidates)
-                self.record(ctx, "audit_gate",
-                            "所有候选答案均为空 → 恢复原列表交由下游兜底处理")
+                # 2026-09-20 修复：原实现无条件 `kept = list(candidates)`，
+                # 会把**刚刚被 Level0 硬否决的候选**连同空答案一起复活。
+                # kept 为空有两种成因：① 所有候选都是空的；② 其余候选全被否决
+                # 且存在空答案（走上方 `n_fail < len(candidates)` 分支）。
+                # 现在只恢复空答案候选，绝不把被程序否决的候选放回；
+                # 只有在"一个空答案候选都没有"的退化情形才回退原列表，
+                # 避免在此处制造空池。
+                _empties = [c for c in candidates if id(c) in _empty]
+                if _empties:
+                    kept = _empties
+                    self.record(ctx, "audit_gate",
+                                "保留候选为空 → 仅恢复 %d 个空答案候选，"
+                                "被程序否决的候选不放回，交由下游兜底处理"
+                                % len(_empties))
+                else:
+                    kept = list(candidates)
+                    self.record(ctx, "audit_gate",
+                                "所有候选答案均为空 → 恢复原列表交由下游兜底处理")
         return kept, feedbacks
 
     # ------------------------------------------------------------------

@@ -61,6 +61,111 @@ REJECT_REPLAN_THRESHOLD = 0.40
 REJECT_REPLAN_COUNT = 5
 
 # ============================================================
+# issues 标签归一化（2026-09-30，用户 #6「蓝图设计有没有问题」）
+# ============================================================
+# 背景：提示词原先**没有给出 issues 的固定标签表**（只写"category:具体描述"），
+# 于是 LLM 自造标签，同一含义出现多种写法。official112_local_0910 实测：
+#   circular_risk=190 / circularity=190      ← 同一含义被算成两类
+#   invalid_dependencies=38 / invalid_dependency=30
+#   feasible_path=25 / missing_decomposition=19 /
+#   missing_dependency=17 / missing_dependencies=16
+# ⇒ 「蓝图哪一维度最常出问题」的归因统计被系统性打散。
+# 两道修：① prompts/dag_review.py 固化合法标签表（治源头）；
+#         ② 此处兜底归一化（治存量 + 防模型偶发不听）。
+# 只做**同义词映射**，不猜语义：认不出的标签归 `other`，绝不硬塞。
+ISSUE_CANON = {
+    # 循环
+    "circularity": "circular_risk",
+    "circular": "circular_risk",
+    "circular_risk": "circular_risk",
+    # 依赖
+    "invalid_dependency": "invalid_dependencies",
+    "invalid_dependencies": "invalid_dependencies",
+    "missing_dependency": "missing_dependency",
+    "missing_dependencies": "missing_dependency",
+    "dependency": "invalid_dependencies",
+    # 简单化
+    "decomposition": "no_simplification",
+    "no_simplification": "no_simplification",
+    "missing_decomposition": "no_simplification",
+    "under_specified": "under_specified",
+    "underspecified": "under_specified",
+    # ⚠ 以下 7 种 `simplif*` 变体来自**存量数据实测**（official112_local_0910
+    #   共 55 条全落 other）：模型把"未真正简化"写成了十几种形式。
+    #   语义明确 = 与 no_simplification 同义，故合并（不是猜）。
+    "simplification": "no_simplification",
+    "simplification_failed": "no_simplification",
+    "simplification_failure": "no_simplification",
+    "simplification_fail": "no_simplification",
+    "simplifies": "no_simplification",
+    "simplifies_fail": "no_simplification",
+    "simplifies_failure": "no_simplification",
+    "simplifies_parent": "no_simplification",
+    "simplifies_child": "no_simplification",
+    # 可行路径
+    "feasibility": "feasible_path",
+    "feasible_path": "feasible_path",
+    "feasible_route": "feasible_path",
+    "no_feasible_path": "feasible_path",
+    "no_plausible_route": "feasible_path",
+    "no_valid_path": "feasible_path",
+    "unfeasible": "feasible_path",
+    "infeasible": "feasible_path",
+    # 依赖（dependency_error / dependency_issue / dependency_circular 实测各 3-5 条）
+    "dependency_error": "invalid_dependencies",
+    "dependency_issue": "invalid_dependencies",
+    "dependency_circular": "circular_risk",
+    # 数学合理性
+    "soundness": "math_soundness",
+    "math_soundness": "math_soundness",
+    "math_soundness_issue": "math_soundness",
+    "math_unsoundness": "math_soundness",
+    # 分解依据 / 缺引理支撑
+    "missing_rationale": "missing_rationale",
+    "rationale": "missing_rationale",
+    # missing_justification 实测 12 条，描述均为"无前置引理支撑就直接断言"
+    # ⇒ 语义 = 缺依据，归 missing_rationale（不是 missing_lemma 那种检索问题）
+    "missing_justification": "missing_rationale",
+    "missing_lemma": "missing_rationale",
+    # 衔接
+    "coherence": "coherence",
+    "cohesion": "coherence",
+    # ★ Lean 逻辑层检测（sub_goal_solver._lean_dag_logic_check 升级时写入，
+    #   格式 `lean_logic_error:首条诊断`）。它是**由 Lean 编译失败**产生的硬证据，
+    #   与 LLM 主观评审是两类信号 ⇒ 单列一类便于归因（回答用户 #6
+    #   「用 Lean 检测有没有 sorry 的地方」到底抓到了什么）。
+    "lean_logic_error": "lean_logic_error",
+}
+
+# 归因报告用的中文含义（诊断报告「蓝图哪一维度出问题」表直接取用）
+ISSUE_CN = {
+    "under_specified": "粒度过粗/目标不可验证",
+    "no_simplification": "未真正简化父目标",
+    "circular_risk": "与祖辈重复（循环分解）",
+    "feasible_path": "找不到可信解题路径",
+    "invalid_dependencies": "依赖与图结构不匹配",
+    "missing_dependency": "缺失关键前置",
+    "math_soundness": "断言与题目条件矛盾",
+    "missing_rationale": "缺分解依据",
+    "coherence": "与父节点衔接不上",
+    "lean_logic_error": "Lean 编译不过（命题形式不成立）",
+    "other": "其他/未归类",
+}
+
+
+def normalize_issue_tag(issue: str) -> str:
+    """把一条 issue 字符串的标签归一化。
+
+    输入形如 ``"circularity:与祖辈 X 相似"`` → 返回 ``"circular_risk"``。
+    无冒号 / 空标签 → ``"other"``。**绝不抛异常**（诊断路径不能因脏数据崩）。
+    """
+    s = str(issue or "")
+    tag = s.split(":", 1)[0].strip().lower() if ":" in s else ""
+    if not tag:
+        return "other"
+    return ISSUE_CANON.get(tag, "other")
+
+# ============================================================
 # 数据结构
 # ============================================================
 
@@ -140,6 +245,53 @@ class DagReviewReport:
                 hints.append(f"[{r.node_id}] {r.reconstruction_hint}")
         return "\n".join(hints)
 
+    def issue_histogram(self) -> dict:
+        """归一化后的 issues 标签直方图 → ``{规范标签: 条数}``。
+
+        回答用户 #6「蓝图的设计有没有问题」——**问题出在哪一维度**。
+        标签经 `normalize_issue_tag` 归一，故 `circularity` 与 `circular_risk`
+        会被合并计数（历史实测同义异写导致统计被打散，详见模块顶部注释）。
+        """
+        c: dict = {}
+        for r in self.results.values():
+            if not r.is_reject:
+                continue
+            for it in (r.issues or []):
+                k = normalize_issue_tag(it)
+                c[k] = c.get(k, 0) + 1
+        return c
+
+    def issue_fix_rate(self, prev: "Optional[DagReviewReport]" = None) -> dict:
+        """**每条 issue 在重写后有没有被修掉**（对应"设计有没有问题"的下半问）。
+
+        做法：拿本轮 report.results 与 `prev`（重写前那轮的 report.results）
+        比对 —— 若节点 nid 上一轮 reject 且本轮 accept ⇒ 该 issue 已修复。
+        返回 ``{规范标签: {"seen": n, "fixed": m, "fixed_ratio": p}}``。
+
+        prev 为空 / None ⇒ 返回空 dict（首轮无对照，不应伪造修复率）。
+        ⚠ 只统计**两轮都出现过的节点 id**：重写后 id 变了（整树重生成很常见）
+           则本轮 accept 无法归因给旧 issue，**不计入分母也不计入分子**，
+           避免"节点没了就当修好了"这种自欺。
+        """
+        if not prev or not getattr(prev, "results", None):
+            return {}
+        out: dict = {}
+        for nid, old in prev.results.items():
+            if not old.is_reject:
+                continue
+            new = self.results.get(nid)
+            if new is None:
+                continue          # 节点已消失/换 id：不作为修复证据
+            tags = {normalize_issue_tag(it) for it in (old.issues or [])} or {"other"}
+            for t in tags:
+                rec = out.setdefault(t, {"seen": 0, "fixed": 0, "fixed_ratio": 0.0})
+                rec["seen"] += 1
+                if not new.is_reject:
+                    rec["fixed"] += 1
+        for rec in out.values():
+            rec["fixed_ratio"] = round(rec["fixed"] / rec["seen"], 3) if rec["seen"] else 0.0
+        return out
+
     def to_dict(self) -> dict:
         return {
             "results": {nid: r.to_dict() for nid, r in self.results.items()},
@@ -147,6 +299,7 @@ class DagReviewReport:
             "reject_ratio": self.reject_ratio,
             "degraded": self.degraded,
             "should_replan": self.should_replan(),
+            "issue_histogram": self.issue_histogram(),
         }
 
 

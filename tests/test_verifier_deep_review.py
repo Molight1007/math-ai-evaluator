@@ -481,7 +481,7 @@ class ConfigWiringTest(unittest.TestCase):
     def test_agent_config_fields(self):
         from user_agent import AgentConfig
         c = AgentConfig()
-        self.assertIs(c.verifier_deep_final_enabled, False)   # 默认关
+        self.assertIs(c.verifier_deep_final_enabled, True)   # 2026-10-01 研究期默认开
         self.assertEqual(c.verifier_deep_final_min_remaining, 150.0)
         self.assertEqual(c.verifier_deep_review_max_tokens, 16384)
 

@@ -107,15 +107,17 @@ def test_generation_steps_all_gated_by_verify_only():
             assert "gen_time_up" in window, \
                 "solver.run 应有生成侧软截止（gen_time_up）子分支（2026-09-06 超时修复）"
             continue
-        # sub_goal_solver 有两处：2.7 子目标主路径在 verify_only 判定**之前**
-        # （属预期不门禁，因为它消耗的时间会体现在剩余时间上，触发 3.1 判定）；
-        # 3.5 补充候选在判定之后，必须门禁。锚定 3.5 的那次调用。
+        # sub_goal_solver 原有两处调用：2.7 子目标主路径与 3.5 补充候选。
+        # 2.7 主路径（@2.7_subgoal_main）与 deep 档 P&E 主路径（@3_solve）
+        # 均在 verify_only 判定**之前**，属预期不门禁 —— 它们消耗的时间会
+        # 体现在剩余时间上，进而触发 3.1 判定。
+        # ★ 2026-09-29：**3.5_subgoal_sup 阶段整体删除**（用户决策，与 2.7 主路径
+        #   语义重叠，见 CHANGES_2026-09-29.md）⇒ 「3.5 必须门禁」的断言失效，
+        #   改为锁定「恰好 2 处、均为预期主路径」的形态。
         if needle == "self.sub_goal_solver.run(ctx)":
-            anchor = src.find("3.5) 子目标分解补充候选")
-            assert anchor >= 0, "找不到 3.5 注释锚点"
-            tail = src[anchor:anchor + 900]
-            assert "verify_only" in tail, \
-                "3.5 子目标补充候选没有 verify_only 门禁 —— L1 漏改"
+            assert src.count("self.sub_goal_solver.run(ctx)") == 2, \
+                ("3.5 已删除，sub_goal_solver 应只剩 2.7 主路径 + 3_solve(P&E) "
+                 "共 2 处调用（若新增请同步本门禁测试）")
             continue
         assert "verify_only" in window, (
             f"{needle} 的调用窗口内没有 verify_only 门禁 —— "

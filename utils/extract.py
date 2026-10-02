@@ -194,7 +194,7 @@ _CALC_STRAG_RE = re.compile(r"</?calc\b[^>]*>?", re.IGNORECASE)
 #     `看起来 d = 10 是候选答案。让我验证是否 d = 10 足够。` ← 推测语气
 #   根因：模型有时**不用标准 `tool_calls` JSON**，而是把工具调用写成
 #   **XML 风格的文本**（`<parameter=query>…</parameter>`）。而
-#   `agent/base.py::llm_with_calc` **只处理 `resp["tool_calls"]`**（标准格式）
+#   `agent/base.py::llm_with_tools` **只处理 `resp["tool_calls"]`**（标准格式）
 #   ⇒ 这段 XML 既没被执行、也没被剥除，**原样留在响应文本里**，
 #   随后被答案抽取当成"答案"。003 的 `<parameter=que` 同源。
 #   修法：与 `<calc>` 同样在答案抽取前剥除（完整块 + 裸标签残留）。
@@ -505,8 +505,13 @@ def is_valid_final_answer(text: str) -> bool:
     if not text or not text.strip():
         return False
     s = text.strip()
-    if len(s) < 2:
-        return False
+    # 2026-09-20 修复：删除 `if len(s) < 2: return False` 闸门。
+    # 单字符是**合法且完整**的答案（选项字母 A/B/C/D、判断题值、个位数），
+    # 这与 formatter.py 已修口径一致（见该文件 run() 中"单字符是合法且完整
+    # 的答案，只在空或纯空白时才回退"）。原判据使 is_valid_final_answer("A")
+    # 返回 False，触发 solver.py 的 `answer = raw[-500:]` 兜底，把正确选项
+    # 换成推理尾部散文 —— 客观题必然判错。
+    # 真正的非答案形态（纯空白、纯括号、拒绝语）由下方 _REFUSAL_PATTERNS 负责。
     for pat in _REFUSAL_PATTERNS:
         if pat.search(s):
             return False

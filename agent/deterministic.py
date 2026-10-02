@@ -1,4 +1,14 @@
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+
 """
 确定性验证通道（DeterministicChecker）
 =====================================
@@ -41,9 +51,9 @@ _SUBSTITUTION_TOL = 1e-4
 
 # 检查入口超时护栏（2026-09-13）：病态 SymPy 表达式会让 sp.simplify 卡死，实测单次
 # 460s/116s；而单题硬时限仅 1200s，且 3.6 / 4_verify / 6.5 三处各跑一次 check_answer。
-# 写法对齐 calc_tool._subst_with_timeout（join(_SYM_TIMEOUT_SEC)）与
+# 写法对齐 utils/math_eval._subst_with_timeout（join(_SYM_TIMEOUT_SEC)）与
 # symbolic_solve.solve_with_tool（join(_SOLVE_TIMEOUT_SEC)）：daemon 线程 + join 超时。
-_DET_TIMEOUT_SEC = float(os.environ.get("DETERMINISTIC_TIMEOUT_SEC", "5.0") or "5.0")
+_DET_TIMEOUT_SEC = _sw_num("deterministic_timeout_sec")
 _DET_HUNG_MAX = 8      # 累计超时上限，超过后整体降级（防无界建线程）
 _DET_HUNG = 0          # 累计超时次数；成功一次衰减 1，防跨题永久降级
 
@@ -494,12 +504,12 @@ def verify_answer_exact(expr: str, answer: str, mapping: dict | None = None) -> 
         - pass/fail 只在**双方都精确**时给出；否则一律 unknown。
     """
     try:
-        from .calc_tool import safe_eval_subst, to_exact_number
+        from utils.math_eval import safe_eval_subst, to_exact_number
     except ImportError:  # 提交包（submit/）路径兜底
         try:
-            from calc_tool import safe_eval_subst, to_exact_number
+            from math_eval import safe_eval_subst, to_exact_number
         except ImportError:
-            return {"verdict": "unknown", "evidence": "calc_tool 不可用",
+            return {"verdict": "unknown", "evidence": "math_eval 不可用",
                     "value": None, "method": "exact_subst"}
     if not expr or not str(expr).strip():
         return {"verdict": "unknown", "evidence": "表达式为空",

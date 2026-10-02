@@ -3,7 +3,7 @@
 纯函数、零 LLM、零副作用，便于单测与复用：
 - parse_symbolic_payload：从模型输出里稳健地取出结构化建模结果
 - normalize_payload：规整成 (变量映射, 表达式)
-- evaluate_payload：交 calc_tool 精确代入求值 → (精确值, 说明)
+- evaluate_payload：交 utils/math_eval 精确代入求值 → (精确值, 说明)
 
 设计原则：解析失败一律返回 None / (None, 原因)，由调用方降级放行，
 **绝不因解析问题影响主链**。
@@ -138,12 +138,12 @@ def evaluate_payload(payload) -> tuple[str | None, str]:
     if mapping and not _uses_any(expr, mapping):
         return None, f"表达式 {expr!r} 未使用所声明的变量，疑似已自行代入，弃权"
     try:
-        from .calc_tool import safe_eval_subst, to_exact_number
+        from utils.math_eval import safe_eval_subst, to_exact_number
     except ImportError:  # 提交包（submit/）路径兜底
         try:
-            from calc_tool import safe_eval_subst, to_exact_number
+            from math_eval import safe_eval_subst, to_exact_number
         except ImportError:
-            return None, "calc_tool 不可用"
+            return None, "math_eval 不可用"
     got = safe_eval_subst(expr, mapping)
     if got.startswith(("WARN:", "ERROR:")):
         return None, f"代入求值未成功: {got[:80]}"

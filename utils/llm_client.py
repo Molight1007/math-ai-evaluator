@@ -1,4 +1,13 @@
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 """
 轻量级 OpenAI 兼容 LLM 客户端
 ==============================
@@ -29,7 +38,7 @@ import requests
 
 logger = logging.getLogger("MathPilot.LLMClient")
 
-_DEFAULT_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
+_DEFAULT_TIMEOUT_llm_client = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
 # 2026-09-13 晚（4 题实测复盘）：超时后**重试**才是真正的成本黑洞。
 # 实测 4 题里 `failed after 2 attempts` 出现 5 次、5/5 全败，而单次故障 =
 # 180s × 2 + 退避 ≈ **365s** —— 010/016 两题各被两轮 365s 烧光整题预算，
@@ -39,7 +48,7 @@ _DEFAULT_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
 #   ② 超时类故障**默认不重试**（`LLM_RETRY_ON_TIMEOUT=1` 可恢复旧行为）——
 #      "拿同样的请求再赌一次"，实测 5/5 全败，纯亏 timeout 秒。
 # 单次故障成本：365s → 120s。
-_RETRY_ON_TIMEOUT = os.getenv("LLM_RETRY_ON_TIMEOUT", "0") == "1"
+_RETRY_ON_TIMEOUT = _sw_bool("llm_retry_on_timeout")
 _CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
 _MAX_RETRIES = 1      # 2026-09-03：2→1。持续网络问题时 3 次重试纯浪费；
                        # 瞬时抖动 1 次重试足够，配合调用方 is_time_critical 兜底
@@ -70,7 +79,12 @@ _RATE_LIMIT_MARKERS = ("-20048", "429", "too many requests", "请求过于频繁
 # 由调用方（agent/base.py）合并进截断日志，支撑截断率 <5% 健康阈值。
 # 修改影响：chat() 返回值不变，纯增量。
 # ============================================================
-_TRUNCATION_STATS = {"calls": 0, "truncated": 0}
+_TRUNCATION_STATS = {"calls": 0, "truncated": 0,
+                     # ★ 2026-09-21 新增：截断的**分解**口径
+                     #   by_max_tokens：哪一档上限在被撞（如 "32768": 4、"6144": 14）
+                     #   by_site：哪段代码在撞（调用栈反查，如 "Solver@base.py:757 <- solver.py:1437"）
+                     # 理由：本项目同时存在多个 token 上限（65536 / 6144 / 640 / 硬编码 32768），只报"截断了 N 次"无法决策该调哪个参数。
+                     "by_max_tokens": {}, "by_site": {}}
 _TRUNCATION_STATS_LOCK = threading.Lock()
 _TRUNCATION_LISTENER = None
 
@@ -89,19 +103,100 @@ def get_truncation_stats() -> dict:
     with _TRUNCATION_STATS_LOCK:
         return dict(_TRUNCATION_STATS)
 
+def truncation_breakdown() -> dict:
+    """返回截断的**分解**口径（2026-09-21 新增）。
+
+    {
+      "calls": 总响应数, "truncated": 截断数,
+      "by_max_tokens": {"32768": 4, "6144": 14, ...},   # 哪一档上限在被撞
+      "by_site": {"Solver@base.py:757 <- solver.py:1437": 4, ...},  # 谁在撞
+    }
+
+    为什么要这两个维度：只知道"截断了 40 次"
+    无法决策该调哪个参数 ——
+    `max_answer_tokens`(65536) / `verifier_deep_review_max_tokens`(6144) /
+    硬编码的 32768 是**不同**的上限，
+    撞顶率与改法完全不同。
+    """
+    with _TRUNCATION_STATS_LOCK:
+        out = dict(_TRUNCATION_STATS)
+    out["by_max_tokens"] = dict(out.get("by_max_tokens") or {})
+    out["by_site"] = dict(out.get("by_site") or {})
+    return out
+
+
+def _capture_truncation_site(max_frames: int = 2) -> str:
+    """取"真正发起这次 LLM 调用"的位置。
+
+    形如 ``Solver@base.py:757 <- solver.py:1437``：
+      · 跳过本文件自身的帧（chat / _mark_response 等）
+        ⇒ 首个外部帧就是 `BaseAgent.llm` 包装层
+        （顺便从它的 `self` 里取到 agent 名），
+        再上一帧就是最终调用点。
+      · 用 `sys._getframe` 逐级回退（比 inspect.stack 快得多，
+        后者会读源码）。
+
+    全程 try/except：取不到就返回空串，
+    绝不因埋点本身影响主流程。
+    """
+    try:
+        import sys as _sys
+        _self_file = os.path.abspath(__file__)
+        f = _sys._getframe(1)
+        parts: list = []
+        agent = ""
+        hops = 0
+        while f is not None and len(parts) < max_frames and hops < 60:
+            hops += 1
+            fn = os.path.abspath(f.f_code.co_filename)
+            if fn != _self_file:
+                if not agent:
+                    try:
+                        _s = f.f_locals.get("self")
+                        agent = str(getattr(_s, "name", "") or "")
+                    except Exception:  # noqa: BLE001
+                        agent = ""
+                parts.append("%s:%d" % (os.path.basename(fn), f.f_lineno))
+            f = f.f_back
+        if not parts:
+            return ""
+        head = parts[0]
+        tail = (" <- " + parts[1]) if len(parts) > 1 else ""
+        return (("%s@" % agent) if agent else "") + head + tail
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+
+
 
 def _mark_response(model: str, finish_reason: Optional[str],
                    max_tokens: Optional[int]) -> None:
-    """每次 LLM 响应结束计数一次；finish_reason=='length' 时计截断并通知 listener。"""
+    """每次 LLM 响应结束计数一次；finish_reason=='length' 时计截断并通知 listener。
+
+    ★ 2026-09-21：截断时额外记录 **by_max_tokens**
+      （哪一档上限在撞）与 **by_site**（哪段代码在撞）。
+      理由：只报"截断了 N 次"无法决策该调哪个参数。
+    """
     with _TRUNCATION_STATS_LOCK:
         _TRUNCATION_STATS["calls"] += 1
     if finish_reason != "length":
         return
+    site = _capture_truncation_site()
     with _TRUNCATION_STATS_LOCK:
         _TRUNCATION_STATS["truncated"] += 1
+        try:
+            _k = str(int(max_tokens)) if max_tokens is not None else "?"
+        except (TypeError, ValueError):
+            _k = "?"
+        _bmt = _TRUNCATION_STATS.setdefault("by_max_tokens", {})
+        _bmt[_k] = _bmt.get(_k, 0) + 1
+        _bs = _TRUNCATION_STATS.setdefault("by_site", {})
+        _bs[site or "?"] = _bs.get(site or "?", 0) + 1
     logger.warning(
-        "LLM response truncated (finish_reason=length, model=%s, max_tokens=%s)",
-        model, max_tokens,
+        "LLM response truncated (finish_reason=length, model=%s, max_tokens=%s, "
+        "site=%s)",
+        model, max_tokens, site or "?",
     )
     fn = _TRUNCATION_LISTENER
     if fn is not None:
@@ -124,7 +219,7 @@ class LLMClient:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: int = _DEFAULT_TIMEOUT,
+        timeout: int = _DEFAULT_TIMEOUT_llm_client,
         max_retries: int = _MAX_RETRIES,
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "not-needed")
@@ -140,7 +235,10 @@ class LLMClient:
         self,
         messages: list[dict],
         temperature: float = 0.3,
-        max_tokens: int = 4096,
+        # ★ 2026-10-02：4096→8192（DeepSeek 适配方案 A，统一上限）。此默认值仅在调用方
+        #   完全省略 max_tokens 时生效（如 agent/base.py:824 的 TypeError 降级分支
+        #   `client.chat(messages)`）；正常路径都显式传值，故只是抬高兜底、不改行为。
+        max_tokens: int = 8192,
         stream: bool = False,
         tools: Optional[list] = None,
     ):
@@ -204,11 +302,21 @@ class LLMClient:
                     try:
                         _msg = (data.get("choices") or [{}])[0].get("message") or {}
                         if "tool_calls" in _msg and _msg["tool_calls"]:
-                            return {
+                            # ★★ 2026-10-02 DeepSeek 适配（reasoning_content 必须回传）：
+                            #   DeepSeek thinking 模式**要求把上一轮 assistant 消息里的
+                            #   `reasoning_content` 原样回传**；此前这里重建 assistant
+                            #   消息时**把它丢了** ⇒ 工具循环第二轮起被服务端拒绝：
+                            #   `HTTP 400 The reasoning_content in the thinking mode
+                            #   must be passed back to the API`。补回（存在才带，
+                            #   非 reasoning 模型零影响）。
+                            _assistant = {
                                 "role": "assistant",
                                 "content": _msg.get("content") or "",
                                 "tool_calls": _msg["tool_calls"],
                             }
+                            if _msg.get("reasoning_content"):
+                                _assistant["reasoning_content"] = _msg["reasoning_content"]
+                            return _assistant
                     except Exception:  # noqa: BLE001
                         pass
                     content = _extract_content(data)
@@ -367,11 +475,3 @@ def _extract_content(data: dict) -> str:
 
 
 # ── 模块自检 ──
-def _self_test() -> str:
-    """简单的连通性测试，供首次使用时验证配置"""
-    client = LLMClient()
-    return client.chat(
-        messages=[{"role": "user", "content": "Say 'ok' in JSON: {\"status\":\"ok\"}"}],
-        temperature=0.0,
-        max_tokens=32,
-    )

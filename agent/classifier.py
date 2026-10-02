@@ -118,6 +118,13 @@ _KNOWN_DOMAINS: frozenset = frozenset({
     "数学分析", "线性代数", "几何", "抽象代数", "复分析",
     "实分析", "偏微分方程", "拓扑学", "微分几何",
     "概率论", "统计学", "概率论与数理统计",
+    # ★ 2026-09-21 修复（云端 n=38 复核）：补齐 `代数`。
+    #   本集合的契约是「与 prompts/policy.py 中 DOMAIN_HINTS 键保持一致」，
+    #   而 DOMAIN_HINTS 有 `代数` 键、本集合**缺**它 ⇒ CLASSIFY_PROMPT 把
+    #   `代数` 列为可选项，模型答对也无法归一，只能落到「LLM 新领域」分支
+    #   被原样采纳。实测 official112-002/006/007/009/010/011/012/016/017
+    #   共 9/38 题的 ctx.domain 因此失效。
+    "代数",
     "数论", "组合数学", "图论", "数值分析", "运筹学",
     "不定积分", "定积分", "定积分的应用",
     "多元函数积分学", "常微分方程", "无穷级数",
@@ -153,6 +160,54 @@ def _keyword_classify(problem: str) -> tuple[str, int]:
     return best_domain, best_score
 
 
+# LLM 分类回复的解析上限：正规领域名最长「向量代数与空间解析几何」= 12 字
+_DOMAIN_LABEL = "本题类型："
+_DOMAIN_MAX_LEN = 12
+# 出现即说明这一行不是纯领域名（模型把推理/盒子/多行内容写进来了）
+_DOMAIN_BAD_CHARS = "{}[]$\\"
+
+
+def _parse_domain_reply(text: str) -> str:
+    """从 LLM 分类回复中解析出**纯领域名**。
+
+    ★★ 2026-09-21 修复（云端 n=38 逐题复核，实测 9/38 题污染）：
+
+    `stitch()` 的契约是**保留** prefill 种子前缀（供调用方自行解析，
+    见 ``utils/prefill.py`` 的 stitch 文档），而本模块此前直接
+    ``resp.strip().rstrip("。.，,、")`` ⇒ 领域名被污染成「本题类型：代数」。
+
+    后果分两种：
+      · 当「去前缀后的域名」恰好是某个已知领域的子串时（如 `数论`），
+        模糊分支会**侥幸修好** ⇒ 缺陷长期不可见；
+      · 否则落入「LLM 新领域」分支被**原样采纳** —— 实测得到
+        `本题类型：代数`（8 题）与
+        `本题类型：函数方程（…）` + 换行 + 盒子内容（1 题）。
+    此时 ``prompts.policy.DOMAIN_HINTS`` 查不到键、``solver`` 的历史教训
+    匹配也落空 ⇒ 领域策略整条失效。
+
+    同族的正确写法见 ``agent/solver.py`` 中的 stitch 用法：stitch 之后用正则容错，
+    而不是假定返回值已经干净。
+    """
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    # 前缀可能紧跟开头（continuation / echo），也可能被前导包装文本包裹
+    _i = t.find(_DOMAIN_LABEL)
+    if _i >= 0:
+        t = t[_i + len(_DOMAIN_LABEL):]
+    t = t.strip()
+    if not t:
+        return ""
+    # 只认首行：模型若回「领域 + 解释」，解释部分必须丢弃
+    t = t.splitlines()[0].strip()
+    t = t.strip("。.，,、：:").strip()
+    if not t or len(t) > _DOMAIN_MAX_LEN:
+        return ""
+    if any(ch in t for ch in _DOMAIN_BAD_CHARS):
+        return ""
+    return t
+
+
 class ClassifierAgent(BaseAgent):
     name = "Classifier"
 
@@ -184,35 +239,52 @@ class ClassifierAgent(BaseAgent):
 
         # 第二优先级：LLM 分类（仅在关键词得分不足时回退）
         # v2.4.1：prefill「本题类型：」抑制 CoT——分类只需输出域名，秒级返回
+        # 2026-10-02 DeepSeek 适配：原 128 ⇒ 8192。原值基于「输出很短（只需域名）+
+        # prefill 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断
+        # （reasoning 先吃满预算、正文为空）。
         resp = self.llm(ctx, prefill_messages([
             {"role": "system", "content": CLASSIFY_PROMPT},
             {"role": "user", "content": ctx.problem},
-        ], "本题类型："), 0.01, 128)
+        ], "本题类型："), 0.01, 8192)
         if resp:
             resp = stitch("本题类型：", resp)
-            domain = resp.strip().rstrip("。.，,、")
+            # ★ 2026-09-21 修复：先剥 prefill 前缀、只取首行再做校验，
+            #   绝不再把「本题类型：X」整串当领域名（见 _parse_domain_reply）。
+            # ★ 同日第二处修复：解析结果**不得回写 `domain`** —— 该变量保存的是
+            #   关键词分类结果，下方「关键词低分兜底」分支要复用它；旧实现把它
+            #   覆盖成 LLM 解析残料 ⇒ 走到该分支时会把残料当领域名写进 ctx.domain。
+            _llm_domain = _parse_domain_reply(resp)
             # 精确匹配
-            if domain in _KNOWN_DOMAINS:
-                ctx.domain = domain
-                self.record(ctx, "classify", f"题型分类结果(LLM): {domain}", domain=domain)
-                logger.info("Domain classified (LLM): %s", domain)
+            if _llm_domain and _llm_domain in _KNOWN_DOMAINS:
+                ctx.domain = _llm_domain
+                self.record(ctx, "classify",
+                            f"题型分类结果(LLM): {_llm_domain}", domain=_llm_domain)
+                logger.info("Domain classified (LLM): %s", _llm_domain)
                 return ctx
             # 模糊匹配
+            # ★ 必须要求 `_llm_domain` 非空：空串是**任意字符串**的子串，
+            #   否则 `_llm_domain in known` 恒真 ⇒ 会从 frozenset 里随机取一个
+            #   已知领域写进 ctx.domain（静默错分类，比"未知"更糟）。
             for known in _KNOWN_DOMAINS:
-                if known in domain or domain in known:
+                if _llm_domain and (known in _llm_domain or _llm_domain in known):
                     ctx.domain = known
                     self.record(ctx, "classify",
-                                f"题型分类结果(LLM模糊): {domain} → {known}", domain=known)
-                    logger.info("Domain classified (LLM fuzzy): %s -> %s", domain, known)
+                                f"题型分类结果(LLM模糊): {_llm_domain} → {known}",
+                                domain=known)
+                    logger.info("Domain classified (LLM fuzzy): %s -> %s",
+                                _llm_domain, known)
                     return ctx
             # 看起来像有效中文领域 → 采用
-            if len(domain) >= 3 and any('\u4e00' <= ch <= '\u9fff' for ch in domain):
-                ctx.domain = domain
+            if (_llm_domain and len(_llm_domain) >= 3
+                    and any('\u4e00' <= ch <= '\u9fff' for ch in _llm_domain)):
+                ctx.domain = _llm_domain
                 self.record(ctx, "classify",
-                            f"题型分类结果(LLM新领域): {domain}", domain=domain)
-                logger.info("Domain classified (LLM novel): %s", domain)
+                            f"题型分类结果(LLM新领域): {_llm_domain}",
+                            domain=_llm_domain)
+                logger.info("Domain classified (LLM novel): %s", _llm_domain)
                 return ctx
-            logger.debug("Unknown domain classification: %s (keyword score=%d)", domain, score)
+            logger.debug("Unknown domain classification: %s (keyword score=%d)",
+                         _llm_domain, score)
 
         # 关键词低分时，若 ≥1 仍采用（比"未知"好）
         if score >= 1:

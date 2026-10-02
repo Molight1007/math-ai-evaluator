@@ -10,14 +10,17 @@ DagReviewer（LEAP 5.3，#34）单元测试 —— 不依赖真实 LLM。
 - DagReviewReport.merge_from_hints：hint 聚合格式
 """
 import json
+import os
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 from unittest.mock import MagicMock
 
 from agent.base import TaskContext, Budget
 from agent.blueprint_planner import BlueprintDAG, BlueprintNode
 from agent.dag_reviewer import (
     DagReviewerAgent, DagReviewResult, DagReviewReport,
+    ISSUE_CANON, ISSUE_CN, normalize_issue_tag,
     _token_overlap, MIN_STATEMENT_CHARS, CIRCULARITY_TOKEN_OVERLAP,
     REJECT_REPLAN_THRESHOLD, REJECT_REPLAN_COUNT,
 )
@@ -342,3 +345,159 @@ class TestIntegrationWithBlueprint(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ======================================================================
+# issues 标签归一化（2026-09-30，截图 #6「蓝图的设计有没有问题」）
+# ----------------------------------------------------------------------
+# 背景（**存量数据实测**，official112_local_0910）：
+#   circular_risk=190 / circularity=190        ← 同一含义被算成两类
+#   invalid_dependencies=38 / invalid_dependency=30
+#   missing_dependency=17 / missing_dependencies=16
+#   simplification* 系列 7 种写法共 55 条全落 other
+# ⇒ 不做归一化，「蓝图哪一维度最常出问题」的统计会被系统性打散。
+# ======================================================================
+
+ISSUE_TAG_CASES = [
+    # 循环：同义异写必须合并
+    ("circularity:与祖辈 X 相似", "circular_risk"),
+    ("circular_risk:与祖辈 X 相似", "circular_risk"),
+    ("circular:xxx", "circular_risk"),
+    ("dependency_circular:自引用", "circular_risk"),
+    # 依赖：单复数必须合并
+    ("invalid_dependency:缺前置", "invalid_dependencies"),
+    ("invalid_dependencies:缺前置", "invalid_dependencies"),
+    ("dependency_error:xxx", "invalid_dependencies"),
+    ("missing_dependency:缺关键前置", "missing_dependency"),
+    ("missing_dependencies:缺关键前置", "missing_dependency"),
+    # 简单化：7 种 simplification* 变体 + decomposition
+    ("simplification:未简化", "no_simplification"),
+    ("simplification_failed:未简化", "no_simplification"),
+    ("simplification_failure:未简化", "no_simplification"),
+    ("simplification_fail:未简化", "no_simplification"),
+    ("simplifies:未简化", "no_simplification"),
+    ("simplifies_fail:未简化", "no_simplification"),
+    ("simplifies_failure:未简化", "no_simplification"),
+    ("simplifies_parent:未简化", "no_simplification"),
+    ("simplifies_child:未简化", "no_simplification"),
+    ("missing_decomposition:未拆", "no_simplification"),
+    ("decomposition:未拆", "no_simplification"),
+    ("no_simplification:未简化", "no_simplification"),
+    ("under_specified:过短", "under_specified"),
+    ("underspecified:过短", "under_specified"),
+    # 可行路径
+    ("feasibility:无路径", "feasible_path"),
+    ("feasible_route:无路径", "feasible_path"),
+    ("no_feasible_path:无路径", "feasible_path"),
+    ("no_plausible_route:无路径", "feasible_path"),
+    ("no_valid_path:无路径", "feasible_path"),
+    ("unfeasible:无路径", "feasible_path"),
+    ("infeasible:无路径", "feasible_path"),
+    ("feasible_path:无路径", "feasible_path"),
+    # 数学合理性
+    ("soundness:矛盾", "math_soundness"),
+    ("math_unsoundness:矛盾", "math_soundness"),
+    ("math_soundness:矛盾", "math_soundness"),
+    ("math_soundness_issue:矛盾", "math_soundness"),
+    # 依据（含 missing_justification / missing_lemma 实测两类）
+    ("missing_rationale:无依据", "missing_rationale"),
+    ("rationale:无依据", "missing_rationale"),
+    ("missing_justification:无引理支撑", "missing_rationale"),
+    ("missing_lemma:无引理", "missing_rationale"),
+    # 衔接
+    ("coherence:接不上", "coherence"),
+    ("cohesion:接不上", "coherence"),
+    # Lean 逻辑层（sub_goal_solver 升级写入）
+    ("lean_logic_error: unknown identifier 'x'", "lean_logic_error"),
+    # 兜底：认不出的一律 other，**绝不硬塞**
+    ("", "other"),
+    ("无冒号的一整句话", "other"),
+    ("完全没见过的标签:描述", "other"),
+    (None, "other"),
+]
+
+
+@mock.patch.dict(os.environ, {"LEAN_VERIFY": "0"})
+class TestIssueTagNormalization(unittest.TestCase):
+
+    def test_all_synonym_variants_normalize(self):
+        """★ 核心：同义异写必须归到同一标签（否则统计被打散）。"""
+        bad = []
+        for raw, expected in ISSUE_TAG_CASES:
+            got = normalize_issue_tag(raw)
+            if got != expected:
+                bad.append(f"{raw!r}: got {got!r}, want {expected!r}")
+        self.assertEqual(bad, [], "归一化失效：\n" + "\n".join(bad))
+
+    def test_unknown_tags_are_not_forced_into_a_category(self):
+        """★ 反向对照：认不出的标签必须落 other，不得被猜着塞进某类。"""
+        self.assertEqual(normalize_issue_tag("totally_new_tag:描述"), "other")
+        self.assertEqual(normalize_issue_tag(""), "other")
+
+    def test_case_and_space_insensitive(self):
+        """标签大小写/前后空格不应影响归类（模型输出很随意）。"""
+        self.assertEqual(normalize_issue_tag("  Circular_Risk : x"), "circular_risk")
+        self.assertEqual(normalize_issue_tag("UNDER_SPECIFIED:x"), "under_specified")
+
+    def test_every_canon_target_has_chinese_label(self):
+        """ISSUE_CN 必须覆盖 ISSUE_CANON 的全部取值 —— 否则报告里出现裸英文标签。"""
+        missing = [t for t in set(ISSUE_CANON.values()) if t not in ISSUE_CN]
+        self.assertEqual(missing, [], f"缺中文释义: {missing}")
+
+    def test_histogram_merges_synonyms(self):
+        """★ 直方图：190 条 circularity + 190 条 circular_risk 应合成 380。"""
+        rep = DagReviewReport(results={
+            "a": DagReviewResult("a", "reject", issues=["circularity:x"] * 3),
+            "b": DagReviewResult("b", "reject", issues=["circular_risk:y"] * 2),
+            "c": DagReviewResult("c", "accept", quality_score=0.9),
+            "d": DagReviewResult("d", "reject", issues=["under_specified:z"]),
+        })
+        h = rep.issue_histogram()
+        self.assertEqual(h["circular_risk"], 5)
+        self.assertEqual(h["under_specified"], 1)
+        self.assertEqual(sum(h.values()), 6)
+        # accept 节点不进直方图
+        self.assertNotIn("accept", h)
+
+    def test_histogram_handles_no_issues(self):
+        rep = DagReviewReport(results={"a": DagReviewResult("a", "reject")})
+        self.assertEqual(rep.issue_histogram(), {})
+
+    def test_to_dict_includes_histogram(self):
+        """to_dict 是落盘通道 —— 不带直方图，离线就没法做归因。"""
+        rep = DagReviewReport(results={
+            "a": DagReviewResult("a", "reject", issues=["circularity:x"])})
+        self.assertIn("issue_histogram", rep.to_dict())
+        self.assertEqual(rep.to_dict()["issue_histogram"]["circular_risk"], 1)
+
+    def test_fix_rate_counts_only_persisting_node_ids(self):
+        """★ 修复率只认"两轮都在的节点"：节点换 id 不计入，避免'节点没了=修好了'的自欺。"""
+        prev = DagReviewReport(results={
+            "n1": DagReviewResult("n1", "reject", issues=["circular_risk:x"]),
+            "n2": DagReviewResult("n2", "reject", issues=["circular_risk:y"]),
+            # 本轮换 id 消失的节点 —— 不算修复证据
+            "gone": DagReviewResult("gone", "reject", issues=["circular_risk:z"]),
+        })
+        cur = DagReviewReport(results={
+            "n1": DagReviewResult("n1", "accept", quality_score=0.9),   # 修好了
+            "n2": DagReviewResult("n2", "reject", issues=["circular_risk:y"]),  # 没修
+        })
+        fr = cur.issue_fix_rate(prev)
+        self.assertEqual(fr["circular_risk"]["seen"], 2)   # gone 不算
+        self.assertEqual(fr["circular_risk"]["fixed"], 1)
+        self.assertEqual(fr["circular_risk"]["fixed_ratio"], 0.5)
+
+    def test_fix_rate_empty_without_prev(self):
+        """首轮无对照 ⇒ 必须返回空，不得伪造修复率。"""
+        cur = DagReviewReport(results={
+            "n1": DagReviewResult("n1", "accept", quality_score=0.9)})
+        self.assertEqual(cur.issue_fix_rate(None), {})
+        self.assertEqual(cur.issue_fix_rate(DagReviewReport()), {})
+
+    def test_real_gt_would_break_if_canon_were_identity(self):
+        """★ 阳性对照：若 ISSUE_CANON 退化成恒等映射，本用例应红。"""
+        # circularity 不是规范标签 ⇒ 映射后必须变化
+        self.assertNotEqual(normalize_issue_tag("circularity:x"), "circularity")
+        # invalid_dependency（单数）不是规范标签
+        self.assertNotEqual(normalize_issue_tag("invalid_dependency:x"),
+                            "invalid_dependency")

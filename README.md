@@ -1,16 +1,17 @@
-# MathPilot — 基于 Intern-S 系列大模型的数学智能体
+# MathPilot — 数学推理智能体
 
-> 赛题：基于 Intern-S 系列大模型的数学智能体设计与推理创新（挑战杯人工智能赛道初赛）
->
-> 队伍方案：**多智能体协作 + 共享黑板 + 聚类共识投票 + SymPy 符号快车道** 的数学推理智能体
+> 队伍方案：**多智能体协作 + 共享黑板 + 聚类共识投票 + SymPy 符号快车道** 的数学推理智能体。
+> （源自挑战杯「基于 Intern-S 系列大模型的数学智能体」赛题；**赛后研究期**主模型已换为
+> GLM-4.7-Flash / DeepSeek，仓库中不再保留 Intern-S 特化逻辑。）
 >
 > ⚠ **首次使用请先读 [SETUP.md](SETUP.md)** —— 本仓库**刻意未包含**若干体积大或含密钥的资源
 > （Lean 工具链 ≈3 GB、Mathlib 依赖闭包 ≈2.2 GB、`.env` 密钥等）。直接 clone 后需按该文档补齐
 > 才能完整运行；**不含 Lean 时流水线仍可跑通**（Lean 相关闸门自动降级放行）。
 >
-> ⚠ **注意运行档位**：代码默认值是**赛期受限档**（单题 1100s、**联网关闭**）。
-> 研究阶段（无时间限制 + 联网可用）请用 **`python run_research.py --test_file ... --output ...`**；
-> 两档对照表见 [SETUP.md 第零节](SETUP.md)。
+> ⚠ **运行档位**：2026-10-01 起，代码默认值已放开为**研究档**（单题 `max_time_per_question=86400`≈不限时、
+> 联网搜索默认开），且调度侧**不再有任何"按剩余时间降级"的逻辑**。
+> 需要显式固化研究档配置（含 Lean 联网环境变量）时仍可用
+> **`python run_research.py --test_file ... --output ...`**；对照表见 [SETUP.md 第零节](SETUP.md)。
 
 ---
 
@@ -60,7 +61,7 @@ result = agent.solve(problem, metadata)          # -> dict
 - ✅ `solve(problem: str, metadata: dict) -> dict` 签名与规范一致
 - ✅ `final_response` 恒为非空字符串（含全套兜底链路）
 - ✅ 返回内容全部可 JSON 序列化（`utils/extract.py::safe_json_serialize`）
-- ✅ 不硬编码 API key；`client` 由平台注入，`INTERN_API_KEY` 仅本地调试使用
+- ✅ 不硬编码 API key；`client` 由平台注入，`OPENAI_API_KEY` 仅本地调试使用
 - ✅ 不依赖绝对路径，所有读取均用相对路径
 - ✅ 不依赖标准答案/隐藏测试集
 - ✅ 不依赖跨题内存状态（每道题独立进程，仅调用一次 `solve`）
@@ -105,7 +106,7 @@ flowchart LR
 - **预算控制**：线程安全 `Budget`，单题 LLM 调用 ≤ `max_total_calls`（默认 15，含自纠错 1 轮），防超时超限。
 - **wall-clock 超时**：单题 ≤ `max_time_per_question`（默认 300s），Agent 总时长 ≤ 21000s；Windows 下用 `_thread.interrupt_main` 实现。
 - **Token 裁剪**：`max_tokens_cap` 截断，上下文超长自动降级重试，TypeError 自动回退 positional 调用。
-- **输出质量检测**：幻觉模式（"42 魔法数字"/拒绝回答/AI 身份声明）、截断检测（未闭合 LaTeX/括号/代码块）、模板泄露检测（Intern-S 输出 prompt 模板而非解答）。
+- **输出质量检测**：幻觉模式（"42 魔法数字"/拒绝回答/AI 身份声明）、截断检测（未闭合 LaTeX/括号/代码块）、模板泄露检测（模型回吐 prompt 模板而非解答）。
 
 ---
 
@@ -114,9 +115,7 @@ flowchart LR
 ```text
 赛事提交版/
 ├── user_agent.py              # 平台固定入口：ReasoningAgent + AgentConfig
-├── main.py                    # 本地批量 runner（并发 3，逐题原子落盘，断点续跑）
 ├── run_eval.py                # 本地评测脚本（答案匹配、领域统计、断点续跑）
-├── llm_client.py              # InternChatClient（本地调试用 OpenAI 兼容客户端）
 ├── requirements.txt           # 依赖清单
 ├── README.md                  # 本文件
 ├── docs/
@@ -161,27 +160,27 @@ pip install -r requirements.txt
 
 ```bash
 # Windows PowerShell
-$env:INTERN_API_KEY = "sk-..."
+$env:OPENAI_API_KEY = "sk-..."
 # Linux/macOS
-export INTERN_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."
 ```
 
 可选用环境变量覆盖模型与端点：
 
 ```bash
-export INTERN_MODEL="Intern-S2-Preview-397B"    # 默认即此
-export INTERN_API_BASE="https://chat.intern-ai.org.cn/api/v1/chat/completions"
+export LLM_MODEL="deepseek-v4-flash"
+export OPENAI_BASE_URL="https://api.deepseek.com/v1"
 ```
 
-### 3. 批量运行（对应平台 runner 行为）
+### 3. 批量运行
 
 ```bash
-python main.py --input_file sample_data/dev.jsonl --output_dir sample_outputs
+python run_eval.py --test_file sample_data/IMO-AnswerBench_smoke2.jsonl --output results.jsonl
 ```
 
-- 每道题结果保存为 `sample_outputs/{idx}.json`
-- 并发数默认 3，可用 `LOCAL_MAX_CONCURRENCY` 环境变量调整
-- 已存在且非空的 `idx.json` 会被跳过（断点续跑）
+- 逐题结果写入 `--output` 指定的 JSONL（每题一行，含过程留痕）
+- 并发数用 `--concurrency` 控制
+- 加 `--resume` 跳过结果文件中已完成的题（断点续跑）
 
 ### 4. 本地评测（答案匹配 + 领域统计）
 
@@ -219,14 +218,13 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 | `use_proof_channel` | False | 证明题专用通道 |
 | `max_revise_rounds` | 1 | 自纠错回环轮数（A/B 合入） |
 | `use_blueprint` | False | 蓝图分解（已简化为直解） |
-| `use_sub_goal` | False | 子目标分解（候选不足 2 或证明题触发） |
 
 > A/B 验证结论（2026-08-13，6 题本地集）：
 > - `max_revise_rounds=1`：6/6 无损失、输出更易读 → **已合入默认**（自纠错轮数改为 1）；
 > - `verifier_voting_times=3`：准确率无增量、耗时 +23% → 保持 1 票；
 > - `use_blueprint`：掉分且耗时 +165% → 保持关闭；
 > - `use_scoring` + `use_proof_channel`：6/6 但耗时 +163%（267.3s）→ 保持关闭（无性价比）；
-> - `use_sub_goal`：已接入（候选不足 2 或证明题触发），默认关闭可随时开启。
+> - `use_sub_goal`：~~已接入~~ **已于 2026-10-01 删除** —— 该字段声明与白名单齐全但全仓 0 读取点（死配置），真正生效的是 `deep_use_sub_goal`。
 > 其余能力默认关闭，是为在**平台限流（RPM 30 / TPM 150000）与 6 小时总时限**下保证稳定性。
 
 ---
@@ -239,7 +237,7 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 | 单题进程组硬时限 1200s | 单题默认 300s 预算，远低于硬限 |
 | Agent 总硬时限 6h（21000s） | `max_total_time_seconds=21000`，预算与壁钟双控 |
 | RPM 30 / TPM 150000 | 单题 ≤15 次 LLM 调用、token 裁剪，规避限流 |
-| 逐题独立进程、仅调一次 solve | `main.py` 模拟；不依赖跨题状态 |
+| 逐题独立进程、仅调一次 solve | `run_eval.py` 逐题独立 `solve()`；不依赖跨题状态 |
 | final_response 非空 | 四层兜底链路保证 |
 | 不可硬编码 key / 绝对路径 | 已自查通过 |
 
@@ -251,7 +249,7 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 2. **聚类共识投票**：候选答案经文本 + SymPy 双路等价归一化为簇，以簇置信度 × 规模排序选最优，抗单点噪声。
 3. **SymPy 符号快车道**：确定性题型（求导/积分/行列式/方程/极限）由 LLM 提取表达式、符号引擎精确求解，零推理误差。
 4. **提示词工程**：30+ 数学领域动态提示词 + 蓝图分解（可按需开启）+ 证明/纠错/子目标专用提示词。
-5. **输出质量防护**：幻觉检测、截断检测、模板泄露检测（Intern-S 特有）、英文思考链污染检测。
+5. **输出质量防护**：幻觉检测、截断检测、模板泄露检测（模型回吐 prompt 模板）、英文思考链污染检测。
 6. **资源自控**：LLM 预算 + wall-clock 超时 + Token 裁剪 + 并发安全，适配竞赛限流与时限。
 
 ---
@@ -263,12 +261,12 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 - [ ] `solve(problem, metadata)` 返回含非空 `final_response` 的 JSON 可序列化字典
 - [ ] `requirements.txt` 覆盖全部依赖
 - [ ] 无硬编码 API key、个人路径、调试标准答案
-- [ ] `main.py --input_file sample_data/dev.jsonl --output_dir sample_outputs` 本地跑通
-- [ ] 选择使用的模型：`Intern-S2-Preview-397B`
+- [ ] `run_eval.py --test_file sample_data/IMO-AnswerBench_smoke2.jsonl --output results.jsonl` 本地跑通
+- [ ] 选择使用的模型：`deepseek-v4-flash`（或 `GLM-4.7-Flash`）
 
 ---
 
 ## 十、致谢与参考
 
 - 官方 baseline 仓库（接口规范与本地 runner）
-- 书生 Intern API 控制台（模型与限流申请）
+- DeepSeek / 智谱 GLM API 控制台（模型与限流申请）

@@ -32,10 +32,10 @@ sys.path.insert(0, _ROOT)
 from agent.base import TaskContext, Budget  # noqa: E402
 from agent.blueprint_planner import BlueprintPlannerAgent  # noqa: E402
 from user_agent import AgentConfig  # noqa: E402
-from tools.leap_eval import load_bench, make_client  # noqa: E402
+from tools.lean_local.leap_eval import load_bench, make_client  # noqa: E402
 
 
-def make_ctx(problem: str) -> TaskContext:
+def make_ctx_validate_blueprint(problem: str) -> TaskContext:
     """构造最小可用的 TaskContext（TaskContext 不接收 config）。"""
     ctx = TaskContext(problem=problem, metadata={}, domain="")
     ctx.budget = Budget(max_calls=20)
@@ -72,7 +72,7 @@ def main() -> int:
     results = []
     for idx, item in enumerate(items, 1):
         print(f"\n=== [{idx}/{len(items)}] {item['id']} ===", flush=True)
-        ctx = make_ctx(item["problem"])
+        ctx = make_ctx_validate_blueprint(item["problem"])
         t0 = time.time()
         try:
             dag = planner.generate_blueprint(ctx)

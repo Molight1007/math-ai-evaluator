@@ -36,6 +36,8 @@ gitcode_sync/
 eval_bp/
 eval_out/
 eval_out_*/
+# 2026-10-02 中间结果存储层落盘目录（results/<run_id>/<qid>/），不进仓
+results/
 
 # 本地 Lean 离线工具链（含 lean4-toolchain，体积 GB 级，按需本地准备，不提交）
 lean下载版/
@@ -49,6 +51,9 @@ lean_*.log
 
 # 本地环境与备份（含密钥、本地快照）
 .env
+# 2026-10-01：小测试专用的 DeepSeek 求解配置（含密钥，与 .env 相互独立）
+.env.ds
+.env.*
 .git_backup_*/
 .workbuddy/
 .codebuddy/
@@ -76,3 +81,6 @@ formal-imo/
 superhuman/
 .git_broken_20260903_2254/
 .git_gitcode_mess_20260903/
+
+# 临时探针产物（2026-10-02）
+.pytmp*

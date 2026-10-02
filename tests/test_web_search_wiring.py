@@ -3,7 +3,7 @@
 
 背景：`tools/web_search.py` 此前**已实现但全仓无调用者**（代码审计发现）⇒
 `tool_calls.web_search` 恒为"未调用"，能力形同虚设。
-现已接进 `agent/base.py::llm_with_calc` 的原生 tool_calls 循环，
+现已接进 `agent/base.py::llm_with_tools` 的原生 tool_calls 循环，
 由 `config.enable_web_search`（默认 **False**）控制是否注册。
 
 本文件**不联网**（执行器真调用已在开发时手工验证），只锁接线契约与降级语义。
@@ -27,10 +27,6 @@ class WebSearchToolSchemaTest(unittest.TestCase):
         self.assertEqual(fn["parameters"]["required"], ["query"])
         self.assertIn("query", fn["parameters"]["properties"])
 
-    def test_calc_schema_still_present(self):
-        """反向保护：接线不能把原有 calc_eval 工具挤掉。"""
-        self.assertEqual(B.CALC_TOOL_SCHEMA["function"]["name"], "calc_eval")
-
 
 class WebSearchToolExecTest(unittest.TestCase):
 
@@ -48,11 +44,11 @@ class WebSearchToolExecTest(unittest.TestCase):
 
 
 class WebSearchSwitchTest(unittest.TestCase):
-    """开关默认必须为 False —— 不经 A/B 不得改变主链行为。"""
+    """开关默认（2026-10-01 研究期按用户决策默认开）。"""
 
-    def test_default_off(self):
+    def test_default_on(self):
         import user_agent as U
-        self.assertFalse(U.AgentConfig().enable_web_search)
+        self.assertTrue(U.AgentConfig().enable_web_search)
 
     def test_declared_and_whitelisted(self):
         import inspect

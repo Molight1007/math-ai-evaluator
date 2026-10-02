@@ -23,7 +23,7 @@
 | `enable_calc_tool` | False | False（研究档亦未开，原因见下） |
 | `phase_budget_enabled` | False | False |
 
-⇒ **直接 `python run_eval.py ...` 或 `python main.py ...` 跑出来的是「单题 1100s、无网络」的受限档。**
+⇒ **直接 `python run_eval.py ...` 跑出来的是「单题 1100s、无网络」的受限档。**
 研究阶段（比赛已结束，目标是**正确率**而非平台得分）应该用：
 
 ```bash
@@ -64,7 +64,7 @@ python run_research.py --test_file <题单.jsonl> --output <结果.jsonl>
 | 12 | `LEANSEARCH_CORPUS_PATH` 指向的语料 | 仓库外 | 可选（无它则离线检索不可用） | 见第四节 |
 | 13 | `gitcode_sync/` | — | ❌ **已废弃，不需要** | — |
 
-**已上传、无需自备**：全部源码（`agent/` `prompts/` `tools/` `utils/`）、**题库（含 official112 全量 112 题）**、`run_eval.py`、`user_agent.py`、`main.py`、`requirements.txt`、`tests/`、`.gitmodules`。
+**已上传、无需自备**：全部源码（`agent/` `prompts/` `tools/` `utils/`）、**题库（含 official112 全量 112 题）**、`run_eval.py`、`user_agent.py`、`requirements.txt`、`tests/`、`.gitmodules`。
 
 ---
 
@@ -77,14 +77,11 @@ python run_research.py --test_file <题单.jsonl> --output <结果.jsonl>
 | **主链路** `utils/llm_client.py` | `OPENAI_API_KEY` | 密钥 |
 | | `OPENAI_BASE_URL` | **基址**（末尾带 `/v1`，客户端自行拼接 `/chat/completions`） |
 | | `LLM_MODEL` | 模型名 |
-| 根目录 `llm_client.py` | `INTERN_API_KEY` | 密钥 |
-| | `INTERN_API_BASE` | ⚠ 这里是**完整端点**（**含** `/chat/completions`），与上面的基址语义不同 |
-| | `INTERN_MODEL` | 模型名 |
 | `tools/lean_local/leap_eval.py` | `DEEPSEEK_API_KEY` / `DEEPSEEK_API_BASE` / `DEEPSEEK_MODEL` | 仅 LEAP 对照评测用，平时可不设 |
 
 ### ⚠ 最容易踩的坑
 
-**只设 `INTERN_*` 而不设 `OPENAI_*`** 时，主链路的 `OPENAI_BASE_URL` 缺失会**静默回落到 `http://localhost:8000/v1`**，表现为连接被拒（`os error 10061` / 502），**整批题全部失败**。
+**未设 `OPENAI_BASE_URL`** 时，主链路的基址会**静默回落到 `http://localhost:8000/v1`**，表现为连接被拒（`os error 10061` / 502），**整批题全部失败**。跑评测前务必确认 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `LLM_MODEL` 三者齐全。
 
 创建 `.env`（示例）：
 
@@ -151,7 +148,7 @@ git submodule update --init --recursive
 git clone <repo> && cd <repo>
 pip install -r requirements.txt
 # 创建 .env（见第二节）
-python main.py            # 或：python run_eval.py --test_file <题库> --output <结果>
+python run_eval.py --test_file <题库> --output <结果>
 ```
 
 此时**所有 Lean 相关环节自动降级放行**，流水线可完整跑通。

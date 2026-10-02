@@ -17,7 +17,7 @@
 - **纯函数、零 LLM、零副作用**：解析/校验/求解全在本地，毫秒~秒级；
 - 失败一律返回 None / (None, 原因)，由调用方**弃权放行**，绝不阻断主链；
 - **宁漏勿误**：多解且目标值不唯一、结果非精确数值、超时 → 全部弃权；
-- 安全边界与 calc_tool._SYM_SAFE_RE 同口径（无引号/下划线/方括号 → sympify
+- 安全边界与 utils/math_eval._SYM_SAFE_RE 同口径（无引号/下划线/方括号 → sympify
   无代码执行面），并复用 daemon 线程 + 超时护栏（防病态输入卡死主线程）。
 """
 
@@ -29,17 +29,24 @@ import re
 import threading
 from dataclasses import dataclass, field
 
+# 2026-10-01 去重：原此处另有一份与 agent/symbolic_model.py 逐字相同的
+# _first_json_object（29 行）。本模块存在两种导入方式（
+# 与 ），故用双路径 try/except。
+try:
+    from .symbolic_model import _first_json_object
+except ImportError:                      # 扁平导入时的回退
+    from symbolic_model import _first_json_object
+
 logger = logging.getLogger("MathPilot.SymbolicSolve")
 
 # --------------------------------------------------------------------------
 # 常量与安全边界
 # --------------------------------------------------------------------------
-# 与 calc_tool._SYM_SAFE_RE 同口径：字母/数字/四则/括号/逗号/空格/点；
+# 与 utils/math_eval._SYM_SAFE_RE 同口径：字母/数字/四则/括号/逗号/空格/点；
 # **不含**引号 ' "、下划线 _（禁 dunder 属性链）、方括号 []（禁下标）、
 # % //（语义歧义）。^ 先规范化为 ** 再检查。
 _SAFE_EXPR_RE = re.compile(r"^[0-9a-zA-Z*/().,\-+ ]+$")
 _IDENT_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*")
-_FIRST_JSON_RE = re.compile(r"\{", re.S)
 
 _SOLVE_TIMEOUT_SEC = 5.0
 _HUNG_MAX = 20
@@ -183,35 +190,6 @@ def strip_given_numbers(problem, *, max_params: int = 12) -> StripResult | None:
 # ==========================================================================
 # ② 协议解析
 # ==========================================================================
-def _first_json_object(text: str) -> str | None:
-    """抠出文本里第一个平衡的 `{...}` 块（跳过字符串内部的括号与转义）。"""
-    if not text:
-        return None
-    start = text.find("{")
-    if start < 0:
-        return None
-    depth = 0
-    in_str = False
-    escaped = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if in_str:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i + 1]
-    return None
 
 
 def _split_equations(block: str) -> list:
@@ -366,7 +344,7 @@ def _solve_core(equations: list, target: str, params: dict) -> tuple[str | None,
     import sympy as sp                                  # 延迟导入
 
     # 断言 + TARGET 里出现的所有标识符 → 强制映射为普通 Symbol
-    # （否则 E/pi/sin 等 SymPy 内建名会把符号静默吃掉，见 calc_tool._rename_vars 同款教训）
+    # （否则 E/pi/sin 等 SymPy 内建名会把符号静默吃掉，见 math_eval._rename_vars 同款教训）
     idents: set = set()
     for line in equations:
         idents.update(_IDENT_RE.findall(str(line)))
@@ -427,10 +405,10 @@ def _solve_core(equations: list, target: str, params: dict) -> tuple[str | None,
 
     exact = None
     try:
-        from .calc_tool import to_exact_number
+        from utils.math_eval import to_exact_number
     except ImportError:
         try:
-            from calc_tool import to_exact_number
+            from math_eval import to_exact_number
         except ImportError:
             to_exact_number = None
 

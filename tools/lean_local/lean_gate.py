@@ -30,6 +30,15 @@ v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调�
 """
 from __future__ import annotations
 
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+
 import logging
 import os
 import re
@@ -224,7 +233,7 @@ class LeanGate:
         6 候选 ×20–38s 全串行；并行后压缩到 ⌈N/K⌉ 波。
         """
         import time as _t
-        if os.environ.get("LEAN_GATE_PARALLEL", "1") == "0":
+        if not _sw_bool("lean_gate_parallel"):
             return None
         # 只在 MCP 通道真可用时并行：bridge 是 `lake env lean` 全量编译，
         # 并行收益未验证且同目录并发 lake 有额外风险 → 保持旧的串行行为。
@@ -398,19 +407,11 @@ class LeanGate:
             #   （实测 14/81 = 17.3% 的题在 6.5 因 time_critical 跳过 Lean）。
             # 口径：剩余 < 45s（≈ 一次编译 + 余量）即停止验剩余候选，按"未验"降级
             #   保留（不淘汰，与 lenient 一致），记 degraded="time_budget" 便于统计。
-            if ctx.start_time >= 10**8 and (_pre is None or _pre[_idx] is None):
-                _left_budget = (ctx.start_time + float(getattr(
-                    self.config, "max_time_per_question", 1200))) - _t.time()
-                if _left_budget < 45.0:
-                    self._record_ctx(ctx, {
-                        "id": getattr(cand, "id", None), "verdict": "unknown",
-                        "lean_valid": False, "degraded": "time_budget",
-                        "error": None,
-                        "reason": f"剩余 {_left_budget:.0f}s < 45s，保留候选不验"
-                                  f"（护 6.5 最终闸门）",
-                    })
-                    kept.append(cand)
-                    continue
+            # 2026-10-01：比赛期「剩余 <45s 即停止验证、未验证候选直接进池」已按研究期
+            # 标尺删除（审计 A 级第 4 条）。原逻辑为护 6.5 最终闸门而"按未验降级保留"，
+            # 结果是把**未经 Lean 把关的候选**放进池内。研究期求正确率上限，
+            # 宁可多花 Lean 编译时间，也不放行未验证候选。
+            # （单题硬墙仍由 `is_timed_out` / `max_time_per_question` 把控。）
             entry = {
                 "id": cand.id,
                 "verdict": "unknown",
@@ -734,7 +735,7 @@ class LeanGate:
         # 依据：平台实测 strict_reject 17 次、verdict 100% unknown，6.5 因此
         # 白烧 ~1520s，而"拒绝后仍输出某答案"→ 只烧时间不改输出。开关用于
         # 量化严格拒绝的真实代价（关掉做 A/B，用数据决定是否调整）。
-        if os.environ.get("LEAN_GATE_STRICT_UNKNOWN", "1") == "0":
+        if not _sw_bool("lean_gate_strict_unknown"):
             entry["degraded"] = "lenient_unknown"
             entry["feedback"] = ("Lean 无法判定（unknown）→ 按开关配置**弃权放行**"
                                  "（LEAN_GATE_STRICT_UNKNOWN=0，用于 A/B 对照）")

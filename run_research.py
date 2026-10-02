@@ -53,16 +53,16 @@ os.chdir(REPO)
 # ---------------------------------------------------------------- 研究档配置
 # 取值理由：
 #   · 86400s（24h）语义上等于"不限"，但避免进程因单次调用挂死而永久占住
-#   · tier_budget 与研究档单题上限对齐 ⇒ paper_pacer 的收紧分支恒不触发
-#     （`单题预算 = min(tier_cap, max(sustainable×系数, min_soft))`，
-#      sustainable = 并发 × 剩余target / 剩余题数；target 极大 ⇒ 恒取 tier_cap）
+#   · 2026-09-29：PaperPacer 已删除 ⇒ 全卷不再有时间总量控制，
+#     `--paper_target_time` 已不存在（它只被 PaperPacer 消费）。
+#     tier_budget 现为**统一档位单键**，但 CLI 仍按 `f,s,d` 三段解析后
+#     取 deep 段 ⇒ 传 "86400,86400,86400" 仍等效于"每题不限时"。
 #   · 连带效果（都是研究阶段想要的）：
-#       `is_time_critical()`（剩余<120s）与 `emergency`（ratio>0.95）**永不触发**
+#       `is_time_critical()`（剩余<60s）与 `emergency`（ratio>0.95）**永不触发**
 #       ⇒ 5.5 复核 / 4.5 oracle 等所有时间守卫全部放开，不再被时间掐掉
 RESEARCH_ARGS = [
     "--max_time_per_question", "86400",
     "--tier_budget", "86400,86400,86400",
-    "--paper_target_time", "86400000",
     "--max_total_time_seconds", "86400000",
     # 联网（研究阶段允许）
     "--enable_web_search", "true",
@@ -143,11 +143,10 @@ def main() -> int:
     print("=" * 70, flush=True)
     print("单题上限      : %ss（默认档 1100s）"
           % _argval("--max_time_per_question"), flush=True)
-    print("档位预算      : %s（默认档 120,540,1150）"
+    print("档位预算      : %s（统一档位；默认 1150）"
           % _argval("--tier_budget"), flush=True)
-    print("全卷目标/总限  : %s / %s（默认档 8438 / 20700）"
-          % (_argval("--paper_target_time"), _argval("--max_total_time_seconds")),
-          flush=True)
+    print("全卷总限      : %s（默认 20700; PaperPacer 已删除，无全卷节流）"
+          % _argval("--max_total_time_seconds"), flush=True)
     print("联网          : web_search=%s  leansearch=%s（默认档均为 false）"
           % (_argval("--enable_web_search"), _argval("--use_leansearch")),
           flush=True)

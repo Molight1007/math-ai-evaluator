@@ -19,6 +19,7 @@ Orchestrator/main 的信号量约束，本模块单题内不额外开线程）�
 """
 
 import logging
+import re
 
 from .base import (BaseAgent, TaskContext, Candidate, next_candidate_id)
 from utils.extract import (
@@ -61,22 +62,57 @@ _VERIFIER_SYS = (
 )
 
 
+# VERDICT 之后（只允许标点/空白/markdown 装饰，最多 8 个）紧跟的单个 A 或 B。
+# 负向先行断言 `(?![A-Z])` 排除 ABOVE / AB 这类词首；
+# `[^\w\u4e00-\u9fff]` 明确排除中文与字母数字 ⇒ 中文解释里的 A/B 不会被误认成裁决。
+_VERDICT_RE = re.compile(r"VERDICT[^\w\u4e00-\u9fff]{0,8}([AB])(?![A-Z])")
+
+
 def _parse_verdict(text: str) -> bool:
-    """解析验证结果：VERDICT: A → True（通过），B → False（未通过）。"""
+    """解析验证结果：VERDICT: A → True（通过），B → False（未通过）。
+
+    ★ 2026-09-21 修复（原判据过宽，实测可误判为「通过」）：
+      原末条 `("VERDICT" in upper and "A" in upper)` 是**全文包含**测试，
+      而 `stitch()` 保留 prefill 前缀 ⇒ 文本**恒含 VERDICT**
+      ⇒ 等价于「只要有任意大写 A 就判通过」。
+      实测反例：`"VERDICT: 该解答有 AB 两处问题"` 原判据返回 True（通过）。
+      现改为「VERDICT 之后紧跟 A/B」，与提示词要求的输出格式一致。
+      影响：判据变严 ⇒ 未按格式输出的答复按「未通过」处理（保守方向：继续协作迭代）。
+    """
     if not text:
         return False
     upper = text.upper()
     if "INCORRECT" in upper or "WRONG" in upper or "FALSE" in upper:
         return False
-    if "VERDICT" in upper and "B" in upper.split("VERDICT")[-1][:4]:
+    m = _VERDICT_RE.search(upper)
+    if m:
+        return m.group(1) == "A"
+    # 无显式 VERDICT 标记时的保守回退：仅"明确出现 CORRECT"才判通过。
+    return "CORRECT" in upper
+
+
+# prefill 种子前缀（stitch 会**保留**它 ⇒ 各角色返回值必须剥前缀后再判有效性）
+_PF_SOLVE = "## 解题过程\n"
+_PF_REVIEW = "## 审查意见\n"
+_PF_INTEGRATE = "## 最终解答\n"
+
+
+def _has_content(text: str, prefix: str) -> bool:
+    """stitch 结果里是否有**前缀之外的实际内容**。
+
+    ★ 2026-09-21 修复（与 agent/classifier.py 的 prefill 前缀污染同族）：
+      `stitch()` 的契约是**保留** prefill 前缀（见 utils/prefill.py 第 50 行）。
+      模型只回一个空格时，`stitch(prefix, " ")` 得到 `prefix + " "` ——
+      **非空但零内容**，会骗过调用方的 `if not solution` / `if not final` 守卫，
+      下游 `extract_final_answer` 抽到空 ⇒ 产出空答案候选
+      （甚至让前缀串本身经兜底函数变成候选答案）。
+    """
+    t = str(text or "")
+    if not t:
         return False
-    # 2026-09-12 定型前审核：显式加括号固化优先级。`and` 本就优先于 `or`，
-    # 加括号后**语义完全不变**，只是消除"靠运算符优先级隐式表达意图"的隐患。
-    # ⚠ 已知过宽（未改，属行为变化需赛后评估）：`"A" in upper` 会命中任何含
-    #   大写 A 的文本（如 ANSWER / ABOVE），理想判据是 VERDICT 后紧跟 A/B。
-    if "CORRECT" in upper or ("VERDICT" in upper and "A" in upper):
-        return True
-    return False
+    if t.startswith(prefix):
+        t = t[len(prefix):]
+    return bool(t.strip())
 
 
 class CollaborativeSolver(BaseAgent):
@@ -119,14 +155,22 @@ class CollaborativeSolver(BaseAgent):
                 review = self._role_review(ctx, final)
 
             # 3) 整合 Agent：综合解题输出 + 审查意见 +（后续轮）上一轮结果
+            # ★ 2026-09-21 修复（先覆盖后校验 ⇒ 丢掉好答案）：
+            #   原实现直接 `final = self._role_integrate(...)`，整合 Agent 返回空串时
+            #   `final` **已被覆盖成空**，紧随的 `if not final: break` 把
+            #   **解题 Agent 的有效解答一并丢弃**，末尾只能抽出空答案
+            #   ⇒ 向候选池追加空候选（且损失一个可能正确的解答）。
+            #   改为「先取临时变量、校验通过才赋值」，失败时保留既有 final。
             if rnd == 1:
-                final = self._role_integrate(ctx, solution, review)
+                _cand = self._role_integrate(ctx, solution, review)
             else:
-                final = self._role_integrate_round(ctx, solution, review, final)
+                _cand = self._role_integrate_round(ctx, solution, review, final)
 
-            if not final:
-                self.record(ctx, "collab", f"第{rnd}轮整合Agent未产出有效结果")
+            if not _cand:
+                self.record(ctx, "collab",
+                            f"第{rnd}轮整合Agent未产出有效结果（保留上一轮结果，不丢解答）")
                 break
+            final = _cand
 
             # 4) 验证 Agent：判定是否正确
             ok = self._role_verify(ctx, final)
@@ -183,7 +227,8 @@ class CollaborativeSolver(BaseAgent):
             0.3,
             self.config.policy_max_tokens,
         )
-        return stitch("## 解题过程\n", resp) if resp else ""
+        out = stitch(_PF_SOLVE, resp) if resp else ""
+        return out if _has_content(out, _PF_SOLVE) else ""
 
     def _role_review(self, ctx: TaskContext, target: str) -> str:
         user = f"题目：\n{ctx.problem}\n\n待审查的解答：\n{target[-4000:]}"
@@ -202,9 +247,12 @@ class CollaborativeSolver(BaseAgent):
                 "## 审查意见\n",
             ),
             0.1,
-            4096,
+            # ★ 2026-10-02：4096→8192。实测该处曾撞 finish_reason=length（DeepSeek 长审查意见
+            #   被腰斩）；与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。
+            8192,
         )
-        return stitch("## 审查意见\n", resp) if resp else ""
+        out = stitch(_PF_REVIEW, resp) if resp else ""
+        return out if _has_content(out, _PF_REVIEW) else ""
 
     @staticmethod
     def _collect_oracle_context(ctx: TaskContext, target: str) -> str:
@@ -245,7 +293,8 @@ class CollaborativeSolver(BaseAgent):
             0.1,
             self.config.policy_max_tokens,
         )
-        return stitch("## 最终解答\n", resp) if resp else ""
+        out = stitch(_PF_INTEGRATE, resp) if resp else ""
+        return out if _has_content(out, _PF_INTEGRATE) else ""
 
     def _role_integrate_round(self, ctx: TaskContext, solution: str,
                               review: str, prev: str) -> str:
@@ -268,7 +317,8 @@ class CollaborativeSolver(BaseAgent):
             0.1,
             self.config.policy_max_tokens,
         )
-        return stitch("## 最终解答\n", resp) if resp else ""
+        out = stitch(_PF_INTEGRATE, resp) if resp else ""
+        return out if _has_content(out, _PF_INTEGRATE) else ""
 
     def _role_verify(self, ctx: TaskContext, final: str) -> bool:
         answer = extract_final_answer(final)
@@ -285,7 +335,10 @@ class CollaborativeSolver(BaseAgent):
                 "VERDICT: ",
             ),
             0.0,
-            512,
+            # 2026-10-02 DeepSeek 适配：原 512 ⇒ 8192。原值基于「只输出一行 VERDICT +
+            # prefill 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断
+            # （reasoning 先吃满预算、正文为空）。
+            8192,
         )
         text = stitch("VERDICT: ", resp) if resp else ""
         return _parse_verdict(text)

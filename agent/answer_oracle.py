@@ -6,9 +6,17 @@ from __future__ import annotations
 当前"写不对难题"的根因之一是：验证器（Verifier）与解题器（Solver）同源，
 A/B 投票本质是"让同一个模型再读一遍"，会一起错；而客观工具没有形成闭环。
 
-本模块把"客观答案验证"从 verifier 中抽离为统一入口。2026-09-06 起
-Lean 系（LeanBridge/lean_gate）随「检测链去 Lean 化」从平台链路移除
-（平台无 Lean 可执行文件，历史实证只空转不审核），本模块只保留：
+本模块把"客观答案验证"从 verifier 中抽离为统一入口。
+⚠ **2026-09-23 更正**：本节此前写"2026-09-06 去 Lean 化：平台无 Lean 可执行文件" ——
+**该前提已过时**：0923 云端实测 `lean_executable` 存在、`lean_mcp` 332 次调用 0 失败。
+但本轮 46/46 题均为**解答题**，所以"证明题走 Lean"的分支从未被触发，
+故本模块当前的**实际缺口不在 Lean**，而在：
+- 只有"多候选自洽共识"（self-consistency），**没有 reference ⇒ 判不出绝对对错**
+  （0923 效能审计实测该环节召回仅 **3%**）。
+- 补法见 `agent/answer_falsifier.py`（**只做证伪**：数值回带 → SymPy 精确判定 → Lean 背书），
+  已由 `orchestrator._oracle_review_best` 与本模块**叠加调用**。
+
+本模块保留：
 - 计算/数值题 → SymPy 符号等价（多候选 self-consistency 聚类）+ 答案可解析性；
 - 证明题 → 不编译不误判，直接返回 unknown（散文证明不可程序化等价判定），
   由 AuditGate（rubric 结构化判分）与对抗式验证承担客观把关。
@@ -41,7 +49,7 @@ from .base import TaskContext
 
 logger = logging.getLogger("MathPilot.Oracle")
 
-# 证明题判定信号（与 lean_gate / solver / difficulty_router 保持一致）
+# 证明题判定信号（与 lean_gate / solver 保持一致）
 _PROOF_TYPE = "证明题"
 _PROOF_DOMAINS = ("证明", "证明题")
 
@@ -284,26 +292,3 @@ class AnswerOracle:
             sev_tag = f"(严重度{sev})" if sev else ""
             lines.append(f"- {loc} {tag}{sev_tag}: {desc}".strip())
         return "\n".join(lines)
-
-    @staticmethod
-    def cluster_equivalent_answers(answers: list) -> list[list[int]]:
-        """多候选答案符号等价聚类，返回候选下标分组（self-consistency 信号）。
-
-        纯本地、O(n²) 两两比对，不消耗 LLM 预算。
-        """
-        n = len(answers)
-        visited = [False] * n
-        groups: list[list[int]] = []
-        for i in range(n):
-            if visited[i]:
-                continue
-            group = [i]
-            visited[i] = True
-            for j in range(i + 1, n):
-                if visited[j]:
-                    continue
-                if AnswerOracle.answers_equivalent(answers[i], answers[j]):
-                    group.append(j)
-                    visited[j] = True
-            groups.append(group)
-        return groups

@@ -20,8 +20,6 @@ QT_JUDGE = "判断题"
 QT_FILL = "填空题"
 QT_SOLUTION = "解答题"
 
-_QUESTION_TYPES = (QT_PROOF, QT_CHOICE, QT_JUDGE, QT_FILL, QT_SOLUTION)
-
 
 # ---------------------------------------------------------------------------
 # 关键词信号表

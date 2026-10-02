@@ -64,6 +64,28 @@ DAG_REVIEW_SYSTEM = """你是 AND-OR Blueprint DAG 的严格评审员，专精�
      不要泛泛而谈。
 
 ============================================================
+issues 标签必须取自下表（**唯一合法取值**，禁止自造）
+============================================================
+格式恒为 `标签:具体描述`，标签一律用下列**英文小写下划线**写法。
+同一含义**只准用同一个标签**——写别的写法会让下游统计把同一问题算成两类。
+
+| 标签（必用此写法） | 对应维度 | 何时用 |
+|---|---|---|
+| `under_specified`     | 1 简单化   | statement 过短/等价于父目标，没给出可验证目标 |
+| `no_simplification`   | 1 简单化   | 粒度未细化，子目标并不比父目标更小更直接 |
+| `circular_risk`       | 3 无循环   | 与祖辈词袋/语义高度相似，fold 回原陈述 |
+| `feasible_path`       | 2 可行路径 | 已有工具/引理下找不到可信解题路径 |
+| `invalid_dependencies`| 4 依赖     | depends_on 与图结构不匹配（**复数形式，勿写 invalid_dependency**） |
+| `missing_dependency`  | 4 依赖     | 缺失关键前置依赖 |
+| `math_soundness`      | 5 数学合理性 | 断言与题目条件矛盾 / 方向性错误 / 漏条件 |
+| `missing_rationale`   | 6 分解依据 | rationale 为空 / 同义反复 / 与 statement 对不上 |
+| `coherence`           | 7 衔接     | 符号未定义、跳步无依据、纯结论搬运 |
+
+**禁止**：`circularity`（用 `circular_risk`）、`invalid_dependency`（用 `invalid_dependencies`）、
+`missing_dependencies`（用 `missing_dependency`）、`decomposition`（用 `no_simplification`）、
+`soundness`（用 `math_soundness`）—— 这些都是历史的错写，会被归入 `other`。
+
+============================================================
 输出严格 JSON（只输出一个 JSON）
 ============================================================
 ```json
@@ -71,7 +93,7 @@ DAG_REVIEW_SYSTEM = """你是 AND-OR Blueprint DAG 的严格评审员，专精�
   "verdict": "accept" | "reject",
   "quality_score": 0.0-1.0,        // 综合质量分
   "issues": [                       // reject 时必填，每条 ≤ 120 字
-    "category:具体描述",
+    "标签:具体描述",
     "circular_risk:与祖辈 X 高度相似，未真正简化",
     "under_specified:statement 过短，未给出可验证目标"
   ],

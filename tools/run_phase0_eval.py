@@ -24,7 +24,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
 
-def load_env(env_path: str | None = None) -> None:
+def load_env_run_phase0_eval(env_path: str | None = None) -> None:
     """读取 .env，并映射成 run_eval / LLMClient 期望的变量名。"""
     path = env_path or os.path.join(_ROOT, ".env")
     if not os.path.exists(path):
@@ -71,7 +71,7 @@ def main() -> int:
                          "--override verifier_voting_times=3（D6 三把钥匙 A/B 用）")
     args = ap.parse_args()
 
-    load_env()
+    load_env_run_phase0_eval()
     for k in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL"):
         v = os.environ.get(k)
         print(f"  {k:<18} {'已设置 (%d 字符)' % len(v) if v else '缺失'}")

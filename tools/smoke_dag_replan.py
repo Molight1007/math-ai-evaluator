@@ -131,7 +131,7 @@ def run_mock_smoke() -> bool:
     cfg = _make_config()
     client = MockClient(build_mock_script())
 
-    ctx = _make_ctx("mock")
+    ctx = _make_ctx_smoke_dag_replan("mock")
     ctx.blueprint = BlueprintDAG.from_dict(BAD_BLUEPRINT)
     # 模拟子目标求解结果：失败信号（子目标没能得到有效结论）
     ctx.subgoal_trace.append({
@@ -197,7 +197,7 @@ def run_mock_smoke() -> bool:
 def run_real_smoke() -> bool:
     """真实 LLM 模式：用 eval_dag/problems.jsonl 前 2 题验证闭环。"""
     import time
-    from tools.leap_eval import make_client  # noqa: E402
+    from tools.lean_local.leap_eval import make_client  # noqa: E402
 
     api_key = os.environ.get("INTERN_API_KEY", "")
     if not api_key:
@@ -217,7 +217,7 @@ def run_real_smoke() -> bool:
 
     all_ok = True
     for p in problems:
-        ctx = _make_ctx(p["id"])
+        ctx = _make_ctx_smoke_dag_replan(p["id"])
         print(f"\n--- {p['id']} ---")
         # 蓝图生成
         from agent.blueprint_planner import BlueprintPlannerAgent
@@ -263,7 +263,7 @@ def _make_config():
     return cfg
 
 
-def _make_ctx(pid: str) -> TaskContext:
+def _make_ctx_smoke_dag_replan(pid: str) -> TaskContext:
     return TaskContext(
         problem="求所有满足条件 f(x+y)=f(x)+f(y) 的函数 f: R→R（mock 题）",
         metadata={"problem_id": pid},

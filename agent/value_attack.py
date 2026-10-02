@@ -11,15 +11,11 @@
 拦截点：蓝图 merge / 候选答案里出现"极值 = 数值"时。
 """
 import logging
-import re
 
 logger = logging.getLogger("MathPilot")
 
 # 声称极值触发词（中英）
-_MAX_KW = re.compile(r"maximal|maximum|largest|greatest|求.*最大|最大值|极大值", re.I)
-_MIN_KW = re.compile(r"minimal|minimum|smallest|least|求.*最小|最小值|极小值", re.I)
 # 数值表达式（声称的极值）
-_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)")
 
 # 采样规模：准确率 vs 速度平衡（30k ≈ 009 找到 4.913/4.94）
 _N_SAMPLES = 20000
@@ -27,22 +23,7 @@ _N_SAMPLES = 20000
 _EPS = 1e-6
 
 
-def _extract_claimed_value(text: str) -> float | None:
-    """从声称文本提取数值（如 'maximum value is 4∛(85/98)' 难解析 → 取近似）。"""
-    # 简化：直接找 = X / is X / 为 X 后的数值（含 ∛ 分数尽量解析）
-    m = re.search(r"(?:max(?:imum)?(?: value)?|min(?:imum)?(?: value)?)\s*"
-                  r"[=:：is为是]?\s*([0-9]+(?:\.[0-9]+)?)", text, re.I)
-    if m:
-        return float(m.group(1))
-    return None
 
-
-def _to_python_func(expr_lean: str) -> str:
-    """把 LaTeX/自然语言极值表达式转 Python lambda 字符串（返回 None 表示不可用）。
-
-    由 LLM 在 verify_value_claim 里生成，这里只做兜底清理。
-    """
-    return expr_lean
 
 
 def attack_value_claim(problem: str, claimed: float, direction: str,
@@ -71,7 +52,9 @@ def attack_value_claim(problem: str, claimed: float, direction: str,
     try:
         for _ in range(n_samples):
             pt = None
-            # 用函数自带采样器优先；否则 n 元单纯形
+            # 只使用函数自带的 sample_point；未提供时该点直接跳过。
+            # ⚠ 本函数**没有**"n 元单纯形"兜底实现 —— 2026-09-20 更正：
+            #   原注释"否则 n 元单纯形"与代码事实不符（误导排查方向）。
             sampler = ns.get("sample_point")
             try:
                 if sampler:
@@ -86,12 +69,21 @@ def attack_value_claim(problem: str, claimed: float, direction: str,
                 continue
             if val is None:
                 continue
-            if best is None or val > best:
-                best = val
+            # 2026-09-20 修复：聚合方向必须与声称方向一致。
+            # 原实现恒取**最大值**，却在下方用 `best < claimed` 判 min 类声称
+            # ⇒ 等于用最大值去证明"存在更小的值"，最小值声称几乎不可能被证伪，
+            # 且返回的 found 与文案（"发现目标值 < 声称最小值"）自相矛盾。
+            if direction == "min":
+                if best is None or val < best:
+                    best = val
+            else:
+                if best is None or val > best:
+                    best = val
     except Exception as e:  # noqa: BLE001
         return {"ok": True, "reason": f"采样异常: {str(e)[:80]}"}
     if best is None:
-        return {"ok": True, "reason": "采样无可行点，跳过"}
+        return {"ok": True,
+                "reason": "采样无可行点（未提供 sample_point 或点均不可行），跳过"}
     # 声称"最大值=M"：找 S > M → 证伪
     if direction == "max":
         if best > claimed + _EPS:
@@ -109,5 +101,3 @@ def attack_value_claim(problem: str, claimed: float, direction: str,
                        f"声称最小值 {claimed:.6f}——声称的极值不成立"),
         }
     return {"ok": True, "found": best, "reason": "采样未突破声称最小值"}
-    # 其它方向不适用 → 放行
-    # return {"ok": True, "reason": "无适用方向"}

@@ -26,13 +26,20 @@ import time
 
 logger = logging.getLogger("MathPilot")
 
+# 2026-09-29：工作区已从 `D:\挑战杯` 迁走（该路径已不存在）⇒ 本文件的 mathlib
+# 根目录探测必须**路径无关**：先从环境变量取，再按「仓库内相对路径」拼，
+# 最后才退回历史绝对路径（保留仅为兼容个别机器的既有安装）。
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+
 # 候选 mathlib 源码根目录（按机器实际位置探测）
 _CANDIDATE_ROOTS = [
+    os.environ.get("MATHPILOT_MATHLIB_ROOT", ""),
     "D:/mathlib4-last_bump_for_v4.31.0",
     "D:/mathlib4-last_bump_for_v4.31.0/Mathlib",
     "/mathlib4-last_bump_for_v4.31.0",
-    "D:/挑战杯/lean下载版/test_mathlib/Mathlib",
-    "D:/挑战杯/lean下载版/test_mathlib",
+    os.path.join(_REPO_ROOT, "lean下载版", "test_mathlib", "Mathlib"),
+    os.path.join(_REPO_ROOT, "lean下载版", "test_mathlib"),
 ]
 
 # 声明行匹配：theorem / lemma / def 开头，捕获 种类 + 名称
@@ -43,7 +50,7 @@ _DECL_HEAD = re.compile(
 _DECL_TERMINATORS = re.compile(
     r"^\s*(?:theorem|lemma|def|example|instance|class|structure|/-|import|open)\b")
 
-_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_'.]*")
+_TOKEN_RE_lean_search = re.compile(r"[A-Za-z_][A-Za-z0-9_'.]*")
 
 # LeanSearch v2 官方开源语料（非形式化描述 JSONL，gzip）的仓库内默认路径。
 # 2026-08-31：平台无外网 → 官方 API 失效；语料 50MB gzip 随仓库走，
@@ -341,7 +348,7 @@ class Lsv2Corpus:
                         (doc["informal_description"], 2),
                         (doc["name"], 1),
                         (doc["signature"], 1)):
-                    for t in _TOKEN_RE.findall(text or ""):
+                    for t in _TOKEN_RE_lean_search.findall(text or ""):
                         t = t.lower()
                         if len(t) >= 3 and t not in ("theorem", "lemma", "def"):
                             seen.add((t, weight))
@@ -658,7 +665,7 @@ class MathlibTheoremSearcher:
     @staticmethod
     def _tokenize(query: str) -> list[str]:
         toks = []
-        for t in _TOKEN_RE.findall(query or ""):
+        for t in _TOKEN_RE_lean_search.findall(query or ""):
             t = t.lower()
             if len(t) >= 3 and t not in ("theorem", "lemma", "def"):
                 toks.append(t)

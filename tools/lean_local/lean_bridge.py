@@ -1,4 +1,13 @@
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 """
 Lean 验证桥接层（agent/lean_bridge.py）
 ========================================
@@ -133,6 +142,65 @@ def _detect_lean_project_dir() -> str:
     return ""
 
 
+def _repo_closure_roots() -> list[str]:
+    """仓库内**默认**可能挂载 Mathlib 闭包的目录（不含 LEAN_PATH）。
+
+    2026-09-21 抽取：此前 `_mathlib_tactic_entry_available()` 与
+    `_mathlib_ready()` 各维护一份同样的列表，已经漂移过一次
+    （前者有 `data/mathlib-closure-core`，后者没有）⇒ 统一到本函数。
+    """
+    proj = _project_root()
+    return [
+        os.path.join(proj, "deploy", "mathlib-olean"),
+        os.path.join(proj, "data", "mathlib-closure-core"),
+        os.path.join(proj, "data", "mathlib-closure"),
+        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
+        os.path.join(proj, "vendor", "lean-toolchain",
+                     "mathlib", "closure-full"),
+        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
+        os.path.join(proj, "mathlib", "closure-full"),
+    ]
+
+
+def _closure_roots() -> list[str]:
+    """实际可能被编译器搜索到的闭包根：LEAN_PATH 优先，再补仓库内的默认位置。"""
+    roots: list[str] = [
+        d for d in os.environ.get("LEAN_PATH", "").split(os.pathsep) if d
+    ]
+    return roots + _repo_closure_roots()
+
+
+def _has_mathlib_tactics(root: str) -> bool:
+    """``root`` 下是否有**可用的 Mathlib tactic**（聚合入口或裁剪闭包都算）。
+
+    判据：
+      - ``Mathlib/Tactic.olean``             —— 聚合入口（full 闭包 / 完整工程）
+      - ``Mathlib/Tactic/NormNum.olean``     —— 裁剪闭包（deploy/mathlib-olean）
+
+    ★ 2026-09-21 修复（云端「Lean 验证全降级」根因）：
+      此前该判据**只认聚合入口**。而 `deploy/mathlib-olean` 是由 5 个具体入口
+      （NormNum/Ring/Linarith/Positivity/Omega）BFS 构建的**裁剪闭包**，
+      **没有** `Mathlib/Tactic.olean` ⇒ 被判为「Mathlib 未就绪」。
+      后果不是降级而是**全降级**：`_mathlib_ready()` 返回 False ⇒
+      `verify()` / `verify_answer()` / `run_pre_verification()` /
+      `audit_sketch()` 四处调用点全部跳过 `_prepend_mathlib_import()` ⇒
+      原始 ``import Mathlib.Tactic``（或裸 ``import Mathlib``）原样送编译 ⇒
+      闭包内无该 olean ⇒ 编译必败 ⇒ ``verdict`` 恒 ``unknown``、
+      ``lean_valid`` 恒 ``False``。
+
+      本地为何不暴露：本地同时存在带聚合入口的 ``vendor/.../closure-full``
+      与 ``data/mathlib-closure``，`_detect_lean_project_dir()` 命中其中之一
+      ⇒ 判据为真 ⇒ 归一化正常执行。云端 2026-09-20 为让 MCP 通道生效把
+      ``LEAN_PROJECT_PATH`` 指向了裁剪闭包（deploy/cloud_run.env），
+      于是 ``_lean_project_dir`` 非空且**恰为裁剪闭包根** ⇒ 必现。
+    """
+    if not root:
+        return False
+    return (os.path.isfile(os.path.join(root, "Mathlib", "Tactic.olean"))
+            or os.path.isfile(os.path.join(root, "Mathlib", "Tactic",
+                                           "NormNum.olean")))
+
+
 def _mathlib_tactic_entry_available() -> bool:
     """聚合入口 Mathlib/Tactic.olean 是否可用（full 闭包/本地完整工程为 True）。
 
@@ -145,24 +213,16 @@ def _mathlib_tactic_entry_available() -> bool:
     挂载闭包后 lean 直编只用 LEAN_PATH 搜索）**以它为准**，避免被本机残留
     的 full 闭包目录（data/mathlib-closure）误导；LEAN_PATH 未设置时
     （本地 lake 工程场景）fallback 到默认部署目录探测。
+
+    ⚠️ 本函数问的是「聚合入口在不在」，与 `_has_mathlib_tactics()` 问的
+    「有没有可用的 tactic」是**两个不同问题**，不可互相替代：前者决定
+    import 块形态，后者决定要不要做 import 归一化。
     """
     roots: list[str] = [
         d for d in os.environ.get("LEAN_PATH", "").split(os.pathsep) if d
     ]
-    if roots:
-        return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
-                   for r in roots)
-    proj = _project_root()
-    roots = [
-        os.path.join(proj, "deploy", "mathlib-olean"),
-        os.path.join(proj, "data", "mathlib-closure-core"),
-        os.path.join(proj, "data", "mathlib-closure"),
-        # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
-        os.path.join(proj, "vendor", "lean-toolchain",
-                     "mathlib", "closure-full"),
-        # 2026-09-07 root 形态（主仓切换后 <root>/mathlib/closure-full）
-        os.path.join(proj, "mathlib", "closure-full"),
-    ]
+    if not roots:
+        roots = _repo_closure_roots()
     return any(os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
                for r in roots)
 
@@ -236,10 +296,73 @@ def _cross_check_problem_symbols(problem: str, lean_code: str) -> bool:
         return True
 
 
+# ★★ 2026-09-22（用户口径「将错误逻辑改掉」）：**闭式自证**的硬判据。
+#   可证的事实：`verify_answer` 里那条"答案数字是否进代码"的交叉核对
+#   **在题面含参数时是循环判据** —— 自证式代码的右端**就是答案本身**，
+#   故 `common2`（答案数字 ∩ 代码数字）恒非空 ⇒ 该分支永远放行。
+#   实测 001：`example : (2 * -2 : ℚ) = -4 := by norm_num` 因含 `-4` 而被判
+#   `answer_valid / compiled_and_guards_passed`，而同题两条**含符号参数的
+#   正确候选** `-2(m-1)` 因 `convert_to_lean_failed` 被判 `unknown` 遭拒。
+#
+#   可证的补强：**ground（无自由标识符）命题只能证明某个具体数值恒等式**，
+#   它**不可能**形式化一个含参数的题目（题目的断言本身是关于变量的）。
+#   ⇒ 题面含参数时的 ground 通过，必然是自证，一律拒绝。
+_PARAM_HINT_RES = (
+    re.compile(r"∀|\\forall|for\s+all|任取|对任意|任意"),
+    # ★ 2026-09-22 补：中文"求所有/全部/每个"型措辞 ⇒ 答案是一个**解族**，
+    #   必然依赖参数/索引。实测漏判：`求所有 a_n` 原先判为非参数（见下方 `[a-zA-Z]_`）。
+    re.compile(r"所有|全部|每个|每一|任一"),
+    re.compile(r"_\{|\^\{"),                        # LaTeX 下标/上标 `a_{n}` ⇒ 有参数或索引
+    re.compile(r"[a-zA-Z]_"),                       # ★ 补：纯下标记法 `a_n` / `f_k`（无花括号）
+    # ★ 系数带参数 `2m`/`3n`。**必须紧邻**，不可放宽为 `\d\s*[a-zA-Z]` ——
+    #   否则英文散文里的「3 and」「4 The」会被误判为参数，导致纯算术题被误拒。
+    re.compile(r"\d[a-zA-Z]"),
+    re.compile(r"[a-zA-Z]\s*(?:[+\-*/^=]|\\cdot)"),  # x+ / m= ⇒ 参数参与运算
+)
+
+_LEAN_KEYWORDS = {
+    "example", "theorem", "lemma", "by", "norm_num", "decide", "native_decide",
+    "rfl", "ring", "ring_nf", "linarith", "nlinarith", "omega", "simp", "exact",
+    "apply", "intro", "have", "show", "calc", "positivity", "field_simp",
+    "Nat", "Int", "Rat", "Real", "Complex", "Bool", "Prop", "Type", "True", "False",
+    "forall", "exists", "fun", "if", "then", "else", "let", "in", "with",
+}
+
+
+def _problem_is_parametric(problem: str) -> bool:
+    """题面是否含**参数 / 变量**（而非纯具体数值计算题）。
+
+    有意避开"抽出单字母"的做法：那个口径有 noise 白名单（e/i/d/n/x/a），
+    会把最常见的变量字母误当噪声，导致漏判（003 的 `a_n` 就抽不出符号）。
+    这里改判"是否出现**数学语境下的参数形态**"，对纯算术题不误伤。
+    """
+    s = str(problem or "")
+    return any(p.search(s) for p in _PARAM_HINT_RES)
+
+
+def _is_ground_statement(lean_code: str) -> bool:
+    """Lean 语句是否为 **ground（闭式）命题** —— 不含任何自由标识符。
+
+    只取 `:=` 之前的 statement 段（tactic 段不参与判断），剔注释，
+    再看除 Lean 关键字/类型名以外是否还有标识符剩下。
+    """
+    try:
+        s = str(lean_code or "")
+        s = re.sub(r"--[^\n]*", " ", s)
+        s = re.sub(r"/-.*?-/", " ", s, flags=re.S)
+        head = s.split(":=")[0]
+        # 去掉 `example foo :` / `theorem bar :` 里的**自定义命题名**
+        head = re.sub(r"\b(?:example|theorem|lemma)\s+[A-Za-z_][A-Za-z0-9_']*\s*", " ", head)
+        toks = re.findall(r"[A-Za-z_][A-Za-z0-9_']*", head)
+        return not [t for t in toks if t not in _LEAN_KEYWORDS]
+    except Exception:  # noqa: BLE001
+        return False          # 判不出就不改变既有行为
+
+
 def _to_exact_number_safe(v: Any) -> Optional[str]:
     """把答案串转成 Lean 可用的**精确数值字面量**（本地实现，不 import agent.*）。
 
-    为什么不复用 `agent.calc_tool.to_exact_number`：`agent` 依赖 `tools`，
+    为什么不复用 `utils.math_eval.to_exact_number`：`agent` 依赖 `tools`，
     反向导入会引入循环依赖（本项目已因循环导入出过 Lean 通道被静默禁用的事故）。
     保守实现：只接受纯数值 / 简单分数 / `\\boxed{}` 包裹的数值；其余返回 None
     （调用方据此放弃系统验算，不影响原有判定）。
@@ -293,8 +416,13 @@ def _prepend_mathlib_import(code: str) -> str:
     if not code:
         return _mathlib_import_block() + "\n"
     # 聚合入口 import Mathlib.Tactic（行尾无子模块）→ 替换为可用块
-    if re.search(r"^\s*import\s+Mathlib\.Tactic\s*$", code, re.MULTILINE):
-        return re.sub(r"(?m)^\s*import\s+Mathlib\.Tactic\s*$",
+    # ★ 2026-09-21 加固：原先锚点写作 `\s*$`，`import Mathlib.Tactic -- 注释`
+    #   这类带行尾注释的写法会逃过本规则，转而被下方「已有具体模块导入 → 原样
+    #   返回」的分支放行 ⇒ 聚合入口被保留 ⇒ 裁剪闭包下同样编译必败
+    #   （与 0921 云端全降级同一失效家族）。现允许行尾 `--` 注释与空白。
+    if re.search(r"^\s*import\s+Mathlib\.Tactic\s*(?:--[^\n]*)?$",
+                 code, re.MULTILINE):
+        return re.sub(r"(?m)^\s*import\s+Mathlib\.Tactic\s*(?:--[^\n]*)?$",
                       _mathlib_import_block(), code)
     # 已有具体模块导入（Mathlib.Tactic.NormNum / Mathlib.Data.X）→ 原样返回
     if re.search(r"^\s*import\s+Mathlib\.", code, re.MULTILINE):
@@ -771,7 +899,7 @@ def _mcp_gate_ok(work_dir: str) -> bool:
     """
     if _is_mcp_project_root(work_dir):
         return True
-    if (os.environ.get("LEAN_MCP_AUTOLAKE", "1") or "1").strip() in ("0", "false", "no"):
+    if not _sw_bool("lean_mcp_autolake"):
         return False
     return _ensure_min_lake_project(work_dir)
 
@@ -1177,29 +1305,6 @@ def _mcp_workers() -> int:
     return lean_parallelism()
 
 
-def _mcp_pool_reset() -> None:
-    """关闭并清空全部实例池（测试/收尾用）。
-
-    注意：只关**空闲**实例；正在被借出的实例由 ``_mcp_acquire`` 的 finally 归还时
-    自然丢弃（名额已清零，等价于"下次重建"）。
-    """
-    global _MCP_POOL_TOTAL
-    with _MCP_POOL_LOCK:
-        pools = list(_MCP_POOLS.values())
-        _MCP_POOLS.clear()
-        _MCP_POOL_MADE.clear()
-        _MCP_POOL_TOTAL = 0
-    for _q in pools:
-        while True:
-            try:
-                _c = _q.get_nowait()
-            except queue.Empty:
-                break
-            try:
-                _c.close()
-            except Exception:  # noqa: BLE001
-                pass
-
 
 # =====================================================================
 # 并发安全的临时 .lean 文件（MCP 诊断用）
@@ -1507,7 +1612,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 赛后无时间限制（用户方针：凡依据是时间的条款一律重新审视）⇒ 地板恢复。
             # 可用 `LEAN_MCP_TIMEOUT_FLOOR` 覆盖（默认 300s，覆盖冷启动 90s 有 3 倍余量）。
             try:
-                _floor = float(os.environ.get("LEAN_MCP_TIMEOUT_FLOOR", "300") or 300)
+                _floor = _sw_num("lean_mcp_timeout_floor")
             except (TypeError, ValueError):
                 _floor = 300.0
             try:
@@ -1542,7 +1647,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                 # 仅用于 :1570-1571 的 {"ok":False,...} 返回；本段位于 if errors:
                 # （:1502）内部 ⇒ ok=False 已定，它只影响 _analyze_error 的错因
                 # 文本质量，**不改变候选是否被淘汰**。省一次 goal 调用（timeout=45s）。
-                if gl and os.environ.get("LEAN_MCP_GOAL_LOC", "0") != "0":
+                if gl and _sw_bool("lean_mcp_goal_loc"):
                     try:
                         gresp = _px.request(
                             lean_file, timeout=45.0, goal_line=int(gl),
@@ -1560,7 +1665,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                 # 依据：本段结果只 append 到 err_text（:1540-1541），同 :1502 内
                 # 部 ⇒ ok=False 已定，只影响错因文本质量，**不改变候选淘汰**。
                 # 省一次 multi_attempt（timeout=90s，是三者中最贵的一项）。
-                if os.environ.get("LEAN_MCP_MULTI_ATTEMPT", "0") != "0":
+                if _sw_bool("lean_mcp_multi_attempt"):
                     try:
                         _ln0 = int(errors[0].get("line") or 1)
                         _col0 = int(errors[0].get("column") or 1)
@@ -1586,7 +1691,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                 # 依据：本段结果只 append 到 err_text（:1562-1565），同 :1502 内
                 # 部 ⇒ ok=False 已定，只影响 _analyze_error 的错因文本质量，
                 # **不改变候选淘汰**。省一次 hover（timeout=45s）。
-                if os.environ.get("LEAN_MCP_HOVER_CHECK", "0") != "0":
+                if _sw_bool("lean_mcp_hover_check"):
                     try:
                         _hln = int(errors[0].get("line") or 1)
                         _hcol = int(errors[0].get("column") or 1)
@@ -1620,21 +1725,48 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 用 lean-lsp-mcp 的 lean_verify 查定理依赖的公理集合——可捕捉
             # **间接引入**的 sorry（如经宏/别名），这是源码扫描 _scan_untrusted
             # 覆盖不到的盲区。检出 sorryAx 即判不可信（与档1 语义一致）。
-            if os.environ.get("LEAN_MCP_VERIFY_AXIOMS", "1") != "0":
+            if _sw_bool("lean_mcp_verify_axioms"):
                 try:
+                    # ★★ 2026-09-21 修复（覆盖盲区）：原正则**只匹配 `theorem`**，
+                    #   对 `example : ... := by ...` 整体跳过 ⇒ 而 MathPilot 生成的
+                    #   验证代码**大量使用 `example`** ⇒ 这道"捕捉间接 sorry"的防线
+                    #   实际大面积失效。
+                    #   实测证据：`ansverify_880065_88791123086.lean`
+                    #   = `example : (2:ℚ)*(-2) = -4 := by norm_num` 编译 ok=True，
+                    #   但 axiom 检查**静默跳过**（日志里既无"通过"也无"sorryAx"）。
+                    #   修法：先找 theorem/lemma；找不到时把**首个 example** 改写成
+                    #   命名 theorem 的副本，**重新诊断**（LSP 才会加载新名字）后按名验证。
+                    _vname = None
                     _tm = re.search(
-                        r"\btheorem\s+([A-Za-z_][\w'.]*)", code or "")
+                        r"\b(?:theorem|lemma)\s+([A-Za-z_][\w'.]*)", code or "")
                     if _tm:
+                        _vname = _tm.group(1)
+                    elif re.search(r"(?m)^[ \t]*example\s*:", code or ""):
+                        _vname = "_mp_axcheck"
+                        _alt = re.sub(
+                            r"(?m)^([ \t]*)example\s*:",
+                            r"\1theorem " + _vname + " :",
+                            code or "", count=1)
+                        if _alt != (code or ""):
+                            with open(lean_file, "w", encoding="utf-8") as _fh:
+                                _fh.write(_alt)
+                            _px.request(lean_file, timeout=max(timeout, 90.0))
+                            logger.info(
+                                "[LeanBridge] ★ axiom 检查改用 example 改写副本：%s",
+                                _vname)
+                        else:
+                            _vname = None
+                    if _vname:
                         _vr = _px.verify_theorem(
-                            lean_file, _tm.group(1), timeout=45.0)
+                            lean_file, _vname, timeout=45.0)
                         _vraw = str(_vr.get("raw") or "")
                         if "sorryAx" in _vraw:
                             logger.warning(
                                 "[LeanBridge] mcp axiom 检查发现 sorryAx：%s",
-                                _tm.group(1))
+                                _vname)
                             return {"ok": False, "error": _UNTRUSTED_MSG}
                         logger.info("[LeanBridge] ★ mcp axiom 检查通过：%s",
-                                    _tm.group(1))
+                                    _vname)
                 except Exception as _ve:  # noqa: BLE001
                     logger.debug("[LeanBridge] axiom 检查跳过: %s", _ve)
             return {"ok": True, "error": ""}
@@ -1861,32 +1993,35 @@ class LeanBridge:
                 # 误判 False 导致 verify_answer 跳过 _prepend_mathlib_import，
                 # JSON 通道 lean_code 无 import → norm_num 等未定义 → 平台
                 # 非证明题答案验证整体失效（本地有 lake 工程不暴露）。
-                if not ready and os.path.isfile(
-                        os.path.join(pdir, "Mathlib", "Tactic.olean")):
+                #
+                # ★ 2026-09-21 修复（云端「Lean 验证全降级」根因）：判据由
+                #   「只认聚合入口 Mathlib/Tactic.olean」放宽为
+                #   `_has_mathlib_tactics`（聚合入口 **或** 裁剪闭包的具体
+                #   tactic 模块）。云端 deploy/cloud_run.env 为让 MCP 通道生效
+                #   把 LEAN_PROJECT_PATH 指向裁剪闭包 deploy/mathlib-olean，
+                #   于是 pdir 非空且**恰为裁剪闭包根**、无 Mathlib/Tactic.olean
+                #   ⇒ 本分支恒 False ⇒ verify()/verify_answer()/
+                #   run_pre_verification()/audit_sketch() 四处全部跳过 import
+                #   归一化 ⇒ `import Mathlib.Tactic` 原样送编译 ⇒ 必败 ⇒
+                #   verdict 恒 unknown、lean_valid 恒 False。
+                #   ⚠️ 下方 else 分支的 NormNum 兜底**早已存在**，本分支此前
+                #   缺失 ⇒ 两个分支**不对称**才是真正的缺陷（不是"没写兜底"）。
+                if not ready and _has_mathlib_tactics(pdir):
                     ready = True
         else:
             # 无 lake 工程（比赛环境）：LEAN_PATH 或默认部署目录挂载闭包即就绪
-            roots: list[str] = [
-                d for d in os.environ.get("LEAN_PATH", "").split(os.pathsep) if d
-            ]
-            proj = _project_root()
-            roots += [
-                os.path.join(proj, "deploy", "mathlib-olean"),
-                os.path.join(proj, "data", "mathlib-closure"),
-                # 2026-09-06 vendor 挂载（MathPilot-lean-toolchain closure-full）
-                os.path.join(proj, "vendor", "lean-toolchain",
-                             "mathlib", "closure-full"),
-                # 2026-09-10 root 一体化形态（与 _mathlib_tactic_entry_available
-                # 的 roots 列表对称；平台无 pdir 时也能识别 <root>/mathlib/closure-full）
-                os.path.join(proj, "mathlib", "closure-full"),
-            ]
-            for r in roots:
+            for r in _closure_roots():
                 # core 闭包无聚合入口，用具体模块 olean 判定；full 闭包两者皆有
-                if (os.path.isfile(os.path.join(r, "Mathlib", "Tactic.olean"))
-                        or os.path.isfile(os.path.join(
-                            r, "Mathlib", "Tactic", "NormNum.olean"))):
+                if _has_mathlib_tactics(r):
                     ready = True
                     break
+        # ★ 2026-09-21 统一兜底：pdir 存在但**本身不含** Mathlib，而编译器真正
+        # 搜索的 LEAN_PATH / 仓库默认闭包里**有** Mathlib（如 pdir 被设成非闭包
+        # 目录、闭包另经 LEAN_PATH 挂载）⇒ 仍必须做 import 归一化，否则同样
+        # 落入"归一化被跳过 → import Mathlib.Tactic 编译必然失败"的全降级。
+        # 该兜底对「机器上确实没有 Mathlib」的情形返回 False，与原行为一致。
+        if not ready:
+            ready = any(_has_mathlib_tactics(r) for r in _closure_roots())
         self._mathlib_ready_cache = ready
         return ready
 
@@ -2223,6 +2358,8 @@ class LeanBridge:
             # `enable_calc_tool=False`（2026-09-15 起默认关）⇒ 模型不被要求写 `<calc>`
             # ⇒ 提不到算式 ⇒ **102/102 条记录的 `sys_verify` 全为 None**
             #（本守卫自 2026-09-15 起**结构性不可达**，等于不存在）。
+            # ★ 2026-10-01：`<calc>` 板块与 `enable_calc_tool` 已整体删除，
+            #   本正则回退成为唯一提取路径（上方历史背景保留）。
             # 回退判据：**整行纯算术等式**（左侧只含数字/运算符/括号、且至少含一个
             # `+ - * / ^`；右侧为数字）⇒ 交给下游构造 `(左) = (答案)` 编译。
             # 0 LLM 成本、不改提示词、不动 calc 链。
@@ -2357,6 +2494,12 @@ class LeanBridge:
                 # v17 补丁：题目无大数字时退而用"答案数字"核对——答案里的
                 # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
                 _cc = _cross_check_problem_numbers(problem, lean_code)
+                # ★★ 2026-09-22：**闭式自证拦截**（补上循环判据的缺口，见上方 helper 注释）。
+                #   题面含参数 + 验证代码是 ground 闭式 ⇒ 只证明了 `X = X` 型恒等式，
+                #   不可能形式化题目 ⇒ 直接判自证，不再看数字是否"出现在代码里"。
+                if (_cc is not False and _problem_is_parametric(problem)
+                        and _is_ground_statement(lean_code)):
+                    _cc = False
                 if _cc is None:
                     # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
                     ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))

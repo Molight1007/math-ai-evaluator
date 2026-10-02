@@ -20,6 +20,16 @@ IMPROVED = (
     "## 最终答案\n42\n"
     "## 关键验证点\n代入检验通过。"
 )
+# ⚠ 2026-09-30：多轮/无条件用例需用**长响应**——上游有「改进输出过短」门槛
+#   （实测 202 字符），短响应会在改进成功判定前被丢弃（返回 0），
+#   导致"A 跑了但没产出"与"A 根本没跑"混淆。此处显式跨过该门槛。
+IMPROVED_LONG = (
+    "## 问题分析\n重新审视题目，确认已知条件与求解目标。\n"
+    "## 详细解题步骤\n"
+    + "步骤1：整理并化简式子，逐步推导出关键关系。\n" * 8
+    + "## 最终答案\n42\n"
+    "## 关键验证点\n将答案代回原式逐项检验，两侧相等，结论成立。"
+)
 REFUSAL = "抱歉，我无法解答这个问题。"
 SHORT = "## 最终答案\n42"
 
@@ -150,6 +160,117 @@ class ImproveCandidatesTest(unittest.TestCase):
         ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
         n = s.improve_candidates(ctx)
         self.assertEqual(n, 1, "0=关闭预留护栏，回到旧行为")
+
+
+# ======================================================================
+# 遍数 1/2 可配 + 真无条件（2026-09-30，截图 #7）
+# ----------------------------------------------------------------------
+# 用户原话：
+# > 无条件自改进是一遍还是两遍？哪种效果最好，需要尝试。
+#
+# 因此这里锁的不是"哪个遍数更好"（那要跑 A/B 才有答案），而是
+# **两件事必须都真的可切换**，否则 A/B 无从下手：
+#   ① `self_improve_rounds` 真的驱动循环次数（不是写了不生效）；
+#   ② 第 2 轮**真的对同一批候选再改进一次**（不是被 `self_improved`
+#      标记全部过滤掉而空转 —— 这是最隐蔽的失效模式）。
+# 外加 ③「真无条件」= `self_improve_conditional=False` 时不过滤缺陷。
+# ======================================================================
+class ImproveRoundsTest(unittest.TestCase):
+
+    def test_default_rounds_is_one(self) -> None:
+        """默认不配 ⇒ 只跑 1 轮（不改变既有行为，A/B 的 baseline）。"""
+        s = make_solver(IMPROVED)
+        ctx = make_ctx()
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+        n = s.improve_candidates(ctx)
+        self.assertEqual(n, 1)
+        self.assertFalse(hasattr(s.config, "self_improve_rounds"))
+
+    def test_two_rounds_actually_run_twice(self) -> None:
+        """★ 核心回归：rounds=2 时 LLM 必须被调 **2 次**。
+
+        若第 2 轮的 `self_improved` 标记没被重置，`_needs_improve` 会把
+        候选全过滤掉 ⇒ 第 2 轮 0 次调用却"看起来跑了"（静默空转）。
+        本用例用调用计数直接锁死这一点。
+        """
+        calls = []
+
+        class C:
+            def chat(self, messages=None, temperature=0.0, max_tokens=0, **kw):
+                calls.append(1)
+                return IMPROVED_LONG
+
+        cfg = SimpleNamespace(use_blueprint=False, self_improve_max=3,
+                              policy_temperature=0.3, policy_max_tokens=8192,
+                              self_improve_rounds=2)
+        s = SolverAgent(client=C(), config=cfg)
+        ctx = make_ctx(max_calls=20)
+        ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+        n = s.improve_candidates(ctx)
+        # ★ 调用次数 = 3（不是 2），原因是**候选池会增长**：
+        #   第 1 轮：1 个原候选 → 改进成功时"保留原版 + 写入改进版"
+        #           ⇒ 池子变 2 个（实测 trace：保留原版候选#1，改进版写入#0）；
+        #   第 2 轮：对这 2 个各调一次（上限 self_improve_max=3 未撞）
+        #           ⇒ 1 + 2 = 3 次。
+        #   本用例锁的是**第 2 轮真的跑了**（不是被 self_improved 标记全过滤
+        #   而空转）—— 若没重置标记，第 2 轮会是 0 次，总数只会是 1。
+        self.assertEqual(len(calls), 3, "第 2 轮必须真的对候选再改进（池已增长为 2）")
+        self.assertEqual(n, 3, "累计改进次数应跨轮累加")
+        # 判据核心：第 2 轮确实产生了调用（> 第 1 轮的 1 次）
+        self.assertGreater(len(calls), 1, "第 2 轮若空转则此处为 1")
+
+    def test_two_rounds_respects_self_improve_max_per_round(self) -> None:
+        """每轮仍受 self_improve_max 约束（不能因多轮而放大单轮成本）。"""
+        calls = []
+
+        class C:
+            def chat(self, messages=None, temperature=0.0, max_tokens=0, **kw):
+                calls.append(1)
+                return IMPROVED_LONG
+
+        cfg = SimpleNamespace(use_blueprint=False, self_improve_max=2,
+                              policy_temperature=0.3, policy_max_tokens=8192,
+                              self_improve_rounds=2)
+        s = SolverAgent(client=C(), config=cfg)
+        ctx = make_ctx(max_calls=50)
+        for i in range(5):
+            ctx.candidates.append(Candidate(id=i, answer="4", reasoning=f"原解{i}"))
+        s.improve_candidates(ctx)
+        self.assertEqual(len(calls), 4, "2 轮 × 每轮 2 个候选 = 4 次")
+
+    def test_rounds_never_goes_below_one(self) -> None:
+        """配 0 / 负数也要至少跑一轮 —— 否则"自改进"被静默关闭。"""
+        for bogus in (0, -3):
+            s = make_solver(IMPROVED)
+            s.config.self_improve_rounds = bogus
+            ctx = make_ctx()
+            ctx.candidates.append(Candidate(id=0, answer="4", reasoning="原解答内容"))
+            self.assertEqual(s.improve_candidates(ctx), 1,
+                             f"rounds={bogus} 不应导致 0 轮")
+
+    def test_conditional_true_filters_defective_candidate(self) -> None:
+        """★ 反向对照：`self_improve_conditional=True` 时，完好的候选**不该**被改进。"""
+        s = make_solver(IMPROVED)
+        s.config.self_improve_conditional = True
+        ctx = make_ctx()
+        # 推理充分、答案完整 ⇒ 条件模式下应被过滤
+        ctx.candidates.append(Candidate(
+            id=0, answer="42",
+            reasoning="## 问题分析\n" + "充分展开的推理内容。" * 60))
+        self.assertEqual(s.improve_candidates(ctx), 0,
+                         "条件模式应过滤完好候选")
+
+    def test_unconditional_is_default_and_improves_even_good_candidate(self) -> None:
+        """★ 核心：默认（真无条件）时，**即便候选看起来完好也要改进一遍**。"""
+        s = make_solver(IMPROVED_LONG)
+        # config 无 self_improve_conditional ⇒ getattr 默认 False = 真无条件
+        self.assertFalse(getattr(s.config, "self_improve_conditional", False))
+        ctx = make_ctx()
+        ctx.candidates.append(Candidate(
+            id=0, answer="42",
+            reasoning="## 问题分析\n" + "充分展开的推理内容。" * 60))
+        self.assertEqual(s.improve_candidates(ctx), 1,
+                         "真无条件：完好候选也要过一次自改进")
 
 
 if __name__ == "__main__":

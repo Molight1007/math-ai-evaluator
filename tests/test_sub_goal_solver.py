@@ -6,13 +6,25 @@
 - ``_parse_subgoal_plan``: 规划校验、去重、类型白名单、上限
 - ``run``: 全流程（mock client）追加候选
 """
+import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from agent.base import TaskContext, Budget, Candidate
 from agent.sub_goal_solver import SubGoalSolverAgent
 from agent.blueprint_planner import BlueprintDAG, BlueprintNode
+
+
+def _ctx(max_calls: int = 50) -> TaskContext:
+    """多 agent 测试用的 ctx（时间/预算宽裕，闸门默认放行）。"""
+    return TaskContext(
+        problem="求 x^2 = 4 的解",
+        metadata={},
+        start_time=time.time(),
+        deadline=time.time() + 900,
+        budget=Budget(max_calls=max_calls),
+    )
 
 
 def make_agent(client=None) -> SubGoalSolverAgent:
@@ -188,22 +200,24 @@ class StageBudgetTest(unittest.TestCase):
         agent.run(ctx)
         self.assertGreater(self._stage_end_of(ctx), 0.0)
 
-    def test_tail_reserve_caps_stage_end(self) -> None:
-        """真实 deadline 下：stage_end ≤ deadline - tail_reserve（180s，默认）。"""
+    def test_fixed_budget_not_tail_capped(self) -> None:
+        """2026-10-01：tail_reserve 已按用户决策删除 ⇒ 真实 deadline 下
+        stage_end 不再被 `deadline - reserve` 压制，而是固定预算 start+budget。"""
         import time as _t
         agent = make_agent()
         ctx = make_ctx()
-        ctx.deadline = _t.time() + 300  # 真实未来时间戳
+        ctx.deadline = _t.time() + 300  # 真实未来时间戳（但不再参与压制）
         ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
         agent.run(ctx)
         end = self._stage_end_of(ctx)
         self.assertGreater(end, 0.0)
-        # deadline - end >= tail_reserve(180) - 容忍(计时抖动 5s)
-        self.assertGreaterEqual(ctx.deadline - end, 175.0)
+        # 固定预算 750s > 该 deadline(now+300) ⇒ 可越过 deadline（已无尾部预留）
+        self.assertGreater(end, ctx.deadline)
 
-    def test_override_budget_sec_still_tail_capped(self) -> None:
-        """subgoal_stage_budget_sec=0：放弃固定上限，但真实 deadline 下
-        tail_reserve 仍把 stage_end 约束在 deadline-180 前（第二层独立生效）。"""
+    def test_override_budget_sec_zero_disables_cap(self) -> None:
+        """subgoal_stage_budget_sec=0 ⇒ 阶段预算完全停用（stage_end=0）。
+
+        （2026-10-01：tail_reserve 已删，不再有"第二层"deadline 兜底。）"""
         import time as _t
         from types import SimpleNamespace as _NS
         agent = make_agent()
@@ -216,10 +230,7 @@ class StageBudgetTest(unittest.TestCase):
         ctx.deadline = _t.time() + 300  # 真实 deadline
         ctx.candidates.append(Candidate(id=1, answer="1", reasoning="候选1", revised=False))
         agent.run(ctx)
-        end = self._stage_end_of(ctx)
-        self.assertGreater(end, 0.0)
-        # deadline - end >= tail_reserve(180) - 容忍(5s)
-        self.assertGreaterEqual(ctx.deadline - end, 175.0)
+        self.assertEqual(self._stage_end_of(ctx), 0.0)
 
     def test_disable_both_budget_and_reserve(self) -> None:
         """固定预算=0 且 tail_reserve=0 → 阶段预算完全停用（stage_end=0）。"""
@@ -323,65 +334,6 @@ class ReplanDispatchTest(unittest.TestCase):
             m_pl.regenerate_with_feedback.assert_not_called()
 
 
-class StepCalcDisciplineTest(unittest.TestCase):
-    """2026-09-04 calc 纪律下沉子目标步骤：system 注入 <calc> 引导 + 响应回填。"""
-
-    class _RecordingClient:
-        def __init__(self, resp: str):
-            self.resp = resp
-            self.last_messages = None
-
-        def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
-            self.last_messages = messages
-            return self.resp
-
-        def call(self, messages=None, temperature=0.0, max_tokens=256, **kw):
-            return self.chat(messages=messages, temperature=temperature,
-                             max_tokens=max_tokens, **kw)
-
-    def _make_agent(self, enable_calc_tool: bool):
-        config = SimpleNamespace(
-            max_total_calls=20,
-            max_time_per_question=300,
-            max_total_time_seconds=21000,
-            policy_max_tokens=2048,
-            enable_calc_tool=enable_calc_tool,
-        )
-        return SubGoalSolverAgent(client=None, config=config)
-
-    def _call_step(self, agent, resp_text: str):
-        client = self._RecordingClient(resp_text)
-        agent.client = client
-        ctx = make_ctx()
-        out = agent._call_step(ctx, "【原题】求值\n【当前子目标 #1】计算")
-        return out, client.last_messages
-
-    def test_system_injects_calc_guide_and_resolves(self) -> None:
-        agent = self._make_agent(enable_calc_tool=True)
-        out, msgs = self._call_step(
-            agent,
-            "【推导过程】\n略\n【本步结果】\n<calc>1/2+1/3</calc>",
-        )
-        # ① system 提示词注入了 calc 纪律
-        sys_content = msgs[0]["content"]
-        self.assertIn("计算环节请用 <calc>", sys_content)
-        # ② <calc> 块被精确回填，不留原始标记
-        self.assertNotIn("<calc>", out)
-        self.assertIn("5/6", out)
-
-    def test_disabled_keeps_original(self) -> None:
-        agent = self._make_agent(enable_calc_tool=False)
-        out, msgs = self._call_step(
-            agent,
-            "【推导过程】\n略\n【本步结果】\n<calc>1/2+1/3</calc>",
-        )
-        sys_content = msgs[0]["content"]
-        self.assertNotIn("计算环节请用 <calc>", sys_content)
-        # 关闭时不做回填：<calc> 原样保留（与 solver 开关语义一致）
-        self.assertIn("<calc>1/2+1/3</calc>", out)
-
-
-# ------------------------------------------------------------------
 # S1-lite / S2（2026-09-06 老师建议：子目标独立性 + 校验前移）单元测试
 # ------------------------------------------------------------------
 class SubgoalCtxModeTest(unittest.TestCase):
@@ -792,6 +744,115 @@ class MergeSpinRetryTest(unittest.TestCase):
             out = agent._merge_results(ctx, subgoals, "p", {1: "3"}, "s")
         self.assertEqual(m_llm.call_count, 1)
         self.assertEqual(out.strip(), "3")
+
+
+# ======================================================================
+# 多 agent 子目标求解（2026-09-30，截图 #8）
+# ----------------------------------------------------------------------
+# 用户原话：
+# > 子目标……多 agent 拿子目标的求解能不能换成多 agent？
+# > 那样是不是能提高子目标的正确率？
+#
+# 本组测试锁三件事（都不依赖网络/LLM）：
+#   ① `_pick_consensus_sample` 的选择规则**正确**（选错只会放大错误）；
+#   ② `_multi_agent_n` 的三道闸门**都真的会退回 1**（成本失控防线）；
+#   ③ 默认配置下行为与改动前**逐字一致**（A/B 的 baseline 必须干净）。
+# ======================================================================
+class SubgoalMultiAgentTest(unittest.TestCase):
+
+    # ---------- ① 选择规则 ----------
+    def test_majority_key_wins(self):
+        """多数一致 → 取多数派（self-consistency 的核心）。"""
+        got, key, nd = SubGoalSolverAgent._pick_consensus_sample(
+            ["答案是 42", "答案是 42", "答案是 7"])
+        self.assertEqual(got, "答案是 42")
+        self.assertEqual(nd, 2)
+
+    def test_all_distinct_takes_longest(self):
+        """全不同 → 取最长（短的多半是敷衍/未完成）。"""
+        got, _key, nd = SubGoalSolverAgent._pick_consensus_sample(
+            ["短", "中等长度", "这是最长的一个答案内容"])
+        self.assertEqual(got, "这是最长的一个答案内容")
+        self.assertEqual(nd, 3)
+
+    def test_boxed_takes_priority_for_key(self):
+        """关键值优先取 \\boxed{} —— 与判分口径一致，避免拿到散文尾巴。"""
+        _got, key, nd = SubGoalSolverAgent._pick_consensus_sample(
+            ["\\boxed{42} 一段推导", "\\boxed{42}", "\\boxed{7}"])
+        self.assertEqual(key, "42")
+        self.assertEqual(nd, 2)
+
+    def test_whitespace_differences_normalize_to_same_key(self):
+        """`a = 1 + 2` 与 `a=1+2` 必须视为同一结论，否则一致性永远达不成。"""
+        _got, key, nd = SubGoalSolverAgent._pick_consensus_sample(
+            ["a = 1 + 2", "a=1+2"])
+        self.assertEqual(key, "a=1+2")
+        self.assertEqual(nd, 1)
+
+    def test_all_empty_returns_none_not_fake_success(self):
+        """★ 全部为空/失败 ⇒ 返回 None，让上层走失败分支，**绝不伪造成功**。"""
+        got, key, nd = SubGoalSolverAgent._pick_consensus_sample([None, "", "   "])
+        self.assertIsNone(got)
+        self.assertEqual(nd, 0)
+        got2, _k2, nd2 = SubGoalSolverAgent._pick_consensus_sample([])
+        self.assertIsNone(got2)
+        self.assertEqual(nd2, 0)
+
+    def test_tie_prefers_longer_reasoning(self):
+        """平票时取更长的原文（推理更完整）。"""
+        short = "\\boxed{5}"
+        long = "\\boxed{5}" + " 补充推导过程" * 10
+        got, _key, nd = SubGoalSolverAgent._pick_consensus_sample([short, long])
+        self.assertEqual(got, long)
+        self.assertEqual(nd, 1)
+
+    def test_positive_control_would_catch_wrong_pick(self):
+        """★ 阳性对照：若选择规则退化成"取第一个"，本断言应红。"""
+        got, _k, _n = SubGoalSolverAgent._pick_consensus_sample(
+            ["少数派结论", "多数派 A", "多数派 A"])
+        self.assertNotEqual(got, "少数派结论")
+        self.assertEqual(got, "多数派 A")
+
+    # ---------- ② 三道闸门 ----------
+    def _solver(self, **cfg):
+        base = dict(enable_subgoal_multi_agent=True, subgoal_agents_n=3)
+        base.update(cfg)
+        return SubGoalSolverAgent(client=MagicMock(),
+                                  config=SimpleNamespace(**base))
+
+    def test_switch_off_returns_one(self):
+        s = SubGoalSolverAgent(client=MagicMock(), config=SimpleNamespace(
+            enable_subgoal_multi_agent=False, subgoal_agents_n=3))
+        self.assertEqual(s._multi_agent_n(_ctx()), 1)
+
+    def test_default_config_is_off(self):
+        """★ 默认必须是关的 —— 否则 baseline 不干净，A/B 无从比较。"""
+        cfg = SimpleNamespace()   # 完全不配这两个键
+        s = SubGoalSolverAgent(client=MagicMock(), config=cfg)
+        self.assertEqual(s._multi_agent_n(_ctx()), 1)
+
+    def test_enabled_returns_n(self):
+        s = self._solver()
+        self.assertEqual(s._multi_agent_n(_ctx()), 3)
+
+    def test_time_critical_falls_back_to_one(self):
+        """★ 时间紧迫 ⇒ 退回 1，避免生成侧吃光预算把验证饿死。"""
+        s = self._solver()
+        c = _ctx()
+        c.deadline = time.time() - 10      # 已过截止
+        self.assertEqual(s._multi_agent_n(c), 1)
+
+    def test_insufficient_budget_falls_back_to_one(self):
+        """★ 剩余调用数不足 N ⇒ 退回 1。"""
+        s = self._solver(subgoal_agents_n=5)
+        c = _ctx(max_calls=2)
+        self.assertEqual(s._multi_agent_n(c), 1)
+
+    def test_n_is_clamped_to_sane_range(self):
+        """配置写错（0 / 负数 / 超大）不得把预算打爆。"""
+        self.assertEqual(self._solver(subgoal_agents_n=0)._multi_agent_n(_ctx()), 1)
+        self.assertEqual(self._solver(subgoal_agents_n=-5)._multi_agent_n(_ctx()), 1)
+        self.assertEqual(self._solver(subgoal_agents_n=999)._multi_agent_n(_ctx()), 8)
 
 
 if __name__ == "__main__":

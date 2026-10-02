@@ -91,6 +91,12 @@ install_with_elan() {
 install_from_zip() {
     # 离线首选：从 zip 解压。历史上依赖的 deploy/lean-cache/ 与 zip 内容重复
     # 且占 3.0GB，已删除；改为按需解压，省磁盘也省传输体积。
+    #
+    # ⚠️ 2026-09-20 实测修正：本仓 zip 是**官方原版**布局（顶层直接是
+    #   `lean-4.31.0-linux/`），不是重打包的 `lean-cache/lean-4.31.0-linux/`。
+    #   原实现在解压后硬性要求 `$CACHE_DIR` 存在 ⇒ 必然 return 1 ⇒
+    #   整个离线安装失败、lean-env.sh 永远不被正确生成（实测踩到）。
+    #   现改为：解压后**实际探测** lake 所在目录，两种布局都认。
     log "尝试从压缩包解压 lake/lean: $ZIP_FILE"
     if [ ! -f "$ZIP_FILE" ]; then
         log "压缩包不存在，离线安装不可用。"
@@ -101,46 +107,46 @@ install_from_zip() {
         return 1
     fi
     local target="$ROOT_DIR/deploy"
-    if [ ! -x "$CACHE_DIR/lean-4.31.0-linux/bin/lake" ]; then
+    if [ ! -x "$(find_lean_bin_dir)" ]; then
         log "解压中（约 832MB，可能需要 1-2 分钟）..."
         unzip -q -o "$ZIP_FILE" -d "$target" || { log "解压失败"; return 1; }
     fi
-    [ -d "$CACHE_DIR" ] || { log "解压后未找到 $CACHE_DIR"; return 1; }
     return 0
 }
 
-install_from_cache() {
-    # 优先：已有解压好的缓存目录；否则先尝试用 zip 解压出该目录。
-    if [ ! -d "$CACHE_DIR" ]; then
-        install_from_zip || return 1
-    fi
-    log "从离线缓存目录加载 lake/lean: $CACHE_DIR"
+# 探测已解压好的 lean 工具链 bin 目录（兼容两种 zip 布局 + 铺平布局）
+find_lean_bin_dir() {
+    local d
+    for d in "$CACHE_DIR/bin" \
+             "$CACHE_DIR"/lean-*/bin \
+             "$ROOT_DIR/deploy"/lean-*/bin \
+             "$ROOT_DIR"/lean-*/bin; do
+        if [ -x "$d/lake" ]; then
+            printf '%s\n' "$d"
+            return 0
+        fi
+    done
+    return 1
+}
 
-    # 兼容两种缓存布局：
-    #   1) 官方 release 解压原样:  $CACHE_DIR/lean-4.31.0-linux/bin/lake
-    #   2) 铺平布局:              $CACHE_DIR/bin/lake
-    # lean/lake 二进制内嵌 $ORIGIN/../lib 与 $ORIGIN/../lib/lean 的 RPATH，
-    # 因此只需保证 bin/ 与 lib/ 相对结构不变，无需额外设置 LD_LIBRARY_PATH。
+install_from_cache() {
+    # 优先：已有解压好的工具链；否则先尝试用 zip 解压出来。
+    log "从离线工具链加载 lake/lean"
     local bin_dir=""
     local lib_dir=""
-    if [ -x "$CACHE_DIR/bin/lake" ]; then
-        bin_dir="$CACHE_DIR/bin"
-        lib_dir="$CACHE_DIR/lib"
-    else
-        local d
-        for d in "$CACHE_DIR"/lean-*/bin; do
-            if [ -x "$d/lake" ]; then
-                bin_dir="$d"
-                lib_dir="$(dirname "$d")/lib"
-                break
-            fi
-        done
-    fi
 
-    if [ -z "$bin_dir" ] || [ ! -x "$bin_dir/lake" ]; then
-        log "缓存中缺少 lake 可执行文件（期望 $CACHE_DIR/lean-*/bin/lake 或 $CACHE_DIR/bin/lake）。"
-        return 1
+    # 先在已有布局里找；找不到再解压一次再找（幂等）
+    if ! bin_dir="$(find_lean_bin_dir)"; then
+        install_from_zip || return 1
+        bin_dir="$(find_lean_bin_dir)" || {
+            log "解压后仍找不到 lake 可执行文件（已找过 $CACHE_DIR、deploy/lean-*、lean-*）。"
+            return 1
+        }
     fi
+    # lean/lake 二进制内嵌 $ORIGIN/../lib 与 $ORIGIN/../lib/lean 的 RPATH，
+    # 因此只需保证 bin/ 与 lib/ 相对结构不变，无需额外设置 LD_LIBRARY_PATH。
+    lib_dir="$(dirname "$bin_dir")/lib"
+    log "找到工具链 bin=$bin_dir"
 
     log "写入环境文件 $ENV_FILE (bin=$bin_dir)"
     {

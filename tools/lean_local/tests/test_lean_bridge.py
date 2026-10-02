@@ -161,8 +161,14 @@ class HelperTest(unittest.TestCase):
             "example : (12 + 13 : ℚ) = 3000 := by norm_num", "最大值为 3000"))
         self.assertFalse(_answer_embedded(
             "example : (12 + 13 : ℚ) = 2999 := by norm_num", "最大值为 3000"))
-        # 分数 LaTeX（\\dfrac{2617}{2618}）：代码只含分子 2617 也算锚定（沾边）
-        self.assertTrue(_answer_embedded(
+        # ★ 2026-09-21 断言更正（原为 assertTrue「沾边即锚定」，已过时）：
+        #   分数形态于 2026-09-17（L2）被**故意收紧**为「代码必须真出现
+        #   a/b、\\frac{a}{b} 或 \\dfrac{a}{b}」（实测据 official112-070：旧通用
+        #   数字核对把 {1,2}−{0,1,2} 取成 ∅ ⇒ 对 `\\frac{1}{2}` 必然判未锚定，
+        #   白走 convert_to_lean_failed，故加此专项分支）。
+        #   ⇒ 代码只含分子 2617 **不等于**锚定了分数 2617/2618 —— 那是假阳性
+        #     （`= 2617` 证明的是 2617，不是 2617/2618）。故改为 assertFalse。
+        self.assertFalse(_answer_embedded(
             "example : (x : ℚ) = 2617 := by norm_num",
             "\\dfrac{2617}{2618}"))
         # 代码完全不含 2617/2618 → 未锚定 → False

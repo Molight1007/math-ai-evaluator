@@ -138,7 +138,6 @@ def _make_solver():
     cfg = SimpleNamespace(
         max_total_calls=20, max_time_per_question=300,
         max_total_time_seconds=21000, policy_max_tokens=2048,
-        enable_calc_tool=False, calc_mandatory=False,
     )
     return SubGoalSolverAgent(client=None, config=cfg)
 

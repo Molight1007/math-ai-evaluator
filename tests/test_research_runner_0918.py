@@ -22,7 +22,7 @@ def _src(rel):
 REQUIRED = {
     "--max_time_per_question": "86400",
     "--tier_budget": "86400,86400,86400",
-    "--paper_target_time": "86400000",
+    # 2026-09-29：--paper_target_time 随 PaperPacer 删除（无人消费该参数）
     "--max_total_time_seconds": "86400000",
     "--enable_web_search": "true",
     "--use_leansearch": "true",
@@ -61,26 +61,28 @@ def test_research_runner_banner_reads_from_argv():
     assert src.count("_argval(") >= 6
 
 
-def test_research_profile_differs_from_code_defaults():
-    """研究档不得等于代码默认值 —— 否则这个脚本毫无意义。"""
+def test_research_profile_matches_code_defaults_now():
+    """2026-10-01 研究期决策：类默认值也放开 ⇒ 默认已与研究档一致。
+
+    原测试要求"研究档 != 代码默认"（防研究档无意义）。现用户决策把默认值
+    直接改成研究级（不限时/联网开），故改为断言"默认值已是研究级"。
+    """
     import re
     ua = _src("user_agent.py")
     m = re.search(r"max_time_per_question:\s*int\s*=\s*(\d+)", ua)
-    assert m and m.group(1) == "1100", "代码默认单题上限应为 1100"
-    assert REQUIRED["--max_time_per_question"] != m.group(1)
+    assert m and int(m.group(1)) >= 86400, "代码默认单题上限应为研究级(>=86400)"
     m2 = re.search(r"enable_web_search:\s*bool\s*=\s*(\w+)", ua)
-    assert m2 and m2.group(1) == "False", "代码默认联网应为关"
+    assert m2 and m2.group(1) == "True", "代码默认联网应为开（2026-10-01 研究期）"
     assert REQUIRED["--enable_web_search"] == "true"
 
 
-def test_web_search_and_leansearch_defaults_stay_off():
-    """研究档只由 CLI 传入 ⇒ 不得顺手改代码默认值（会污染平台提交语义）。"""
+def test_web_search_default_on_leansearch_still_off():
+    """2026-10-01：联网搜索默认开（用户决策）；LeanSearch 未在本次清单内，仍默认关。"""
     ua = _src("user_agent.py")
-    assert "enable_web_search: bool = False" in ua
+    assert "enable_web_search: bool = True" in ua
     assert "use_leansearch: bool = False" in ua
     rv = _src("run_eval.py")
-    # run_eval 自带基线里也不能出现联网开启
-    assert '"enable_web_search": True' not in rv
+    # run_eval 自带基线里不能出现 LeanSearch 开启（未在本次清单内）
     assert '"use_leansearch": True' not in rv
 
 

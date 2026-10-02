@@ -15,8 +15,6 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-import requests
-
 
 def _resp(status=429, text="-20048 请求过于频繁"):
     r = Mock()
@@ -87,50 +85,6 @@ class UtilsLLMClientBackoffTest(unittest.TestCase):
             with self.assertRaises(Exception):
                 c.chat([{"role": "user", "content": "x"}])
         self.assertEqual(sleeps, [11.0])   # 8.0（基数）+ 3.0（抖动）
-
-
-class RootInternClientBackoffTest(unittest.TestCase):
-    """根 `llm_client.py` → InternChatClient（main.py 链路）。"""
-
-    def _client(self):
-        import os
-        os.environ["INTERN_API_KEY"] = "test-token"
-        os.environ["INTERN_MODEL"] = "test-model"
-        from llm_client import InternChatClient
-        return InternChatClient(retry=3)
-
-    def _http_error(self):
-        r = _resp_429()
-        err = requests.exceptions.HTTPError("429 Client Error")
-        err.response = r
-        return err
-
-    def test_rate_limit_body_is_visible_and_backoff_grows(self) -> None:
-        """限流标识在 body 里（raise_for_status 的异常串看不到）→ 必须取
-        exc.response.text 才能识别，并据此走更大退避。"""
-        sleeps = []
-        post = Mock()
-        post.return_value.raise_for_status.side_effect = self._http_error()
-        with patch("llm_client.requests.post", post), \
-             patch("llm_client.time.sleep", side_effect=sleeps.append), \
-             patch("llm_client.random.uniform", return_value=0.0):
-            c = self._client()
-            with self.assertRaises(RuntimeError):
-                c.chat([{"role": "user", "content": "x"}])
-        self.assertEqual(sleeps, [8.0, 16.0])
-
-    def test_retry_count_is_honored(self) -> None:
-        sleeps = []
-        post = Mock()
-        post.return_value.raise_for_status.side_effect = self._http_error()
-        with patch("llm_client.requests.post", post), \
-             patch("llm_client.time.sleep", side_effect=sleeps.append), \
-             patch("llm_client.random.uniform", return_value=0.0):
-            c = self._client()
-            with self.assertRaises(RuntimeError):
-                c.chat([{"role": "user", "content": "x"}])
-        self.assertEqual(post.call_count, 3)
-        self.assertEqual(len(sleeps), 2)
 
 
 if __name__ == "__main__":

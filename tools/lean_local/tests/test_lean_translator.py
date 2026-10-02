@@ -24,7 +24,7 @@ from tools.lean_local.lean_translator import (
 from agent.sub_goal_solver import SubGoalSolverAgent
 
 
-def make_ctx(problem="证明 f(x)=x^2 非负") -> TaskContext:
+def make_ctx_test_lean_translator(problem="证明 f(x)=x^2 非负") -> TaskContext:
     return TaskContext(
         problem=problem,
         metadata={},
@@ -153,21 +153,21 @@ class BuildDeclarationTest(unittest.TestCase):
 class TranslateNodeTest(unittest.TestCase):
     def test_direct_wrap_preferred(self):
         agent = LeanTranslatorAgent(MockClient(fail_all=True), make_agent().config)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         decl = agent.translate_node(ctx, "n1a", "(x : ℝ) → x ^ 2 ≥ 0")
         self.assertIsNotNone(decl)  # 直包，不触发 LLM
         self.assertEqual(agent._llm_call_count if hasattr(agent, "_llm_call_count") else 0, 0)
 
     def test_llm_translation_fallback(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         decl = agent.translate_node(ctx, "n2b", "证明 x 的平方非负")
         self.assertIsNotNone(decl)
         self.assertIn("sorry", decl)
 
     def test_llm_failure_returns_none(self):
         agent = LeanTranslatorAgent(MockClient(fail_all=True), make_agent().config)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         decl = agent.translate_node(ctx, "n2b", "证明 x 的平方非负")
         self.assertIsNone(decl)
 
@@ -197,7 +197,7 @@ class TranslateAndAuditTest(unittest.TestCase):
     def test_success_verdict_ok(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
         self._stub_bridge(agent, ok=True)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         result = agent.translate_and_audit(ctx, sample_dag())
         self.assertEqual(result["verdict"], "ok")
         self.assertEqual(result["leaf_count"], 3)
@@ -207,7 +207,7 @@ class TranslateAndAuditTest(unittest.TestCase):
     def test_compile_fail_verdict_fail(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
         self._stub_bridge(agent, ok=False)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         result = agent.translate_and_audit(ctx, sample_dag())
         self.assertEqual(result["verdict"], "fail")
         self.assertTrue(result["gaps"])  # 抽取到缺口
@@ -216,7 +216,7 @@ class TranslateAndAuditTest(unittest.TestCase):
     def test_all_translation_failed(self):
         # 叶子含自然语言，LLM 全失败 → 无声明 → unknown
         agent = LeanTranslatorAgent(MockClient(fail_all=True), make_agent().config)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         nodes = {
             "g": BlueprintNode("g", "and", "目标", ["a"]),
             "a": BlueprintNode("a", "and", "纯自然语言子目标", []),
@@ -228,14 +228,14 @@ class TranslateAndAuditTest(unittest.TestCase):
     def test_run_writes_sketch_tree(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
         self._stub_bridge(agent, ok=True)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         ctx.blueprint = sample_dag().to_dict()
         agent.run(ctx)
         self.assertEqual(ctx.sketch_tree["verdict"], "ok")
 
     def test_run_without_blueprint(self):
         agent = LeanTranslatorAgent(MockClient(), make_agent().config)
-        ctx = make_ctx()
+        ctx = make_ctx_test_lean_translator()
         agent.run(ctx)
         self.assertEqual(ctx.sketch_tree["verdict"], "unknown")
         self.assertIn("无 Blueprint DAG", ctx.sketch_tree["error"])
@@ -265,7 +265,7 @@ class SubGoalIntegrationTest(unittest.TestCase):
                     "gaps": [], "per_node": {}, "lean_code": ""}
         LeanTranslatorAgent.translate_and_audit = fake_audit
         try:
-            ctx = make_ctx()
+            ctx = make_ctx_test_lean_translator()
             agent.run(ctx)
             self.assertTrue(ctx.candidates)
             self.assertTrue(ctx.blueprint)

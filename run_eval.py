@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 # -*- coding: utf-8 -*-
 """
 MathPilot 本地评测脚本 —— 仅用于本地开发调试，非平台正式评测调用入口。
@@ -641,8 +650,8 @@ def _strip_set_braces(s: str) -> str:
 #      但 SymPy 视之为不同符号 ⇒ 数学等价却判错（official112-091 实况）。
 # ★ 2026-09-18 复核：单独开 S2 **不产生误判**（099 仍为 False，因 pred 只拆出 1 项
 #   而 `_multi_value_match` 要求两侧都 ≥2 项）⇒ 可安全启用为默认。
-_EVAL_SPLIT_CN = os.environ.get("EVAL_SPLIT_CN", "1") == "1"
-_EVAL_ALPHA_EQUIV = os.environ.get("EVAL_ALPHA_EQUIV", "0") == "1"
+_EVAL_SPLIT_CN = _sw_bool("eval_split_cn")
+_EVAL_ALPHA_EQUIV = _sw_bool("eval_alpha_equiv")
 
 _SPLIT_SEP_RE = re.compile(r"[,，、;；]")
 
@@ -1011,38 +1020,36 @@ DEFAULT_AGENT_OVERRIDES: Dict[str, Any] = {
     # 依据：同批错题实测两次超限（并发3 轮 1164.7s / 并发1 轮 **1211s > 1200 越墙**）。
     # ⚠ **只改这一处硬限**；`tier_budget.deep` 仍为 1150（档位预算管资源分配，
     #   压它会提前掐断本可在 1200s 内跑完的题）。
-    "max_time_per_question": 1100,
+    # 2026-10-01 按用户决策：研究期不限时，此值仅作挂死兜底，不参与调度决策；
+    #   调度侧已不再有任何按剩余时间降级的逻辑（soft_budget/gen_deadline/verify_only 触发路径已删）。
+    "max_time_per_question": 86400,
     # ---- 对齐 user_agent.py:101 / :105 / :106 ----
     "max_workers": 3,
     # 9/4：平台不限 token → 本地 override 同步放开（防截断腰斩；上探 65536 对齐 AgentConfig）
     "max_answer_tokens": 65536,
     "revise_sample_times": 2,
-    "max_revise_rounds": 1,
-    # ---- 对齐 user_agent.py:109 / :112 / :113 ----
-    "use_scoring": False,
-    "use_proof_channel": False,
-    "use_lemma_accumulation": False,
-    "by_enable_fast_path": True,
-    # ---- 本地卷档位预算（2026-09-02 晚三次修正：对齐比赛限时）----
-    # 本地基线（2026-09-17 更正）：fast 120 / standard 540 / deep **1150**
-# ⚠ 原注释写 deep 1200，与本文件 :887 的实际值 1150 不符（Audit-2）。
-    # （user_agent.py 口径，#49 已 480→540 上调）。本地评测必须与平台一致，
-    # 否则"本地验证通过"不代表"比赛限时下可复现"。
-    # 历史：540→900 是配合 54000s 不限时总池的放宽，违背比赛时间模拟，
-    # 已回退。分时桶实测 >700s 档正确率 0%——多给时间不换正确率，
-    # standard 540s 足够覆盖 450s 内能解对的快题。
-    "tier_budget": {"fast": 120.0, "standard": 540.0, "deep": 1150.0},
-    # ---- 全卷调度：本地 45 题小卷（2026-09-02 三次修正：恢复比赛折算）----
-    # 用户要求：测试时间限制必须符合比赛要求，不能"不限时"。
-    # 折算口径（题·秒守恒）：平台 112 题卷 target 21000s × 并发 3 =
-    # 63000 题·秒 → 题均 562.5 题秒。45 题应得 45 × 562.5 = 25313 题秒，
-    # 本地 pacer 并发假设同为 3 → target = 25313 / 3 ≈ 8438s（≈2.34h）。
-    # 进度正常（elapsed/target ≤ 完成比例）时每题仍拿满档位预算；
-    # 全卷拖沓时自动收紧（MIN_SOFT=120s 保底防占位符）——与平台同机制。
-    # 历史：54000s（45×1200）="进度恒正常、每题吃满档"= 不限时，已废弃；
-    # 8680s 是旧平台 18000s 时代口径（×1.2 余量），现版平台 21000s 更新为 8438s。
-    "paper_total_questions": 45,
-    "paper_target_time": 8438,
+    # 2026-10-01：原值 1 会把自纠错回环整体压到 1 轮（审计 A 级第 7 条）。
+    # 与 `user_agent.py:293` 声明的 5 分叉 ⇒ 口径不一致且属比赛期省时裁剪。
+    # 研究期求正确率上限，对齐配置声明值 5。
+    "max_revise_rounds": 5,
+    # ---- 对齐 user_agent.py（2026-10-01 按用户决策默认开，研究期不省资源）----
+    "use_scoring": True,
+    "use_proof_channel": True,
+    # 2026-10-01：原先这里把 `use_lemma_accumulation` 压回 False，与
+    # `AgentConfig.use_lemma_accumulation = True` 自相矛盾（跑 eval 时被静默关闭）。
+    # 已移除该 override，改为继承配置默认值（仍可经 CLI 显式传参覆盖）。
+    # 2026-09-29：`by_enable_fast_path` 已随快车道删除（死开关，无行为作用）。
+    # ---- 统一档位预算（2026-09-29）----
+    # 三档（fast/standard/deep）已按用户决策收敛为**单一档位**，取值 = 原 deep 最强配置。
+    # 原 `{fast:120, standard:540, deep:1150}` 与 `paper_*` 全卷调度参数随
+    # PaperPacer 删除；全卷不再有时间总量控制（研究阶段云端评测不限时）。
+    # 单题唯一约束是下方 `max_time_per_question` 硬墙。
+    "tier_budget": {"deep": 86400.0},
+    # 统一档位其余参数（与 user_agent.py __post_init__ 保持一致）
+    "tier_sample_times": {"deep": 3},
+    "tier_voting_times": {"deep": 3},
+    "tier_max_completions": {"deep": 2},
+    "tier_max_calls": {"deep": 100},
     # 前置验证最多 2 次尝试（原默认 2 轮 = 3 次，每次 21s 编译 + LLM 调用，
     # 单题可烧掉 3-5 分钟；preverify 是「检查理解」不是「写论文」，1 轮足够）
     # 2026-09-11：#13 前置验证修复——轮数 1→2（即最多 3 轮尝试）。
@@ -1078,6 +1085,19 @@ class EvalEngine:
         # 保存生效覆盖（小样本自适应要用），避免二次重建时丢失
         self._effective_overrides = overrides
         self.agent = ReasoningAgent(self.llm_client, **overrides)
+        # ★ 2026-10-02 中间结果存储层接线：本轮评测 run_id（一轮一个目录：
+        #   results/<run_id>/<qid>/）。显式设定后由 artifact_store 统一取用；
+        #   平台直调（不经本脚本）时回退进程级稳定默认值。失败不阻断评测。
+        self.run_id = time.strftime("%Y%m%d-%H%M%S")
+        try:
+            from agent.artifact_store import set_run_id as _set_run_id
+            _set_run_id(self.run_id)
+        except Exception:  # noqa: BLE001
+            try:
+                from artifact_store import set_run_id as _set_run_id
+                _set_run_id(self.run_id)
+            except Exception:  # noqa: BLE001
+                pass
         logger.info("EvalEngine init: %s, overrides=%s", self.llm_client, overrides)
         self.domain_stats: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {"total": 0, "correct": 0}
@@ -1272,44 +1292,11 @@ class EvalEngine:
             logger.info(f"断点续跑：跳过 {len(done_ids)} 道已完成")
         pending = [t for t in tests if str(t.get("id", t.get("_line_no"))) not in done_ids]
         logger.info(f"待评测: {len(pending)} / 总计: {len(tests)}")
-        # ---- 小样本自适应（2026-09-02，DAG 冒烟 2 题全败根因）----
-        # PaperPacer 用 paper_total_questions（45/112 全卷数）评估"卷面进度"，
-        # 小卷（--test_file 2 题）第 1 题一完成就误判"卷面落后"→ 单题软预算被
-        # 收紧到 ~200-500s → DAG 全链路（蓝图+评审+重写+子目标求解）跑不完
-        # → llm() budget_skip → [子目标求解失败]。
-        # 修正：待评测题数 < 配置全卷数时，按待评测题数重建 agent：
-        #   paper_total_questions = 待评测题数；paper_target_time = 题数 ×
-        #   (全卷 target / 全卷题数)，保证小卷的"题均可用时间"与全卷一致。
-        # 2026-09-02 晚修复：判定基准从 len(tests) 改为 len(pending)——
-        # --resume 断点续跑时 tests 仍是全卷（45），若按全卷判定不触发自适应，
-        # 剩余 36 题继续吃 45 题紧预算（~540s/题）→ 占位符重演。
-        # 2026-09-02 三次修正：target 由 54000 恢复比赛折算 8438（45/112×21000），
-        # 题均墙钟 8438/45 ≈ 187.5s（× 并发 3 = 562 题秒，与平台题均一致）。
-        if pending:
-            cfg_total = int(self._effective_overrides.get(
-                "paper_total_questions", 0) or 0)
-            cfg_target = float(self._effective_overrides.get(
-                "paper_target_time", 0) or 0)
-            actual = len(pending)
-            if cfg_total and actual < cfg_total:
-                per_q = cfg_target / max(1, cfg_total)
-                # 2026-09-02 晚方案 A（老师拍板）：小卷放宽——题均预算下限提到
-                # standard 档满值 540s。原 187.5s/题 折算假设"全卷 45 题平均分"，
-                # 小卷（10 题）deep 难题占比高（实测 4/10），1875s 池被
-                # 4×1200s 挤爆 → 后续题被 PaperPacer 压到 120s 保底 → 占位符重演。
-                # 540s/题 下限让小卷的 deep 题能跑满，难题有时间，测试才反映
-                # 真实单题能力（不是被时间池结构性饿死）。
-                per_q = max(per_q, 540.0)
-                adapted = dict(self._effective_overrides)
-                adapted["paper_total_questions"] = actual
-                adapted["paper_target_time"] = max(120.0, int(actual * per_q))
-                self.agent = ReasoningAgent(self.llm_client, **adapted)
-                self._effective_overrides = adapted
-                logger.info(
-                    "小样本自适应: 待评测 %d 题 < 全卷 %d 题，重建 agent "
-                    "(paper_total_questions=%d, paper_target_time=%d, per_q=%.1fs)",
-                    actual, cfg_total, actual,
-                    int(adapted["paper_target_time"]), per_q)
+        # ---- 2026-09-29：小样本自适应块已删除 ----
+        # 原逻辑在"待评测题数 < 全卷题数"时重建 agent，调整 PaperPacer 的
+        # `paper_total_questions` / `paper_target_time`，以免小卷被误判"卷面落后"
+        # 而收紧单题预算。PaperPacer 已整体删除（全卷无时间总量控制）⇒ 该
+        # workaround 失去存在前提，整块移除。
         with ThreadPoolExecutor(max_workers=max(1, self.concurrency)) as executor:
             future_map = {executor.submit(self.solve_one, t): t for t in pending}
             for future in as_completed(future_map):
@@ -1450,6 +1437,10 @@ def main():
     parser.add_argument("--blueprint_deps_enabled", type=str, default=None,
                         choices=["true", "false"],
                         help="blueprint_deps_enabled（DAG 依赖边；false=复现'依赖恒空'旧行为做 A/B）")
+    parser.add_argument("--blueprint_or_expand_all", type=str, default=None,
+                        choices=["true", "false"],
+                        help="blueprint_or_expand_all（OR 节点是否展开全部备选分支；"
+                             "默认 false=只取 children[0]，true 会放大子目标规模）")
     # 2026-09-13：为 A/B 对比新增两个开关（此前只能改代码才能切换）。
     # 背景：`3.3_improve`(单Agent自审自改) 与 `3.4_collab`(三Agent协作改进)
     # 语义重叠，需要实测"哪个更高效"才能决定舍去哪一个。
@@ -1466,19 +1457,15 @@ def main():
     # 2026-09-08：L2 子目标数值/代数断言 Lean 验证（lean-lsp-mcp norm_num/ring）
     parser.add_argument("--enable_numeric_lean_verify", type=str, default=None, choices=["true", "false"], help="enable_numeric_lean_verify（子目标数值断言 Lean 验证）")
     parser.add_argument("--lean_numeric_max_per_q", type=int, default=None, help="lean_numeric_max_per_q（每题数值 Lean 验证限额，默认 2）")
-    # 2026-09-09 P1/P2：计算强制纪律 + 子目标类型路由（A/B 开关）
-    parser.add_argument("--calc_mandatory", type=str, default=None, choices=["true", "false"], help="calc_mandatory（裸数值断言打回=计算必须走工具）")
-    parser.add_argument("--calc_hard_only", type=str, default=None, choices=["true", "false"], help="calc_hard_only（计算分档：只强制易错算子 [根号/对数/组合数/幂/e…] 走工具，纯四则可自算）")
-    parser.add_argument("--subgoal_calc_router", type=str, default=None, choices=["true", "false"], help="subgoal_calc_router（计算型子目标 terminal 专用路径）")
-    parser.add_argument("--tool_calc_enabled", type=str, default=None, choices=["true", "false"], help="tool_calc_enabled（原生 calc_eval 工具调用试点）")
-    # 2026-09-10 L1/L2：计算核验关卡（默认关，A/B 用）
-    parser.add_argument("--answer_selfcheck_enabled", type=str, default=None, choices=["true", "false"], help="answer_selfcheck_enabled（L1：数值答案无 <calc> 工具来源 → 定向重问）")
+    # 2026-09-10 L2：独立符号建模核验关卡（A/B 用）
+    # 2026-10-01：`--calc_mandatory` / `--calc_hard_only` / `--subgoal_calc_router` /
+    #   `--tool_calc_enabled` / `--answer_selfcheck_enabled` 随 `<calc>` 板块删除。
     parser.add_argument("--symbolic_crosscheck_enabled", type=str, default=None, choices=["true", "false"], help="symbolic_crosscheck_enabled（L2：独立符号建模求真值 → 与答案比对，不符则打回）")
     # 2026-09-12 符号化方程求解通道：模型只交方程（组）+ 目标，数值由本地工具算
     parser.add_argument("--symbolic_solve_enabled", type=str, default=None, choices=["true", "false"], help="symbolic_solve_enabled（数值剥离→模型符号建模→工具求解，模型不参与计算）")
     parser.add_argument("--symbolic_solve_feedback", type=str, default=None, choices=["true", "false"], help="symbolic_solve_feedback（工具值与答案分歧时回传工具结果给模型定稿）")
     parser.add_argument("--symbolic_solve_adopt", type=str, default=None, choices=["true", "false"], help="symbolic_solve_adopt（方案④：工具求解成功后答案直接取工具值，模型不参与计算）")
-    parser.add_argument("--use_fast_path", type=str, default=None, choices=["true", "false"], help="by_enable_fast_path（SymPy 快车道）")
+    # 2026-09-29：`--use_fast_path` 已删除（快车道机制整体移除）
     parser.add_argument("--max_total_calls", type=int, default=None, help="max_total_calls（单题 LLM 调用预算）")
     # ---- 2026-09-13 诊断模式：时间限制放开（默认不传 = 保持比赛口径，行为不变）----
     # 用途：服务端高延迟时（实测单次 LLM 60–180s），比赛口径会让每题被"预算不足"
@@ -1487,9 +1474,10 @@ def main():
     parser.add_argument("--max_time_per_question", type=int, default=None,
                         help="单题壁钟上限秒（诊断用；不传=1200 比赛口径）")
     parser.add_argument("--tier_budget", type=str, default=None,
-                        help="三档预算 'fast,standard,deep'（诊断用；不传=120,540,1150）")
-    parser.add_argument("--paper_target_time", type=int, default=None,
-                        help="全卷墙钟目标秒（诊断用；放大后 PaperPacer 不再收紧单题预算）")
+                        help="统一档位预算 'f,s,d'（2026-09-29 后只取最后一段作 deep 值；"
+                             "不传=1150）")
+    # 2026-09-29：`--paper_target_time` / `--deep_quota_ratio` / `--paper_total_questions`
+    # 三个参数随 PaperPacer 删除（已无任何消费者）。
     # ---- 2026-09-15 赛后无约束评测：补齐此前**没有 CLI 入口**的旋钮 ----
     # 背景：上述 4 个诊断参数只覆盖了一部分约束，`max_total_time_seconds` /
     # 子目标阶段预算 / `max_subgoals` / `improve_min_remaining` / `deep_quota_ratio`
@@ -1516,10 +1504,19 @@ def main():
                         help="leansearch_inject_verifier（方案 A：把定理原文注入验证器，默认 true）")
     parser.add_argument("--improve_min_remaining", type=float, default=None,
                         help="3.3 改进停手预留秒（诊断用；不传=300；0=关闭该护栏）")
-    parser.add_argument("--deep_quota_ratio", type=float, default=None,
-                        help="deep 档全卷占比上限（诊断用；不传=0.25；1.0=不限制）")
-    parser.add_argument("--paper_total_questions", type=int, default=None,
-                        help="全卷题数（PaperPacer 分摊基准；不传=45 本地默认）")
+    # 2026-09-29（截图 #7）：无条件自改进 A/B 抓手 —— 遍数（1/2）与缺陷过滤开关。
+    parser.add_argument("--self_improve_rounds", type=int, default=None,
+                        help="3.3 Step2 自改进遍数（默认 1；设 2 做「一遍 vs 两遍」A/B）")
+    parser.add_argument("--self_improve_conditional", type=str, default=None,
+                        choices=["true", "false"],
+                        help="3.3 是否只改有缺陷候选（默认 false = 真无条件）")
+    # 2026-09-29（截图 #3+#4）：领域→定理检索 A/B 抓手（有定理 vs 无定理）。
+    parser.add_argument("--enable_theorem_hint", type=str, default=None,
+                        choices=["true", "false"],
+                        help="1.6 领域→Mathlib 定理检索并注入（默认 true）")
+    parser.add_argument("--theorem_hint_max_queries", type=int, default=None,
+                        help="1.6 单题最多发几次 leansearch 检索（默认 2）")
+    # 2026-09-29：--deep_quota_ratio / --paper_total_questions 随 PaperPacer 删除。
     args = parser.parse_args()
 
     if args.list_banks:
@@ -1593,6 +1590,9 @@ def main():
     if args.blueprint_deps_enabled is not None:
         overrides["blueprint_deps_enabled"] = (
             args.blueprint_deps_enabled == "true")
+    if args.blueprint_or_expand_all is not None:
+        overrides["blueprint_or_expand_all"] = (
+            args.blueprint_or_expand_all == "true")
     if args.enable_dag_replan is not None:
         overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
     if args.enable_self_improve is not None:
@@ -1607,17 +1607,7 @@ def main():
             args.enable_numeric_lean_verify == "true"
     if args.lean_numeric_max_per_q is not None:
         overrides["lean_numeric_max_per_q"] = args.lean_numeric_max_per_q
-    if args.calc_mandatory is not None:
-        overrides["calc_mandatory"] = args.calc_mandatory == "true"
-    if args.calc_hard_only is not None:
-        overrides["calc_hard_only"] = args.calc_hard_only == "true"
-    if args.subgoal_calc_router is not None:
-        overrides["subgoal_calc_router"] = args.subgoal_calc_router == "true"
-    if args.tool_calc_enabled is not None:
-        overrides["tool_calc_enabled"] = args.tool_calc_enabled == "true"
-    # 2026-09-10 L1/L2 计算核验关卡
-    if args.answer_selfcheck_enabled is not None:
-        overrides["answer_selfcheck_enabled"] = args.answer_selfcheck_enabled == "true"
+    # 2026-09-10 L2 独立符号建模核验关卡
     if args.symbolic_crosscheck_enabled is not None:
         overrides["symbolic_crosscheck_enabled"] = args.symbolic_crosscheck_enabled == "true"
     # 2026-09-12 符号化方程求解通道
@@ -1627,19 +1617,20 @@ def main():
         overrides["symbolic_solve_feedback"] = args.symbolic_solve_feedback == "true"
     if args.symbolic_solve_adopt is not None:
         overrides["symbolic_solve_adopt"] = args.symbolic_solve_adopt == "true"
-    if args.use_fast_path is not None:
-        overrides["by_enable_fast_path"] = args.use_fast_path == "true"
     if args.max_total_calls is not None:
         overrides["max_total_calls"] = args.max_total_calls
     # 2026-09-13 诊断模式：时间限制放开
     if args.max_time_per_question is not None:
         overrides["max_time_per_question"] = args.max_time_per_question
     if args.tier_budget:
+        # 2026-09-29：统一档位 —— CLI 仍兼容 `f,s,d` 三段写法（取 deep 段，
+        # 保持 `run_research.py` 的 "86400,86400,86400" 等既有调用可用），
+        # 也支持单段 "1150" 直写。
         _tb = [float(x) for x in args.tier_budget.split(",")]
         if len(_tb) == 3:
-            overrides["tier_budget"] = {"fast": _tb[0], "standard": _tb[1], "deep": _tb[2]}
-    if args.paper_target_time is not None:
-        overrides["paper_target_time"] = args.paper_target_time
+            overrides["tier_budget"] = {"deep": _tb[2]}
+        elif len(_tb) == 1:
+            overrides["tier_budget"] = {"deep": _tb[0]}
     # 2026-09-15 赛后无约束评测：补齐 7 个旋钮（默认 None ⇒ 不改变比赛口径）
     if args.max_total_time_seconds is not None:
         overrides["max_total_time_seconds"] = args.max_total_time_seconds
@@ -1661,10 +1652,16 @@ def main():
             args.leansearch_inject_verifier == "true")
     if args.improve_min_remaining is not None:
         overrides["improve_min_remaining"] = args.improve_min_remaining
-    if args.deep_quota_ratio is not None:
-        overrides["deep_quota_ratio"] = args.deep_quota_ratio
-    if args.paper_total_questions is not None:
-        overrides["paper_total_questions"] = args.paper_total_questions
+    if args.self_improve_rounds is not None:
+        overrides["self_improve_rounds"] = args.self_improve_rounds
+    if args.self_improve_conditional is not None:
+        overrides["self_improve_conditional"] = (
+            args.self_improve_conditional == "true")
+    if args.enable_theorem_hint is not None:
+        overrides["enable_theorem_hint"] = args.enable_theorem_hint == "true"
+    if args.theorem_hint_max_queries is not None:
+        overrides["theorem_hint_max_queries"] = args.theorem_hint_max_queries
+    # 2026-09-29：--deep_quota_ratio / --paper_total_questions 随 PaperPacer 删除。
 
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,

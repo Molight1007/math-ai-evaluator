@@ -141,10 +141,15 @@ def safe_simplify(expr_str: str) -> Optional[str]:
     if parsed is None:
         logger.debug(f"safe_simplify: {err}")
         return None
+    result = parsed
     try:
         result = sp.simplify(parsed)
         return sp.latex(result)
     except Exception:
+        # 2026-09-20 修复：原写法 `return str(result)` 在 sp.simplify 自身抛异常时，
+        # result 尚未绑定 ⇒ 处理器反而抛 UnboundLocalError（比原异常更糟，且会逃出
+        # 本函数，调用方若未捕获即中断）。预绑定 result = parsed 保证异常路径可解析。
+        logger.debug("safe_simplify 化简失败，回退原文: %s", result)
         return str(result)
 
 
@@ -180,12 +185,24 @@ def compute_derivative(expr_str: str, var: str = "x") -> Optional[str]:
 def compute_integral(expr_str: str, var: str = "x",
                      lower: Optional[str] = None,
                      upper: Optional[str] = None) -> Optional[str]:
-    """计算积分。"""
+    """计算积分。
+
+    2026-09-20 修复：原实现**完全忽略** lower/upper 两个形参 —— 传入定积分上下限
+    也会静默返回不定积分结果（潜伏缺陷；此前唯一调用点未传参，故一直未暴露）。
+    现在两侧都给出时按 `(v, lower, upper)` 求真定积分。
+    """
     parsed, err = _try_parse(expr_str)
     if parsed is None:
         return None
     try:
         v = sp.Symbol(var)
+        if lower is not None and upper is not None:
+            a, ea = _try_parse(str(lower))
+            b, eb = _try_parse(str(upper))
+            if a is None or b is None:
+                logger.debug("compute_integral: 上下限解析失败 (%s)/(%s)", ea, eb)
+                return None
+            return sp.latex(sp.integrate(parsed, (v, a, b)))
         result = sp.integrate(parsed, v)
         return sp.latex(result)
     except Exception:

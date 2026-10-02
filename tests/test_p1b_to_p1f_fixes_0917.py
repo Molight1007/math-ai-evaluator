@@ -58,22 +58,31 @@ def test_z5_gate_agrees_with_single_source_of_truth():
 
 # ============================ Audit-2 ============================
 def test_audit2_no_stale_tier_budget_numbers():
-    """四套口径收敛：不得再残留 540/1200/1320 这类与真源不符的**兜底值**。"""
-    pacer = _src("agent/paper_pacer.py")
-    assert '{"fast": 300.0, "standard": 750.0, "deep": 1150.0}' in pacer
-    assert '{"fast": 120.0, "standard": 540.0, "deep": 1200.0}' not in pacer
+    """2026-09-29 重写：PaperPacer 已删除，档位帽收敛为**唯一 deep 值**。
+
+    原测试校验 paper_pacer.py 与 user_agent.py 的档位帽口径一致（防四套口径）。
+    统一档位后，paper_pacer.py 不存在，user_agent.py 的 tier_budget 只剩单键
+    `{"deep": 86400.0}` ⇒ 改为校验"不再残留任何三档字典"。
+    """
+    import os
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    assert not os.path.exists(os.path.join(_root, "agent", "paper_pacer.py")), \
+        "PaperPacer 已按用户决策删除，不应再存在"
     ua = _src("user_agent.py")
-    assert "{fast:300, standard:750, deep:1150}" in ua
+    # 旧的三档口径不得残留
+    assert "{fast:300, standard:750, deep:1150}" not in ua
     assert "{fast:120, standard:540, deep:1320}" not in ua
+    # 新的统一档位单键写法必须存在（2026-10-01 研究期改为 86400=仅防挂死）
+    assert '{"deep": 86400.0}' in ua
 
 
 def test_audit2_agentconfig_default_matches_declaration():
+    """统一档位后 __post_init__ 的 tier_budget 收敛为单键 deep=86400（研究期不限时）。"""
     import re
     ua = _src("user_agent.py")
-    m = re.search(r'self\.tier_budget = \{"fast": ([\d.]+), "standard": ([\d.]+), '
-                  r'"deep": ([\d.]+)\}', ua)
-    assert m, "未找到 __post_init__ 的 tier_budget 赋值"
-    assert (m.group(1), m.group(2), m.group(3)) == ("300.0", "750.0", "1150.0")
+    m = re.search(r'self\.tier_budget = \{"deep": ([\d.]+)\}', ua)
+    assert m, "未找到 __post_init__ 的统一档位 tier_budget 赋值"
+    assert m.group(1) == "86400.0"
 
 
 # ============================ Audit-4 ============================
@@ -119,10 +128,18 @@ def test_l2_dfrac_form():
 
 # ============================ L4 ============================
 def test_l4_dead_path_is_documented():
+    """L4（`calc_inconsistent` 计算冲突裁决）死路径的交代（2026-10-01 更新）。
+
+    原 L4 守卫断言两处注释字面量存在：`agent/solver.py` 的
+    「连带 calc_inconsistent 检测不可达」与 `agent/orchestrator.py` 的
+    「calc_inconsistent 判据在当前配置下不可达」。2026-10-01 `<calc>` 计算工具
+    板块整体删除后，`calc_inconsistent` 机制与那两处注释一并移除；本用例改锁
+    「两处均显式留痕 calc_inconsistent 的移除」，保留"死路径/已删机制须留痕"的纪律。
+    """
     src = _src("agent/solver.py")
-    assert "连带 calc_inconsistent 检测不可达" in src
+    assert "calc_inconsistent" in src, "solver 需留痕 calc_inconsistent 的移除"
     orch = _src("agent/orchestrator.py")
-    assert "calc_inconsistent 判据在当前配置下不可达" in orch
+    assert "calc_inconsistent" in orch, "orchestrator 需留痕 calc_inconsistent 的移除"
 
 
 # ============================ P1-F ============================

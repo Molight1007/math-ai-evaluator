@@ -186,12 +186,15 @@ class BlueprintDAG:
 
     # ---------------- 转子目标 ----------------
     def to_subgoal_plan(self, max_subgoals: int | None = None,
-                        with_deps: bool = True) -> dict:
+                        with_deps: bool = True,
+                        or_expand_all: bool = False) -> dict:
         """把 DAG 转成 SubGoalSolver 兼容的子目标规划。
 
         规则：
         - AND 节点 → 展开所有 children（全部必须求解）
-        - OR 节点 → 取第一个可证 child（策略分支，先尝试主分支）
+        - OR 节点 → 默认取第一个 child（策略分支，先尝试主分支）；
+          传入 `or_expand_all=True` 时展开**全部**备选分支。
+          该项为 2026-09-20 新增，默认 False 以保持历史行为（须 A/B 后定默认）。
         - 叶子节点 → 作为原子子目标
         - 输出按拓扑序排列，depends_on 依据 DAG **依赖锥**（见 `_preceding_leaves`）
         - ★ 前瞻引理（node_role="anticipatory"）**不进求解链**：
@@ -251,8 +254,18 @@ class BlueprintDAG:
             if node.node_type == "and":
                 for c in node.children:
                     expand(c)
-            else:  # or：取第一个 child（主策略分支）
-                expand(node.children[0])
+            else:  # or 节点
+                # 2026-09-20：原实现恒取 `children[0]`（注释称"主策略分支"），
+                # 使 OR 节点在语义上退化为 AND 的单分支 ⇒ 蓝图路径**结构性不存在
+                # "独立求解分支"**（另一条策略路径永不求解）。这正是"子目标链
+                # 锁定错值"的上游结构原因，比提示词层规则更根本。
+                # ⚠ 展开全部分支会显著改变子目标规模，属**行为变更**，须 A/B 验证，
+                #   故做成开关：默认 False = 保持历史行为；置 True 才展开全部 children。
+                if or_expand_all:
+                    for c in node.children:
+                        expand(c)
+                else:
+                    expand(node.children[0])
 
         if self.root_id in self.nodes:
             expand(self.root_id)
@@ -686,7 +699,9 @@ class BlueprintPlannerAgent(BaseAgent):
             ctx.blueprint_plan = dag.to_subgoal_plan(
                 getattr(self.config, "max_subgoals", None),
                 # 2026-09-15：依赖边开关（默认开＝修复后的正确行为）
-                with_deps=getattr(self.config, "blueprint_deps_enabled", True))
+                with_deps=getattr(self.config, "blueprint_deps_enabled", True),
+                # 2026-09-20：OR 节点展开策略（默认 False = 只取 children[0]）
+                or_expand_all=getattr(self.config, "blueprint_or_expand_all", False))
             _anti = len(ctx.blueprint_plan.get("anticipatory_lemmas") or [])
             self.record(ctx, "blueprint",
                         f"Blueprint DAG → {len(ctx.blueprint_plan['subgoals'])} 个子目标"
@@ -721,6 +736,14 @@ class BlueprintPlannerAgent(BaseAgent):
             pass
 
         user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
+        # ★ 2026-09-29（截图 #6）：蓝图规划决定"需要推理出哪些中间结论"，
+        # 正是 Mathlib 定理线索最该起作用的地方（用户原话："子目标的设立有没有
+        # 帮助大模型简化题目"）。注入到 user 侧（不污染 JSON 输出的 system 契约）。
+        # 无命中时为空串，零影响。
+        if getattr(self.config, 'enable_theorem_hint', True):
+            _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
+            if _th:
+                user_msg = user_msg + "\n\n" + _th
         last_resp = None
         # prefill 种子前缀必须**锚定到顶层包装**，不能只用 '{"'。
         # 实测两种失败形态：
@@ -744,7 +767,9 @@ class BlueprintPlannerAgent(BaseAgent):
                     ],
                     _PREFILL,
                 ),
-                0.2, 6144,
+                # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
+                #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
+                0.2, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)
@@ -819,6 +844,11 @@ class BlueprintPlannerAgent(BaseAgent):
             problem=ctx.problem,
             feedback_block=feedback_block,
         )
+        # ★ 2026-09-29：重规划路径同样注入定理线索（独立于首次生成的调用点）
+        if getattr(self.config, 'enable_theorem_hint', True):
+            _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
+            if _th:
+                user_msg = user_msg + "\n\n" + _th
         # prefill 锚定顶层包装（同首次生成）
         _PREFILL = '{"root_id": "g", "nodes": ['
         for attempt in range(max_attempts):
@@ -834,7 +864,9 @@ class BlueprintPlannerAgent(BaseAgent):
                     ],
                     _PREFILL,
                 ),
-                0.2, 6144,
+                # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
+                #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
+                0.2, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)
@@ -929,6 +961,11 @@ class BlueprintPlannerAgent(BaseAgent):
             target_statement=lca_node.statement,
             feedback_block=feedback_block,
         )
+        # ★ 2026-09-29：子树重写路径同样注入定理线索（第三条独立调用点）
+        if getattr(self.config, 'enable_theorem_hint', True):
+            _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
+            if _th:
+                user_msg = user_msg + "\n\n" + _th
         # prefill 锚定（子树也是标准 DAG JSON 结构）
         _PREFILL = '{"root_id": "r", "nodes": ['
         for attempt in range(max_attempts):
@@ -944,7 +981,9 @@ class BlueprintPlannerAgent(BaseAgent):
                     ],
                     _PREFILL,
                 ),
-                0.2, 6144,
+                # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
+                #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
+                0.2, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)

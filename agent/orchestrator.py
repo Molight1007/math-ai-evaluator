@@ -1,4 +1,26 @@
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+
+# 2026-10-02 中间结果存储层（李平老师架构建议 #5，老师点名的「耦合过紧」根因）：
+# 把题意理解 / 蓝图 / 子目标 / 候选 / verdict / Lean / 终答**多存一份**到
+# results/<run_id>/<qid>/。只加不改：不删分支、不改判定、不动返回值；
+# 每一处调用都**永不抛异常**（失败只落一条 trace，绝不阻断主链）。
+try:
+    from agent.artifact_store import (
+        put_ctx as _artifact_put, append_ctx as _artifact_append,
+        attach as _artifact_attach)
+except ImportError:
+    from artifact_store import (
+        put_ctx as _artifact_put, append_ctx as _artifact_append,
+        attach as _artifact_attach)
 """
 编排器（Orchestrator）—— 简化版
 ================================
@@ -9,7 +31,7 @@ from __future__ import annotations
     (1次LLM)   (3次并行)  (3次投票)  (无LLM)
 
 弱化改动：
-- 不设蓝图分解（use_blueprint=False，对 Intern-S 思维流友好）
+- 蓝图分解默认开启（`use_blueprint=True`；2026-10-01 研究期按用户决策默认开）
 - 不设自纠错回环（直接用聚类选最优候选）
 - 不设完整性审核链（省去 3+ 次 LLM 确认与续写）
 - Symbol 快车道仍在（可确定性求解时短路）
@@ -37,7 +59,10 @@ _DEGRADED_ANSWER_RE = _re.compile(
 # 2026-09-13 晚：紧急直答的输出上限（token）。旧值直接用 `max_answer_tokens`
 # （65536）= 允许"只输出一行答案"的调用写一整篇论文，与 prefill 语义矛盾，
 # 且在读超时下更容易被截断/挂住。紧急直答只需要一行 ⇒ 1024 足够且更快更稳。
-_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv("EMERGENCY_DIRECT_MAX_TOKENS", "1024"))
+# 2026-10-02 DeepSeek 适配：env 默认 1024 ⇒ 8192。原值基于「直答只需一行 + prefill
+# 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断（reasoning 先吃满
+# 预算、正文为空）。仍可用 EMERGENCY_DIRECT_MAX_TOKENS 覆盖。
+_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv("EMERGENCY_DIRECT_MAX_TOKENS", "8192"))
 
 from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_response
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
@@ -45,12 +70,11 @@ from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
 from .verifier import VerifierAgent
 from .formatter import FormatterAgent
-from .difficulty_router import DifficultyRouter
-from .paper_pacer import PaperPacer
 from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
 from .audit_gate import AuditGate
 from utils.extract import safe_json_serialize, is_truncated_answer as _is_truncated_answer
+from .param_usage import collect_param_usage
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -153,6 +177,129 @@ def _sum_reject_votes(ctx) -> int:
 #   不把累计值混进来（否则同一份 diag 里两个口径打架）。
 # ⚠ 纯埋点：无记录时安静返回零值字典。
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+def _compute_subgoal_gaps(ctx) -> dict:
+    """子目标逻辑缺口分析（2026-09-29，截图 #6）—— 纯埋点，不改任何分支。
+
+    用户原话：
+    > 子目标的设立有没有帮助大模型简化题目……可不可以用 lean 来检测有没有
+    > sorry 的地方，**像这种缺少的逻辑点是不是就是大模型需要推理出来的点**？
+
+    本函数把「子目标求解结果」翻译成**可归因的缺口清单**，回答三件事：
+      ① 有多少子目标没解出来；
+      ② 这些缺口**是什么性质**（纯逻辑跳跃 / 缺引理 / 形式化 / 计算 / 未归类）；
+      ③ 其中**哪些才是"必须由大模型推理出来"的点**
+         （只有「纯逻辑跳跃」算；形式化与检索问题不算 —— 那两类是工具链的事）。
+
+    ★ 为什么必须做这个区分：若把全部失败笼统算作"模型推理不行"，
+      优化方向会被引到调推理提示词；而实际上可能大半是译题错误 —— 那该修的是
+      `lean_translator`。没有这个区分，后续所有优化决策都建立在错误归因上。
+
+    ★ 数据源：只读 `ctx.subgoal_trace`（sub_goal_solver 已写入），
+      **零新增开销、零 Lean 依赖、零 LLM 调用**。
+      缺陷数据（`ctx.refine_result`，LEAP Stage3）当前链路未接入，故不参与；
+      一旦接入，`gap_analyzer.merge_gap_sources()` 可直接做双源交集。
+    """
+    try:
+        from .gap_analyzer import extract_subgoal_gaps
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[gap_analyzer] 导入失败，跳过缺口分析: %s", e)
+        return {"ok": False, "error": "模块导入失败"}
+    try:
+        r = extract_subgoal_gaps(getattr(ctx, "subgoal_trace", None) or [])
+        # 明细只留前若干条，避免 diag 膨胀（完整清单离线分析时另取）
+        if r.get("gaps"):
+            r["gaps"] = r["gaps"][:20]
+        return r
+    except Exception as e:  # noqa: BLE001  埋点失败绝不阻断求解
+        logger.debug("[gap_analyzer] 缺口分析异常: %s", e)
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
+# ---------------------------------------------------------------------------
+def _compute_lean_gaps(ctx) -> dict:
+    """Lean 侧逻辑缺口（2026-09-30，截图 #6 下半问）—— 纯埋点，不改分支。
+
+    用户原话：
+    > **可不可以用 lean 来检测有没有 sorry 的地方，像这种缺少的逻辑点
+    > 是不是就是大模型需要推理出来的点呢？**
+
+    数据源：`ctx.lean_dag_fails` / `ctx.lean_dag_checked`
+      （由 `SubGoalSolver._lean_dag_logic_check()` 写入 —— 它把每个候选子目标
+      变成 `example : (expr) := by sorry` 交给 Lean 编译；`by sorry` 挖空了
+      "证明"，故**编译失败只可能来自命题本身**）。
+
+    ★ 关键判读（必须与自然语言侧分开看）：
+      编译失败 ⇒ 该子目标**连要证什么都没说清** ⇒ 属 `formalization`
+      （形式化/表述缺陷），**不是模型推理不出来的点**。
+      把它误读成推理瓶颈，优化方向就会错到去调解题提示词。
+
+    与 `_compute_subgoal_gaps` 是**两个独立视角**，故 diag 中并列输出；
+    需要交集时由 `gap_analyzer.merge_gap_sources()` 在离线汇总里做。
+    """
+    try:
+        from .gap_analyzer import extract_lean_dag_gaps
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[gap_analyzer] 导入失败，跳过 Lean 缺口分析: %s", e)
+        return {"ok": False, "error": "模块导入失败"}
+    try:
+        r = extract_lean_dag_gaps(
+            getattr(ctx, "lean_dag_fails", None) or {},
+            getattr(ctx, "lean_dag_checked", None) or [],
+            getattr(ctx, "blueprint", None) or {},
+        )
+        if r.get("gaps"):
+            r["gaps"] = r["gaps"][:20]
+        return r
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[gap_analyzer] Lean 缺口分析异常: %s", e)
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
+# ---------------------------------------------------------------------------
+def _switch_snapshot() -> dict:
+    """开关注册表生效值快照（2026-10-01 注册制）。
+
+    永不抛异常：注册表不可用时返回空 dict，不影响 diag 生成。
+    """
+    try:
+        from agent.switch_registry import snapshot as _snap
+        return _snap()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _tool_gateway_summary(ctx) -> dict:
+    """统一工具调用遥测（2026-09-30，截图 #10）—— 纯埋点，不改分支。
+
+    数据源 = `agent/tool_gateway.ToolGateway.summarize(ctx)`，即本 ctx 上
+    那一个门面实例的调用统计。
+
+    ★ 为什么必须落盘：
+      用户诉求是「调用工具的方法有没有写成规范性的类函数，需要 Lean 检测时
+      直接调用，适配各阶段」。改造后"工具到底被调了几次、为什么没成功"
+      必须有**单一数据源** —— 否则又要回到"遍历 trace 猜"的老路（本项目
+      已因此把"没跑"误读成"没问题"多次）。
+
+    ⚠ 口径红线：本字段为全零**只说明"没有代码走门面"**，
+      绝不能读成"本轮没调用工具" —— 既有调用点（orchestrator 自建 LeanGate、
+      answer_falsifier 自建 LeanBridge 等）**尚未迁移到门面**，
+      它们的调用量仍在各自的既有埋点里（`leansearch` / `toolcall_exec` 等）。
+    """
+    try:
+        from .tool_gateway import ToolGateway
+        s = ToolGateway.summarize(ctx)
+        # 附一句口径说明，避免诊断报告读者误读（见上方红线）
+        s["_note"] = ("本表只统计走 ToolGateway 的调用；既有调用点尚未全部迁移，"
+                      "全零 ≠ 本轮没调用工具")
+        return s
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[tool_gateway] 遥测汇总异常: %s", e)
+        return {"total": 0, "by_tool": {}, "by_reason": {},
+                "elapsed_total": 0.0, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
+# ---------------------------------------------------------------------------
 def _parse_exhaust_result(subgoal_trace) -> dict:
     """解析「解族穷尽性检查」子目标的输出，判断它**是否真的做了检查**。
 
@@ -209,8 +356,7 @@ def _parse_exhaust_result(subgoal_trace) -> dict:
 
 # ★ 2026-09-17（P1-F）：受监控的诊断键（trace step 名）。
 _DIAG_MONITORED_KEYS = (
-    "value_attack", "formal_spec", "formal_gaps", "pick_diag", "calc_tool_calls",
-    "calc_prewarm_events", "calc_rewrite", "calc_fallback", "lemma_repo",
+    "value_attack", "formal_spec", "formal_gaps", "pick_diag", "lemma_repo",
     "preverify_trace", "symbolic_solve_events", "objective_check_events",
     "numericize_events", "expression_eval_events",
     # 2026-09-18：文本通道工具调用（模型想调用但被协议挡住，此前不可见）
@@ -301,12 +447,26 @@ def _summarize_deep_review(ctx) -> dict:
     }
 
 
-def _summarize_leansearch(ctx) -> dict:
-    """按题汇总 LeanSearch 检索埋点。"""
+def _summarize_leansearch(ctx, cfg=None) -> dict:
+    """按题汇总 LeanSearch 检索埋点。
+
+    ★ 2026-09-21 扩写（用户要求「记录 leansearch 到底要找多少 Mathlib
+      定理」）：此前只有**产出侧**口径（calls / hits / unique / elapsed_ms /
+      root），缺**需求侧与触顶侧**口径 ⇒ 事后无法回答"到底是检索次数不够、
+      还是命中条数被 `leansearch_top_k` 截了、还是压根没时间检索"。
+    新增字段：
+      · n_queries        —— 真正发起检索的次数（= 有 n_hits 的条目数）
+      · per_query        —— 每次检索的命中条数序列（看分布，不只看总和）
+      · top_k / top_k_capped          —— 单次命中是否顶到 leansearch_top_k
+      · max_calls_per_q / calls_capped —— 单题调用次数是否顶到上限
+      · skipped_time_critical / skipped_call_cap —— 两类跳过各几次
+    """
     entries = [t for t in (getattr(ctx, "trace", None) or [])
                if isinstance(t, dict) and t.get("step") == "leansearch"]
-    calls = sum(1 for e in entries if "n_hits" in e)
-    hits = sum(int(e.get("n_hits", 0) or 0) for e in entries)
+    hits_seq = [int(e.get("n_hits", 0) or 0) for e in entries
+                if "n_hits" in e]
+    calls = len(hits_seq)
+    hits = sum(hits_seq)
     ms = sum(float(e.get("elapsed_ms", 0.0) or 0.0) for e in entries)
     uniq = set()
     for e in entries:
@@ -314,10 +474,30 @@ def _summarize_leansearch(ctx) -> dict:
             if n:
                 uniq.add(n)
     roots = [str(e.get("root", "")) for e in entries if e.get("root")]
+    # 两类跳过的 record 文案（verifier._prepare_theorem_context 里各一处）
+    skipped_time = sum(1 for e in entries
+                       if "时间紧张" in str(e.get("content", "")))
+    skipped_cap = sum(1 for e in entries
+                      if "上限" in str(e.get("content", "")))
+    cap_calls = top_k = None
+    try:
+        if cfg is not None:
+            cap_calls = int(getattr(cfg, "leansearch_max_calls_per_q", 0) or 0)
+            top_k = int(getattr(cfg, "leansearch_top_k", 0) or 0)
+    except Exception:  # noqa: BLE001
+        cap_calls = top_k = None
     return {
-        "calls": calls,
+        "calls": calls,                 # 兼容旧字段名（= n_queries）
+        "n_queries": calls,
         "hits": hits,
         "unique": len(uniq),
+        "per_query": hits_seq,          # 每次检索命中条数（分布口径）
+        "top_k": top_k or None,
+        "top_k_capped": bool(top_k and hits_seq and max(hits_seq) >= top_k),
+        "max_calls_per_q": cap_calls or None,
+        "calls_capped": bool(cap_calls and calls >= cap_calls),
+        "skipped_time_critical": skipped_time,
+        "skipped_call_cap": skipped_cap,
         "elapsed_ms": round(ms, 1),
         "root": roots[-1][:120] if roots else "",
     }
@@ -344,9 +524,8 @@ class Orchestrator(BaseAgent):
         self.sub_goal_solver = SubGoalSolverAgent(client, config)
         self.verifier = VerifierAgent(client, config)
         self.formatter = FormatterAgent(client, config)
-        # 难题深度求解通道（v2.5）
-        self.difficulty_router = DifficultyRouter(client, config)
-        self.pacer = PaperPacer(config)
+        # 2026-09-29：DifficultyRouter（难度路由）与 PaperPacer（全卷时间池）
+        # 已按用户决策删除 —— 统一单一档位，不再有按难度/配额裁剪方法的机制。
         # deep 档难题三Agent协作求解器（v2.6：解题→审查→整合→反复验证）
         self.collab = CollaborativeSolver(client, config)
         # AuditGate 答案审核闸门（2026-09-06 去 Lean 化：取代 lean_gate /
@@ -410,7 +589,7 @@ class Orchestrator(BaseAgent):
         （单测经 tests/conftest.py 统一置 0；评测 A/B 对照也可用它）。
         """
         self._ensure_lean_modules()          # 2026-09-10：治循环导入静默禁用
-        _env_off = (os.environ.get("LEAN_VERIFY", "1") or "1").strip().lower()
+        _env_off = "0" if not _sw_bool("lean_verify") else "1"
         if _env_off in ("0", "false", "no", "off"):
             return False
         if not getattr(self.config, "enable_lean_verify", True):
@@ -444,6 +623,85 @@ class Orchestrator(BaseAgent):
         if isinstance(md, dict) and md.get("lean_applicable") is False:
             return False
         return True
+
+    # ------------------------------------------------------------------
+    # 领域 → 定理检索（2026-09-29 新增，截图 #3+#4）
+    # ------------------------------------------------------------------
+    def _retrieve_theorem_hints(self, ctx) -> None:
+        """1.6) 用 leansearch 到 Mathlib 检索本题该用的定理，写入 ctx。
+
+        写出的字段（供下游各阶段按需取用，**不改变任何既有分支**）：
+          · ``ctx.theorem_hints``      : list[str] 命中的 Mathlib 全名
+          · ``ctx.theorem_hint_block`` : str 注入提示词用的文本块（可为空）
+          · ``ctx.theorem_hint_trace`` : dict 完整埋点（query/命中/耗时/后端）
+
+        ★ 用户要求「调用工具的方法要写成规范性的类函数，需要使用 Lean 检测时
+          直接调用那个函数，适配每一阶段」⇒ 检索逻辑**全部收敛在**
+          ``agent.theorem_hint.retrieve_theorems_for_question()`` 一个入口，
+          本方法只做「调用 + 落盘 + 埋点」，不含任何检索细节。
+          换后端/换 query 策略只改 theorem_hint.py，本处不动。
+
+        ★ 失败与超时一律降级（不阻断主流程）：检索只是**增益**，不是门禁。
+        """
+        try:
+            from .theorem_hint import (retrieve_theorems_for_question,
+                                       match_against_ground_truth)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[1.6_theorem_hint] 模块导入失败，跳过: %s", e)
+            return
+
+        try:
+            res = retrieve_theorems_for_question(
+                ctx.problem or "",
+                domain=getattr(ctx, "domain", "") or "",
+                question_type=getattr(ctx, "question_type", "") or "",
+                config=self.config,
+                max_queries=int(getattr(
+                    self.config, "theorem_hint_max_queries", 2) or 2),
+                top_k=int(getattr(self.config, "leansearch_top_k", 5) or 5),
+            )
+        except Exception as e:  # noqa: BLE001  # 兜底：接口内已 try，此处再保险
+            self.record(ctx, "theorem_hint",
+                        f"定理检索异常（跳过，不阻断）: {type(e).__name__}: {e}")
+            return
+
+        ctx.theorem_hints = list(res.names)
+        md = res.to_dict()
+        # 与题库预标注比对（若 metadata 里带了该题标注；云端/离线注入时才有）
+        gt = None
+        try:
+            _md = getattr(ctx, "metadata", None)
+            if isinstance(_md, dict):
+                gt = _md.get("theorem_gt")
+        except Exception:  # noqa: BLE001
+            gt = None
+        if gt:
+            try:
+                md["gt_match"] = match_against_ground_truth(res, gt)
+            except Exception as e:  # noqa: BLE001
+                md["gt_match"] = {"error": f"{type(e).__name__}: {e}"}
+        ctx.theorem_hint_trace = md
+
+        # 注入块：★ 2026-09-29 改为调用 `TheoremRetrieval.render_hint_block()`。
+        # 原先在此处**内联拼装**「短名 + 全名」两列，实测 5 条命中即 798 字符，
+        # 其中 Mathlib 命名空间前缀占 60%+，对中文推理的大模型是纯 token 噪音。
+        # 现收敛为「短名列表」——拼装口径统一由 theorem_hint 模块负责（符合用户
+        # 「调工具的方法要写成规范性的类函数」），本处不再持有任何渲染细节。
+        # 全名仍完整保留在 `ctx.theorem_hint_trace` 里（见下），供 Lean 侧/A-B 归因。
+        try:
+            ctx.theorem_hint_block = res.render_hint_block(
+                max_items=int(getattr(self.config, "leansearch_top_k", 5) or 5))
+        except Exception as e:  # noqa: BLE001  渲染失败不阻断
+            logger.warning("[1.6_theorem_hint] 渲染注入块失败，跳过注入: %s", e)
+            ctx.theorem_hint_block = ""
+
+        self.record(
+            ctx, "theorem_hint",
+            f"定理检索 {'命中 ' + str(len(res.hits)) + ' 条' if res.ok else '未跑通'}"
+            f"（{res.elapsed:.1f}s，后端 {res.backend or '-'}）"
+            + (f"；{res.reason}" if res.reason else ""),
+            n_hits=len(res.hits), elapsed=round(res.elapsed, 2),
+            backend=res.backend)
 
     # ------------------------------------------------------------------
     # 阶段耗时埋点（2026-09-03 老师：deep 档需要每个环节具体耗时做决定）
@@ -492,18 +750,18 @@ class Orchestrator(BaseAgent):
         # 便于用评测数据判断是否需要把后处理**前移到闸门之前**（那属主链顺序
         # 调整，定型前不动）。
         _before_pp = ans
-        if os.environ.get("NUMERICIZE_FINAL", "1") != "0":
+        if _sw_bool("numericize_final"):
             try:
                 ans = self._maybe_numericize(ctx, ans)
             except Exception as _e:  # noqa: BLE001
                 logger.debug("[P2] 数值化异常跳过: %s", _e)
-        if os.environ.get("OBJECTIVE_SELFCHECK", "1") != "0":
+        if _sw_bool("objective_selfcheck"):
             try:
                 ans = self._objective_selfcheck(ctx, ans)
             except Exception as _e:  # noqa: BLE001
                 logger.debug("[P5] 客观题自检异常跳过: %s", _e)
         # B0（2026-09-13）：答案形态闸门——条件式→具体值 / 求所有→枚举
-        if os.environ.get("ANSWER_FORM_GATE", "1") != "0":
+        if _sw_bool("answer_form_gate"):
             try:
                 ans = self._answer_form_gate(ctx, ans)
             except Exception as _e:  # noqa: BLE001
@@ -523,7 +781,7 @@ class Orchestrator(BaseAgent):
 
         支持：数字、+ - * / **、括号、`\\frac{}{}`、`\\cdot`、`\\times`、
               `!`（阶乘，作用于整数）、`\\sqrt{}`。
-        为什么不用 `calc_tool.to_exact_number`：实测它对本链路的典型失分格式
+        为什么不用 `utils.math_eval.to_exact_number`：实测它对本链路的典型失分格式
         （`2023^2`、`2^{19}\\cdot 19!`、`3!`）一律返回 None，等于 P2 无效。
         安全：仅接受白名单字符（数字/运算符/括号/空格/F），异常一律 None。
         """
@@ -657,7 +915,7 @@ class Orchestrator(BaseAgent):
         （差分检测曾因此永久失效，见 formatter._objective_diff_probe 的教训）。
         """
         try:
-            if os.environ.get("ANSWER_FORM_GATE", "1") == "0":
+            if not _sw_bool("answer_form_gate"):
                 return ans
             _q = ctx.problem or ""
             _m = _re.search(r"\\boxed\{([^{}]*)\}", ans or "")
@@ -761,7 +1019,10 @@ class Orchestrator(BaseAgent):
             _resp = self.client.chat(
                 messages=[{"role": "system", "content": _sys},
                           {"role": "user", "content": _user}],
-                temperature=0.0, max_tokens=512,
+                # 2026-10-02 DeepSeek 适配：原 512 ⇒ 8192。原值基于「答案规范化只需
+                # 一行 + 提示词抑制输出」的 Intern-S 时代假设，对 reasoning 模型必然
+                # 截断（reasoning 先吃满预算、正文为空）。
+                temperature=0.0, max_tokens=8192,
             )
             _text = (_normalize_chat_response(_resp) or "").strip()
             if not _text:
@@ -778,7 +1039,7 @@ class Orchestrator(BaseAgent):
         - 返回 False 表示"Lean 认为该等式不成立" → 由调用方记录（可作硬信号）。
         价值：Lean 的 ℕ/ℤ/ℚ 语义精确，可捕捉 SymPy 在语义/精度上的偏差。
         """
-        if os.environ.get("LEAN_XCHECK_NUMERIC", "1") == "0":
+        if not _sw_bool("lean_xcheck_numeric"):
             return True
         try:
             from tools.lean_local.lean_bridge import mcp_run_code
@@ -818,7 +1079,7 @@ class Orchestrator(BaseAgent):
         判据复用 Lean 适用性（客观题本就 lean_applicable=False）。
         开关：SELF_IMPROVE_OBJECTIVE_SKIP（默认 1，设 0 恢复旧行为）。
         """
-        if os.environ.get("SELF_IMPROVE_OBJECTIVE_SKIP", "1") == "0":
+        if not _sw_bool("self_improve_objective_skip"):
             return True
         try:
             m = ctx.metadata if isinstance(ctx.metadata, dict) else {}
@@ -886,6 +1147,10 @@ class Orchestrator(BaseAgent):
                 # 600 = 单题预算（1000）的六成，与 2.7 对称，保证后段 3.6/4_verify/6.5 不被饿死。
                 # ⚠ 单次 LLM 200-300s 不可中断（`base.py:619`）⇒ 仍可能被跨过一次。
                 "3_solve": 600.0,             # 实测 max 1148；**上限必须 < 单题预算才有效**
+                # 2026-09-29 新增（截图 #3+#4）：领域→定理检索。
+                # 实测（official112 前 12 题）单题 8~11s（源码扫描后端、2 query）。
+                # 给 60s 上限：正常 10s 内完成，异常/后端退化时最多烧 60s 即放手。
+                "1.2_theorem_hint": 60.0,
                 "3.2_complete": 220.0,        # 实测 max 175
                 "3.3_improve": 500.0,         # 实测 max 453（与 3.4 共享改进额度）
                 "3.4_collab": 800.0,          # 实测 max 691
@@ -1097,19 +1362,14 @@ class Orchestrator(BaseAgent):
         # ---- 全卷时钟锚点（2026-09-13 修复「全卷时钟是死的」）------------------
         # 原实现把 total_start_time / total_deadline 都基于 `now`，而平台是**逐题**
         # 调用 solve()→run() 的 ⇒ total_deadline 每题都被重置成"此刻 + 6.25h"
-        # ⇒ elapsed_total 恒 ≈ 0、ratio 恒 0 ⇒ 下面 `ratio > 0.95`（应急模式）与
-        # `ratio > 0.8`（时间收紧）两个全卷保护分支**永不触发** —— 全卷时间管理
-        # 实际是死的，每题只顾自己跑到单题硬顶（这正是"某题吃光预算"的温床）。
-        # 修复：锚点只在**首题**锁定一次、跨题保留（并发下"先到先写"，幂等）；
-        # 并把 PaperPacer 的 start_time 对齐同一锚点，使
-        # `total_time_remaining()`（TaskContext）与 `hard_remaining()` /
-        # `budget_for()`（PaperPacer）三个口径完全一致，不会各算一套时间。
+        # ⇒ elapsed_total 恒 ≈ 0、ratio 恒 0。
+        # ★ 2026-10-01：原先依赖 ratio 的「应急模式 / 时间收紧」两个全卷保护分支
+        #   已按研究期标尺**整体删除**（该阶段已于 2026-10-02 删除，见 CHANGES）。
+        #   保留锚点仅用于**诊断字段**（`ctx.total_deadline` 等），不再驱动任何
+        #   降级逻辑；全卷不做时间总量控制。
+        # 锚点只在**首题**锁定一次、跨题保留（并发下"先到先写"，幂等）。
         if getattr(self, "_paper_anchor", None) is None:
             self._paper_anchor = now
-            try:
-                self.pacer.start_time = now
-            except Exception:  # noqa: BLE001
-                pass
         _anchor = float(self._paper_anchor)
         ctx = TaskContext(
             problem=problem,
@@ -1119,12 +1379,20 @@ class Orchestrator(BaseAgent):
             deadline=now + getattr(self.config, 'max_time_per_question', 300),
             total_start_time=_anchor,
             total_deadline=_anchor + getattr(self.config, 'max_total_time_seconds', 21000),
+            # 2026-10-02：题型惰性求值开关（`1_classify` 阶段删除后由属性消费）。
+            _enable_question_type=getattr(self.config, "enable_question_type", True),
         )
+        # ★ 2026-10-02 hook 0：中间结果存储层挂载（关闭/失败 → 静默 no-op，主链无感）。
+        #   run_id 取进程级稳定值（一轮评测一个目录）；qid 由题面哈希生成（文件名不含中文）。
         try:
-            self._stage_start(ctx, "0_paper_pacer")
-            # 0) PaperPacer 全卷时间池：5h 目标动态预算帽 + MIN_SOFT 保底
-            self.pacer.begin()
-            ctx.pacer_remaining = self.pacer.hard_remaining()
+            _artifact_attach(ctx, config=self.config, problem=problem)
+        except Exception:  # noqa: BLE001  存储层任何问题都不得阻断求解
+            pass
+        try:
+            # ★ 2026-10-02：`0_paper_pacer` 阶段已删除（用户 2026-10-02 点名「全卷配速删了」）。
+            #   该阶段原仅记录单题剩余时间的诊断字段、无任何实际逻辑（PaperPacer 已于
+            #   2026-09-29 删除），其诊断字段随本阶段一并移除。历史报告仍含该阶段名
+            #   （阶段名是稳定契约，此处仅留痕）。
             # 单题 20 分钟硬限：超时直接跳过（保留已有候选/兜底产出）
             if ctx.is_timed_out():
                 self.record(ctx, "timeout", "单题超过 20 分钟，跳过处理")
@@ -1136,46 +1404,30 @@ class Orchestrator(BaseAgent):
                     answer = self._emergency_direct_solve(ctx.problem)
                 if not answer:
                     answer = "未给出有效解答。"
-                self.pacer.end(soft=getattr(ctx, "soft_budget", None))
+                # ★ 2026-10-02 hook 08（超时早返回分支）：终答同样落盘（只加不改）。
+                _artifact_put(ctx, "08_final", {
+                    "final_response": answer, "timeout": True})
                 return safe_json_serialize({
                     "final_response": answer, "trace": ctx.trace,
                     "diag": self._collect_diag(ctx),
                 })
-            elapsed_total = time.time() - ctx.total_start_time
-            total_budget = ctx.total_deadline - ctx.total_start_time
-            ratio = elapsed_total / total_budget if total_budget > 0 else 0.0
-            # v2.8：运行时覆盖统一写入 ctx.state（RunState），不再改写共享 config，
-            # 消除并发=3 时跨题污染（时间预算自律核心）。
-            if ratio > 0.95:
-                # P1 修复：阈值 0.75→0.95。本地测试更晚进入应急模式，把准确率放在时间前面。
-                # 应急模式：候选→1、投票→1，跳过续写/复算（45 error 主因根治）
-                ctx.state.sample_times = max(1, self.config.policy_sample_times - 1)
-                ctx.state.voting_times = 1
-                ctx.state.emergency = True
-                ctx.state.playoff_enabled = False
-                self.record(ctx, "paper_pacer", f"应急模式：已用 {ratio:.0%} 总预算")
-            elif ratio > 0.8:
-                ctx.state.voting_times = 1
-                ctx.state.emergency = False
-                ctx.state.playoff_enabled = False
-                self.record(ctx, "paper_pacer", f"时间收紧：已用 {ratio:.0%} 总预算")
-            else:
-                ctx.state.emergency = False
-                ctx.state.playoff_enabled = True
+            # 2026-10-01：比赛期「全卷时间池按比例降级」已按研究期标尺删除
+            # （审计 A 级第 1 条）。原 ratio>0.95 / >0.8 三档会静默置
+            # `ctx.state.emergency`，级联关闭 P1 强制重解、2.6 前置验证、
+            # 2.7 子目标主路径、3.2 续写、3.3 自改进等能力；且与上方
+            # 「PaperPacer 已彻底删除、全卷不做时间总量控制」的注释直接矛盾。
+            # ★ 注意：RunState.playoff_enabled 默认为 False，必须在正常态**显式打开**，
+            #   否则会静默关掉 playoff（反而多裁一项能力）。
+            # 单题唯一约束仍是 `max_time_per_question` 硬墙（见上方 is_timed_out）。
+            ctx.state.emergency = False
+            ctx.state.playoff_enabled = True
 
-            self._stage_start(ctx, "1_classify")
-            # 1) 题型识别（零 LLM 关键词分类，供 Lean 门禁区分证明题/解答题、
-            #    及题型差异化策略使用）。
-            # 2026-09-01 补漏：原逻辑仅在「元数据 domain 未知」时才跑 classifier.run，
-            # 若 metadata.domain ∈ _KNOWN_DOMAINS（如 "代数"）则跳过 → ctx.question_type
-            # 永不赋值 → lean_gate 拿不到 question_type，该 domain 下的证明题会被误判
-            # 为非证明题走轻量答案验证而非整题 verify。这里无条件先做题型识别。
-            if self.config.enable_question_type:
-                from .question_type import classify_question_type
-                ctx.question_type = classify_question_type(ctx.problem)
-                self.record(ctx, "classify_type",
-                            f"题型识别结果: {ctx.question_type}",
-                            question_type=ctx.question_type)
+            # ★ 2026-10-02：`1_classify` 阶段已删除（老师建议「聚焦推导」）。
+            #   题型不再预分类、不缓存进 ctx；`ctx.question_type` 改为**惰性属性**
+            #   （首次读取时按需调 `classify_question_type`，见 agent/base.py）。
+            #   下游 130+ 处 `getattr(ctx,"question_type","")` 读取点**零改动**。
+            #   历史报告仍含 `1_classify` 阶段名（阶段名是稳定契约，此处仅留痕）。
+            #   `enable_question_type=False` 时惰性属性直接返回 ""（消融路径不变）。
 
             # 1.1) Lean 适用性判定（2026-09-10 用户要求「所有题都要用 Lean，
             #      除非非常简单的题」）：答案不是数学对象的题（选项字母 /
@@ -1207,121 +1459,64 @@ class Orchestrator(BaseAgent):
             elif self.config.enable_domain_hint:
                 self.classifier.run(ctx)
 
-            # 2) 快车道（可确定性求解 → 直接出结果）
-            fast_result = self._fast_path(ctx)
-            if fast_result is not None:
-                ctx.final_response = fast_result
-                self.record(ctx, "fast_path", f"快车道直接求解: {fast_result[:200]}")
-                self.pacer.end(soft=getattr(ctx, "soft_budget", None))
-                return safe_json_serialize({
-                    "final_response": fast_result, "trace": ctx.trace,
-                    "candidates": [], "verdicts": [],
-                    "diag": self._collect_diag(ctx),
-                })
+            # 1.6) 领域 → 定理检索（2026-09-29 新增，截图 #3+#4 老师重点关注）
+            #      用户诉求：「我们要判断它是哪个领域的题目，会用到什么定理
+            #      （这里就要使用 leansearch 去 mathlib 搜索对应的定理）……
+            #      判断大模型或 leansearch 最后有没有找到正确的定理，以及
+            #      定理对大模型的推理效果如何？」
+            #      本阶段负责**找**（检索命中定理并写入 ctx，供 2.6 前置理解 /
+            #      3_solve 提示词使用）；**判定命中率**由离线脚本
+            #      `tools/theorem_probe.py` 对预标注表做（非运行时）；
+            #      **效用**由 有/无定理 的 A/B（开关 enable_theorem_hint）回答。
+            #      ★ 全程 try 包裹且超时可跳过 —— 检索失败绝不阻断主流程。
+            self._stage_start(ctx, "1.2_theorem_hint")
+            if (getattr(self.config, "enable_theorem_hint", True)
+                    and not ctx.state.emergency):
+                self._retrieve_theorem_hints(ctx)
 
-            self._stage_start(ctx, "2.5_difficulty")
-            # 2.5) 难度路由：静态预判 + LLM 自评 → 三级档位（难题深度通道）
-            self.difficulty_router.run(ctx)
-            tier = getattr(ctx, 'tier', 'standard')
-            # 应急模式：所有档位强制降档到 **standard**（预算收紧，保产出）。
-            # 2026-09-14：**fast 档已删除**（用户要求，只留 standard/deep）
-            # ⇒ 应急降档目标改为 standard —— 它仍保有完整的子目标分解与
-            # 逐项判定链路，只压缩预算；不像已删除的 fast 那样连候选池与
-            # 子目标分解都一并省掉（实测那正是 102/103/106 出问题的原因）。
-            if ctx.state.emergency and tier != 'standard':
-                ctx.tier = 'standard'
-                tier = 'standard'
-                self.record(ctx, "paper_pacer", "应急模式：强制降档到 standard")
-            # deep 档配额闸（2026-08-28 新增）：deep 占比封顶 25%。
-            # 时间账：并发 3 × 6h = 64800 题·秒；deep 占 30% 需 70080，超 5280
-            # → 全卷必爆。超配额时降级到 standard，保证全卷能做完。
-            if tier == 'deep' and not self.pacer.allow_deep():
-                ctx.tier = 'standard'
-                tier = 'standard'
-                self.record(ctx, "paper_pacer",
-                            f"deep 配额用尽（{self.pacer.deep_used}/"
-                            f"{self.pacer.total_questions}×"
-                            f"{self.pacer.deep_quota_ratio:.0%}），降级到 standard")
-            elif tier == 'deep':
-                self.pacer.note_deep()
-            # 全卷时间池动态预算帽
-            ctx.soft_budget = self.pacer.budget_for(tier)
-            # ---- 让动态预算真正生效（2026-09-13 恢复并改造）--------------------
-            # 历史：2026-09-03 老师要求"每题上限 1200s，不到 1200 不要截断；
-            # 强制结束 = 错误"，故**取消**了此处的 deadline 收紧，deadline 恒等于
-            # 1200s 硬顶 —— 后果是 PaperPacer 算出的 soft_budget **只被记录、完全
-            # 不生效**，单题预算退化成常量，全卷调度形同虚设（112 题 × 1200s ÷
-            # 并发 3 = 12.4h，与"6.5h 内跑完"在数学上直接冲突）。
-            #
-            # 现改为**有上限的放开**：
-            #     单题硬墙 = min(放开后的硬顶 max_time_per_question,
-            #                    PaperPacer 动态预算 soft_budget)
-            # · 时间宽裕（本地少量题 / 卷面前段）→ soft_budget 大 → 拿满硬顶，
-            #   等价于"放开时间、不截断"，老师原本的意图仍然满足；
-            # · 卷面吃紧 → soft_budget 自动回落 → 提前收手，保证后面的题还有预算
-            #   （这就是"不卡在某一题上导致写不完"的执行点）。
-            # 下方 `_vres` / `_gen_deadline` 基于收紧后的 deadline 计算，故必须
-            # 在本行之后进行（顺序不能调换）。
-            _hard_cap = float(getattr(self.config, 'max_time_per_question', 1200) or 1200)
-            _one_q = max(60.0, min(_hard_cap, float(ctx.soft_budget or 0) or _hard_cap))
-            if ctx.deadline and ctx.deadline >= 10**8:
-                _new_dl = ctx.start_time + _one_q
-                if _new_dl < ctx.deadline:
-                    self.record(ctx, "paper_pacer",
-                                f"单题预算收紧 {ctx.deadline - ctx.start_time:.0f}s → "
-                                f"{_one_q:.0f}s（档位 {tier}，全卷剩余 "
-                                f"{self.pacer.hard_remaining():.0f}s）")
-                    ctx.deadline = _new_dl
-            # 尾部阈值：默认 120s；deep 档再收紧到 60s，把时间用得更尽
+            # 2) 2026-09-29：**快车道旁路已删除**（用户决策）。
+            # 原 `_fast_path()` 用正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后
+            # 直接 SymPy 直解并 `return`，命中即**跳过全部 19 阶段**（含 Lean 验证、
+            # 候选池、投票、审核闸门）——与"研究阶段跑全部方法"直接冲突，且正则过宽、
+            # 无法关闭（审计报告 DEF-A3；云端实测 12/112 题命中）。
+            # 现统一走下面的完整链路，不再有任何旁路。
+
+            # 2.5) 2026-09-29：**难度路由已删除，统一为单一档位**（用户决策）。
+            # 原 DifficultyRouter 静态预判 + LLM 自评 → fast/standard/deep 三档，
+            # 档位再决定候选数/投票数/子目标数/预算等"方法集"——违背"用全部方法
+            # 测试大模型能力"的初衷。现 `ctx.tier` 恒为 "deep"（= 原最强档配置），
+            # 不再有任何按难度分流的分支。
+            # ⚠ 同时删除的还有：应急降档（emergency → standard）、deep 全卷配额闸
+            #   （allow_deep()，`deep_quota_ratio=0.25` × 112 = 28 恰等于实测 deep 题数，
+            #   即"研究档下仍按配额裁剪方法"的头号来源）。
+            ctx.tier = "deep"
+            tier = "deep"
+            # 2026-10-01 按用户决策：研究期不限时 —— **删除"单题按剩余时间收紧 deadline"
+            # 的降级路径**（原 `min(硬顶, 档位软预算)` 会把单题拦腰截断）。
+            # 现单题只受 `max_time_per_question`（86400，仅防挂死）约束，不再按预算降级。
+            # soft_budget 仅保留为诊断字段（值=档位预算，已=86400）。
+            ctx.soft_budget = float(
+                (getattr(self.config, 'tier_budget', None) or {}).get("deep", 86400.0))
+            # 尾部阈值：统一取 deep 档值 60s（把时间用得更尽）。
+            # 2026-09-29：原 `if tier == 'deep'` 分支已因统一档位删除。
             ctx.critical_tail_seconds = float(
-                getattr(self.config, 'critical_tail_seconds', 120.0))
-            if tier == 'deep':
-                ctx.critical_tail_seconds = float(
-                    getattr(self.config, 'deep_critical_tail_seconds', 60.0))
-            # 生成侧软截止（2026-09-06 超时修复，冒烟 4/5 题烧穿 1200s 实证）：
-            # 生成类单次 LLM 调用可达 200-300s，各模块循环只在候选/子目标边界查
-            # is_time_critical（= deadline-120/60s）→ 最后一段生成必然跨过临界点
-            # 把剩余预算烧穿 → 4_verify 投票全跳（"deadline 已过跳过投票"×6）、
-            # 6.5 闸门空转（stage_timers 实证 0.0003s）、答案零验证裸提交。
-            # 这里按档位预留 verify_reserve 秒强制留给 4_verify 投票 + 6.5 审核：
-            #   deep=240s（投票 3 票/候选 + 打回重做窗口）/ 其余=180s。
-            # config.verify_reserve_seconds 可覆盖；设 0 关闭（= 旧行为）。
-            # 2026-09-11 v6：再上调预留（deep 360→540 / standard 300→480）。v5 实证：
-            # 010 剩余已升至 387s（预留机制确认生效），但 002 的 3_solve 扩张到 579s
-            # → 至 3.6 累计 1080s、剩余仅 120s（< 150 门槛）。根因是"生成侧各阶段共享
-            # 同一截止点，单个阶段（3_solve）即可吃掉大部分余量"。故进一步前移生成截止，
-            # 把更多预算明确让给验证与硬信号重解（P1）。
-            # 2026-09-13 更正：先前的 800 基于错误前提（"单题可放到 3600s"），已回滚。
-            # 现实约束：单题平台硬限 **1200s**（超时整个进程组被杀、不执行 finally、
-            # 该题计 C），故单题预算 1150s 就是全部可用时间。验证侧各阶段
-            # （3.6 + 4_verify + 4.5 + 4.6 + 5 + 5.5 + 6 + 6.5）p90 合计 ≈ 756s，
-            # 占 1150s 的 66% —— 全给验证侧会把生成侧饿死。
-            # 按"生成 ≈55% / 验证 ≈45%"分配 ⇒ deep 540s、其余 480s（沿用原值，
-            # 它本就是 1200s 约束下的合理切分）。本预留必须保住"最后能格式化出答案"。
-            # ★ 2026-09-16 审计修复：`verify_reserve_seconds` 此前**未在 AgentConfig
-            #   声明、不在白名单、无 CLI**，只能靠 getattr 兜底 ⇒ 注释承诺的
-            #   "可覆盖"是假开关。现已在 AgentConfig 声明（默认 0.0）。
-            #   ⚠ 必须把 0/负 解释为"用按档位默认"，否则声明默认值本身就会
-            #   把预留变成 0（`_gen_deadline == deadline`），悄悄改变行为。
-            _vres = float(getattr(self.config, 'verify_reserve_seconds', 0.0) or 0.0)
-            if _vres <= 0:
-                _vres = 540.0 if tier == 'deep' else 480.0
-            ctx._gen_deadline = (
-                ctx.deadline - _vres
-                if ctx.deadline and ctx.deadline >= 10**8 else 0.0)
-            self.record(ctx, "paper_pacer",
-                        f"生成侧软截止 {ctx.deadline - ctx._gen_deadline:.0f}s"
-                        f" 前停手（verify_reserve={_vres:.0f}s，留给验证/审核）"
-                        if ctx._gen_deadline else
-                        "生成侧软截止未启用（无 deadline）")
+                getattr(self.config, 'deep_critical_tail_seconds', 60.0))
+            # 2026-10-01 按用户决策：研究期不限时 —— **删除"生成侧软截止 (verify_reserve)"
+            # 降级路径**。原逻辑预留 540s 给验证侧、逼生成在同一截止点前停手；
+            # 研究期不省资源，生成/验证不再互相掐预算。
+            # `_gen_deadline` 保持未设（0.0）⇒ `gen_time_up()` 回退 `is_time_critical()`，
+            # 而单题 deadline 已达 86400 ⇒ 实际不再触发任何"按剩余时间降级"。
+            ctx._gen_deadline = 0.0
             # 按档位调整 LLM 调用预算（deep 档需要更多调用次数）
             max_calls = self.config.tier_max_calls.get(
                 tier, self.config.max_total_calls)
             if ctx.budget is not None:
                 ctx.budget.set_max_calls(max_calls)
+            # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
+            #   内容（档位/调用预算）仍有效，2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
             self.record(ctx, "paper_pacer",
                         f"档位 {tier} 软预算帽 {ctx.soft_budget:.0f}s "
-                        f"(剩余目标 {ctx.pacer_remaining:.0f}s, 调用预算 {max_calls})",
+                        f"(调用预算 {max_calls})",
                         tier=tier, soft_budget=round(ctx.soft_budget))
 
             self._stage_start(ctx, "2.6_pre_audit")
@@ -1344,25 +1539,28 @@ class Orchestrator(BaseAgent):
                 else:
                     self.audit_gate.confirm_understanding(ctx)
 
-            self._stage_start(ctx, "2.65_calc_prewarm")
-            # 2.65) 方案 B（2026-09-13 用户选定）：**生成前算式预计算**——主动把
-            # "该用工具算的算式"先算好、摆到模型面前。动机：016 实测
-            # `calc_tool_calls=[]` 且 `calc_fallback=0` ⇒ 模型压根不写 <calc>，
-            # 所有"写在前面才生效"的防线（降级解析/分档/值汇总）全部空转。
-            # 必须放在**首个生成阶段（2.7 子目标主路径）之前**：子目标链是最早产出
-            # 内容的路径，预计算值在这里第一次能被看见（随后 revise/improve/merge
-            # 也自动带上，见 `solver._calc_trace_block` / `sub_goal_solver._calc_results_block`）。
-            # graceful：内部自带触发判据 + 时间护栏，失败/超时/NONE/纯四则一律
-            # 不写 block、不阻断，仅留 `calc_prewarm` 埋点。
-            try:
-                self.solver.prewarm_calcs(ctx, tier=tier)
-            except Exception as _e_cp:  # noqa: BLE001  预计算失败不阻断主流程
-                self.record(ctx, "calc_prewarm",
-                            f"预计算调用异常（已跳过，不阻断）: "
-                            f"{type(_e_cp).__name__}: {str(_e_cp)[:120]}")
+            # ★ 2026-10-02 hook 01：题意理解确认后落盘（2.6_pre_audit → 01_understanding）。
+            _artifact_put(ctx, "01_understanding", {
+                "question_type": getattr(ctx, "question_type", ""),
+                "domain": getattr(ctx, "domain", ""),
+                "lean_applicable": (ctx.metadata or {}).get("lean_applicable"),
+                "lean_skip_reason": (ctx.metadata or {}).get("lean_skip_reason"),
+                "trace": [t for t in (getattr(ctx, "trace", None) or [])
+                          if isinstance(t, dict)
+                          and t.get("step") in ("classify_type",
+                                                "confirm_understanding",
+                                                "lean_preverify")][-20:],
+            })
+
+            # 2026-09-29：**2.65_calc_prewarm 阶段已删除**（用户决策：
+            # 「预计算没必要，且不合逻辑，删了。之后对于计算部分我们会再想办法」）。
+            # 原设计在首个生成阶段前先让 LLM 预列算式并用 SymPy 算好、塞进 prompt，
+            # 但用户判定其"不合逻辑"（把计算从推理链里剥离，掩盖了模型真实的
+            # 计算能力）。计算部分待后续重新设计。
+            # 阶段名 "2.65_calc_prewarm" 已从收尾 stage 列表中同步移除。
 
             self._stage_start(ctx, "2.7_subgoal_main")
-            # 2.7) 子目标细化主路径（v2.9）：全部档位统一先跑一次子目标分解逐步求解
+            # 2.7) 子目标细化主路径（v2.9）：统一档位下先跑一次子目标分解逐步求解
             # 2026-09-06：时间判断升级 gen_time_up（生成侧软截止，给验证留预算）
             if (getattr(self.config, 'enable_subgoal_main_path', True)
                     and not ctx.state.emergency
@@ -1436,29 +1634,30 @@ class Orchestrator(BaseAgent):
                             f"3_solve(deep P&E) 阶段预算 {_dsp_cap:.0f}s"
                             f"（实耗 {time.time() - _dsp_t0:.0f}s）")
 
+            # ★ 2026-10-02 hook 02/03：蓝图(DAG) / 子目标落盘（只加不改）。
+            #   位置刻意放在 **2.7 主路径 + deep 档 P&E 之后**：两条路径谁产出了蓝图
+            #   都能覆盖；二者互斥（P&E 有 `not _subgoal_main_done` 守卫）故只写一次。
+            #   02_blueprint = AND-OR DAG；03_subgoals = DAG 转出的子目标规划 + 逐步结果。
+            _bp02 = getattr(ctx, "blueprint", None) or {}
+            _pl03 = getattr(ctx, "blueprint_plan", None) or {}
+            _st03 = getattr(ctx, "subgoal_trace", None) or []
+            if _bp02:
+                _artifact_put(ctx, "02_blueprint", _bp02)
+            if _pl03 or _st03:
+                _artifact_put(ctx, "03_subgoals", {"plan": _pl03, "trace": _st03})
+
             # Solver 多路采样（候选数/温度分层按档位，solver 内部读取 ctx.tier）
-            # L1 验证优先（2026-08-31）：剩余时间不足 verify_only_seconds 时
-            # 停止生成新候选，把最后的时间留给验证投票。
-            # 依据：A_base 30 题日志 170 次"剩余时间不足"跳过调用、
-            # 117 次"验证拿到 None 默认判错" —— 生成阶段把时间烧光，
-            # 验证投票被饿死（误杀正确候选）。verify_only 治的就是这个。
-            # ⚠ D 组对照实测净 −1、p=1.0 → 默认关闭（verify_only_seconds=0），
-            # 触发条件必须显式 > 0，避免 deadline 已过（remaining<0）时误触发。
-            _remaining_before_solve = (
-                ctx.deadline - time.time() if ctx.deadline else float("inf"))
-            _verify_only_seconds = getattr(self.config, 'verify_only_seconds', 0)
-            if _verify_only_seconds > 0 and _remaining_before_solve < _verify_only_seconds:
-                ctx.state.verify_only = True
-                self.record(ctx, "paper_pacer",
-                            f"L1 验证优先：剩余 {_remaining_before_solve:.0f}s"
-                            f" < {_verify_only_seconds}s，"
-                            f"停止生成新候选，只保留验证",
-                            verify_only=True)
+            # 2026-10-01 按用户决策：研究期不限时 —— **删除"L1 验证优先"触发路径**
+            # （原：剩余 < verify_only_seconds 时停止生成新候选）。`ctx.state.verify_only`
+            # 不再被置位（恒 False）⇒ 下游 `not ctx.state.verify_only` 门禁恒放行，
+            # 不再有任何"为省时间而跳过生成/审核"的降级。
             if not ctx.state.verify_only:
                 # 2026-09-06 超时修复：生成侧软截止已到且已有候选 → 不再追加
                 # 生成（solver.run 单次可能 200-300s），直接带现有候选进验证。
                 # 无候选时仍必须跑（兜底产出第一候选）。
                 if ctx.gen_time_up() and ctx.candidates:
+                    # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
+                    #   2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
                     self.record(ctx, "paper_pacer",
                                 "生成侧软截止已到且已有候选，跳过追加生成"
                                 "直接进入验证/审核")
@@ -1488,17 +1687,25 @@ class Orchestrator(BaseAgent):
                     self.record(ctx, "control",
                                 f"3_solve 阶段预算 {_sp_cap:.0f}s"
                                 f"（实耗 {time.time() - _sp_t0:.0f}s）")
+
+            # ★ 2026-10-02 hook 05：3_solve 生成后落盘候选池（05_candidates）。
+            _artifact_put(ctx, "05_candidates", [
+                {"id": c.id, "answer": getattr(c, "answer", ""),
+                 "reasoning": getattr(c, "reasoning", ""),
+                 "revised": getattr(c, "revised", False)}
+                for c in (getattr(ctx, "candidates", None) or [])
+            ])
+
             if not self._has_usable_candidate(ctx):
                 # 2026-09-13 晚：判据从 `not ctx.candidates` 放宽为"无**可用**候选"。
                 # 旧判据只看池子空不空，而 solver 原先会塞占位候选 ⇒ 池子非空但
                 # 全是占位符，这条兜底（以及 `_emergency_direct_solve`）永远不触发。
                 self.record(ctx, "control",
                             "Solver 未产出可用候选（空/占位符），触发兜底直接求解")
-                self.pacer.end(tier=tier, soft=getattr(ctx, "soft_budget", None))
                 return self._fallback_direct(ctx)
 
             self._stage_start(ctx, "3.2_complete")
-            # 3.2) 截断候选续写：每档 max_completions 个（fast=0 跳过），应急模式跳过
+            # 3.2) 截断候选续写：统一档位 max_completions 个，应急模式跳过
             if (getattr(ctx, 'candidates', None)
                     and not ctx.state.emergency
                     and not ctx.state.verify_only):
@@ -1584,25 +1791,11 @@ class Orchestrator(BaseAgent):
                             f"（改进共享预算 {_improve_total:.0f}s − 3.3 已用 "
                             f"{_imp_used:.0f}s；实耗 {time.time() - _collab_t0:.0f}s）")
 
-            self._stage_start(ctx, "3.5_subgoal_sup")
-            # 3.5) 子目标分解补充候选：仅非 deep 档（deep 档已作为主路径提前执行）
-            # 2026-08-30（#45 移除题型分流）：原逻辑带 `or is_proof`，即证明题
-            # **无条件**触发子目标分解。但 IMO 基本全是证明题，该分支等于让
-            # 全部题目都多跑一轮子目标规划 —— 而 #43 归因已证明：错题主因是
-            # 时间分配错误（规划抢走了真正写题的预算）。故去掉题型条件，
-            # 只保留与题型无关的统一触发条件：候选不足时才补。
-            use_sub = getattr(self.config, 'use_sub_goal', False)
-            if (tier != 'deep'
-                    and use_sub
-                    and not getattr(ctx, '_subgoal_main_done', False)
-                    and not ctx.state.verify_only
-                    and not ctx.gen_time_up()
-                    and len(ctx.candidates) < 2):
-                self.record(ctx, "control",
-                            "触发子目标分解补充候选",
-                            sub_goal_trigger=f"tier={tier}, "
-                                             f"candidates={len(ctx.candidates)}")
-                self.sub_goal_solver.run(ctx)
+            # 2026-09-29：**3.5_subgoal_sup 阶段已删除**（用户决策）。
+            # 原逻辑「仅非 deep 档 + 候选不足时补跑子目标分解」在统一档位后
+            # 条件恒假（`tier != 'deep'` 永假），且其语义与 2.7 子目标主路径
+            # 完全重叠（2.7 已对所有题先跑一遍并把 `_subgoal_main_done` 置位）。
+            # 该阶段已于 2026-09-29 删除；阶段名保留于审计清单（stage_audit）作历史记录。
 
             self._stage_start(ctx, "3.6_audit_filter")
             # 3.6) 候选客观审核（2026-09-06 晚：Lean 双通道 + AuditGate 串行）。
@@ -1766,15 +1959,14 @@ class Orchestrator(BaseAgent):
                         self.record(ctx, "p1_check",
                                     "P1 未触发：" + "；".join(_p1_why))
 
-            # 2026-09-02 老师需求：候选池统一封顶（兜底所有生成路径：
-            # 初始/改进/续写/协作/子目标/revise 追加总量都可能超）
-            # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%；
-            # 平台实测候选边际收益低，杠杆在验证器错因质量，不在堆候选）
+            # 2026-10-01：比赛期「候选池统一封顶 6」已按研究期标尺删除
+            # （审计 A 级第 6 条）。原注释自述 `cap 8→6（deep 候选 4→3 配套，
+            # 验证成本 -25%）` —— 属以成本为由裁剪候选粒度。研究期求正确率上限，
+            # 不再截断候选；此处仅保留计数记录，便于观察候选规模与耗时关系。
             _pre_verify_n = len(ctx.candidates or [])
             if _pre_verify_n > 6:
-                ctx.candidates = (ctx.candidates or [])[:6]
                 self.record(ctx, "control",
-                            f"候选池 {_pre_verify_n} → 6（统一封顶）")
+                            f"候选池 {_pre_verify_n} 个（已取消封顶，不再截断为 6）")
             # 2026-09-13：过滤「非答案形态」候选。
             # 096 实测：候选 answer 字段里混入 Markdown 标题 `### 选项A分析`，
             # 因其 len>3 且不含拒绝词，被计入选择题投票 ⇒ **污染投票分布**。
@@ -1832,6 +2024,25 @@ class Orchestrator(BaseAgent):
             ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
             ctx._best_cluster = ver_result.get("best_cluster")
             ctx._cluster_data = ver_result.get("cluster_data", [])
+
+            # ★ 2026-10-02 hook 06：4_verify 后落盘 verdict（06_verdicts）。
+            _bc6 = getattr(ctx, "_best_cluster", None)
+            _artifact_put(ctx, "06_verdicts", {
+                "verdicts": [
+                    {"id": v.id, "answer": getattr(v, "answer", ""),
+                     "confidence": getattr(v, "confidence", None),
+                     "correct_votes": getattr(v, "correct_votes", None),
+                     "total_votes": getattr(v, "total_votes", None),
+                     "feedback": getattr(v, "feedback", "")}
+                    for v in (getattr(ctx, "verdicts", None) or [])
+                ],
+                "cluster": (None if _bc6 is None else {
+                    "answer_norm": getattr(_bc6, "answer_norm", ""),
+                    "size": getattr(_bc6, "size", None),
+                    "confidence": getattr(_bc6, "confidence", None),
+                    "candidate_ids": getattr(_bc6, "candidate_ids", None),
+                }),
+            })
 
             self._stage_start(ctx, "4.5_oracle")
             # 4.5) deep 档：AnswerOracle 客观复核 best_cluster（区别于投票同源自评）
@@ -1891,18 +2102,45 @@ class Orchestrator(BaseAgent):
                     # 现改为：兜底答案先存入 ctx.final_response，落回统一出口，
                     # 由 formatter 校验/修复（候选都差时保留预设答案），
                     # 再进 6.5 AuditGate 闸门把关，最后统一 return。
-                    direct_answer = self.solver.direct_solve(ctx)
-                    # 2026-09-18：过 `_set_final_response`（非答案闸门）
-                    if not self._set_final_response(ctx, direct_answer, "zero_vote_direct"):
-                        if str(direct_answer or "").strip():
+                    # ★ 2026-09-23 改造：改为「**证伪优先**」。
+                    #   本路径原文是"候选全 0 票 ⇒ 池不可信 ⇒ 弃池、改取 direct_solve
+                    #   的另一条产线答案"。但 0923 环节效能审计推翻了该前提：
+                    #   · 两个主力闸门（4_verify 全 0 票 / lean_gate proof_invalid）
+                    #     在**正确题**上的误报率都是 **56%** ⇒ "全 0 票"不等于池不可信；
+                    #   · 弃池的代价实测为：18 题终答出池、16 题判错（= 全部错题 43.2%）。
+                    #   用户判据："**错误答案一定是能证明错误的**" ⇒ 择优的正确姿势是
+                    #   **先淘汰能被客观证伪的候选**，再在幸存者中择优；只有幸存者为 0
+                    #   （或证伪器不可用）时，才回退到原来的 direct_solve 兜底。
+                    #   红线：证伪器只做证伪、不做证实；不确定一律放行（宁漏不误杀）。
+                    _avail, _n_surv = self._falsify_candidates(ctx)
+                    direct_answer = ""
+                    if _avail and _n_surv > 0:
+                        # 池中仍有未被证伪的候选 ⇒ **不采纳池外直答**，交 Formatter 从池中择优
+                        self.record(ctx, "control",
+                                    "零票兜底：证伪淘汰后仍剩 %d 个未被证伪候选 → "
+                                    "改由候选池择优（不采纳 direct_solve 的池外答案）"
+                                    % _n_surv)
+                        ctx._zero_vote_fallback = False
+                    else:
+                        direct_answer = self.solver.direct_solve(ctx)
+                        if (str(direct_answer or "").strip()
+                                and self._falsify_rejects(ctx, direct_answer)):
                             self.record(ctx, "control",
-                                        "零票兜底直答被判为非答案（过程叙述/脏文本）"
-                                        "→ 退回候选池择优")
-                        self._set_final_response(
-                            ctx, self._pick_best_from_candidates(ctx) or "",
-                            "zero_vote_pick_best")
-                    # 标记 0 票兜底路径：formatter 需要它来判断是否保留预设答案
-                    ctx._zero_vote_fallback = True
+                                        "零票兜底直答被客观证伪（数值回带 + SymPy 精确判定）"
+                                        "→ 拒绝采纳，退回候选池择优")
+                            direct_answer = ""
+                        # 2026-09-18：过 `_set_final_response`（非答案闸门）
+                        if not self._set_final_response(ctx, direct_answer,
+                                                        "zero_vote_direct"):
+                            if str(direct_answer or "").strip():
+                                self.record(ctx, "control",
+                                            "零票兜底直答被判为非答案（过程叙述/脏文本）"
+                                            "→ 退回候选池择优")
+                            self._set_final_response(
+                                ctx, self._pick_best_from_candidates(ctx) or "",
+                                "zero_vote_pick_best")
+                        # 标记 0 票兜底路径：formatter 需要它来判断是否保留预设答案
+                        ctx._zero_vote_fallback = True
 
             self._stage_start(ctx, "5.5_low_conf")
             # 5.5) 低置信度强制复核（v2.6 杀掉虚高置信度）：
@@ -1942,6 +2180,10 @@ class Orchestrator(BaseAgent):
             self.formatter.run(ctx)
 
             self._stage_start(ctx, "6.5_audit_gate")
+            # 2026-10-01：原 6.5 处「`calc_inconsistent`（计算冲突）优先于 Lean
+            #   answer_valid」的裁决已随 `<calc>` 计算工具板块整体删除 —— 其唯一
+            #   来源（`_maybe_answer_selfcheck` 里"有工具值却与答案不符"的判据）
+            #   已移除 ⇒ 该分支随之消失（原 L4「判据在当前配置下不可达」已成历史）。
             # 6.5) 最终答案闸门（2026-09-06 晚：Lean/AuditGate 双后端路由）。
             #      Lean 环境可用 → LeanGate.gate_final_answer：证明题整题 verify、
             #      非证明题 verify_answer（norm_num/ring 答案锚定核验，5-21s），
@@ -1992,17 +2234,14 @@ class Orchestrator(BaseAgent):
                     _rework_deadline = min(
                         _hard_end,
                         ctx.start_time + _tier_budget) - max(0.0, _rework_reserve)
-                    # 2026-09-12 A4 修复（Bug 2：6.5 成为新的时间黑洞）：
-                    # 此前 deep 档 `_max_rework=None`（**无上限**）→ 实测 #000 单题
-                    # 6.5 占 531s（44%）、#006 占 31%，"砍掉 4.6 省下的时间被 6.5
-                    # 吃回去"。且 unknown→strict_reject 的题**重做后输出不变**
-                    # （17 次 strict_reject 白烧 1520s，只烧时间不改输出）。
-                    # 现给 deep 档设上限（默认 3 次，与 standard 的 2 次对称）；
-                    # `DEEP_MAX_REWORK=-1` 恢复旧行为（无上限），便于 A/B 与回退。
+                    # 2026-10-01：比赛期上限（默认 3）已按研究期标尺放开 ⇒ 默认 -1 = 无上限
+                    # （审计 A 级第 3 条）。原注释自述动机是「6.5 成为新的时间黑洞」
+                    # 的省时考虑；研究期求正确率上限，不再以时间为由限制终审重做。
+                    # `DEEP_MAX_REWORK=N`（N>=0）仍可显式设上限，便于 A/B。
                     try:
-                        _deep_cap = int(os.environ.get("DEEP_MAX_REWORK", "3"))
+                        _deep_cap = int(os.environ.get("DEEP_MAX_REWORK", "-1"))
                     except (TypeError, ValueError):
-                        _deep_cap = 3
+                        _deep_cap = -1
                     # 2026-09-14：fast 档已删除 ⇒ 原 `tier in ("fast","standard")`
                     # 简化为 `tier == "standard"`。
                     _max_rework = (2 if tier == "standard"
@@ -2012,52 +2251,15 @@ class Orchestrator(BaseAgent):
                         if getattr(_c, "answer", "") == ctx.final_response:
                             best_reasoning = getattr(_c, "reasoning", "") or ""
                             break
-                    # 2026-09-13 联动修复（实测驱动）：若该答案在 answer_selfcheck
-                    # 里被判"涉高危运算却无 <calc> 工具来源"且因剩余不足未重问，
-                    # 则**不接受** Lean 的 answer_valid —— 它只证明"LLM 写的那个
-                    # 命题可被证明"，在题面无 ≥3 位数字时会退化为"自证放行"
-                    # （实测 010：错误答案 0 被判 answer_valid，见
-                    #   lean_bridge._cross_check_problem_symbols 注释）。
-                    # 此处改判为需重做，进入下方 while 重生成循环。
-                    _su = str(getattr(ctx, "selfcheck_unverified_answer", "")
-                              or "").strip()
-                    # 2026-09-13 方案 C-B：**计算冲突**优先级更高 —— 答案与本地
-                    # 精确计算器（calc_tool/SymPy）的结果直接矛盾时，无论 Lean 判
-                    # 什么（answer_valid 只证明"LLM 写的命题可证"），一律不放行。
-                    # 这把"数值答案正确性"的裁决权从 Lean 收回给计算器。
-                    _ci = bool(getattr(ctx, "calc_inconsistent", False))
-                    # ⚠ 2026-09-17（L4）可达性核实：`calc_inconsistent` 的**唯一**
-                    #   置位点在 `solver._maybe_answer_selfcheck`，而该函数在
-                    #   `enable_calc_tool=False`（当前默认）时**整体早退**
-                    #   ⇒ 本分支在当前配置下**结构性不可达**（该裁决从未生效）。
-                    #   不在此处"补一个替代判据"：用推理里的任意算式判"矛盾"会**误拒
-                    #   正确候选**（同 L1 的结论）。要恢复它必须二选一：
-                    #     (a) 重新开启 calc 工具链（连带 `<calc>` 引导与回填）；
-                    #     (b) 为 6.5 新增独立的"答案 ↔ 题面条件"复算通路。
-                    #   在做出该决定前，此处保留但**显式标注不可达**，避免误读。
-                    if (not _ci
-                            and not getattr(self.config, "enable_calc_tool", False)):
-                        self.record(
-                            ctx, "final_gate",
-                            "calc_inconsistent 判据在当前配置下不可达"
-                            "（enable_calc_tool=False ⇒ selfcheck 整体早退）")
-                    if _ci:
-                        self.record(
-                            ctx, "final_gate",
-                            "答案与本地精确计算器结果冲突（calc_inconsistent）"
-                            "→ 拒绝放行，按需重做")
-                        g_ok = False
-                    elif _su and _su in str(ctx.final_response or ""):
-                        self.record(
-                            ctx, "final_gate",
-                            f"答案 {_su[:40]} 涉高危运算却无 <calc> 工具来源"
-                            "（selfcheck 未核验）→ 不接受 Lean answer_valid，按需重做")
-                        g_ok = False
-                    else:
-                        g_ok = _gate.gate_final_answer(
-                            ctx, tier, ctx.final_response, best_reasoning)
+                    g_ok = _gate.gate_final_answer(
+                        ctx, tier, ctx.final_response, best_reasoning)
                     _tried = 0
                     _last_feedback = ""
+                    # ★ 2026-09-21：记下"进入重做循环前"的答案，供未过审核时回滚。
+                    #   候选按 confidence **降序**试探（下方 sorted(...reverse=True)），
+                    #   循环因次数/时间耗尽而退出时 ctx.final_response 停在**最后换上**
+                    #   的候选 = 置信度最低者；而"闸门没能确认更强" ≠ "确认更弱"。
+                    _pre_rework_final = ctx.final_response
                     while (not g_ok
                            and _t3.time() < _rework_deadline - 5
                            and (_max_rework is None or _tried < _max_rework)):
@@ -2176,6 +2378,26 @@ class Orchestrator(BaseAgent):
                                         f"换候选 #{_next.id} 过审核闸门，采用其答案")
                     if not g_ok:
                         ctx.gate_rejected = True
+                        # ★ 2026-09-21 回滚：本重做循环把 ctx.final_response 一路往前
+                        #   覆盖（gate_next / gate_rework），而候选按置信度降序试探
+                        #   ⇒ 循环退出时终值 = 最后换上 = **置信度最低**者。
+                        #   实测 0921 arm2c2t：000 `\boxed{1}`(conf 0.667) → `20`
+                        #   (conf 0.000)；003 `\boxed{2026}` → `因此a_{2025} = 2026。`；
+                        #   004 `\boxed{1012}` → 187 字过程叙述。Lean 全降级时闸门
+                        #   对所有解答题恒拒 ⇒ 必然退到最弱候选。
+                        #   未过审核 = 无可信证据支持替换 ⇒ 回到重做前的答案。
+                        if (_pre_rework_final
+                                and ctx.final_response != _pre_rework_final
+                                and self._set_final_response(
+                                    ctx, _pre_rework_final, "gate_rollback")):
+                            try:
+                                ctx._gate_rollback = True
+                            except Exception:  # noqa: BLE001
+                                pass
+                            self.record(ctx, _gk,
+                                        "候选尽数未过客观审核 → 回滚到重做前的答案"
+                                        f"（{str(_pre_rework_final)[:60]}），"
+                                        "不以置信度最低的候选收尾（2026-09-21）")
                         self.record(ctx, _gk,
                                     f"{tier} 档审核重做达上限仍拒（{_tried} 次换候选/重生成），"
                                     "当前答案标 rejected 放行")
@@ -2183,13 +2405,23 @@ class Orchestrator(BaseAgent):
                     self.record(ctx, _gk,
                                 f"审核闸门异常，降级放行: {str(_e)[:120]}")
 
-            self.pacer.end(tier=tier, soft=getattr(ctx, "soft_budget", None))
+            # ★ 2026-10-02 hook 07：6.5 审核闸门后落盘（07_lean）—— Lean 门禁 / DAG 校验痕迹。
+            _artifact_put(ctx, "07_lean", {
+                "final_gate": getattr(ctx, "final_gate", None),
+                "gate_rejected": getattr(ctx, "gate_rejected", None),
+                "lean_dag_checked": getattr(ctx, "lean_dag_checked", None),
+                "lean_dag_fails": getattr(ctx, "lean_dag_fails", None),
+                "lean_reject_feedback": getattr(ctx, "lean_reject_feedback", None),
+                "final_response_after_gate": getattr(ctx, "final_response", ""),
+            })
 
-            # 阶段耗时收尾（2026-09-03）：统一 stop 全部 19 阶段（之前 start 在阶段开始）
-            for _stg in ("0_paper_pacer","1_classify","2.5_difficulty","2.6_pre_audit",
-                         "2.65_calc_prewarm",
+            # 阶段耗时收尾（2026-09-03）：统一 stop 全部阶段（start 在阶段开始）
+            # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty` / `0_paper_pacer`（阶段均已删）；
+            #   此前报告仍含这些阶段名（留痕，阶段名是契约）。
+            for _stg in ("1.2_theorem_hint",
+                         "2.6_pre_audit",
                          "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
-                         "3.4_collab","3.5_subgoal_sup",
+                         "3.4_collab",
                          "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                          "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
                 self._stage_stop(ctx, _stg)
@@ -2221,6 +2453,13 @@ class Orchestrator(BaseAgent):
             # 每项带独立开关与埋点，便于单次评测逐项审查（2026-09-11 用户指示）
             ctx.final_response = self._final_answer_postprocess(ctx)
 
+            # ★ 2026-10-02 hook 08：run() 正常返回前落盘终答（08_final）。
+            _artifact_put(ctx, "08_final", {
+                "final_response": ctx.final_response or "",
+                "n_candidates": len(getattr(ctx, "candidates", None) or []),
+                "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
+            })
+
             return safe_json_serialize({
                 "final_response": ctx.final_response or "",
                 "trace": ctx.trace,
@@ -2233,6 +2472,8 @@ class Orchestrator(BaseAgent):
                 "mathlib_usage_stats": {
                     **(ctx.mathlib_usage_stats or {}),
                     "distinct_theorems": len(ctx.used_theorems or []),
+                    # ★ 2026-09-23：「引用即采用」采用率（回答"定理有没有真用上"）
+                    "adoption": self._mathlib_adoption(ctx),
                 },
                 # ---- 逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）----
                 # 统一由 _collect_diag 构建（全 getattr 兜底：提前 return / 异常路径也覆盖）
@@ -2240,91 +2481,21 @@ class Orchestrator(BaseAgent):
             })
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
-            try:
-                self.pacer.end(soft=getattr(ctx, "soft_budget", None))
-            except Exception:
-                pass
             return self._fallback(ctx, problem, e)
 
     # ----------------------------------------------------------
-    # 快车道：可确定性求解的题目直接用 SymPy 短路
+    # 2026-09-29：快车道（_fast_path / _try_sympy_solve）已按用户要求**整体删除**。
+    #
+    # 原设计：正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后直接 SymPy 直解并
+    # `return`，命中即跳过全部后续阶段（Lean 验证 / 候选池 / 投票 / 审核闸门）。
+    # 删除理由：
+    #   ① 与"研究阶段用全部方法测试大模型"直接冲突 —— 它省掉的恰是待研究的环节；
+    #   ② 首条正则过宽（任何含两个数字与运算符的题干都命中），且无开关可关
+    #      （审计报告 DEF-A3）；云端实测 12/112 题命中；
+    #   ③ 用户决策"统一一个档位、统一答题格式"，不允许任何旁路。
+    # 保留说明：`utils.sympy_tools` 的 import 仍保留（其它模块可能引用），
+    # 不再有未定义名风险。
     # ----------------------------------------------------------
-    _FAST_PATH_PATTERNS = [
-        (r"\d+\s*[\+\-\*/×÷]\s*\d+", "arithmetic"),
-        (r"(?:calculate|compute|evaluate)\b", "arithmetic"),
-        (r"(?:求导|导数|微分|derivative?|differentiate|f'|f''|d/dx)", "derivative"),
-        (r"(?:积分|∫|integral|integrate)", "integral"),
-        (r"(?:行列式|determinant|det\s*\(|矩阵的?行列式)", "determinant"),
-        (r"(?:解(?:方程|方程组)|solve.{0,6}equation)", "equation"),
-        (r"(?:一元二次|二次方程|quadratic)", "quadratic"),
-        (r"(?:极限|limit)", "limit"),
-    ]
-
-    _FAST_PATH_TIME_LIMIT = 20.0  # 快车道总耗时上限（秒），超限即放弃、回退主流程
-
-    def _fast_path(self, ctx: TaskContext) -> str | None:
-        problem = ctx.problem or ""
-        start = time.time()
-        for pattern, tag in self._FAST_PATH_PATTERNS:
-            if not _re.search(pattern, problem, _re.IGNORECASE):
-                continue
-            self.record(ctx, "fast_path", f"检测到可快车道求解题型: {tag}")
-            if not _HAS_SYMPY:
-                self.record(ctx, "fast_path", "SymPy 未安装，跳过快车道")
-                continue
-            # 耗时控制：超过预算立即放弃快车道，避免过度消耗时间
-            if time.time() - start > self._FAST_PATH_TIME_LIMIT:
-                self.record(ctx, "fast_path", "快车道耗时超限，放弃，回退主流程")
-                return None
-            result = self._try_sympy_solve(problem, tag)
-            if result:
-                self.record(ctx, "fast_path", f"快车道 SymPy 求解成功: {result}")
-                return result
-            self.record(ctx, "fast_path", f"快车道 {tag}: SymPy 求解失败，回退")
-        return None
-
-    def _try_sympy_solve(self, problem: str, tag: str) -> str | None:
-        extract_prompt = (
-            "请从以下题目中提取**核心数学表达式**（只输出表达式，不要额外文字）。"
-            f"\n\n题目类型: {tag}\n题目: {problem}\n\n表达式:"
-        )
-        try:
-            # v2.4.1：prefill「表达式：」抑制 CoT——快车道只需表达式，秒级返回
-            from utils.prefill import prefill_messages, stitch
-            raw_expr = _normalize_chat_response(self.client.chat(
-                messages=prefill_messages(
-                    [
-                        {"role": "system", "content": "你只输出数学表达式，不要任何解释。"},
-                        {"role": "user", "content": extract_prompt},
-                    ],
-                    "表达式：",
-                ),
-                temperature=0.0,
-                max_tokens=32768,
-            ))
-            if raw_expr:
-                raw_expr = stitch("表达式：", raw_expr)
-            raw_expr = (raw_expr or "").strip()
-        except Exception:
-            return None
-        if not raw_expr or len(raw_expr) > 500:
-            return None
-        try:
-            if tag in ("arithmetic", "quadratic"):
-                return eval_expression(raw_expr)
-            elif tag == "derivative":
-                return compute_derivative(raw_expr)
-            elif tag == "integral":
-                return compute_integral(raw_expr)
-            elif tag == "determinant":
-                return compute_determinant(raw_expr)
-            elif tag in ("equation",):
-                return solve_equation(raw_expr)
-            elif tag == "limit":
-                return compute_limit(raw_expr)
-        except Exception:
-            pass
-        return None
 
     def _review_bug_feedback(self, ctx: TaskContext, feedback: str) -> str:
         """Step 4：让模型复核验证器的缺陷反馈，可驳回误报（论文流水线）。
@@ -2401,8 +2572,14 @@ class Orchestrator(BaseAgent):
         # 去重键 = (revise_round, final_response)：相同即本趟已跑过，直接返回。
         # `force=True`（P1 应急重解）是调用方**显式要求**的，不参与去重。
         if not force:
-            _pass_key = (int(getattr(ctx, "revise_round", 0) or 0),
-                         str(getattr(ctx, "final_response", "") or ""))
+            # ★ 2026-09-21 修复去重键：**去掉 revise_round** —— 它由本函数自身在
+            #   下方 `ctx.revise_round += 1` 递增，拿它入键等于**自毁去重**：
+            #   5) 段跑完 revise_round 变 1，5.5 段带着 1 再进来键就不同 ⇒ 必然
+            #   重复整轮回环。实测 0921 arm2c2t 001：`5_revise_or_fallback` 668s
+            #   + `5.5_low_conf` 655s = 1323s，占该题 41%（两段各跑一次完整回环）。
+            #   去重语义本就是"本趟对**同一答案**不重复 revise"，答案相同即命中；
+            #   轮次仅用于日志展示（下方 record 仍打印当前 round）。
+            _pass_key = str(getattr(ctx, "final_response", "") or "")
             _seen = getattr(ctx, "_revise_pass_keys", None)
             if not isinstance(_seen, set):
                 _seen = set()
@@ -2414,7 +2591,8 @@ class Orchestrator(BaseAgent):
                 if _pass_key in _seen:
                     self.record(ctx, "revise",
                                 "同一答案（round=%d）本趟已 revise 过 → 跳过重复回环"
-                                "（Z6 2026-09-17）" % _pass_key[0])
+                                "（Z6 去重键修复 2026-09-21）"
+                                % int(getattr(ctx, "revise_round", 0) or 0))
                     return False
                 _seen.add(_pass_key)
         if force:
@@ -2708,6 +2886,130 @@ class Orchestrator(BaseAgent):
             logger.warning("[orchestrator] 对抗式审查异常（已忽略）: %s", str(exc)[:120])
             return False
 
+    def _mathlib_adoption(self, ctx: TaskContext) -> dict:
+        """统计「检索到的定理」里有多少**真的进了 Lean 代码**（引用即采用）。
+
+        ★ 2026-09-23 新增，回答用户"mathlib 的定理是不是都和本题有关、哪些帮上了忙"：
+          实测 `used_theorems` 的条数恒等于 `search_hits` 恒等于 `top_k`
+          ⇒ **该字段实为"检索结果"，不是"实际使用"**（字段名误导）。
+          本轮实测 460 条里只有 4 条（1%）出现在 Lean 代码中。
+
+        ⚠ 因此"提高定理选择数（top_k）"是**错的解**：`top_k_capped` 已 100% 饱和，
+          调大只会拿回更多同样不被使用的条目。缺的是"**检索 → 采用 → 编译验证**"闭环。
+
+        本方法把"采用率"变成可度量字段，使该闭环的成效可被逐轮跟踪。
+        """
+        try:
+            names = [str(x) for x in (getattr(ctx, "used_theorems", None) or [])]
+            if not names:
+                return {"retrieved": 0, "adopted": 0, "adoption_rate": 0.0}
+            code = []
+            for t in (getattr(ctx, "trace", None) or []):
+                if not isinstance(t, dict):
+                    continue
+                if t.get("step") == "lean_gate" or t.get("step") == "subgoal_step":
+                    code.append(str(t.get("content") or ""))
+            blob = "\n".join(code)
+            adopted = sum(1 for n in names if n.split(".")[-1] and n.split(".")[-1] in blob)
+            return {"retrieved": len(names), "adopted": adopted,
+                    "adoption_rate": round(100.0 * adopted / max(len(names), 1), 1)}
+        except Exception:  # noqa: BLE001
+            return {"retrieved": 0, "adopted": 0, "adoption_rate": 0.0}
+
+    def _falsify_candidates(self, ctx: TaskContext) -> tuple:
+        """对候选池逐个跑证伪器，把**已被证伪**的候选答案记进 `ctx._falsified_answers`。
+
+        返回 (available, n_survivors)：
+        - `available=False` ⇒ 证伪器未启用/不可用/时间不足 ⇒ 调用方**必须保持原行为**；
+        - `available=True` ⇒ `n_survivors` 是未被证伪的候选数（可能为 0 = 全被证伪）。
+
+        ★ 2026-09-23 新增，回答用户"为什么把正确的排除、投票是不是有问题"：
+          实测两个主力闸门（`4_verify` 全 0 票 / `lean_gate` proof_invalid）在**正确题**上
+          的误报率都是 56% ⇒ "排除正确的"是结构性噪声。用户判据是
+          "**错误答案一定是能证明错误的**" ⇒ 与其让闸门投票淘汰（同源自评、无判别力），
+          不如用**可机检的证伪**来淘汰：只有拿到 SymPy 确认的反例才剔除。
+        """
+        try:
+            if not getattr(self.config, "enable_answer_falsifier", True):
+                return False, 0
+            cands = list(getattr(ctx, "candidates", None) or [])
+            if not cands:
+                return False, 0
+            if ctx.is_time_critical():
+                return False, 0
+            from .answer_falsifier import AnswerFalsifier
+            f = AnswerFalsifier(self.client, self.config)
+            prob = getattr(ctx, "problem", "") or ""
+            falsified = []
+            for c in cands:
+                if ctx.is_time_critical():
+                    break
+                res = f.falsify(ctx, c, problem=prob)
+                if res.is_incorrect:
+                    falsified.append({
+                        "answer": str(getattr(c, "answer", ""))[:160],
+                        "witness": (res.witness or "")[:200],
+                        "oracle_type": res.oracle_type,
+                    })
+            if falsified:
+                try:
+                    ctx._falsified_answers = [x["answer"] for x in falsified]
+                    meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+                    meta["falsified_answers"] = falsified
+                    ctx.metadata = meta
+                except Exception:  # noqa: BLE001
+                    pass
+                self.record(ctx, "falsify",
+                            "候选证伪：%d/%d 个候选被客观证伪（SymPy 精确判定%s）"
+                            % (len(falsified), len(cands),
+                               "+Lean 背书" if any(x["oracle_type"] == "sympy+lean"
+                                                  for x in falsified) else ""))
+            return True, max(0, len(cands) - len(falsified))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[orchestrator] 候选证伪异常（忽略）: %s", str(exc)[:120])
+            return False, 0
+
+    def _falsify_rejects(self, ctx: TaskContext, answer: str) -> bool:
+        """尝试**客观证伪**一个答案文本。返回 True 表示"已证伪、不得采纳"。
+
+        与 `_oracle_review_best` 的分工：
+        - `AnswerOracle` 只能做「多候选自洽共识」⇒ 判不出**绝对**对错；
+        - 本方法只做**证伪**：数值回带（LLM 出闭式等式）→ SymPy 精确判定
+          → Lean 背书（编译通过则推翻本次证伪）。
+
+        设计红线（与 falsifier 一致，此处再兜一层）：
+        - 任何异常 / 时间不足 / 证书缺失 / 判定不确定 ⇒ **返回 False（放行）**；
+        - 绝不在此处判"正确"，也绝不用它替换答案（只做否决）。
+        """
+        try:
+            if not getattr(self.config, "enable_answer_falsifier", True):
+                return False
+            if not str(answer or "").strip():
+                return False
+            if ctx.is_time_critical():
+                return False
+            from .answer_falsifier import AnswerFalsifier
+            f = AnswerFalsifier(self.client, self.config)
+            cand = type("_C", (), {"answer": str(answer), "reasoning": ""})()
+            res = f.falsify(ctx, cand, problem=getattr(ctx, "problem", "") or "")
+            if not res.is_incorrect:
+                return False
+            # 留痕：把证伪结论记进 diag / trace，供事后审计
+            self.record(ctx, "falsify",
+                        "证伪命中：%s | 反例：%s" % (
+                            res.reason, (res.witness or "")[:160]))
+            try:
+                ctx.metadata.setdefault("falsify_hits", []).append(
+                    {"answer": str(answer)[:120], "reason": res.reason,
+                     "witness": (res.witness or "")[:200],
+                     "checks": res.checks, "oracle_type": res.oracle_type})
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[orchestrator] 证伪器异常（放行）: %s", str(exc)[:120])
+            return False
+
     def _oracle_review_best(self, ctx: TaskContext, ver_result: dict,
                             tier_votes: int) -> None:
         """deep 档：对 best_cluster 代表候选做 AnswerOracle 客观复核。
@@ -2737,14 +3039,31 @@ class Orchestrator(BaseAgent):
         self.record(ctx, "oracle_review",
                     f"AnswerOracle 客观复核: {result.verdict} ({result.oracle_type})",
                     verdict=result.verdict, oracle_type=result.oracle_type)
-        if (result.is_incorrect and result.feedback
-                and not ctx.state.emergency):
+        # ★ 2026-09-23 叠加「证伪」——补 oracle 的能力缺口。
+        #   oracle 只有"多候选自洽共识"，没有 reference ⇒ **判不出绝对对错**
+        #   （0923 效能审计：本环节召回仅 **3%**）。而证伪器能给出**可机检的反例**
+        #   （数值回带 → SymPy 精确判定 → Lean 背书），正好补上"证明某个候选是错的"。
+        #   被证伪 ⇒ 与 incorrect 同路：注入 revise 通道并触发一次定向修正。
+        _bad_fb = result.feedback if (result.is_incorrect and result.feedback) else ""
+        try:
+            from .answer_falsifier import AnswerFalsifier
+            _fr = AnswerFalsifier(self.client, self.config, ctx.budget).falsify(
+                ctx, rep, problem=getattr(ctx, "problem", "") or "")
+            if _fr.is_incorrect:
+                self.record(ctx, "oracle_review",
+                            "证伪器命中（%s）：%s" % (_fr.oracle_type, _fr.reason))
+                _ffb = _fr.to_feedback()
+                if _ffb:
+                    _bad_fb = (_ffb + ("\n" + _bad_fb if _bad_fb else "")).strip()
+        except Exception as _e:  # noqa: BLE001
+            logger.warning("[orchestrator] 证伪器叠加异常（忽略）: %s", str(_e)[:120])
+        if _bad_fb and not ctx.state.emergency:
             # 客观反馈注入 revise 通道（audit_reject_feedback 通用反馈通道）
             if not getattr(ctx, 'audit_reject_feedback', None):
                 ctx.audit_reject_feedback = []
-            ctx.audit_reject_feedback.append(result.feedback)
+            ctx.audit_reject_feedback.append(_bad_fb)
             self.record(ctx, "oracle_review",
-                        f"客观复核判错，触发定向修正: {result.feedback[:120]}")
+                        f"客观复核/证伪判错，触发定向修正: {_bad_fb[:120]}")
             self._deep_revise_loop(ctx, ver_result, tier_votes)
 
     def _verdicts_from_ver_result(self, ver_result: dict, candidates: list = None) -> list:
@@ -2813,8 +3132,40 @@ class Orchestrator(BaseAgent):
                 return True
         return False
 
+    def _maybe_final_select(self, ctx: TaskContext) -> "str | None":
+        """★ 2026-10-02 阶段二-2：终答五层选择（返回答案串；未接管返回 None）。
+
+        与 `formatter._maybe_final_select` **共用** `final_selector.run_cached`
+        ⇒ 两条路径同一决策、同一缓存、同一份 LLM 成本。
+        开关 OFF / 无候选 / 异常 ⇒ 返回 None ⇒ 调用方**回退既有择优**。
+        """
+        try:
+            try:
+                from .final_selector import run_cached
+            except ImportError:
+                from final_selector import run_cached
+            res = run_cached(ctx, self.llm, self.record)
+            try:
+                ctx._final_select_diag = dict(res.get("diag") or {})
+                ctx._final_select_diag["branch"] = res.get("branch")
+            except Exception:  # noqa: BLE001
+                pass
+            ans = str(res.get("answer") or "").strip()
+            if not ans or res.get("skipped"):
+                return None
+            return ans
+        except Exception as exc:  # noqa: BLE001  五层失败一律回退既有逻辑
+            logger.debug("[orchestrator] 终答五层选择异常（回退）: %s: %s",
+                         type(exc).__name__, exc)
+            return None
+
     def _pick_best_from_candidates(self, ctx: TaskContext) -> str:
         import re as _re
+        # ★ 2026-10-02 阶段二-2：终答五层选择优先（开关 ON 时此处即返回，
+        #   ⇒ 下方的 verdict 置信度 / `objective_majority_vote` 分支不执行）。
+        _fs_ans = self._maybe_final_select(ctx)
+        if _fs_ans is not None:
+            return _fs_ans
         # 2026-09-13 P0 诊断埋点：记录"候选答案分布 + verdict 明细 + 命中分支"，
         # 用于确证 102 题（候选 4/6 正确却输出错答案）的根因。
         # 纯记录、不改选取行为；写入 ctx._pick_diag 供 _collect_diag 落盘。
@@ -2858,7 +3209,7 @@ class Orchestrator(BaseAgent):
         # 行为：对归一化后的候选答案做频次统计，取最高频。
         # 设计依据：self-consistency（Wang 2022），对"答案形态稳定"
         # （A–E 字母组合）的客观题有理论支撑。
-        if (os.environ.get("OBJECTIVE_MAJORITY_VOTE", "0") == "1"
+        if (_sw_bool("objective_majority_vote")
                 and getattr(ctx, "question_type", "") == "选择题"):
             _mv_count: dict = {}
             for _c in getattr(ctx, "candidates", None) or []:
@@ -2930,6 +3281,22 @@ class Orchestrator(BaseAgent):
             if _na(a):
                 return False
         except Exception:  # noqa: BLE001  判据不可用则放行（不阻断主流程）
+            pass
+        # ★ 2026-10-02 阶段二-2（team-lead Q4）：终答**唯一出口** —— 池外直答
+        #   （零票兜底 / 6.5 重做循环）也过五层：输入仅一个答案 ⇒ 五层**直接采用、
+        #   不调 LLM**（保护项：兜底路径不变慢/不变不稳）。开关 OFF ⇒ `skipped`
+        #   ⇒ 原样写入（完全回退）。保持 `@staticmethod`（测试按静态签名调用）。
+        try:
+            try:
+                from .final_selector import adopt_single
+            except ImportError:
+                from final_selector import adopt_single
+            _r = adopt_single(ctx, a, reason=str(reason or ""))
+            if not _r.get("skipped"):
+                _a2 = str(_r.get("answer") or "").strip()
+                if _a2:
+                    a = _a2
+        except Exception:  # noqa: BLE001  五层任何异常都不得阻断写答案
             pass
         ctx.final_response = a
         return True
@@ -3012,6 +3379,72 @@ class Orchestrator(BaseAgent):
                                 for t in (getattr(ctx, "trace", None) or [])
                                 if isinstance(t, dict)
                                 and t.get("step") == "p1_check"],
+            # ★ 2026-09-23 新增：候选证伪器的命中记录（answer_falsifier）。
+            #   必须导出 —— 否则"证伪器没生效"与"埋点缺失"无法区分
+            #   （教训见 skill mathpilot-deepseek-error-audit §10.1）。
+            "falsify_events": [str(t.get("content", ""))[:220]
+                               for t in (getattr(ctx, "trace", None) or [])
+                               if isinstance(t, dict)
+                               and t.get("step") == "falsify"],
+            # 被客观证伪的候选答案原文（供审计"证伪器到底剔除了什么"）
+            "falsified_answers": [
+                str(x.get("answer"))[:160] for x in
+                ((ctx.metadata or {}).get("falsified_answers") or [])
+            ] if isinstance(getattr(ctx, "metadata", None), dict) else [],
+            # ★ 2026-09-23 新增：子目标「做成了没」的度量（用户判据：
+            #   目标不是"跑通/有数据"，而是"有没有起到作用"）。
+            #   0923 实测：279 个子目标里 88% 的 result < 120 字符（中位仅 30）、
+            #   96% 没有 expected_output ⇒ 名义上"拆了"，实质上"没算"。
+            #   该字段把"空壳率"逐题导出，使"阻断重做"有判据可依。
+            "subgoal_delivery": {
+                "n": len(getattr(ctx, "subgoal_trace", None) or []),
+                "n_underdeliver_120": sum(
+                    1 for s in (getattr(ctx, "subgoal_trace", None) or [])
+                    if isinstance(s, dict) and len(str(s.get("result") or "")) < 120),
+                "n_missing_expected_output": sum(
+                    1 for s in (getattr(ctx, "subgoal_trace", None) or [])
+                    if isinstance(s, dict)
+                    and not str(s.get("expected_output") or "").strip()),
+            },
+            # ★ 2026-10-02（阶段二-1：「淘汰」→「保留」）：**每个子目标保留了几条候选、
+            #   代表解是第几条**（-1 = 无有效候选）。数据源 = `subgoal_trace[i]["candidates"]`
+            #   （阶段二-1 新增；下游消费方式零改动）。用途：验证"候选真的被保留下"，
+            #   并支撑后续「最终答案层一次性对比判断」的归因。
+            "subgoal_candidates": [
+                {"id": s.get("id"),
+                 "n_kept": len(s.get("candidates") or []),
+                 "n_answers": len(s.get("candidate_answers") or []),
+                 "picked_index": s.get("candidates_picked_index", -1),
+                 # ★ 2026-10-02（阶段二-2）：子目标层**客观验证**选中的候选下标
+                 #   （-1 = 客观验证判不出，沿用原代表解）。
+                 "verified_index": s.get("candidates_verified_index", -1)}
+                for s in (getattr(ctx, "subgoal_trace", None) or [])
+                if isinstance(s, dict)
+            ],
+            # ★ 2026-10-02（阶段二-2）：终答五层选择观测（②多答案/③客观验证/
+            #   ④模型对比/⑤投票 各自是否触发、命中分支、执行到的层顺序）。
+            #   `exit` = 最终落地的写出口（single_adopt = 池外直答单答案快速采纳，
+            #   Q4 纳入后"终答唯一出口"可归因）。
+            "final_selection": {
+                **dict(getattr(ctx, "_final_select_diag", {}) or {}),
+                "exit": getattr(ctx, "_final_select_exit", "") or "",
+            },
+            # ★ 2026-10-02（阶段二-2）：**子目标层客观验证**汇总（team-lead Q1 要求）——
+            #   阶段三 A/B 用它归因「客观验证到底有没有挑出对的那个」。
+            "subgoal_verify_summary": {
+                "n_with_multi_candidates": sum(
+                    1 for s in (getattr(ctx, "subgoal_trace", None) or [])
+                    if isinstance(s, dict) and len(s.get("candidates") or []) >= 2),
+                "n_judged": sum(
+                    1 for s in (getattr(ctx, "subgoal_trace", None) or [])
+                    if isinstance(s, dict)
+                    and s.get("candidates_verified_index", -1) >= 0),
+                "n_undecided": sum(
+                    1 for s in (getattr(ctx, "subgoal_trace", None) or [])
+                    if isinstance(s, dict)
+                    and len(s.get("candidates") or []) >= 2
+                    and s.get("candidates_verified_index", -1) < 0),
+            },
             # ★ 2026-09-12 补导出：符号化求解 / 独立符号复核 / 答案工具自检 的埋点。
             # 此前这些只写进 ctx.trace，而 diag 导出按固定字段挑 → jsonl 里看不到，
             # 导致"机制到底跑没跑"无法从结果文件判定（只能靠日志旁证）。
@@ -3045,13 +3478,21 @@ class Orchestrator(BaseAgent):
                                 if isinstance(t, dict) and t.get("step") == _k]
                for _k in ("final_postprocess_change", "subgoal_recover",
                           "subgoal_replan_needed", "lean_feedback_revise",
-                          "calc_easy_pass",
-                          # 2026-09-13 晚补：方案 B（生成前预计算 `2.65_calc_prewarm`）
-                          # 在 `solver.prewarm_calcs()` 里写了 7 处 record，但**不在本
-                          # 白名单** ⇒ 埋点全被丢弃（trace 不落盘、run_eval 只存 diag），
-                          # 4 题实测跑完连"预计算产出几条算式"都查不到 —— 正是本注释
-                          # 上一段吐槽过的同一个坑。补上即可见。
-                          "calc_prewarm")},
+                          # ★ 2026-09-21（可观测性）：又是同一个坑 ——
+                          #   `oracle_review`（4.5_oracle 的 AnswerOracle 复核结果，
+                          #   orchestrator L2763-2774 共 3 处 record）与
+                          #   `adversarial`（4.6_adv 的触发/跳过原因，L2694-2728 共 5 处）
+                          #   都只写进 trace，而**不在本白名单** ⇒ jsonl/diag 里
+                          #   一条都看不到。后果：无法从结果文件判定"4.5_oracle 跑了
+                          #   几次、判了什么；4.6_adv 是跑了还是被窗口检查跳过"，
+                          #   只能靠读日志猜（而日志里这两处恰好 0 条）。
+                          #   ⇒ 补入白名单，导出 `oracle_review_events` /
+                          #   `adversarial_events`。
+                          "oracle_review", "adversarial",
+                          # ★ 2026-09-30（截图 #8）：子目标多 agent 采样埋点。
+                          #   不加这条 ⇒ 无法从结果文件区分「多 agent 没开启」
+                          #   与「开启了但每次都无多数一致」—— A/B 归因失效。
+                          "subgoal_multi_agent")},
             # revise 事件（含"P1 硬信号触发强制重解"/自纠错轮次/预算不足终止）
             # ——2026-09-11 补：此前仅 revise_round 可观测，看不到触发原因
             "revise_events": [str(t.get("content", ""))[:200]
@@ -3090,13 +3531,6 @@ class Orchestrator(BaseAgent):
                              for t in (getattr(ctx, "trace", None) or [])
                              if isinstance(t, dict)
                              and t.get("step") == "value_attack"],
-            # ⑦'' calc 工具审计（2026-09-09 P1-2：<calc> 求值 WARN/ERROR = 工具
-            # 失败/模型自算降级点，自算率 = 该事件数 / 计算点数，A/B 核心指标）
-            "calc_fallback": [{"expr": str(t.get("expr", ""))[:100],
-                               "reason": str(t.get("reason", ""))[:100]}
-                              for t in (getattr(ctx, "trace", None) or [])
-                              if isinstance(t, dict)
-                              and t.get("step") == "calc_fallback"][:20],
             # ★ 2026-09-18（可观测性）：**文本通道工具调用** —— 模型在正文/推理里
             #   手写 tool_call / function= / parameter= 这类**文本标记**，而平台未填
             #   原生 `tool_calls` ⇒ 调用**不执行、不回填**，答案退化为散文
@@ -3107,28 +3541,16 @@ class Orchestrator(BaseAgent):
                 for t in (getattr(ctx, "trace", None) or [])
                 if isinstance(t, dict)
                 and t.get("step") == "toolcall_text_detected"][:20],
-            # ⑦''' calc 强制打回审计（2026-09-09 P1-1：心算打回是否真触发——
-            # solver 主链定向重问 / 子目标 L0C 重解 / 二次裸算标注，全部可观测）
-            "calc_rewrite": [str(t.get("content", ""))[:120]
-                             for t in (getattr(ctx, "trace", None) or [])
-                             if isinstance(t, dict)
-                             and t.get("step") == "solver_calc_rewrite"][:20],
-            "calc_tool_mode": [str(t.get("content", ""))[:120]
-                            for t in (getattr(ctx, "trace", None) or [])
-                            if isinstance(t, dict)
-                            and t.get("step") == "calc_tool_mode"][:20],
-            "calc_tool_calls": [str(t.get("content", ""))[:120]
+            # ⑦''' 工具循环审计（2026-10-01：原 calc 埋点随 `<calc>` 板块删除，
+            # 改记 web_search 工具循环的模式与执行次数）
+            "toolcall_mode": [str(t.get("content", ""))[:120]
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
-                              and t.get("step") == "calc_tool_call"][:20],
-            "subgoal_l0c": [str(t.get("content", ""))[:120]
-                            for t in (getattr(ctx, "trace", None) or [])
-                            if isinstance(t, dict)
-                            and t.get("step") == "subgoal_l0c"][:20],
-            "subgoal_naked_twice": sum(
-                1 for t in (getattr(ctx, "trace", None) or [])
-                if isinstance(t, dict) and t.get("step") == "subgoal_step"
-                and "二次裸算" in str(t.get("content", ""))),
+                              and t.get("step") == "toolcall_mode"][:20],
+            "toolcall_exec": [str(t.get("content", ""))[:120]
+                              for t in (getattr(ctx, "trace", None) or [])
+                              if isinstance(t, dict)
+                              and t.get("step") == "toolcall_exec"][:20],
             # ⑤ 检测链 AuditGate（2026-09-06 去 Lean 化顶替 lean_gate；
             #    Level0-3 多级瀑布记录：候选过滤 / 最终答案门禁 / 理解确认；
             #    2026-09-06 晚 Lean 双通道恢复后，lean 不可用时的兜底记录）
@@ -3150,6 +3572,14 @@ class Orchestrator(BaseAgent):
             "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
             "revise_round": getattr(ctx, "revise_round", 0),
             "revise_feedback": list(getattr(ctx, "revise_feedback", None) or [])[:20],
+            # ★ 2026-09-21（可观测性）：6.5 审核闸门的**整题终态**标量。
+            #   此前只有 `lean_gate` / `audit_gate` 里的逐条 `final_gate` 事件，
+            #   没有"本题最终是否被拒 / 换过哪些候选 / 是否回滚"的汇总字段 ⇒
+            #   事后要重建结论必须逐事件扫（0921 巡检即因此多绕了几步）。
+            #   `gate_rollback` 与 0921 的回滚修复配对，用于 A/B 计数。
+            "gate_rejected": bool(getattr(ctx, "gate_rejected", False)),
+            "gate_tried": list(getattr(ctx, "_gate_tried", None) or []),
+            "gate_rollback": bool(getattr(ctx, "_gate_rollback", False)),
             # 2026-09-13 P0：答案选取埋点（候选分布 + verdict 明细 + 命中分支）
             "pick_diag": getattr(ctx, "_pick_diag", None) or {},
             # B0：答案形态闸门事件（从 trace 中挑出，条数少，便于事后判定触发情况）
@@ -3168,7 +3598,62 @@ class Orchestrator(BaseAgent):
             # ★ 2026-09-15：LeanSearch 检索埋点（老师 #44）——本题的
             # 调用次数 / 命中数 / 去重后条数 / 耗时 / 后端 root。
             # `used_theorems`（run_eval 已导出）是命中定理名清单，两者互为交叉验证。
-            "leansearch": _summarize_leansearch(ctx),
+            "leansearch": _summarize_leansearch(ctx, self.config),
+            # ★ 2026-09-29（截图 #3+#4）：领域→定理检索埋点。
+            #   与上面的 `leansearch` 分开：后者是**验证期**的引理检索，
+            #   本项是**理解期**的定理预取，两者用途不同、不该混算。
+            #   含 query / 命中全名 / 耗时 / 后端 / （若注入标注）命中率。
+            "theorem_hint": dict(getattr(ctx, "theorem_hint_trace", None) or {}),
+            # ★ 2026-10-02（阶段一：子目标结论 → 主求解 信息流）：主求解是否
+            #   真的用上了子目标结论 —— 注入的**条数 / 字符数**。
+            #   口径：{count = 有非空 result 的子目标条数；chars = 注入块长度}。
+            #   缺键 / count=0 ⇒ 未注入（无子目标结论 / 开关关闭）；便于 A/B 归因，
+            #   使"主求解建立在子目标之上"这件事可被结果文件核验（而非靠日志猜）。
+            "subgoal_findings_injected": dict(
+                _md.get("subgoal_findings_injected", {}) or {}),
+            # ★ 2026-09-29（截图 #6）：**逻辑缺口分析** —— 回答用户
+            #   「缺的逻辑点是不是大模型需要推理出来的点」。
+            #
+            # 口径说明（重要，勿混算）：
+            #   · `subgoal_gaps` 消费 `ctx.subgoal_trace`（自然语言求解视角）——
+            #     每步子目标有没有产出有效结论，失败时按报错性质分五类；
+            #   · 其中 `reasoning_gaps` 才是**真·推理瓶颈**（前提齐全却推不出）；
+            #     `non_reasoning_gaps` 是形式化/检索/计算问题，**不该计入推理能力评估**。
+            #   这个区分是本埋点的全部价值：不区分的话「大量子目标失败」会被
+            #   笼统读成"推理能力差"，而实际可能大半是译题错误 —— 那会把优化
+            #   方向引到完全错误的地方。
+            "subgoal_gaps": _compute_subgoal_gaps(ctx),
+            # ★ 2026-09-30（截图 #6 下半问）：**Lean 侧逻辑缺口** —— 回答
+            #   「可不可以用 lean 来检测有没有 sorry 的地方」。
+            #   与 `subgoal_gaps` 并列但**口径不同**，勿混算：
+            #     · `subgoal_gaps`  ：自然语言求解有没有得出结论（软信号）；
+            #     · `lean_gaps`     ：`by sorry` 声明能否编译（**硬信号**，
+            #                        失败即"连要证什么都没说清"）。
+            #   判读要点：`lean_gaps` 抓到的缺口绝大多数属 `formalization`
+            #   （命题写得不成立），**不是模型该推出来的点**。若把它读成推理
+            #   瓶颈，优化就会错到去调解题提示词。
+            "lean_gaps": _compute_lean_gaps(ctx),
+            # ★ 2026-09-30（截图 #10）：**统一工具调用遥测**。
+            #   用户诉求「调用工具的方法有没有写成规范性的类函数，需要 Lean 检测时
+            #   直接调用，适配各阶段」—— `agent/tool_gateway.py` 是那个统一入口，
+            #   这里把它的调用统计落盘，使诊断报告的「工具使用」维度
+            #   有**单一数据源**（此前只能靠遍历 trace 猜）。
+            #   口径说明：
+            #     · `total`      = 本门面被调用次数（**不等于**流水线全部工具调用，
+            #                      因为只有走门面的调用才计数）；
+            #     · `by_reason`  = **闭合原因码**分布，可直接聚合归因；
+            #     · 关键区分：`unavailable`（环境没装）≠ `reject`（跑了判否）
+            #                      ≠ `error`（调用炸了）—— 三者修法完全不同。
+            #   ⚠ 若本字段为全零，**只说明"没有代码走门面"**，
+            #     绝不可读成"本轮没调用工具"（既有调用点尚未迁移）。
+            "tool_gateway": (_tool_gateway_summary(ctx)),
+            # 2026-10-01 开关注册制：26 个开关的生效值快照（含来源 env/config/default）
+            # ⇒「生效查不到」问题根治：任何一轮评测都能从 diag 还原开关状态。
+            "switch_snapshot": _switch_snapshot(),
+            # ★ 2026-09-21（可调参数实测记录）：把「配置上限 / 实际用了多少 / 有没有撞顶」放进同一张表，随 diag 落盘。
+            #   用户诉求：「cleansearch 到底要找多少定理、检测打回要搞多少次、无条件重做多少次、子目标要设多少……我们要测出最合理的数据」（不止这几个）。
+            #   明细与拓展方法见 agent/param_usage.py 的模块文档。
+            "param_usage": collect_param_usage(ctx, self.config),
             # ★ 2026-09-15：带推理复核的判定（独立信号，不并入投票统计）。
             # 第一轮实测因缺此字段，无法判断复核"跑了没、判了什么"。
             "deep_review": _summarize_deep_review(ctx),
@@ -3271,6 +3756,9 @@ class Orchestrator(BaseAgent):
                               "content": "紧急直答失败，返回占位答案"})
         # P2/P5 后处理同样适用于兜底路径（提前返回，绕过统一出口）
         answer = self._final_answer_postprocess(ctx, answer)
+        # ★ 2026-10-02 hook 08（Solver 无候选 → 直答兜底）：终答落盘（只加不改）。
+        _artifact_put(ctx, "08_final", {"final_response": answer,
+                                        "fallback_direct": True})
         return safe_json_serialize({
             "final_response": answer, "trace": ctx.trace,
             "diag": self._collect_diag(ctx),
@@ -3286,6 +3774,9 @@ class Orchestrator(BaseAgent):
         if answer:
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "使用已有候选最佳答案作为兜底"})
+            # ★ 2026-10-02 hook 08（异常兜底分支）：终答落盘（只加不改）。
+            _artifact_put(ctx, "08_final", {"final_response": answer,
+                                            "fallback": True})
             return {"final_response": answer, "trace": trace,
                     "diag": self._collect_diag(ctx)}
         # 紧急直答
@@ -3294,5 +3785,8 @@ class Orchestrator(BaseAgent):
             answer = "未给出有效解答。"
             trace.append({"agent": self.name, "step": "fallback",
                           "content": "紧急直答失败，返回占位答案"})
+        # ★ 2026-10-02 hook 08（异常兜底分支，无候选）：终答落盘（只加不改）。
+        _artifact_put(ctx, "08_final", {"final_response": answer,
+                                        "fallback": True})
         return {"final_response": answer, "trace": trace,
                 "diag": self._collect_diag(ctx)}

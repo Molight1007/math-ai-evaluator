@@ -161,32 +161,6 @@ class TestTimeoutIsNotRetried(unittest.TestCase):
         self.assertEqual(len(sleeps), 2)
 
 
-class TestPrewarmBudgetGuard(unittest.TestCase):
-    """预计算必须有独立预算下限，不能挤掉主生成。"""
-
-    def test_min_remain_constant_is_300(self) -> None:
-        from agent import solver as S
-        self.assertEqual(S._CALC_PREWARM_MIN_REMAIN, 300.0)
-
-    def test_skipped_when_low_on_time(self) -> None:
-        """剩余不足 300s ⇒ 跳过预计算（旧实现只要剩 150s 就跑，实测吃掉 364s）。"""
-        import time as _t
-        from agent.solver import SolverAgent
-        from agent.base import TaskContext
-
-        recorded = []
-        agent = object.__new__(SolverAgent)
-        agent.config = SimpleNamespace(enable_calc_prewarm=True,
-                                       enable_calc_tool=True)
-        agent.record = lambda ctx, step, content, **kw: recorded.append(content)
-
-        ctx = TaskContext(problem="计算 comb(50,3) 的值", metadata={})
-        ctx.deadline = _t.time() + 200          # 只剩 200s < 300
-        ctx._gen_deadline = ctx.deadline - 60
-        self.assertFalse(agent._prewarm_applicable(ctx, "standard"))
-        self.assertTrue(any("剩余不足" in c for c in recorded), recorded)
-
-
 class TestRescueFailureDoesNotLeakPlaceholder(unittest.TestCase):
     """**关键回归**（独立验证者抓到的缺口）。
 

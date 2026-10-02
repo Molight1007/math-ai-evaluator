@@ -10,7 +10,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
 
-def load_env() -> None:
+def load_env_debug_one_trace() -> None:
     for line in open(os.path.join(_ROOT, ".env"), encoding="utf-8"):
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
@@ -24,7 +24,7 @@ def load_env() -> None:
 
 
 def main() -> int:
-    load_env()
+    load_env_debug_one_trace()
     import run_eval
     from utils.llm_client import LLMClient
     from user_agent import ReasoningAgent

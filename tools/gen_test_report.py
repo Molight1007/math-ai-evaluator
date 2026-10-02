@@ -298,7 +298,7 @@ def auto_diag(row: dict, verdicts: list) -> str:
                   sorted(et.items(), key=lambda x: -x[1])) if et else "（无，因无否决票）")
 
 
-def build(results_path, testset_path, core_path, out_md, title):
+def build_gen_test_report(results_path, testset_path, core_path, out_md, title):
     rows = load_jsonl(results_path)
     bank = {r.get("id"): r for r in load_jsonl(testset_path) if r.get("id")}
     core = {r.get("id"): r for r in load_jsonl(core_path) if r.get("id")}
@@ -579,7 +579,7 @@ def main():
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--title", default="本地评测报告")
     a = ap.parse_args()
-    md = build(a.results, a.testset, a.core, a.out_md, a.title)
+    md = build_gen_test_report(a.results, a.testset, a.core, a.out_md, a.title)
     print("已写出:", a.out_md, "( %d 字符 )" % len(md))
     return 0
 

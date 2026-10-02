@@ -4,13 +4,16 @@
 覆盖：提取器（宁缺毋滥丢弃规则/num-poly 分类/去重/上限）、隐式乘修复、
 开关与每题限额守卫（mock LeanBridge，不做真编译）。
 """
+import os  # noqa: E402
 import sys  # noqa: E402
 import time  # noqa: E402
 import unittest  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
-sys.path.insert(0, "D:/挑战杯")  # noqa: E402
+# 2026-09-29：原先硬编码 "D:/挑战杯"（工作区已迁走，该路径不存在）⇒ 改为
+# 由本文件位置反推仓库根，保证任何机器/任何盘符下都能跑。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # noqa: E402
 from agent.sub_goal_solver import SubGoalSolverAgent  # noqa: E402
 from agent.base import TaskContext  # noqa: E402
 

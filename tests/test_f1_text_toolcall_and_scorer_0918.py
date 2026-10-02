@@ -44,13 +44,6 @@ def test_f1_parser_unclosed_form():
     assert "splitting field" in got[1]["query"]
 
 
-def test_f1_parser_calc_form():
-    from agent.base import _parse_text_toolcall
-    assert _parse_text_toolcall(
-        "<tool_call><function=calc_eval><parameter=expr>36*101+74"
-        "</parameter></function></tool_call>") == ("calc_eval", {"expr": "36*101+74"})
-
-
 def test_f1_parser_tolerates_spaces():
     from agent.base import _parse_text_toolcall
     got = _parse_text_toolcall(

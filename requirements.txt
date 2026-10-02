@@ -4,7 +4,7 @@
 # 依赖刻意保持极简，降低平台安装失败风险；全部为标准 PyPI 包。
 # ============================================================
 
-# 平台/本地 client 依赖（llm_client.py、main.py、run_eval.py 使用）
+# 评测/求解链路的 HTTP 依赖（run_eval.py、utils/llm_client.py 使用）
 requests>=2.31.0
 
 # 符号计算引擎（SymPy 快车道）

@@ -36,7 +36,8 @@ def _mean(xs):
 WALL = 1200.0
 
 # 生成侧 / 验证侧分组（用于「该往哪边分配时间」的判断）
-GEN_STAGES = ("1_classify", "2.5_difficulty", "2.6_pre_audit", "2.7_subgoal_main",
+# ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty`（阶段已删）；此前报告仍含之。
+GEN_STAGES = ("2.6_pre_audit", "2.7_subgoal_main",
               "3_solve", "3.2_complete", "3.3_improve", "3.4_collab",
               "3.5_subgoal_sup")
 VERIFY_STAGES = ("3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv",
@@ -45,8 +46,11 @@ VERIFY_STAGES = ("3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv",
 
 
 def main():
+    # 2026-09-29：原先硬编码 `D:\挑战杯`（工作区已迁走）⇒ 改为由本文件位置
+    # 反推仓库根，保证任何机器/盘符下都能跑。
+    _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        r"D:\挑战杯", "results", "official112_local_0910.jsonl")
+        _repo_root, "results", "official112_local_0910.jsonl")
     if not os.path.isfile(p):
         print(f"结果文件不存在: {p}")
         sys.exit(1)

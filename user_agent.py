@@ -1,10 +1,11 @@
 from __future__ import annotations
 """
-MathPilot — 基于 Intern-S 系列大模型的数学智能体（多智能体版）
+MathPilot — 数学推理智能体（多智能体版）
 ==========================================================
 
-赛题：基于 Intern-S 系列大模型的数学智能体设计与推理创新
-发榜单位：上海人工智能实验室
+项目：多智能体协作的数学推理智能体，以官方 112 题为基准做本地/云端评测。
+当前阶段：**赛后研究期** —— 不限时、不限 token、唯一目标是解题正确率上限；
+主模型为 GLM-4.7-Flash / DeepSeek，仓库中不再保留 Intern-S（书生）特化逻辑。
 
 架构（多智能体协作，简化版 v2）：
     题型识别 → 通用求解 → 过程校验 → 答案规范化
@@ -44,6 +45,14 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 logger = logging.getLogger("MathPilot")
+
+# 2026-10-01 去重：原此处另有一份与 agent/base.py 逐字相同的 _normalize_chat_response（72 行）。
+# 改为**惰性委托** —— 保留本模块「agent 导入失败则降级直答后端」的既有设计，
+# 同时消除重复实现（两份函数体实测完全相同，仅签名注解与注释有别）。
+def _normalize_chat_response(resp):
+    from agent.base import _normalize_chat_response as _impl
+    return _impl(resp)
+
 
 
 # ============================================================
@@ -112,8 +121,9 @@ class AgentConfig:
     policy_temperature: float = 0.3    # 策略采样温度（提高以增加多样性）
     policy_max_tokens: int = 65536     # 策略最大 token（上限；9/4 放开，只受 1200s 时间墙）
 
-    # 蓝图分解（简化版：关闭蓝图，直接用最简 prompt）
-    use_blueprint: bool = False        # 蓝图太长，Intern-S 思维流先被蓝图占满
+    # 蓝图分解（2026-10-01 研究期按用户决策**默认开**；原为"简化版：关闭蓝图"）
+    use_blueprint: bool = True         # 蓝图太长，Intern-S 思维流先被蓝图占满
+    # 2026-10-01 按用户决策默认开（研究期不省资源）
 
     # 验证模型（评判）
     verifier_voting_times: int = 1     # 每个候选只投 1 票（避免无效重复投票）
@@ -134,7 +144,8 @@ class AgentConfig:
     # 100% unknown、LeanGate 判 valid / 降级放行 ⇒ 三道闸门对错答**零否决**。
     # 本项对**最终选定答案**做一次不 prefill 的复核（1 次调用/题，可否决）。
     # ⚠ 默认关：未 A/B 前行为完全不变。
-    verifier_deep_final_enabled: bool = False
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    verifier_deep_final_enabled: bool = True
     verifier_deep_final_min_remaining: float = 150.0  # 剩余时间低于此值则跳过复核
     verifier_deep_review_max_tokens: int = 16384      # 复核输出上限（需容纳推理链）
     # ★ 2026-09-15 实测教训：用投票模板做复核时，模型只吐 **12 个字**
@@ -166,61 +177,32 @@ class AgentConfig:
     #   实际语义：`_gen_deadline = deadline − verify_reserve`，
     #   生成侧软截止 = 该值；deep 档默认 540s、其余 480s。
     verify_reserve_seconds: float = 0.0  # 0 = 用按档位的默认（deep 540 / 其他 480）
-    # ★ 2026-09-16 新增：联网搜索工具开关（`agent/base.py::llm_with_calc` 注册）。
-    #   默认 **False** —— 工具已实现并接线，但不经 A/B 不改变主链行为。
+    # ★ 2026-09-16 新增：联网搜索工具开关（`agent/base.py::llm_with_tools` 注册）。
     #   开启后模型可在原生 tool_calls 里自行调用 `web_search(query)`；
     #   逐题效果见 `tool_calls.web_search`（calls/ok/fail/results/verdict）。
     #   ⚠ 后端实测可用性（2026-09-16）：Math StackExchange ✓ / arXiv ✓ /
     #     Bing △（能连通但结果不可用）⇒ 已按此次序回退。
-    enable_web_search: bool = False
+    #   （原理由：默认 False —— 工具已实现并接线，但不经 A/B 不改变主链行为。）
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    enable_web_search: bool = True
     # ★ 2026-09-17 新增：Lean 同答案候选去重缓存（**默认关**）。
     #   实测 003 的 7 候选里 5 个同答案，重复验证浪费约 120s；
     #   但复用报告会绕过"按各自 reasoning 判定"的守卫② ⇒ **改变验证语义**，
     #   收益（5.6%）不足以承担 ⇒ 默认关，供 A/B（`--lean_dedup_by_answer true`）。
-    lean_dedup_by_answer: bool = False
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    lean_dedup_by_answer: bool = True
 
-    # ---- calc_tool 确定性计算（2026-09-01，治 value_wrong）----
-    # ★ 2026-09-15 关闭（用户指示「没有解决计算问题就关掉」）。实测依据：
-    #   ① **工具几乎零使用**：多次实测 `<calc>` 回填 = 0、`[计算]` = 0
-    #      （09-13「实测 `<calc>` 出现 0 次」；09-14「12/12 题 [计算]回填=0」）；
-    #   ② **计算错本就不是瓶颈**：错题归因 v1.1 的 E 类（计算执行错）
-    #      仅 2 题 / 4.2%（分母 48）；
-    #   ③ 其变体 `enable_calc_prewarm` 09-14 实测**净负**（12 题仅 1 题相关）。
-    #   ⇒ 关掉**能省调用**（`calc_mandatory` 的对"无 <calc> 的数值断言"重问实测
-    #     无效：模型下一轮仍不写），且因本就未生效，**正确率无损失**。
-    #   回退：置 True 即恢复（代码已保证 False 时行为与旧版完全一致）。
-    enable_calc_tool: bool = False
-    # 2026-09-09 P1-1（老师拍板"计算必须用工具"）：行级**裸数值断言**
-    # （如 `25*4 = 100`，两侧无字母/中文、无 <calc> 来源）→ 判定心算/自算，
-    # 带反馈打回重写一次（方程/结论式含变量放行，不打断推导）。
-    # 2026-09-12 用户要求「强制、一定、绝对用工具算」→ **默认开启**：
-    # 命中"未用 <calc> 的心算数值断言"即定向重问，要求改写成 <calc>。
-    # ★ 2026-09-15 关闭：随 enable_calc_tool 一起关（实测重问无效、纯烧调用）。
-    # 回退：`--calc_mandatory false`（或 config 覆盖）。
-    calc_mandatory: bool = False
-    # 2026-09-12 用户要求「不是不让模型算，而是让易错的根号/组合数/log 走工具」：
-    # True → 打回判据只认**易错算子**（开方/根式、对数、指数与自然常数 e、
-    # 组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π），简单加减乘除
-    # 允许模型自算；False → 恢复"任何数值计算都必须走工具"的旧行为。
-    # 作用点：calc_tool.find_naked_numeric_asserts(hard_only=...) +
-    # solver._maybe_answer_selfcheck 的高危算子门槛。
-    # ★ 2026-09-15 关闭：随 enable_calc_tool 一起关。
-    # 回退：`--calc_hard_only false`。
-    calc_hard_only: bool = False
-    # 2026-09-14 改为**默认关闭**：实测无价值 + 有明确成本。
-    # 关闭依据（12 题错题回归 `results/wrong12_v1_0914_out.jsonl`）：
-    #   · 12/12 题都产出了 1 条预计算，但**只有 1 题（015 的 `fact(2)=2`）与答案相关**，
-    #     其余全部无关 —— 例：014 的 gold 是三个特定大数，它猜了
-    #     `sum((i+1)*i**2, i, 0, 1000)`；016 的 gold 是 21，它猜了 `10+sqrt(10)`。
-    #   · 根因：**"让模型在解题前凭题面猜该算什么"这个前提不成立**，猜的算式质量很差。
-    #   · 且与方案 A 功能重叠 —— 方案 A 已把**解题过程中真算出来的** `[计算]` 值
-    #     前置注入（`collect_calc_results` → 4 条路径），那才是有效的值。
-    #   · 成本不低：本批单题 30–111s（API 不稳时），而单题预算只有 1150s。
-    # ⇒ 净收益为负，默认关闭。字段保留，随时可开回。
-    # 开启方式：`--enable_calc_prewarm true` 或 env `CALC_PREWARM=1`
-    # （注意 `_prewarm_applicable` 判据是 `os.environ.get("CALC_PREWARM","1") == "0"`，
-    #   故 env 侧只有设 `0` 才关；默认值由本字段决定）。
-    enable_calc_prewarm: bool = False
+    # ---- 2026-10-01：`<calc>` 计算工具板块整体删除 ----
+    # 用户决策：「这个板块是错误的，本身就有问题」⇒ 删除 `<calc>` 协议与工具化
+    # 计算（原 `enable_calc_tool` / `calc_mandatory` / `calc_hard_only` /
+    # `tool_calc_enabled` / `answer_selfcheck_enabled` / `subgoal_calc_router`
+    # 六个开关一并移除）。纯数学求值内核迁至 `utils/math_eval.py`；符号核验通道
+    # （`symbolic_crosscheck_enabled` / `symbolic_solve_enabled`）不受影响。
+    # ★ 2026-09-29：`enable_calc_prewarm` 字段已随"生成前算式预计算"（方案 B /
+    #   阶段 2.65_calc_prewarm）**整体删除**（用户决策：没必要、不合逻辑）。
+    #   原字段的实测记录（保留备查）：12/12 题都产出预计算，但只有 1 题与答案相关；
+    #   根因是"让模型在解题前凭题面猜该算什么"这一前提不成立；成本 30–111s/题。
+    #   计算部分将另行设计。
     # 2026-09-12 用户要求「原本完成的子目标要记录，不能重头再来」：
     # True → 同一题的**已完成子目标结果**跨 run() 调用复用（零 LLM）。
     # 背景：orchestrator 会在 3_solve / 3.5 等阶段多次调用 sub_goal_solver.run()，
@@ -233,24 +215,16 @@ class AgentConfig:
     # 交上游重规划（不在子目标循环内新建重规划，避免破坏 depends_on 顺序）。
     # 设 False 回到旧行为（失败即占位放行）。
     subgoal_adaptive_recover: bool = True
-    # 2026-09-09 用户洞察：原生工具调用试点（同智能体调 WebSearch 逻辑）——
-    # 模型生成 tool_call calc_eval → 执行 calc_tool → 回传 → 继续；默认关待验证
-    tool_calc_enabled: bool = False
-    # 2026-09-10 L1（用户 9/10 + 李平老师建议）：**答案级工具自洽核验**——
-    # 最终答案是纯数值、却没有任何 <calc> 工具来源（心算产物）→ 定向重问一次，
-    # 要求把得出答案的算式写成 <calc>；仅在重问结果**带工具来源**时采纳。
-    # 零后悔（失败/未改善一律保留原输出）。默认关待 A/B（题均 +1 次 LLM 调用）。
-    # 2026-09-12 用户要求「强制用工具算」→ **默认开启**：最终答案为纯数值却没有
-    # <calc> 工具来源（心算产物）即定向重问；**仅当新答案能在工具回填结果中找到
-    # 来源时才采纳**（见 solver._maybe_answer_selfcheck 的 ok 判定）。
-    # 回退：`--answer_selfcheck_enabled false`。
-    answer_selfcheck_enabled: bool = True
     # 2026-09-10 L2（用户 9/10 思路 + 李平老师 9/9 建议）：**独立符号建模复核**——
     # 让模型当"数学问题拆解助手"，只把给定数值抽象成变量并输出目标量表达式
-    # （禁止自算），由 calc_tool 精确代入求真值，与主链答案比对；不一致则打回
+    # （禁止自算），由 utils/math_eval 精确代入求真值，与主链答案比对；不一致则打回
     # 一次，仅当新答案落回该真值才采纳。每题最多 1 次调用。默认关待 A/B。
-    symbolic_crosscheck_enabled: bool = False
-    symbolic_max_tokens: int = 512
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    symbolic_crosscheck_enabled: bool = True
+    # 2026-10-02 DeepSeek 适配：原 512 ⇒ 8192。原值基于「建模输出很短（EQUATIONS+TARGET）
+    # + prefill 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断
+    # （reasoning 先吃满预算、正文为空）。
+    symbolic_max_tokens: int = 8192
     # 2026-09-12 符号化方程求解通道（用户 9/11 需求）：智能体把题面里「显式给定
     # 的具体数值」剥离存本地，给模型的是**未知数类型**题面；模型只输出方程（组）
     # + 求解目标，具体数值由本地 SymPy 回代算出 —— **模型不参与任何计算**，
@@ -258,13 +232,39 @@ class AgentConfig:
     # 省时间设计（用户 9/12 硬要求）：剥离/校验/求解全部本地（毫秒~秒级）；
     # 只加 1 次**短**建模调用；工具值与主链答案一致时 **0 额外调用**，
     # 仅分歧才追加 1 次短回传；**不新增候选**（不触发下游验证/Lean 额外成本）。
-    symbolic_solve_enabled: bool = False
-    symbolic_solve_max_tokens: int = 384     # 建模输出很短（EQUATIONS + TARGET）
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    symbolic_solve_enabled: bool = True
+    # 2026-10-02 DeepSeek 适配：原 384 ⇒ 8192。原值基于「建模输出很短（EQUATIONS +
+    # TARGET）+ prefill 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断
+    # （reasoning 先吃满预算、正文为空）。
+    symbolic_solve_max_tokens: int = 8192
     symbolic_solve_feedback: bool = True     # 分歧时把工具结果回传模型定稿
     # 2026-09-12 方案④「把计算从模型手里拿走」：工具求解成功后**答案直接取
     # 工具值**（模型原先的数值被丢弃），而不是只做事后比对 —— 这样最终答案
     # 在架构上由本地计算器产生，模型无法心算。设 False 回到"仅比对/回传"旧行为。
     symbolic_solve_adopt: bool = True
+
+    # ★ 2026-09-23 新增：候选答案**证伪器**（agent/answer_falsifier.py）。
+    #   动机（0923 四维分析实证）：46 题里 25 题「全部候选 0 票」⇒ 触发零票兜底、
+    #   整池被弃、改取 direct_solve 的另一条产线答案 ⇒ 18 题终答出池、16 题判错
+    #   （占全部错题的 43.2%）；且 021 里错答与 gold **同时**拿到 3/3 票 ⇒ 投票无判别力。
+    #   用户判断"错误答案一定是能证明错误的"，故补一条**只做证伪**的通道：
+    #   数值回带（LLM 出闭式等式）→ SymPy 精确判定 → Lean 背书（编译通过则推翻证伪）。
+    #   红线：宁可漏证，绝不误杀；任何不确定一律 unknown。
+    enable_answer_falsifier: bool = True
+    falsify_max_per_q: int = 2               # 单题最多证伪次数（每次 1 次短 LLM 调用）
+
+    # ★ 2026-09-23 新增：把 LeanSearch 检索到的 Mathlib 定理注入**解题侧**引理记忆。
+    #   实测（0923 效能审计）460 条检索结果里只有 4 条（1%）进了 Lean 代码；
+    #   根因是检索结果此前**只注入验证器**（`leansearch_inject_verifier`），
+    #   解题器从未收到 ⇒ 检索在最该用它的环节缺席。置 False 可回退。
+    inject_mathlib_to_solver: bool = True
+
+    # ★ 2026-09-23 新增：`6.5_audit_gate` 对**非证明题**早退（不再产出 unknown 噪音）。
+    #   实测：37/46 题触发、235 条 verdict **全 unknown**（对解答题结构性无输出，
+    #   见 audit_gate.py:255-268 的既有说明），却仍耗 0.37h 并污染 diag 统计。
+    #   置 False 可回退到"照常跑但全 unknown"的旧行为。
+    audit_gate_skip_non_proof: bool = True
 
     # ★ 2026-09-16 删除死字段 `extraction_mode`：AgentConfig 声明了、
     #   override 白名单里也列了，但**全仓 0 个读取点**（实测确认）⇒
@@ -340,8 +340,12 @@ class AgentConfig:
     # ⚠ 残留风险仍如实记录：上限在两次调用之间判定、无法中断在途调用，
     #   理论最坏 1100 + 120 = 1220s。缓解：`critical_tail_seconds`（默认 120s）
     #   让最后 120s 内不再启动可选步骤 —— 实测超限幅度（14.7s / 61s）远小于该值域。
-    max_time_per_question: int = 1100  # 单题壁钟上限（秒）
-    max_total_time_seconds: int = 20700  # Agent 总运行上限（秒）= 6h 硬限(21600) − 4% 余量
+    # 2026-10-01 按用户决策：研究期不限时，此值仅作挂死兜底，不参与调度决策；
+    #   调度侧已不再有任何按剩余时间降级的逻辑（soft_budget/gen_deadline/verify_only 触发路径已删）。
+    max_time_per_question: int = 86400  # 单题壁钟上限（秒，仅防挂死）
+    # 2026-10-01 按用户决策：研究期不限时（原值 20700 = 赛期 6h 硬限 − 4% 余量）。
+    # 此值仅作「进程永挂」兜底，不参与任何调度决策；单题上限见 max_time_per_question。
+    max_total_time_seconds: int = 2592000  # 30 天（仅防永挂，非限制）
 
     # ---- 智能体补充部件配置 ----
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
@@ -360,22 +364,73 @@ class AgentConfig:
     revise_sample_times: int = 2       # 自纠错重解候选数
 
     # ---- 新功能开关（简化）----
-    use_scoring: bool = False          # Verifier 不用多维评分（简化，减少误判）
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    use_scoring: bool = True           # Verifier 用多维评分（原：不用/简化，减少误判）
     enable_deterministic: bool = True  # 确定性硬否决（v2.8）：SymPy 代入回验 fail 淘汰候选、unknown 放行
     # 2026-09-06（移植自 sq 分支，默认关，A/B 验证后开）：
     use_rubric: bool = False           # Verifier rubric 结构化判分（verdict+confidence+错因定位，JSON prefill）
     use_challenge: bool = False        # Verifier 反例挑战（LLM 命题 → SymPy 程序数值验证 → hard_fail 否决）
-    by_enable_fast_path: bool = True   # 启用 SymPy 快车道求解
-    use_proof_channel: bool = False    # 关闭证明题专用通道（简化）
+    # 2026-09-29：`by_enable_fast_path` 已删除 —— 快车道（_fast_path）整体移除，
+    # 该字段本就是真死开关（全仓唯一读取点是 logger，不控制行为，审计报告 §四）。
+    # 2026-10-01 按用户决策默认开（研究期不省资源）。
+    use_proof_channel: bool = True     # 证明题专用通道（原：关闭/简化）
     use_lemma_accumulation: bool = True  # 引理积累（2026-08-29 起默认开，按领域路由）
     lemma_domains: list = field(default_factory=lambda: ["Number theory", "数论"])  # 领域路由：A/B 实测数论 +23pp、代数/组合被拖累
-    use_sub_goal: bool = False         # 子目标分解补充候选（候选不足/证明题时触发）
+    # 2026-10-01 删除 `use_sub_goal`：档位时代遗留，声明+白名单齐全但全仓 **0 读取点**
+    # （审查 A 级第 2 条 / B 级死配置）。真正生效的是 `deep_use_sub_goal`（见下方 :485）。
     # Step 2 无条件自改进（2026-08-29 新增，依据 IMO2025 验证-精炼论文）
     # 论文流水线六步中的 Step 2：初始解生成后**无条件**先 review+improve 一次
     # （注入第二段推理预算），再进入验证。论文实测：初始解质量低，此步显著改进。
     # 区别于 revise（验证失败才修正），自改进对每个候选都做一遍。
     enable_self_improve: bool = True
-    self_improve_max: int = 2          # A3（2026-09-11 降本）：每题最多自改进候选数 3→2。
+    self_improve_max: int = 2          # 每题最多自改进候选数（3→2 降本；见下）
+    # ---- 2026-09-29 用户决策（截图 #7）：「无条件自改进是一遍还是两遍？哪种效果
+    #      最好，需要尝试。」⇒ 恢复**真无条件**（默认跳过缺陷过滤），并把遍数做成
+    #      可配置，供后续 A/B 对比。
+    # · `self_improve_rounds`：自改进轮数。1 = 旧单遍；2 = 对同一批候选连做两遍
+    #   （第二遍基于第一遍结果再注入一次推理预算）。默认 1（保守），实验设 2。
+    # · `self_improve_conditional`：是否启用「只改有缺陷候选」的过滤。
+    #   **默认 False = 真无条件**（用户要求）。设 True 恢复 2026-09-11 的条件化。
+    #   ⚠ 历史证据：smoke6_v3 实测条件化前「无条件」正确定 1/6 不变、耗时 +34%，
+    #   且 098 被从正确答案改错。用户已知悉，要求在新配置（统一 deep 档 +
+    #   原版保留 + 下游投票择优）下重新验证 —— 本开关即为该验证的 A/B 抓手。
+    self_improve_rounds: int = 1
+    self_improve_conditional: bool = False
+    # ---- 2026-09-30 用户决策（截图 #8）：子目标多 agent 求解 ----
+    # 用户原话：「多 agent 拿子目标的求解能不能换成多 agent？那样是不是能提高
+    #           子目标的正确率？」
+    # 实现：对同一子目标独立采 N 个解，按**归一化关键值的一致性**选代表解
+    #      （self-consistency 下沉到子目标粒度）。中间步骤错一个后面全错，
+    #      故此处收益理论上高于只在最终答案层投票。
+    #   · `enable_subgoal_multi_agent`：**默认 False** ⇒ 与改动前逐字一致，
+    #     可作为 A/B 的 baseline（设 True 即为实验组）。
+    #   · `subgoal_agents_n`：每题每个子目标采样次数（上限 8）。
+    #     ⚠ 成本是 N 倍单步生成 —— 时间紧迫/预算不足时实现里会自动退回 1 次。
+    enable_subgoal_multi_agent: bool = False
+    subgoal_agents_n: int = 3
+    # ---- 领域 → 定理检索（2026-09-29 新增，截图 #3+#4，老师重点关注）----
+    # 用户诉求：判断题目属于哪个领域、该用什么定理，用 leansearch 去 Mathlib
+    # 检索对应定理，并评估「定理对大模型的推理效果」。
+    #   · 检索实现收敛在 agent/theorem_hint.py 单一入口（便于解耦与替换）；
+    #   · enable_theorem_hint 是 A/B 抓手：设 False = 不检索、不注入
+    #     ⇒ 与 True 对比即可回答「定理对推理有没有帮助」；
+    #   · theorem_hint_max_queries 控制每题最多发几次 leansearch 检索。
+    enable_theorem_hint: bool = True
+    theorem_hint_max_queries: int = 2
+    # ---- 子目标结论 → 主求解 信息流（2026-10-02 阶段一，用户拍板设计）----
+    # 用户原话：「…主求解一定要在子目标的基础上。」
+    # 把 2.7/3_solve(P&E) 已求得的子目标结论（ctx.subgoal_trace）作为**中间数据**
+    # 注入主求解 prompt（初始 / 证明 / 重解三路径），让主答案建立在子目标之上。
+    # 边界：只改信息流，不改投票/采样/终答/阈值。
+    # 默认 True；设 False = 三路径均不注入（A/B 抓手）。已登记 switch_registry。
+    enable_subgoal_findings: bool = True
+    # ---- 终答五层选择（2026-10-02 阶段二-2，用户拍板：「投票应在最后，不要一开始就投票」）----
+    # 用户原话：「把 n 个答案都给大模型让它来判断」「要按照正确率选取」。
+    # ON 时终答由 agent/final_selector.select_final_answer 统一选出
+    # （②多答案判断→③客观验证→④模型对比→⑤投票兜底），
+    # 不再走 formatter._rank_key 票数优先 / objective_majority_vote「一开始就投票」。
+    # 默认 True（用户明确要此行为）；设 False = 全部回退改动前（A/B 抓手）。已登记 switch_registry。
+    enable_final_answer_selection: bool = True
     # 依据：3.3 无条件改进实测只有成本没有收益（smoke6_v3：占单题耗时 29~45%、
     # 总耗时 +34%，正确率 1/6 不变）。配合 A2 条件化（只改有缺陷的候选）进一步压成本。
     improve_min_remaining: float = 300.0  # 3.3 改进停手预留（距生成软截止 < 此值不再开新候选；0=关，治 alg-060 3.3=640s 烧穿）
@@ -400,7 +455,10 @@ class AgentConfig:
     adversarial_tiers: list = field(default_factory=lambda: ["deep", "standard"])
     # 低于此置信度的"检出"不采信：宁可漏掉，不可误伤（治误杀优先于治漏检）
     adversarial_min_confidence: float = 0.5
-    adversarial_max_tokens: int = 640
+    # 2026-10-02 DeepSeek 适配：原 640 ⇒ 8192。原值基于「对抗审查输出很短 + prefill
+    # 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断
+    # （reasoning 先吃满预算、正文为空）。
+    adversarial_max_tokens: int = 8192
     adversarial_max_reasoning: int = 2400
     # ---- 验证增强链时间护栏（2026-09-07：治 4.5_oracle / 4.6_adv 烧穿 6.5）----
     # 冒烟 v2 实证：3.3/3.6 止损省下的时间被 4.5 Oracle(365s)/4.6 对抗(372s)
@@ -410,28 +468,21 @@ class AgentConfig:
     # 不饿死最终闸门。设 0 = 关闭护栏（旧行为）。对齐 LLMClient 180s×2 重试上限。
     verify_enhance_est_seconds: float = 360.0
 
-    # ---- 难题深度求解通道（v2.5）----
-    # 三级档位资源分配：fast（快答）/ standard（标准，== 现状）/ deep（深度）
-    enable_difficulty_router: bool = True   # 总开关；关闭则全卷走 standard（回归现状）
-    enable_llm_difficulty: bool = True      # 难题识别第二层：LLM 自评难度（1 次小调用）
-    # 2026-08-30 Algebra 专项：实测无效已回滚（45 题 Algebra 仍 1/11，
-    # v3 33.3% < ab_review 35.6%），保留开关但默认关闭
-    algebra_force_deep: bool = False
-    tier_sample_times: dict = None          # 每档候选数 {fast:1, standard:2, deep:3}
-    tier_temperatures: dict = None          # 每档温度分层（deep 用 4 层）
-    tier_voting_times: dict = None          # 每档每候选投票数 {fast:1, standard:1, deep:3}
-    tier_max_completions: dict = None       # 每档截断续写数 {fast:0, standard:1, deep:2}
-    tier_max_calls: dict = None             # 每档 LLM 调用预算上限
-    # ⚠ 2026-09-17（Audit-2）：注释原写 {120,540,1320}，与 `__post_init__` 的
-    #   实际默认 {300,750,1150} **不符**（属「注释与代码两套口径」）。此处以代码为准。
-    tier_budget: dict = None                # 每档设计预算帽（秒）{fast:300, standard:750, deep:1150}
-    # 2026-09-13 更正后重设：36000（10h，基于错误前提"平台无总时长"）→ **19500**。
-    # 依据：平台全卷硬限 **6 小时 = 21600s**（不含 Judge，见上方权威出处）。
-    # 取 19500 = 6h 的 90%，给 Judge / 提交 IO / 冷启动留约 35 分钟余量。
-    # 摊到全卷：19500 × 并发3 ÷ 112 题 = **522s/题** —— 这是 PaperPacer 的瞄准点，
-    # 低于理论上限 578s（6h × 3 ÷ 112），为"部分题超支"留缓冲。
-    # 必须与 max_total_time_seconds(20700) 保持 target < hard 关系。
-    paper_target_time: int = 19500      # 全卷墙钟目标（秒，5.42 小时 = 6h 硬限的 90%）
+    # ---- 2026-09-29：难度路由（DifficultyRouter）已删除 ----
+    # 原 `enable_difficulty_router` / `enable_llm_difficulty` / `algebra_force_deep`
+    # 三个开关随 DifficultyRouter 一并移除：统一单一档位后，"按难度选方法"整体废止。
+    # 其对应行/键已从覆盖白名单同步删除（见下方 whitelist）。
+    # 下表保留 `deep` 键作为**唯一配置项**，不再有任何档位分流语义：
+    tier_sample_times: dict = None          # 候选数（统一档位：3）
+    tier_temperatures: dict = None          # 温度分层（统一档位：4 层）
+    tier_voting_times: dict = None          # 每候选投票数（统一档位：3）
+    tier_max_completions: dict = None       # 截断续写数（统一档位：2）
+    tier_max_calls: dict = None             # LLM 调用预算上限（统一档位：100）
+    tier_budget: dict = None                # 设计预算帽秒（统一档位：86400，仅防挂死）
+    # 2026-09-29：`paper_target_time` / `paper_min_soft` / `paper_total_questions` /
+    # `deep_quota_ratio` / `pacer_normal_relax` / `paper_inflight` 随 PaperPacer 删除。
+    # ⇒ **本仓库已不再保证"6h 全卷内完成"**：全卷无时间总量控制，单题只受
+    #   `max_time_per_question` 硬墙约束（用户决策，研究阶段云端评测不限时）。
     # L1 验证优先（2026-08-31）：剩余时间不足该值时进入 verify_only，
     # 不再生成新候选（solver/续写/自改进/协作/子目标/Lean 门禁全跳过），
     # 把最后的时间留给验证投票 → 治 A_base 30 题里 117 次「验证 None 判错」。
@@ -440,9 +491,44 @@ class AgentConfig:
     # 机制与测试保留（tests/test_verify_only.py）；若将来再试，
     # 先补「预算跳过/None 投票计数器」量化验证假设，再调阈值。
     verify_only_seconds: int = 0
-    paper_min_soft: int = 120               # PaperPacer 单题软预算保底（秒）
-    paper_total_questions: int = 112        # 默认全卷题数（PaperPacer 预算帽估算用）
-    deep_use_sub_goal: bool = True          # deep 档强制子目标分解补充候选
+    deep_use_sub_goal: bool = True
+    # ============================================================
+    # 2026-10-01 开关注册制（审查 A 级第 2 条）
+    # ------------------------------------------------------------
+    # 以下字段与 `agent/switch_registry.py::SWITCHES` **一一对应**，
+    # 默认值即该开关的历史默认值（从原裸 os.environ 读取处抄录）。
+    # ★ 读取优先级：环境变量 > 本字段（显式设置）> 默认值
+    #   —— 环境变量优先是刻意的，保证既有跑法（X=0 python ...）行为不变。
+    # 改动任一开关前请先看 switch_registry 的注释。
+    # ============================================================
+    artifact_store_enabled: bool = True  # ARTIFACT_STORE_ENABLED — 中间结果落盘（results/<run_id>/<qid>/，默认开）
+    answer_form_gate: bool = True  # ANSWER_FORM_GATE — 答案形态闸门（非答案形态不放行）
+    deterministic_timeout_sec: float = 5.0  # DETERMINISTIC_TIMEOUT_SEC — 确定性验证通道的单次超时（秒）
+    eval_alpha_equiv: bool = False  # EVAL_ALPHA_EQUIV — 字母等价（A/a）判定（默认关）
+    eval_split_cn: bool = True  # EVAL_SPLIT_CN — 中文答案分隔符切分
+    expr_eval_grounding_guard: bool = True  # EXPR_EVAL_GROUNDING_GUARD — 表达式求值接地护栏
+    lean_gate_parallel: bool = True  # LEAN_GATE_PARALLEL — Lean 门禁并行预取（=0 串行）
+    lean_gate_strict_unknown: bool = True  # LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严
+    lean_mcp_autolake: bool = True  # LEAN_MCP_AUTOLAKE — MCP 自动 lake 环境准备
+    lean_mcp_goal_loc: bool = False  # LEAN_MCP_GOAL_LOC — MCP 回报 goal 位置（默认关）
+    lean_mcp_hover_check: bool = False  # LEAN_MCP_HOVER_CHECK — MCP hover 检查（默认关）
+    lean_mcp_multi_attempt: bool = False  # LEAN_MCP_MULTI_ATTEMPT — MCP 多次尝试（默认关）
+    lean_mcp_timeout_floor: float = 300.0  # LEAN_MCP_TIMEOUT_FLOOR — MCP 调用超时下限（秒）
+    lean_mcp_verify_axioms: bool = True  # LEAN_MCP_VERIFY_AXIOMS — MCP 校验公理使用
+    lean_verify: bool = True  # LEAN_VERIFY — Lean 通道总开关（=0 一键关闭）
+    lean_xcheck_numeric: bool = True  # LEAN_XCHECK_NUMERIC — 数值答案的 Lean 交叉校验
+    llm_retry_on_timeout: bool = False  # LLM_RETRY_ON_TIMEOUT — LLM 超时是否重试（默认不重试）
+    mp_arm: str = 'baseline'  # MP_ARM — 实验臂名称（deploy 用）
+    minimal_mode: bool = False  # MINIMAL_MODE — 最小基础模式（只留主链，默认关）
+    numericize_final: bool = True  # NUMERICIZE_FINAL — 终答数值化（把精确式转小数）
+    objective_itemwise_priority: bool = True  # OBJECTIVE_ITEMWISE_PRIORITY — 客观题逐项优先策略
+    objective_majority_vote: bool = False  # OBJECTIVE_MAJORITY_VOTE — 客观题多数投票（默认关）
+    objective_selfcheck: bool = True  # OBJECTIVE_SELFCHECK — 客观题自查
+    self_improve_keep_original: bool = True  # SELF_IMPROVE_KEEP_ORIGINAL — 自改进保留原答案
+    self_improve_objective_skip: bool = True  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
+    theorem_hint: bool = True  # THEOREM_HINT — 定理检索注入（=0 关闭）
+    toolcall_text_fallback: bool = False  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（直接改主链生成行为，默认关）
+          # 子目标分解主路径（统一档位下每题执行）
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
     # 2026-09-14 **默认关闭**。依据不是"证明无影响"，而是**实测它已基本不触发**：
@@ -454,7 +540,8 @@ class AgentConfig:
     #   （004 旧配置下单题被 3.4 烧掉 691s，把 3.3 / 4_verify / 6.5 全挤成 0s）。
     # ⚠ 该 A/B **不是**"证明无影响"的有效对照（机制两臂都没触发），
     #   不能把这次结论外推成"3.4 无用"。若要真正评估它，必须在时间充裕的配置下单独测。
-    enable_collaborative_deep: bool = False  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
+    # enable_collaborative_deep: 启用（用户指示）：deep 档三 Agent 协作。原 2026-09-14 关闭，且原注释明确要求「若要真正评估它，必须在时间充裕的配置下单独测」——当前正是时间无约束配置。回退：改回 False
+    enable_collaborative_deep: bool = True  # 难题(deep 档)三Agent协作：解题→审查→整合→验证
     collab_max_rounds: int = 3              # 协作验证循环最大轮数（2026-09-06 P3 用户拍板 6→3：单轮含 3 次 LLM 不可中断、algebra-003 曾烧 535s，收紧省时；时间充裕时停滞检测照常兜底）
     # 子目标阶段预算（2026-09-06 P1 用户拍板按档拆分）：
     # deep 保留 750s（难题深度分解值）；standard/fast 用 450s——
@@ -497,9 +584,8 @@ class AgentConfig:
     subgoal_ctx_mode: str = "deps"
     # P2（2026-09-09 老师：计算/推理子目标类型化）：DAG 子目标打标 calc_kind
     # （terminal=纯计算型 / inline=推理型，规则启发，字段总是进 trace 可观测）。
-    # router 开启后：terminal 走专用模板（只给表达式→<calc> 回填即结论）+
-    # 轻校验（结果须回填形态）。默认关待 A/B。
-    subgoal_calc_router: bool = False
+    # 2026-10-01：`subgoal_calc_router`（terminal 专用模板与轻校验）随 `<calc>`
+    # 板块删除；`calc_kind` 打标保留（纯观测字段）。
     # 2026-09-06 老师建议（S1-lite 0-LLM 校验前移）：子目标结果自带 lean 代码片时
     # 做本地编译校验（L1，仅 deep 档 + lean 环境可用，0 LLM 5-21s，禁网纯本地）。
     # 异常/环境缺失一律放行，绝不阻断；False = 跳过 L1 只留 L0 截断检查（A/B 对照）。
@@ -514,18 +600,31 @@ class AgentConfig:
     subgoal_conflict_gate: bool = False     # A 确定性冲突闸（0 LLM）
     subgoal_crosscheck_llm: bool = False    # B LLM 交叉核对轮（+1 调用）
     accept_confidence: float = 0.6          # AcceptGate 可接受置信度阈值（>=该值视为通过，v2.8）
+    # ★ 2026-09-30（截图 #9）：**择优可信度门槛**。
+    #   用户口径「投票…同时要有可信度要求（太低＝全军覆没）」。
+    #   默认 0.0 = 关闭 ⇒ 行为与改动前逐字一致（不产生任何新记录）。
+    #   开启后不改变"必须有答案"的地基：低于门槛的候选**仍提交**，
+    #   但会在 trace / `_pick_diag` 里被显式标记，供 5.5 复核与数据闭环定向归因。
+    pick_confidence_floor: float = 0.0
+    # ★ 2026-09-30（截图 #9）：**revise 之后接一次无条件自改进**。
+    #   用户口径「错误点返回大模型重新生成，**可否加无条件自改**」。
+    #   revise = 告诉模型错哪了（有条件）；自改进 = 再给一段推理预算（无条件）。
+    #   开启后：每轮 revise 生成的候选会**再**过一遍 `improve_candidates`。
+    #   默认 False = 行为与改动前逐字一致（不产生额外 LLM 调用）。
+    #   ⚠ 与 `self_improve_rounds`（3.3 独立环节的遍数）**正交**，不要合并。
+    self_improve_after_revise: bool = False
     # 结构化 bug report 驱动的修正（论文依据：IMO 2025 验证-精炼流水线）
     # 验证器改为产出「分类 + 原文定位」的结构化错因，注入 revise 步骤。
     # 论文实测：best-of-32 仅 21.4%~38.1%，加验证-精炼后 85.7%，
     # 说明杠杆在错因质量而非候选数量。
     use_bug_report_feedback: bool = True
 
-    # ---- 时间预算真正生效（2026-08-28 修复）----
-    # 此前 base.is_time_critical() 硬编码 300s，且 PaperPacer 算出的
-    # ctx.soft_budget 只打日志、无人消费 —— 动态预算形同虚设。
-    critical_tail_seconds: float = 120.0      # 剩余不足该值则跳过可选步骤（原硬编码 300）
-    deep_critical_tail_seconds: float = 60.0  # deep 档再收紧，把时间用得更尽
-    deep_quota_ratio: float = 0.25            # deep 档全卷占比上限（>25% 会导致全卷超时）
+    # ---- 时间预算（2026-08-28 起；2026-09-29 随 PaperPacer 删除简化）----
+    # 统一档位后实际生效的是 `deep_critical_tail_seconds`（orchestrator 恒取该值）。
+    # `critical_tail_seconds` 仅作其它模块的通用兜底默认。
+    critical_tail_seconds: float = 120.0      # 通用兜底：剩余不足该值则跳过可选步骤
+    deep_critical_tail_seconds: float = 60.0  # 统一档位生效值：把时间用得更尽
+    # 2026-09-29：`deep_quota_ratio` 已删除（PaperPacer 移除 ⇒ 全卷配额闸不存在）。
 
     # ---- 检测链（2026-09-06：AuditGate 为主；晚间恢复 Lean 双通道）----
     # AuditGate 多级检测链：Level0 程序硬核验 → Level1 反例搜索 → Level2
@@ -544,7 +643,8 @@ class AgentConfig:
     # 注意：关闭它不影响"Lean 参与评测"—— Lean 的价值在 **3.6 候选级淘汰** 与
     # **6.5 最终答案闸门**（验证完整解答），而非 2.6 的"翻译题目"。
     # 回退：置 True 即恢复（debris 保留，便于赛后用改进后的提示词重试）。
-    enable_lean_preverify: bool = False     # 2.6 题目前置形式化（题目转 Lean 声明校验理解，deep 档）
+    # enable_lean_preverify: 启用（用户指示）：2.6 题目前置形式化。原 2026-09-12 因实测 5/5 fail、零产出关闭（纯烧 100-150s/题）。平台无 Lean 时自动回落。回退：改回 False
+    enable_lean_preverify: bool = True     # 2.6 题目前置形式化（题目转 Lean 声明校验理解，deep 档）
     # 2026-09-12 **按实测数据回退**：曾按用户"lean 一定要用"扩到
     # ("deep","standard")，但同日冒烟实测（051/010/000 三题）显示前置形式化
     # **0/3 通过，且三题全部用满 2 轮重试仍 fail**；报错均为 **Lean 代码层面**
@@ -607,6 +707,12 @@ class AgentConfig:
     # 现改为按**依赖锥**计算（见 BlueprintDAG._preceding_leaves）。
     # 本开关用于 A/B 对照：False = 复现旧行为（不产出依赖边）。
     blueprint_deps_enabled: bool = True
+    # ★ 2026-09-20 新增：OR 节点是否展开**全部**备选分支。
+    # 历史行为（False）= 只展开 children[0]（注释称"主策略分支"），使 OR 在语义上
+    # 退化为 AND 的单分支 ⇒ 蓝图路径**结构性不存在"独立求解分支"**，这正是
+    # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
+    # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
+    blueprint_or_expand_all: bool = False
     # ---- 求解前 DAG 强制门（#34；2026-09-08 起默认关闭）----
     # 45 题实证：门"拦得住、修不好"（21/45 触发重写，净正确率贡献≈0，
     # 总耗时 +23%、触发组人均 +245s）。默认去掉前置强制评审-重写循环，
@@ -643,144 +749,53 @@ class AgentConfig:
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
 
     def __post_init__(self):
-        """初始化三级档位配置表默认值（平台提交版默认关闭 LLM 自评? 否，默认开启）。"""
+        """初始化**统一档位**配置表默认值。
+
+        ★★ 2026-09-29（用户决策）：**删除三档制（fast/standard/deep），统一为单一档位**。
+        理由（用户原话）：「我们是研究，肯定要研究最好的办法，而不是省资源的办法」。
+
+        · 「按难度选择答题方法」的全部机制（DifficultyRouter 难度路由、
+          PaperPacer 全卷时间池与 deep 配额、快车道旁路、calc_prewarm）已删除；
+        · 下表保留 `"deep"` 作为**唯一键**，取值一律取**原 deep 档的最强配置**；
+        · 不保留任何按档位分流的语义 —— 键名仅为兼容下游 `.get(tier, 兜底)` 的
+          读取姿势（`ctx.tier` 恒为 `"deep"`），不再有任何分支判据依赖它。
+        """
         if self.max_subgoals_by_tier is None:
-            # ★ 2026-09-15（用户：「子目标上限太少了；不同档位的最佳数量不同吗？」）：
-            # 按档位分档。deep 是难题档（题更复杂）→ 允许更多子目标；
-            # standard 适度放宽。对标蓝图提示词的复杂度分档（简单 3~5 /
-            # 中等 5~12 / 难题 12~30）。
-            # ⚠ 具体数值**无 A/B 依据**，取"比原 6 放宽但不失控"的保守值。
-            #   验证方法：同 commit 下对照 {6, 8/16, 0=不截断} 跑错题集。
-            self.max_subgoals_by_tier = {"standard": 8, "deep": 16}
+            # 原 {"standard": 8, "deep": 16} → 统一取 deep 值 16。
+            # （2026-09-15 用户：「子目标上限太少了」⇒ 取更宽的 deep 值）
+            self.max_subgoals_by_tier = {"deep": 16}
         if self.tier_sample_times is None:
-            # 2026-09-04：deep 4→3（配每候选 3 票，验证成本 12→9 票 ≈ -25%；
-            # 平台实测堆候选边际收益低，杠杆在验证器错因质量，不在候选数量）
-            self.tier_sample_times = {"fast": 1, "standard": 2, "deep": 3}
+            # 原 {"fast": 1, "standard": 2, "deep": 3} → 统一取 3。
+            # （2026-09-04：deep 4→3，配每候选 3 票，验证成本 12→9 票 ≈ -25%）
+            self.tier_sample_times = {"deep": 3}
         if self.tier_temperatures is None:
+            # 原三档温度分层 → 统一取 deep 的 4 层（保证候选多样性最大）。
             self.tier_temperatures = {
-                "fast": [0.1],
-                "standard": [0.1, 0.3],
                 "deep": [0.1, 0.3, 0.5, 0.7],
             }
         if self.tier_voting_times is None:
-            self.tier_voting_times = {"fast": 1, "standard": 1, "deep": 3}
+            # 原 {"fast": 1, "standard": 1, "deep": 3} → 统一取 3。
+            self.tier_voting_times = {"deep": 3}
         if self.tier_max_completions is None:
-            self.tier_max_completions = {"fast": 0, "standard": 1, "deep": 2}
+            # 原 {"fast": 0, "standard": 1, "deep": 2} → 统一取 2。
+            self.tier_max_completions = {"deep": 2}
         if self.tier_max_calls is None:
-            # v2.6.1：deep 档 30→60
-            # deep 档需要：三Agent协作反复验证(每轮 4 次 × max_rounds) + 多候选求解
-            #   + 子目标分解 + 验证投票 + revise。collab_max_rounds=6 时单协作链就 24 次
-            #   调用，30 次预算不够。60 次才能覆盖协作反复验证场景。
-            # v2.8.1：deep 档 60→100（评测日志显示 60 在"协作 6 轮 + 子目标 + Lean +
-            #   投票 + revise + oracle" 链路下仍耗尽，触发大量「跳过 LLM 调用」；
-            #   100 留出余量，避免因预算紧绷导致的误判/跳过，提升难题正确率）
-            # standard 档 15→30（覆盖 colab_max_rounds=4 协作 + 验证 + 多候选求解）
-            self.tier_max_calls = {"fast": 6, "standard": 30, "deep": 100}
+            # 原 {"fast": 6, "standard": 30, "deep": 100} → 统一取 100。
+            # 历史：v2.6.1 deep 30→60（三Agent协作反复验证需 24+ 次调用）；
+            #      v2.8.1 deep 60→100（"协作 6 轮 + 子目标 + Lean + 投票 + revise +
+            #      oracle" 链路下 60 仍耗尽，触发大量「跳过 LLM 调用」）。
+            # 统一后每题都可能有协作链，故取 deep 的 100（研究阶段不省调用）。
+            self.tier_max_calls = {"deep": 100}
         if self.tier_budget is None:
-            # 2026-09-13 更正后重设（{2000,3200,3600} 基于错误前提，已废止）。
-            # 硬约束回顾：全卷 6h × 并发 3 ÷ 112 题 = **578s/题**；单题平台硬限 1200s。
-            # 档位帽必须让"全卷平均"落在 578s 以内，把有限时间留给少数难题：
-            #   fast     120 → 300   （简单题快速出答案，为难题腾时间）
-            #   standard 540 → 750   （主力档位，约平均线 578s 的 1.3 倍）
-            #   deep    1200 → 1150  （= 单题硬限留加载余量后的值，仅少数题可用）
-            # ⚠ 2026-09-14：`max_time_per_question` 已下调到 **1100**，但**本档位帽
-            #   刻意保持 1150 不动** —— 两者职责不同：
-            #     · `max_time_per_question` = **最后硬限**，只负责"不许越 1200s 墙"；
-            #     · `tier_budget` = **资源分配**，若跟着压到 1100，会**提前掐断**
-            #       本可在 1200s 内跑完的题（用户明确要求避免这种情况）。
-            #   生效值仍是 min(deadline=1100, tier_cap=1150, pacer) = 1100，
-            #   档位侧继续按 1150 估资源，分配逻辑零变化。
-            # 加权示意（deep 受 25% 配额限制）：0.25×1150 + 0.55×750 + 0.20×300
-            # ≈ 760s > 578s 平均 ⇒ 卷面会逐步落后 ⇒ 由 PaperPacer 动态收紧回平均线。
-            # 这正是"把时间花在刀刃上"的执行路径。
-            # ⚠ 这三个值是**档位帽（上限）**，不是每题的实发预算：实发由
-            # PaperPacer.budget_for() 按全卷余量动态决定（有余量才给满）。
-            self.tier_budget = {"fast": 300.0, "standard": 750.0, "deep": 1150.0}
-            # 2026-09-14：deep 1000 → **1150**，与 `max_time_per_question` 重新对齐
-            # （后者从 1000 回调到 1150，理由见该字段注释：超时不再重试后，
-            #  单次在途调用最坏只有 120s，"必须压到 1000"的前提已消失）。
+            # 2026-10-01 按用户决策：研究期不限时，此值仅作挂死兜底，不参与调度决策；
+            #   调度侧已不再有任何按剩余时间降级的逻辑（soft_budget/gen_deadline/verify_only 触发路径已删）。
+            # 查阅：CHANGES_2026-09-29.md §0.2
+            self.tier_budget = {"deep": 86400.0}
 
 
 # ============================================================
 # 响应归一化工具（P0-1 契约防线核心）
 # ============================================================
-
-def _normalize_chat_response(resp: Any) -> str:
-    """把 client.chat 的返回值统一成字符串。
-
-    平台注入的 client 实现不定，常见返回形态：
-      - str: 直接可用
-      - dict: {"content": "...", "choices": [...], "message": {...}}
-      - list: [{"content": "..."}, ...]
-      - 对象: .content / .text / .message.content
-      - bytes: 解码为 UTF-8
-      - None / 异常: 返回 ""
-    """
-    if resp is None:
-        return ""
-    if isinstance(resp, str):
-        return resp
-    if isinstance(resp, bytes):
-        try:
-            return resp.decode("utf-8", errors="replace")
-        except Exception:
-            return ""
-    if isinstance(resp, list):
-        # 取第一个元素
-        for item in resp:
-            text = _normalize_chat_response(item)
-            if text:
-                return text
-        return ""
-    if isinstance(resp, dict):
-        # 常见的几种字典形态
-        for key in ("content", "text", "output", "result"):
-            if key in resp and resp[key] is not None:
-                val = resp[key]
-                if isinstance(val, str):
-                    return val
-                return _normalize_chat_response(val)
-        if "choices" in resp and isinstance(resp["choices"], list) and resp["choices"]:
-            choice = resp["choices"][0]
-            if isinstance(choice, dict):
-                # OpenAI 风格: {"message": {"content": ...}} 或 {"text": ...}
-                if "message" in choice and isinstance(choice["message"], dict):
-                    msg = choice["message"]
-                    for key in ("content", "text"):
-                        if key in msg and msg[key] is not None:
-                            return str(msg[key])
-                if "text" in choice and choice["text"] is not None:
-                    return str(choice["text"])
-            return _normalize_chat_response(choice)
-        if "message" in resp and isinstance(resp["message"], dict):
-            msg = resp["message"]
-            for key in ("content", "text"):
-                if key in msg and msg[key] is not None:
-                    return str(msg[key])
-        if "data" in resp:
-            return _normalize_chat_response(resp["data"])
-        return ""
-    # 普通对象：尝试 .content / .text / .message
-    for attr in ("content", "text", "response"):
-        try:
-            val = getattr(resp, attr, None)
-            if val is not None:
-                return _normalize_chat_response(val)
-        except Exception:
-            pass
-    try:
-        if hasattr(resp, "message") and resp.message is not None:
-            return _normalize_chat_response(resp.message)
-    except Exception:
-        pass
-    # 最后兜底：字符串化
-    try:
-        s = str(resp)
-        if s and s != "None" and not s.startswith("<") and not s.startswith("{"):
-            return s
-    except Exception:
-        pass
-    return ""
 
 
 # ============================================================
@@ -827,36 +842,64 @@ class ReasoningAgent:
             #   实测证据：日志反复出现「Blueprint 子目标数超上限，截断 13 个」
             #   —— 卡在默认值（standard 6 / deep 12），CLI 根本调不动。
             "max_subgoals", "max_subgoals_by_tier",
-            #   `tool_calc_enabled` 是工具循环的总闸；它不在白名单 ⇒
-            #   无法从 CLI 打开 calc 工具循环，也无法验证 web_search 接线。
-            "tool_calc_enabled",
-            "enable_calc_tool",  # 2026-09-01 calc_tool 确定性计算
-            "calc_mandatory",  # 2026-09-09 P1-1 裸数值断言打回（计算必须走工具）
-            "calc_hard_only",  # 2026-09-12 计算分档（只强制易错算子走工具）
-            # 2026-09-13 方案 B 生成前算式预计算（不写白名单 ⇒ CLI/kwargs 覆盖
-            # 被静默丢弃，回退开关失效，同 enable_dag_replan 那次的坑）
-            "enable_calc_prewarm",
+            # 2026-09-29：`enable_calc_prewarm` 已随预计算机制删除，从白名单移除。
+            # 2026-10-01：`<calc>` 板块删除 ⇒ `tool_calc_enabled` / `enable_calc_tool`
+            #   / `calc_mandatory` / `calc_hard_only` / `answer_selfcheck_enabled`
+            #   / `subgoal_calc_router` 六键一并从白名单移除。
             "subgoal_reuse_done",  # 2026-09-12 已完成子目标跨 run() 复用
             "subgoal_adaptive_recover",  # 2026-09-12 子目标失败二选一（重做/重规划）
-            "tool_calc_enabled",  # 2026-09-09 原生工具调用试点（calc_eval）
             # 2026-09-12 定型前审核修复：以下 5 个键此前**不在白名单** → 尽管
             # run_eval.py 有对应 argparse，kwargs 覆盖会在 __init__ 里被静默
             # 丢弃（即文档中写的 `--symbolic_solve_adopt false`、
             # `--answer_selfcheck_enabled false` 等回退路径**实际无效**）。
-            "answer_selfcheck_enabled", "symbolic_crosscheck_enabled",
+            "symbolic_crosscheck_enabled",
             "symbolic_solve_enabled", "symbolic_solve_feedback",
             "symbolic_solve_adopt",
             "max_total_calls", "max_time_per_question",
             "max_total_time_seconds", "max_tokens_cap",
-            "by_enable_fast_path", "use_scoring",
+            "use_scoring",
             "use_rubric", "use_challenge",  # 2026-09-06 sq 移植（A/B 开关）
             "max_revise_rounds", "max_workers",
             "use_proof_channel", "use_lemma_accumulation",
             "lemma_domains",
             "max_answer_tokens", "revise_sample_times",
-            "use_blueprint", "use_blueprint_dag", "use_sub_goal",
+            # 2026-10-01 开关注册制：29 个已登记开关进入白名单（可经 CLI/kwargs 传入）
+            #（2026-10-02 新增 artifact_store_enabled / minimal_mode / enable_subgoal_findings
+            #  / enable_final_answer_selection）
+            "artifact_store_enabled",  # 2026-10-02 中间结果存储层总开关
+            "answer_form_gate",
+            "deterministic_timeout_sec",
+            "eval_alpha_equiv",
+            "eval_split_cn",
+            "expr_eval_grounding_guard",
+            "enable_subgoal_findings",  # 2026-10-02 阶段一：主求解注入子目标结论
+            "enable_final_answer_selection",  # 2026-10-02 阶段二-2：终答五层选择
+            "lean_gate_parallel",
+            "lean_gate_strict_unknown",
+            "lean_mcp_autolake",
+            "lean_mcp_goal_loc",
+            "lean_mcp_hover_check",
+            "lean_mcp_multi_attempt",
+            "lean_mcp_timeout_floor",
+            "lean_mcp_verify_axioms",
+            "lean_verify",
+            "lean_xcheck_numeric",
+            "llm_retry_on_timeout",
+            "mp_arm",
+            "minimal_mode",  # 2026-10-02 最小基础模式（只留主链）
+            "numericize_final",
+            "objective_itemwise_priority",
+            "objective_majority_vote",
+            "objective_selfcheck",
+            "self_improve_keep_original",
+            "self_improve_objective_skip",
+            "theorem_hint",
+            "toolcall_text_fallback",
+            "use_blueprint", "use_blueprint_dag",
             # 2026-09-15：DAG 依赖边开关（修复 depends_on 结构性恒空）
             "blueprint_deps_enabled",
+            # 2026-09-20：OR 节点展开策略开关（默认 False = 保持历史行为）
+            "blueprint_or_expand_all",
             # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
             # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
             "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
@@ -864,21 +907,20 @@ class ReasoningAgent:
             "dag_replan_gate",
             # 骨架编排层评审（老师 9/2 建议：求解前规划质量门，2026-09-02）
             "enable_skeleton_review", "skeleton_review_max_rounds",
-            # 难题深度求解通道
-            "enable_difficulty_router", "enable_llm_difficulty",
-            # Algebra 专项
-            "algebra_force_deep",
+            # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
+            # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。
+            # tier_* 六键保留（仍被 solver / orchestrator 以 .get(tier) 读取，见
+            # AgentConfig.__post_init__ 的"统一档位"说明）。
             "tier_sample_times", "tier_temperatures", "tier_voting_times",
             "tier_max_completions", "tier_max_calls", "tier_budget",
-            "paper_target_time", "paper_min_soft", "paper_total_questions",
+            # 2026-09-29：PaperPacer 已删除 ⇒ paper_* 三键（target_time / min_soft /
+            # total_questions）与 deep_quota_ratio 不再有任何读取点，从白名单移除。
             "deep_use_sub_goal", "deep_revise_rounds", "deep_use_playoff",
             "enable_collaborative_deep", "collab_max_rounds",
             # 子目标阶段预算（P1 按档拆分）
             "subgoal_stage_budget_sec", "subgoal_stage_budget_sec_std",
             # 子目标上下文注入模式（老师 9/6：deps 最小依赖 | all 全量，A/B）
             "subgoal_ctx_mode",
-            # P2 子目标类型路由（老师 9/9：计算型 terminal / 推理型 inline）
-            "subgoal_calc_router",
             # 子目标级 0-LLM lean 代码片编译校验（S1-lite L1，deep 档+lean 可用）
             "enable_subgoal_lean_check",
             # 子目标交叉核对（老师 9/8 建议3：A 确定性冲突闸 0-LLM / B LLM 交叉核对轮）
@@ -889,15 +931,26 @@ class ReasoningAgent:
             # 会被静默丢弃 —— 本项目已因漏加白名单踩过多次，见上方 720/733 行注释）
             "use_leansearch", "leansearch_top_k", "leansearch_max_calls_per_q",
             "leansearch_inject_verifier",
-            # 时间预算（2026-08-28 新增：让动态预算真正生效）
+            # 时间预算（2026-08-28 新增；2026-09-29 删除 deep_quota_ratio 键）
             "critical_tail_seconds", "deep_critical_tail_seconds",
-            "deep_quota_ratio",
             # L1 验证优先（2026-08-31）
             "verify_only_seconds",
             # 结构化 bug report 反馈
             "use_bug_report_feedback",
             # Step 2 无条件自改进（IMO2025 论文）
             "enable_self_improve", "self_improve_max", "improve_min_remaining",
+            # 2026-09-29：真无条件 + 遍数可配（截图 #7 A/B 抓手）
+            "self_improve_rounds", "self_improve_conditional",
+            # 2026-09-30：revise 后无条件自改进（截图 #9 A/B 抓手）
+            #   ★ 必须在此白名单，否则 `--self_improve_after_revise` 会被静默
+            #     丢弃（本项目已因漏加白名单踩过多次）。
+            "self_improve_after_revise",
+            # 2026-09-30：择优可信度门槛（截图 #9）
+            "pick_confidence_floor",
+            # 2026-09-30：子目标多 agent 求解（截图 #8 A/B 抓手）
+            "enable_subgoal_multi_agent", "subgoal_agents_n",
+            # 2026-09-29：领域→定理检索（截图 #3+#4）
+            "enable_theorem_hint", "theorem_hint_max_queries",
             # 易错点记忆注入（2026-09-06 A 档轻量经验）
             "enable_error_lessons",
             # Step 4 bug report 复核
@@ -925,6 +978,51 @@ class ReasoningAgent:
         # 覆盖 dict 型配置后需确保各档键完整
         self.config.__post_init__()
 
+        # ★ 2026-10-02 修既有 bug（配置覆盖静默失效，team-lead 独立验收查出）：
+        #   把 AgentConfig 的**当前取值**绑定进开关注册表。
+        #   此前 `bind_config` **全仓零调用** ⇒ `_overrides` 恒空 ⇒ 注册表读取链
+        #   退化成「env > 默认值」，中间那层「配置覆盖」是死的 —— 白名单允许
+        #   CLI/kwargs 传入，但**传了不生效、也不报错**（静默失败）。
+        #   必须放在 `__post_init__()` 之后（配置已定型）、任何业务逻辑之前。
+        #   平台扁平导入下 `agent` 包不可用时优雅跳过（绝不影响构造）。
+        _bind_cfg = None
+        try:
+            from agent.switch_registry import bind_config as _bind_cfg
+        except ImportError:
+            try:
+                from switch_registry import bind_config as _bind_cfg
+            except ImportError:  # pragma: no cover  两个路径都不可用 → 跳过
+                _bind_cfg = None
+        if _bind_cfg is not None:
+            try:
+                _bind_cfg(self.config)
+            except Exception as _bc:  # noqa: BLE001  绑定失败不得影响构造
+                logger.warning("bind_config 失败（忽略，按 env/默认跑）: %s", _bc)
+
+        # ★ 2026-10-02 最小基础模式（MINIMAL_MODE，一键只留主链）：
+        #   开启时关闭与「推导」无关的旁支口径（联网搜索 / 评分投票 / 证明旁路通道
+        #   / rubric / 挑战分支）。读取走开关注册制（env MINIMAL_MODE > 本字段 > 默认 False）。
+        #   ⚠ 此处置为 False 的字段，其 env（如 USE_SCORING）仍按注册表最高优先级生效。
+        try:
+            from agent.switch_registry import (
+                bind_field as _sw_bind, get_bool as _sw_get_bool)
+        except ImportError:
+            from switch_registry import (
+                bind_field as _sw_bind, get_bool as _sw_get_bool)
+        try:
+            _sw_bind("minimal_mode", getattr(self.config, "minimal_mode", None))
+            if _sw_get_bool("minimal_mode"):
+                _minimal_off = ("enable_web_search", "use_scoring",
+                                "use_proof_channel", "use_challenge",
+                                "use_rubric")
+                for _f in _minimal_off:
+                    setattr(self.config, _f, False)
+                logger.warning(
+                    "MINIMAL_MODE 开启：只留主链（题意理解→子目标→求解→形式化验证），"
+                    "已关闭 %s", " / ".join(_minimal_off))
+        except Exception as _me:  # noqa: BLE001
+            logger.warning("MINIMAL_MODE 处理异常（忽略，按常规模式跑）: %s", _me)
+
         self.orchestrator = None
         # 核心模块导入失败时不崩溃：置为 None，solve 时走 fallback backend
         try:
@@ -936,14 +1034,13 @@ class ReasoningAgent:
         logger.info(
             "MathPilot ReasoningAgent (v2 simplified) initialized: "
             "samples=%d, votes=%d, domain_hint=%s, "
-            "budget=%d, max_tokens_cap=%d, scoring=%s, fast_path=%s",
+            "budget=%d, max_tokens_cap=%d, scoring=%s",
             self.config.policy_sample_times,
             self.config.verifier_voting_times,
             self.config.enable_domain_hint,
             self.config.max_total_calls,
             self.config.max_tokens_cap,
             self.config.use_scoring,
-            self.config.by_enable_fast_path,
         )
 
     # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出

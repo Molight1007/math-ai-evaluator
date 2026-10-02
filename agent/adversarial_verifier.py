@@ -254,7 +254,8 @@ class AdversarialVerifier(BaseAgent):
             _PREFILL_SEED,
         )
         raw = self.llm(ctx, msgs, temperature=0.0,
-                       max_tokens=int(getattr(self.config, "adversarial_max_tokens", 640)))
+                       # 2026-10-02 DeepSeek 适配：兜底值 640 ⇒ 8192，与 config 默认同步。
+                       max_tokens=int(getattr(self.config, "adversarial_max_tokens", 8192)))
         if not raw:
             return ""
         # prefill 的种子不在返回里，解析前补回去

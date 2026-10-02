@@ -403,7 +403,27 @@ class VerifierAgent(BaseAgent):
             clusters.append(cluster)
 
         # 排序：置信度 × 规模的加权（等价答案人越多且票越对 = 越可信）
-        clusters.sort(key=lambda c: c.confidence * c.size + c.confidence, reverse=True)
+        #
+        # ★ 2026-09-22 修复（"删去原本不合理的逻辑"）：
+        #   原键 `confidence * size + confidence` 在**所有簇置信度均为 0** 时
+        #   对每簇都恰好等于 0 ⇒ `sort` 退化为**插入序**，即"随便挑一个"。
+        #   实测 037：候选池里已有与 gold 一致的答案簇，但全簇置信度 0，
+        #   最终按插入序落到了另一个簇上，正确答案被挤掉。
+        #   改为**全序**键，保证任何情况下都有确定且合理的依据：
+        #     置信度 → 得票率 → 正确票数 → 答案形态 → 簇规模
+        #   ① 置信度非零时行为与原来完全一致（首键未变）⇒ 不扰动既有正确路径；
+        #   ② 仅在"全零置信度"这一退化场景下，改用得票率/票数/形态裁决，
+        #      簇规模**降到最后一键**，不再出现"0 票簇按规模压过有票簇"。
+        def _ck(c):
+            _vt = int(getattr(c, "vote_total", 0) or 0)
+            _vc = int(getattr(c, "vote_correct", 0) or 0)
+            _an = str(getattr(c, "answer_norm", "") or "")
+            _form = 3 if "\\boxed" in _an else (2 if 0 < len(_an) <= 40 else (1 if _an else 0))
+            return (float(getattr(c, "confidence", 0.0) or 0.0),
+                    (_vc / _vt) if _vt > 0 else 0.0,
+                    _vc, _form, int(getattr(c, "size", 0) or 0))
+
+        clusters.sort(key=_ck, reverse=True)
         return clusters
 
     # ==================================================================
@@ -512,10 +532,14 @@ class VerifierAgent(BaseAgent):
                 try:
                     from utils.prefill import prefill_messages, stitch
                     _msgs = prefill_messages(_msgs, _DEEP_VERDICT_PREFIX)
-                    _conv = self._deep_llm(ctx, _msgs, 0.0, 64)
+                    # 2026-10-02 DeepSeek 适配：原 64 ⇒ 8192。原值基于「输出很短（只一行
+                    # VERDICT）+ prefill 抑制思维块」的 Intern-S 时代假设；对 reasoning
+                    # 模型（如 deepseek thinking）思维块先吃满预算 ⇒ 正文为空、必截断。
+                    _conv = self._deep_llm(ctx, _msgs, 0.0, 8192)
                     _conv = stitch(_DEEP_VERDICT_PREFIX, _conv) if _conv is not None else ""
                 except Exception:  # noqa: BLE001  prefill 不可用则退回原提示词路径
-                    _conv = self._deep_llm(ctx, _msgs, 0.0, 64)
+                    # 2026-10-02 DeepSeek 适配：原 64 ⇒ 8192（同上）。
+                    _conv = self._deep_llm(ctx, _msgs, 0.0, 8192)
                 _v2 = _last_verdict_ab(_conv or "")
                 if _v2 is not None:
                     verdict = _v2
@@ -710,6 +734,12 @@ class VerifierAgent(BaseAgent):
         raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
         if raw:
             raw = stitch('{"', raw)
+        # 2026-09-20 修复：self.llm 可能返回 None（_is_correct_vote 已自述该情形）。
+        # 原实现直接 `json.loads(None)` 抛 TypeError，而这里只捕 JSONDecodeError，
+        # 只能靠外层 `except Exception` 兜住 ⇒ 异常被静默吞掉、语义不清。
+        # 同函数族其它 5 处均有 `if not raw` 守卫，此处补齐。
+        if not raw:
+            return None
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
@@ -729,7 +759,8 @@ class VerifierAgent(BaseAgent):
     # verdict+confidence+error_type+step_index+reason（错因质量 → revise
     # 定向性）；反例挑战让"非数值答案"也能被程序化数值验证证伪。
 
-    def _vote_one_rubric(self, ctx, problem: str, candidate_text: str) -> dict | None:
+    def _vote_one_rubric(self, ctx, problem: str, candidate_text: str,
+                         temperature: float = 0.0) -> dict | None:
         """一次 rubric 结构化判分（JSON prefill，秒级返回）。
 
         输出 {"verdict","confidence","error_type","step_index","reason"}，
@@ -742,7 +773,7 @@ class VerifierAgent(BaseAgent):
             )},
         ]
         try:
-            raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
+            raw = self.llm(ctx, prefill_messages(messages, '{"'), temperature, 32768)
             if raw:
                 raw = stitch('{"', raw)
         except Exception as e:  # noqa: BLE001
@@ -754,7 +785,8 @@ class VerifierAgent(BaseAgent):
         return rub
 
     def _vote_rubric(self, ctx, problem: str, candidate,
-                     use_deterministic: bool = True) -> list[Verdict]:
+                     use_deterministic: bool = True,
+                     temperature: float = 0.0) -> list[Verdict]:
         """rubric 判分路径：结构化判分 + 确定性旁证（多证据汇审）。
 
         - rubric: verdict A/B + confidence + 错因定位（error_type/step_index/reason）
@@ -1261,33 +1293,6 @@ class VerifierAgent(BaseAgent):
         "只输出最终答案（数值、表达式或选项字母），不要任何推理过程。"
     )
 
-    def _sympy_spot_check(self, answer: str) -> dict:
-        """对候选答案做 SymPy 独立 sanity check（不消耗 LLM 预算）。
-
-        返回 {"parseable": bool, "value": str|None, "note": str}。
-        仅用于给投票做旁证：可解析的数值/表达式答案可信度更高。
-        """
-        if not answer:
-            return {"parseable": False, "value": None, "note": "empty"}
-        try:
-            from utils.sympy_tools import _try_parse, eval_expression
-            # ★ 2026-09-16 修复：先剥 `\boxed{}` 等外壳再解析。
-            #   题面要求用 `\boxed{}` 书写，而 `_try_parse` 会把 `\boxed{2025}`
-            #   归一成 `\boxed2025` 而解析失败 ⇒ 此处曾把**正确答案判为不可信**
-            #   （本函数是"给投票做旁证"用的）。详见 answer_oracle 同类注释。
-            from .answer_oracle import AnswerOracle
-            cand = AnswerOracle.strip_wrappers(answer) or answer
-            parsed, err = _try_parse(cand)
-            if parsed is None:
-                # 退回原文再试一次（剥壳可能反而破坏非包裹式答案）
-                parsed, err = _try_parse(answer)
-            if parsed is None:
-                return {"parseable": False, "value": None, "note": err}
-            val = eval_expression(cand)
-            return {"parseable": True, "value": val, "note": "ok"}
-        except Exception as e:
-            return {"parseable": False, "value": None, "note": str(e)[:80]}
-
     def _deterministic_check(self, ctx, problem: str, candidate) -> dict:
         """对候选答案做确定性旁证/否决（0 LLM 预算）。
 
@@ -1450,7 +1455,8 @@ class VerifierAgent(BaseAgent):
             if use_rubric:
                 # rubric 结构化判分路径（含确定性旁证：fail 硬否决 / pass 独立票）
                 vds = self._vote_rubric(ctx, problem, cand,
-                                        use_deterministic=use_deterministic)
+                                        use_deterministic=use_deterministic,
+                                        temperature=_d_temp)
             else:
                 vds = self._vote(ctx, problem, cand, total_votes=voting_times,
                                  use_scoring=use_scoring, temperature=_d_temp)
@@ -1583,25 +1589,3 @@ class VerifierAgent(BaseAgent):
         reasoning = getattr(candidate, "reasoning", "")
         answer = getattr(candidate, "answer", "")
         return f"{reasoning}\n【最终答案】{answer}" if reasoning and answer else str(candidate)
-
-    def check_completeness(self, ctx: TaskContext, candidate) -> bool:
-        """
-        LLM 确认答案是否完整（是否被截断/未写完）。
-        返回 True 表示完整，False 表示不完整。
-        """
-        text = self._candidate_text(candidate)
-        messages = [
-            {"role": "system",
-             "content": "你是答案完整性检查专家。检查以下解答是否给出了完整结论（没有截断、没有'待续'等）。只输出 COMPLETE 或 INCOMPLETE。"},
-            {"role": "user", "content": text + "\n\n这个答案是完整的吗？"},
-        ]
-        try:
-            # v2.4.1：prefill「COMPLETE 」抑制 CoT，秒级返回判定
-            raw = self.llm(ctx, prefill_messages(messages, "COMPLETE "), 0.0, 64)
-            # ★ 2026-09-16 审计修复：原判据 `"INCOMPLETE" not in raw.upper()
-            #   or "COMPLETE" in raw.upper()` **恒为 True** —— "INCOMPLETE" 本身
-            #   就含子串 "COMPLETE" ⇒ 任一分支都为真 ⇒ 任何非 None 输出都判"完整"，
-            #   完整性校验形同虚设。（本函数当前无调用点，属预防性修复。）
-            return "INCOMPLETE" not in (raw or "").upper()
-        except Exception:
-            return True  # 网络异常时保守当作完整

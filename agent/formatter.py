@@ -30,7 +30,10 @@ _FINAL_ANSWER_MIN_SEC = float(os.getenv("FINAL_ANSWER_MIN_SEC", "45"))
 # 紧急直答的输出上限（token）。旧值 65536 = 允许它写一整篇论文，
 # 与"只要一行答案"的 prefill 语义矛盾，且在 120s 读超时下极易被截断。
 # 直答只需一行：512 足够，且能显著提高"一定拿到答案"的成功率。
-_EMERGENCY_ANSWER_MAX_TOKENS = int(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS", "512"))
+# 2026-10-02 DeepSeek 适配：env 默认 512 ⇒ 8192。原值基于「直答只需一行 + prefill
+# 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断（reasoning 先吃满
+# 预算、正文为空）。仍可用 EMERGENCY_ANSWER_MAX_TOKENS 覆盖。
+_EMERGENCY_ANSWER_MAX_TOKENS = int(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS", "8192"))
 
 # 拒绝回答/不完整答案的模式（2026-09-02 加"子目标求解失败"占位符：
 # 占位符直接当最终答案 = 50% 错题（009/053/004/022 等），必须触发换候选兜底）
@@ -142,6 +145,24 @@ _PROCESS_NARRATIVE_RE = re.compile(
     r"|对于[^，。]{0,12}类似",
     re.IGNORECASE,
 )
+
+# ★ 2026-09-21 新增：**段首叙述形态**（受控、锚定串首，避免误杀答案中的连接词）。
+#   实测 0921 arm2c2t：6.5 重做循环把过程叙述推成最终答案并提交 ——
+#     · `因此a_{2025} = 2026。`（003；含 `{}` ⇒ 触发 has_math 跳过代码/英文判定，
+#        而「因此」不在 `_REASONING_CONNECTIVE_RE` 的 7 个词里 ⇒ 全链漏检）
+#     · `最终正确的上界证明：考虑 $2|F|$ 个"端点"（…`（004，187 字长段）
+#     · `所以对手（选5个数的人）会试图构造5个数…`（002）
+#   规则 = 段首连接词 ∨ 段首"结论文档标签"（…证明： / 结论： / 思路： …）。
+#   ⚠ 只锚定**串首**（无 re.MULTILINE）⇒ 答案中段出现「因此」不受影响。
+#   ⚠ 实测对照集 16 条合法答案（各题 gold + 正常候选 + `解：x=1` / `答：42` /
+#     `无解` / 区间 / 分数 / 中文列举）**零误杀**。
+#   ⚠ 刻意**不**拦纯数值（`20`）与数学碎片（`p=1：f(f(d)) = f(2) + 1。`）——
+#     形态上与合法答案难分，判错代价高于收益；这两类由 orchestrator 6.5 的
+#     「未过审核 → 回滚到重做前答案」（2026-09-21）兜住。
+_LEAD_NARRATIVE_RE = re.compile(
+    r"^\s*(?:因此|所以|于是|从而|因而|由此|进而|继而|这样一来|这表明|这说明"
+    r"|也就是说|换句话说|综上)"
+    r"|^\s*.{0,14}(?:证明|论证|推导|结论|思路|分析|讨论)\s*[:：]")
 # 含这些记号即视为"疑似数学式"，**不再**按代码/英文词串判定，避免误杀。
 _MATH_MARKERS = ("\\", "{", "}", "$", "^")
 
@@ -169,9 +190,11 @@ def _looks_like_non_answer(text: str) -> bool:
     except Exception:  # noqa: BLE001
         pass
     # —— 步骤 / 思考标签 / 推理连接词 / 过程叙述：推理过程的措辞，不可能是答案 ——
+    #    ★ 2026-09-21 增加 `_LEAD_NARRATIVE_RE`（段首连接词 / 结论文档标签）。
     try:
         if (_STEP_LABEL_RE.search(t) or _REASONING_CONNECTIVE_RE.search(t)
-                or _PROCESS_NARRATIVE_RE.search(t)):
+                or _PROCESS_NARRATIVE_RE.search(t)
+                or _LEAD_NARRATIVE_RE.search(t)):
             return True
     except Exception:  # noqa: BLE001
         pass
@@ -197,6 +220,243 @@ def _looks_like_non_answer(text: str) -> bool:
     except Exception:  # noqa: BLE001
         pass
     return False
+
+
+def _answer_form_score(ans) -> int:
+    """答案「形态分」—— 与正确性相关；**推理长度与正确性无因果关系**。
+
+    ★ 2026-09-22（用户口径：「制定正确的逻辑，删去原本不合理的逻辑」）：
+    本项目已三次修复「按推理长度选答案」（09-16 枚举分支、09-17 簇内分支、
+    09-20 长答案重提取），但**仍有三处遗漏**（本文件 259 / 510 / 876 行）。
+    实测 011：票数与置信度**完全并列**的两个候选，交给「推理更长者」裁决
+    （18015 vs 6938 字符），选中错答 —— 正确候选就在池里。
+    ⇒ 判据改为「答案形态」：像答案的（boxed / 短数值表达式）优于散文。
+    """
+    s = str(ans or "").strip()
+    if not s:
+        return 0
+    if "\\boxed" in s:
+        return 3
+    if len(s) <= 40 and not re.search(r"[\u4e00-\u9fff]{6,}", s):
+        return 2
+    if len(s) <= 40:
+        return 1
+    return 0
+
+
+def _rank_key(c):
+    """候选择优的**统一**排序键。
+
+    ★ 2026-09-30（截图 #9）扩为五项：
+        ① `correct_votes`   —— 验证器给该候选投了几张对票；
+        ② **`_support_n`**  —— ★新增：池里有几个**独立候选**写出了同一结论；
+        ③ `confidence`      —— 正确票 / 有效票；
+        ④ `_answer_form_score` —— 「最像答案」（boxed > 短数学式 > 短文本 > 散文）；
+        ⑤ 答案更短（仅确定性收尾）。
+
+    ② 的插入位置有意在 `confidence` **之前**：用户口径「候选数量与逻辑通顺度
+    都要是指标」，而 `support` 正是"候选数量"在单候选身上的投影。
+    为什么它该压过 `confidence`：
+      · 一条结论被 3 个独立候选复现 ⇒ 是 self-consistency 意义上的**共识**；
+      · 单个候选自评 3/3 票 ⇒ 只是"验证器没看出它错"（本项目实测验证器误报率 56%）。
+    历史上本项目已三次因"只看单一指标"丢过正确答案（003/011/014），故此处
+    刻意**新增指标而非替换指标** —— 票数仍是第 1 键，`support` 只在票数相同时起作用，
+    属零风险加性改动。
+
+    ⚠ `_support_n` 由调用方（`_pick_best` 等）按**当前候选池**预先算好并挂到候选对象上；
+    未挂时 `getattr` 兜底为 1（= "它自己就是一票"，不罚也不奖），
+    这样所有既有调用点不传 support 时行为与改动前**完全一致**。
+
+    全项目凡需在候选间择优处**一律复用本函数**，禁止再出现「只看推理长度」的
+    局部实现（历史上已因此丢掉过正确答案：003 的 `\\boxed{0,2026}` 曾输给 0 票的
+    `\\boxed{0,1,2,\\ldots}`；011 的正确候选曾输给更啰嗦的错答）。
+    末项取「答案更短者优先」仅为**确定性收尾**（避免退化成插入序/随机），
+    不代表长答案更差或更好。
+    """
+    ans = str(getattr(c, "answer", "") or "")
+    return (
+        int(getattr(c, "correct_votes", 0) or 0),
+        int(getattr(c, "_support_n", 1) or 1),
+        float(getattr(c, "confidence", 0.0) or 0.0),
+        _answer_form_score(ans),
+        -len(ans),
+    )
+
+
+def _attach_support(candidates) -> dict:
+    """把「独立复现数」挂到每个候选的 `_support_n` 上，返回 support 表。
+
+    ★ 2026-09-30（截图 #9）：「候选数量」作为指标的**落地方式**。
+    调用点在 `_pick_best` 开头（择优之前），因此后续所有走 `_rank_key` 的
+    排序（逐项判定优先、簇内择优、verdict 兜底、兜底池）都自动受益。
+
+    刻意**不**改 `_rank_key` 的签名 —— 它是模块级纯函数、无池上下文，
+    且全项目多处直接调用（含单元测试）。把"池"的知识留在调用方，
+    是本次实现的最小侵入路径。
+
+    ⚠ 幂等：重复调用只覆盖同值，无副作用。任何异常一律忽略（择优绝不能被埋点搞挂）。
+    """
+    try:
+        _m = _answer_support(candidates)
+        for _c in (candidates or []):
+            try:
+                setattr(_c, "_support_n", _support_of(_c, _m))
+            except Exception:  # noqa: BLE001
+                pass
+        return _m
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+# ----------------------------------------------------------------------
+# 2026-09-30（截图 #9）：**「最像答案」+ 证据量 + 可信度门槛**
+# ----------------------------------------------------------------------
+# 用户原话：「投票要选出里面最像答案的一个，候选数量与逻辑通顺度都要是指标，
+#           同时要有可信度要求（太低＝全军覆没）」。
+#
+# 现状拆解（已核验）：
+#   · 「最像答案」⇒ `_answer_form_score`（boxed 3 分 / 短数学式 2 分 / 短文本 1 分
+#     / 散文 0 分）已在 `_rank_key` 第 3 位生效 —— **该项已有基础**；
+#   · 「候选数量」⇒ **完全没有**被当作指标。原 `_rank_key` 只看「该候选拿到几票」，
+#     不看「这个结论在池里被**几个不同候选独立复现**」。
+#     二者语义不同：一条结论若只被 1 个候选写出（哪怕它自评 3/3 票），
+#     与「3 个独立候选都写出同一答案」相比，后者证据强得多
+#     （self-consistency 的原始口径就是"独立采样间的一致性"，不是"单候选自评"）。
+#   · 「可信度要求」⇒ 散落在 `accept_confidence=0.6`（AcceptGate）与硬编码 `< 0.5`
+#     （5.5 低置信度复核），**没有**在"选答"这个动作上做统一闸门。
+#
+# 设计纪律（遵守"一次只改一项"与"宁缺勿滥"）：
+#   ① 只做**加性**指标：`_answer_support` 是新增的第 2 排序键，不删除任何既有键；
+#   ② 所有新闸门默认**不改变行为**（`pick_confidence_floor` 默认 0.0 = 关闭）；
+#   ③ 每个新函数都是纯函数，可被单元测试直接覆盖，绝不抛异常。
+def _answer_support(candidates, key_of=None) -> dict:
+    """统计**答案归一化后**每个结论被多少个**独立候选**复现。
+
+    返回 ``{归一化答案: 候选个数}``。用途 = 给"候选数量"这个指标提供口径。
+
+    ⚠ 与本文件既有的"票数"区别：
+      · 票数（`correct_votes`）= **验证器对同一个候选投了几张对票**；
+      · 本函数 = **池里有几个不同候选写出了这个结论**（独立复现）。
+    两者都是指标，不是替代关系 —— 故本函数只新增排序键，不覆盖票数。
+
+    归一化走 `AnswerOracle.strip_wrappers`（剥 `\\boxed{}` 等外壳）后 `strip().lower()`
+    —— 与 `_are_answers_equivalent` 同源口径，避免 `\\boxed{5}` 与 `5` 被算成两个结论。
+    任何异常一律返回空 dict（绝不阻断选答）。
+    """
+    out: dict = {}
+    try:
+        if not candidates:
+            return out
+        try:
+            from .answer_oracle import AnswerOracle as _AO
+        except Exception:  # noqa: BLE001
+            _AO = None
+        for _c in candidates:
+            _a = ((key_of(_c) if key_of else getattr(_c, "answer", "")) or "")
+            _a = str(_a).strip()
+            if not _a or _looks_like_non_answer(_a):
+                continue
+            if _AO is not None:
+                try:
+                    _a = _AO.strip_wrappers(_a) or _a
+                except Exception:  # noqa: BLE001
+                    pass
+            _k = _a.strip().lower()
+            if not _k:
+                continue
+            out[_k] = out.get(_k, 0) + 1
+    except Exception:  # noqa: BLE001
+        return {}
+    return out
+
+
+def _support_of(candidate, support_map) -> int:
+    """取某候选的「独立复现数」；查不到记 1（它自己就是一票，不该被罚成 0）。"""
+    try:
+        if not support_map:
+            return 1
+        ans = str(getattr(candidate, "answer", "") or "").strip()
+        if not ans:
+            return 1
+        try:
+            from .answer_oracle import AnswerOracle as _AO
+            ans = _AO.strip_wrappers(ans) or ans
+        except Exception:  # noqa: BLE001
+            pass
+        return int(support_map.get(ans.strip().lower(), 1) or 1)
+    except Exception:  # noqa: BLE001
+        return 1
+
+
+def _passes_confidence_floor(candidate, floor: float) -> tuple:
+    """★ 可信度门槛：低于底线的候选**不得**被选为终答（返回 ``(是否放行, 原因)``）。
+
+    用户口径：「可信度要求（太低＝全军覆没）」——
+    即"低可信度答案提交出去几乎必错，等于整题白做"，所以宁可**显式记录**
+    "本次无候选达线"也不要静默地挑一个最弱的交上去。
+
+    判定用**双指标**（两条都看，任一条成立即放行）：
+      ① `confidence`（= 正确票/有效票）≥ floor；
+      ② `correct_votes` ≥ 1 且 `total_votes` ≥ 1 —— 即"**至少有一张真实的正确票**"。
+         为什么要加 ②：`confidence` 在 total_votes=0（全弃权票）时被定义为 0.0，
+         但那是**基础设施故障**（LLM 超时/输出不可解析），不是"被判错"
+         —— 与 `Verdict.abstain` 的既有三态口径一致（故障不是反证）。
+         若只按 ① 判，故障轮次的候选会被全部打成"不可信"，触发无谓的回退。
+
+    `floor <= 0` ⇒ 恒放行（= 默认关闭，行为与改动前逐字一致）。
+    """
+    try:
+        if float(floor or 0.0) <= 0.0:
+            return True, "floor_disabled"
+        _cv = int(getattr(candidate, "correct_votes", 0) or 0)
+        _tv = int(getattr(candidate, "total_votes", 0) or 0)
+        if _tv <= 0:
+            # 全弃权票 = 故障，不是反证 ⇒ 放行并如实说明（不伪装成"可信"）
+            return True, "no_effective_votes"
+        _conf = float(getattr(candidate, "confidence", 0.0) or 0.0)
+        if _conf >= float(floor):
+            return True, "confidence_ok"
+        if _cv >= 1:
+            return True, "has_correct_vote"
+        return False, "below_floor"
+    except Exception:  # noqa: BLE001
+        return True, "judge_error"
+
+
+_CJK_PROSE_RE = re.compile(r"[\u4e00-\u9fff]{4,}")
+_ENUM_ITEM_MAX = 40
+
+
+def _is_real_enumeration(core: str) -> bool:
+    """core 是否为**真枚举答案**（而非"含逗号的散文 / 推导片段"）。
+
+    ★ 2026-09-22 修复（"删去原本不合理的逻辑"）：原判据仅是
+    `re.search(r"[,，;；、]")` ⇒ **任何含逗号的中文散文**都会被当成"枚举答案"，
+    并在 `enum_preferred` 分支里**优先返回**（该分支直接 `return`，绕过后面全部
+    选答逻辑）。实测 014：正确答案 995018（票数最高 2/3、置信度 0.667）
+    被一条 **0 票的散文候选** 顶掉，只因后者含逗号 ⇒ 终答以散文输出，判分必错。
+
+    现在的判据：按逗号/分号/顿号拆分后
+      ① 至少 2 项；
+      ② **每一项都必须是短数学对象** —— 长度 ≤ 40 且不含 4 个以上连续汉字
+         （长中文短语 ⇒ 是句子而非数学对象）；
+      ③ 项末不得是句末标点。
+    宁缺勿滥：判否只是放弃"枚举优先"这条捷径，仍会走正常选答，不会更差。
+    """
+    s = str(core or "").strip()
+    if len(s) < 3:
+        return False
+    parts = [p.strip() for p in re.split(r"[,，;；、]", s) if p.strip()]
+    if len(parts) < 2:
+        return False
+    for p in parts:
+        if len(p) > _ENUM_ITEM_MAX:
+            return False
+        if _CJK_PROSE_RE.search(p):
+            return False
+        if re.search(r"[。！？：]$", p):
+            return False
+    return True
 
 
 class FormatterAgent(BaseAgent):
@@ -236,8 +496,12 @@ class FormatterAgent(BaseAgent):
             if best is None:
                 # BUG-1 修复：绝不输出"无法求解"，也绝不把原题当答案。
                 if ctx.candidates:
-                    best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
-                    answer = best.answer if best.answer and len(best.answer) > 2 else (
+                    best = max(ctx.candidates, key=_rank_key)
+                    # 2026-09-20 修复：删掉 `len(best.answer) > 2` 闸门。
+                    # 本文件 247-250 / 487-489 / 814-816 均已论证"单字符是合法且
+                    # 完整的答案"，唯此处漏改 ⇒ 答案 `A`/`7` 会被替换成推理尾部
+                    # 500 字散文，客观题必然判错。与 251 行统一为"仅空/纯空白才回退"。
+                    answer = best.answer if (best.answer or "").strip() else (
                         (best.reasoning or "")[-500:])
                 else:
                     answer = ""
@@ -352,6 +616,21 @@ class FormatterAgent(BaseAgent):
                 or _MISSING_ANSWER_RE.search(_ans_txt)):
             direct = self._emergency_answer(ctx)
             if direct and not _MISSING_ANSWER_RE.search(direct):
+                # ★ 2026-10-02 阶段二-2（team-lead Q4-①）：紧急直答属**池外直答**，
+                #   纳入「五层 = 终答唯一出口」（单答案 ⇒ 直接采用、**不调 LLM**；
+                #   开关 OFF ⇒ skipped ⇒ 原样，完全回退）。
+                try:
+                    try:
+                        from .final_selector import adopt_single
+                    except ImportError:
+                        from final_selector import adopt_single
+                    _r = adopt_single(ctx, direct, reason="formatter_emergency")
+                    if not _r.get("skipped"):
+                        _d2 = str(_r.get("answer") or "").strip()
+                        if _d2:
+                            direct = _d2
+                except Exception:  # noqa: BLE001  五层异常不得阻断兜底直答
+                    pass
                 self.record(ctx, "finalize", f"占位符答案 → 紧急直答: {direct[:120]}")
                 answer = direct
             else:
@@ -362,6 +641,9 @@ class FormatterAgent(BaseAgent):
         # 另外 3 个（零票兜底直答 / 6.5 重做 / 6.5 换候选）已改用
         # `Orchestrator._set_final_response`（带非答案闸门），本行此前是漏网的。
         # 本模块自带 `_looks_like_non_answer`，直接复用，避免跨模块反向 import。
+        # ★ 2026-10-02 阶段二-2（team-lead Q4-② 裁定）：**此处只做规范化（format_response
+        #   + 非答案闸门），不选答** —— 终答由「五层」在更早的出口决定（`_pick_best` /
+        #   `_set_final_response` / 紧急直答的 `adopt_single`）。**不是旁路，勿再改。**
         _fr_txt = format_response(answer)
         if str(_fr_txt or "").strip() and not _looks_like_non_answer(_fr_txt):
             ctx.final_response = _fr_txt
@@ -369,6 +651,26 @@ class FormatterAgent(BaseAgent):
             self.record(ctx, "finalize",
                         "最终答案被判为非答案形态 → 不覆盖 ctx.final_response，"
                         "交上层最终兜底：%s" % str(_fr_txt)[:80])
+        # ★★ 2026-09-21 修复（云端 n=38 逐题复核）：把 `_pick_diag["picked"]`
+        #   同步为**实际落盘值**。
+        #
+        #   缺陷：`_pick_diag` 在本函数**前半段**就已写入（见上方零票兜底分支
+        #   与 `formatter_pick_best` 兜底分支），但其后
+        #   `_pick_fallback` / `_diagnose_and_repair` / `_repair_truncated` /
+        #   `_emergency_answer` **仍会改写 `answer`** ⇒ 埋点记下的是**被丢弃的
+        #   中间值**。实测云端快照 20/38 题 `pick_diag.picked` ≠ `predicted`，
+        #   其中 8 题终答是散文 —— 使「是选答错了还是终答被覆盖」这一最关键
+        #   归因**无法回答**（极易把埋点错位误读成"答案被后写覆盖"）。
+        #
+        #   修法：此处以 `ctx.final_response`（真正要提交的字符串）为准，
+        #   原值移入 `picked_pre_repair` 保留追溯性。此改动**只影响埋点**，
+        #   不改变任何选答/修复行为（`_pick_diag` 全项目无功能性读取点，
+        #   仅由 `Orchestrator._collect_diag` 落盘进 diag）。
+        if isinstance(getattr(ctx, "_pick_diag", None), dict):
+            _picked_final = str(ctx.final_response or "")
+            if _picked_final and _picked_final != ctx._pick_diag.get("picked"):
+                ctx._pick_diag["picked_pre_repair"] = ctx._pick_diag.get("picked")
+                ctx._pick_diag["picked"] = _picked_final[:60]
         self.record(
             ctx, "finalize",
             f"最终答案: {ctx.final_response[:200]} (置信度: {confidence:.2f})",
@@ -442,10 +744,156 @@ class FormatterAgent(BaseAgent):
             return None
 
     def _pick_best(self, ctx: TaskContext):
+        """择优入口（★ 2026-09-30 截图 #9）：在原始择优之上加**可信度门槛**。
+
+        用户口径：「投票要选出里面最像答案的一个，候选数量与逻辑通顺度都要是指标，
+                  同时要**可信度要求**（太低＝全军覆没）」。
+
+        本方法只做一件事：调用 `_pick_best_raw`（= 改动前的全部择优逻辑，逐字未动），
+        然后检查被选中的候选**是否达到可信度底线**：
+          · 达到 → 原样返回（**绝大多数情形走这里，行为与改动前完全一致**）；
+          · 未达到 → 仍然返回它（不能把答案变成空，那是"全军覆没"本身），
+            但**在 trace 里显式记一条 `low_confidence_pick`**，并把
+            `ctx._pick_diag["below_confidence_floor"] = True` 落盘。
+
+        为什么不"直接拒绝低可信度答案"：
+          本项目的地基是"**必须有答案**"（评测判空 = 0 分）。若在此处拒绝，
+          等于把单题从"可能答错"改成"必定 0 分"，与用户意图相反。
+          「可信度要求」的正确落地是**让优化有据可依**——把"低于底线的题"标出来，
+          供后续环节（5.5 强制复核 / 6.5 重做 / 数据闭环归因）定向处理。
+          ⚠ `pick_confidence_floor` 默认 **0.0** ⇒ 本门槛默认**不产生任何新记录**，
+            亦不改变任何行为；A/B 实验时再显式开启。
+        """
+        cand = self._pick_best_raw(ctx)
+        try:
+            floor = float(getattr(self.config, "pick_confidence_floor", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            floor = 0.0
+        if floor <= 0.0 or cand is None:
+            return cand
+        try:
+            _ok, _why = _passes_confidence_floor(cand, floor)
+            if not _ok:
+                _ans = (getattr(cand, "answer", "") or "")[:60]
+                if isinstance(getattr(ctx, "_pick_diag", None), dict):
+                    ctx._pick_diag["below_confidence_floor"] = True
+                    ctx._pick_diag["confidence_floor"] = floor
+                    ctx._pick_diag["picked_confidence"] = round(
+                        float(getattr(cand, "confidence", 0.0) or 0.0), 4)
+                self.record(
+                    ctx, "finalize",
+                    "★ 所选候选低于可信度门槛 %.2f：%s（conf=%.3f, 正确票 %s/%s）"
+                    "—— 仍提交（拒绝会使本题必得 0 分），但已标记待后续环节定向复核"
+                    % (floor, _ans,
+                       float(getattr(cand, "confidence", 0.0) or 0.0),
+                       getattr(cand, "correct_votes", 0),
+                       getattr(cand, "total_votes", 0)))
+            else:
+                if isinstance(getattr(ctx, "_pick_diag", None), dict):
+                    ctx._pick_diag["below_confidence_floor"] = False
+                    ctx._pick_diag["confidence_gate_reason"] = _why
+        except Exception:  # noqa: BLE001
+            pass
+        return cand
+
+    def _maybe_final_select(self, ctx: TaskContext):
+        """★ 2026-10-02 阶段二-2：终答五层选择（开关 ON 时接管；未接管返回 None）。
+
+        用户口径：「投票应在**最后**，不要一开始就投票」。开关
+        `enable_final_answer_selection`（默认 True）ON 时，终答由
+        `agent/final_selector.select_final_answer` 统一选出（②多答案判断→
+        ③客观验证→④模型对比→⑤投票兜底）⇒ **不再走** `_rank_key` 票数优先 /
+        `objective_majority_vote`。
+
+        `skipped=True` / 无答案 ⇒ 返回 None ⇒ 调用方**回退既有择优**（不阻断主链）。
+        结果经 `run_cached` 缓存 ⇒ 与 `orchestrator._pick_best_from_candidates`
+        **共用同一决策**（同一 ctx 不会选出两个终答）。
+        """
+        try:
+            try:
+                from .final_selector import SynthCandidate, run_cached
+            except ImportError:
+                from final_selector import SynthCandidate, run_cached
+            res = run_cached(ctx, self.llm, self.record)
+            try:
+                ctx._final_select_diag = dict(res.get("diag") or {})
+                ctx._final_select_diag["branch"] = res.get("branch")
+            except Exception:  # noqa: BLE001
+                pass
+            ans = str(res.get("answer") or "").strip()
+            if not ans or res.get("skipped"):
+                return None
+            cand = res.get("cand")
+            if cand is None:
+                for c in (getattr(ctx, "candidates", None) or []):
+                    if (getattr(c, "answer", "") or "").strip() == ans:
+                        cand = c
+                        break
+            if cand is None:
+                cand = SynthCandidate(ans, "（终答五层选择产出）")
+            # ★ 2026-10-02 阶段三（team-lead 复核）：此处原先只在 `_pick_diag`
+            #   **已是 dict** 时才写 ⇒ 主路径上 `_pick_diag` 尚未创建、写入静默丢失，
+            #   随后被 :522 兜底改标成 `formatter_pick_best` ⇒ **A/B 两 arm 看起来
+            #   走同一条路**、五层分支不可归因。改为「不是 dict 就先创建」。
+            try:
+                if not isinstance(getattr(ctx, "_pick_diag", None), dict):
+                    ctx._pick_diag = {}
+                ctx._pick_diag["branch"] = "final_select_" + str(res.get("branch"))
+                ctx._pick_diag["picked"] = ans[:40]
+            except Exception:  # noqa: BLE001
+                pass
+            return cand
+        except Exception as exc:  # noqa: BLE001  五层失败一律回退既有逻辑
+            logger.debug("[formatter] 终答五层选择异常（回退）: %s: %s",
+                         type(exc).__name__, exc)
+            return None
+
+    def _pick_best_raw(self, ctx: TaskContext):
         """
         选择最优答案（BUG-13 修复：共识加权）。
         优先使用聚类结果中置信度最高且规模最大的簇；其次使用传统 verdict 置信度。
         """
+        # ★ 2026-10-02 阶段二-2：终答五层选择优先（开关 ON 时此处即返回，
+        #   ⇒ 下方的 `_rank_key` 票数优先 / `objective_majority_vote` 全程不执行）。
+        _fs = self._maybe_final_select(ctx)
+        if _fs is not None:
+            return _fs
+        # ★★ 2026-09-30（截图 #9）：**择优前先算「独立复现数」**。
+        #   用户口径：「候选数量与逻辑通顺度都要是指标」。
+        #   本步骤把"池里有几个不同候选写出了同一结论"挂到每个候选的 `_support_n`，
+        #   于是下面所有走 `_rank_key` 的排序都变成**五键**（票数→复现数→置信度→
+        #   答案形态→紧凑度），"候选数量"由此真正成为择优依据。
+        #   必须放在**所有择优分支之前**（含被证伪候选剔除之前会更好，但剔除只减
+        #   候选、不产生虚假复现数，故放此处即可）。
+        #   纯加性：异常/空池一律退化为 `_support_n=1`，与改动前逐字一致。
+        try:
+            _sup_map = _attach_support(getattr(ctx, "candidates", None))
+            if _sup_map:
+                # 埋点：让诊断报告能看出"本次终答背后有几个独立候选复现"
+                setattr(ctx, "_support_map", _sup_map)
+        except Exception:  # noqa: BLE001
+            pass
+        # ★ 2026-09-23 新增：**择优时跳过「已被客观证伪」的候选**。
+        #   动机：零票兜底已改为"证伪优先"（orchestrator），被证伪的候选不得再参与择优，
+        #   否则证伪等于白做。判据仍是"错误答案一定能被证明错误" —— 只剔除
+        #   **拿到 SymPy 确认反例**的候选，任何不确定的候选照旧参与。
+        #   实现纪律：仅在"过滤后仍有候选"且"确实剔除了东西"时才替换，
+        #   否则原样走（零风险回退，不改变既有行为）。
+        _fal = getattr(ctx, "_falsified_answers", None)
+        if _fal and (getattr(ctx, "candidates", None) or []):
+            try:
+                from .answer_oracle import AnswerOracle as _AO
+                _all = list(ctx.candidates)
+                _keep = [c for c in _all
+                         if not any(_AO.answers_equivalent(
+                             getattr(c, "answer", "") or "", _x) for _x in _fal)]
+                if _keep and len(_keep) < len(_all):
+                    self.record(ctx, "finalize",
+                                "择优前剔除 %d 个已被客观证伪的候选（剩 %d/%d）"
+                                % (len(_all) - len(_keep), len(_keep), len(_all)))
+                    ctx.candidates = _keep
+            except Exception:  # noqa: BLE001
+                pass
         # 2026-09-13：选择题答案多数投票（OBJECTIVE_MAJORITY_VOTE=1 时）。
         # 必须放在 best_cluster 分支**之前**：best_cluster 是 verifier 聚类，
         # 且簇内再按"推理长度"选（下见 #0），对客观题（答案形态稳定、候选
@@ -463,7 +911,9 @@ class FormatterAgent(BaseAgent):
                    if getattr(c, "origin", "") == "itemwise"
                    and (getattr(c, "answer", "") or "").strip()]
             if _iw:
-                _iw.sort(key=lambda c: len(c.reasoning or ""), reverse=True)
+                # ★ 2026-09-22：原为 `key=len(reasoning)`（只看啰嗦程度）。改为统一
+                #   `_rank_key`，保留"逐项判定优先"的设计意图，但簇内择优不再抖。
+                _iw.sort(key=_rank_key, reverse=True)
                 try:
                     ctx._pick_diag = {
                         "branch": "formatter_itemwise_priority",
@@ -591,41 +1041,61 @@ class FormatterAgent(BaseAgent):
                         #    `0,1,2,3,\ldots`）**不是**合法枚举答案，必须排除。
                         if _PSEUDO_ENUM_RE.search(_core2):
                             continue
+                        # ② ★ 2026-09-22：再加"真枚举"判据 —— 仅含逗号不等于枚举，
+                        #    散文（014 的 0 票候选）曾被此分支优先返回。
+                        if not _is_real_enumeration(_core2):
+                            continue
                         _enum_c.append(_c)
                 if _enum_c:
-                    # ② 排序：先票数、再置信度、最后推理长度（原实现只看长度）
-                    _enum_c.sort(
-                        key=lambda c: (
-                            int(getattr(c, "correct_votes", 0) or 0),
-                            float(getattr(c, "confidence", 0.0) or 0.0),
-                            len(getattr(c, "reasoning", "") or ""),
-                        ),
-                        reverse=True)
+                    # ★ 2026-09-30（截图 #9）：统一改用 `_rank_key`。
+                    #   原为**局部实现**的 (票数, 置信度, 推理长度) ——
+                    #   ① 漏掉新增的「独立复现数」（候选数量指标在此分支失效）；
+                    #   ② 末位仍是「推理长度」（本文件 222 行已论证它与正确性
+                    #      无因果关系，且是同一条被修过三次的老毛病）。
+                    #   改后与全项目择优口径**单一来源**，不再有第二套排序。
+                    _enum_c.sort(key=_rank_key, reverse=True)
+                    _top_enum = _enum_c[0]
                     try:
                         ctx._pick_diag = {
                             "branch": "enum_preferred",
-                            "picked": (getattr(_enum_c[0], "answer", "") or "")[:60],
+                            "picked": (getattr(_top_enum, "answer", "") or "")[:60],
                             "n_enum_candidates": len(_enum_c),
-                            "enum_votes": int(getattr(_enum_c[0], "correct_votes", 0) or 0),
+                            "support_n": int(getattr(_top_enum, "_support_n", 1) or 1),
+                            "enum_votes": int(getattr(_top_enum, "correct_votes", 0) or 0),
                         }
                     except Exception:  # noqa: BLE001
                         pass
                     self.record(ctx, "finalize",
                                 "题面要求『所有』→ 枚举形态候选优先"
-                                "（{} 个**合法**枚举候选，按票数/置信度/推理长度排序）".format(
+                                "（{} 个**合法**枚举候选，按统一 _rank_key：票数→"
+                                "独立复现数→置信度→答案形态 排序）".format(
                                     len(_enum_c)))
-                    return _enum_c[0]
+                    return _top_enum
         except Exception:  # noqa: BLE001
             pass
         # 0) 聚类数据（来自 verifier）→ 找最佳簇中第一个候选
         best_cluster = getattr(ctx, '_best_cluster', None)
         if best_cluster:
             cid_set = set(getattr(best_cluster, 'candidate_ids', []))
-            matching = [c for c in (ctx.candidates or []) if c.id in cid_set]
+            # 2026-09-20 修复（口径错配）：candidate_ids 里存的是**候选在列表中的
+            # 下标**，不是 Candidate.id。三处证据：建簇处（verifier.py）对
+            # Candidate 对象取的是 idx；两个消费侧 verifier.py:1207 与
+            # orchestrator.py:2729 也都写成 `cids[0] < len(candidates)` 后取
+            # `candidates[idx]`。原实现用 `c.id in cid_set` 匹配 ⇒ 候选列表一旦
+            # 发生位移（3.6 段过滤 / 候选池封顶 6 / 6.5 段换候选），matching 为空、
+            # 整条簇分支被静默跳过，下方"按 (票数, 置信度) 择优"的修复失效。
+            matching = [c for _i, c in enumerate(ctx.candidates or [])
+                        if _i in cid_set]
             if matching:
                 # ★ 2026-09-17（M5）：簇内改为 **(票数, 置信度) 优先，最后才比推理长度**。
                 # 原实现只按"推理最长"选，与正确性脱钩 —— 本文件 418-431 已自述
                 # 003 曾因此把已正确的 `\boxed{0,2026}` 丢掉、最终只剩 `\boxed{2026}`。
+                # ★ 2026-09-30（截图 #9）：再统一到 `_rank_key`。原局部键的**末位是
+                #   `len(reasoning)`**（M5 时保留了这一项），仍与正确性无因果；
+                #   且它读的是候选对象上的 `correct_votes`/`confidence`，而本分支的
+                #   票数来源是 `ctx.verdicts`（按 id 索引）—— 两者可能不同源。
+                #   现改为：先把 verdict 的票数回填到候选对象（`_rank_key` 读的是
+                #   对象属性），再统一排序 ⇒ 全项目择优口径单一来源。
                 _vm = {}
                 for _v in (getattr(ctx, "verdicts", None) or []):
                     try:
@@ -634,10 +1104,15 @@ class FormatterAgent(BaseAgent):
                             float(getattr(_v, "confidence", 0.0) or 0.0))
                     except Exception:  # noqa: BLE001
                         continue
-                matching.sort(
-                    key=lambda c: (_vm.get(int(getattr(c, "id", -1)), (0, 0.0)),
-                                   len(c.reasoning or "")),
-                    reverse=True)
+                for _c in matching:
+                    _hit = _vm.get(int(getattr(_c, "id", -1)))
+                    if _hit is not None:
+                        try:
+                            _c.correct_votes = int(_hit[0])
+                            _c.confidence = float(_hit[1])
+                        except Exception:  # noqa: BLE001
+                            pass
+                matching.sort(key=_rank_key, reverse=True)
                 return matching[0]
 
         # 1) 传统 verdict 置信度
@@ -754,7 +1229,10 @@ class FormatterAgent(BaseAgent):
                     _resp = self.client.chat(
                         messages=[{"role": "system", "content": _sys},
                                   {"role": "user", "content": _user}],
-                        temperature=0.0, max_tokens=512,
+                        # 2026-10-02 DeepSeek 适配：原 512 ⇒ 8192。原值基于「短直答 +
+                        # prefill 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型
+                        # 必然截断（reasoning 先吃满预算、正文为空）。
+                        temperature=0.0, max_tokens=8192,
                     )
                     _text = _normalize_chat_response(_resp) or ""
                     if not _text.strip():
@@ -821,7 +1299,29 @@ class FormatterAgent(BaseAgent):
                     return ans
         # 从 candidates 中找非拒绝/非不完整答案
         if ctx.candidates:
-            for c in sorted(ctx.candidates, key=lambda x: len(x.reasoning or ""), reverse=True):
+            _cs = sorted(ctx.candidates, key=_rank_key, reverse=True)
+            # ★ 2026-09-22：把"并列且无判别信号"这件事**显式暴露**出来。
+            #   实测 011：两个候选的正确票数、置信度、答案形态**完全并列**
+            #   （3/3 vs 3/3、conf 1.0 vs 1.0、都带 `\boxed`），此时**本地没有任何
+            #   判别信号** —— 旧逻辑拿"推理更长者"当裁判，等于随机且系统性偏向啰嗦。
+            #   本处只做两件事：
+            #     ① 判据中性化（末键用答案紧凑度，不再用推理长度）；
+            #     ② 把并列事实写进 diag 与 trace，使其**可统计、可追踪**。
+            #   ⚠ 这不构成"解决了 011"：真正的解法是对并列候选做**外部验证**
+            #   （符号等价 / 代回题设），已列入 CHANGES 待办，尚未实现。
+            if len(_cs) >= 2 and _rank_key(_cs[0])[:3] == _rank_key(_cs[1])[:3]:
+                self.record(ctx, "finalize",
+                            "候选择优出现**无信号并列**（票数 / 置信度 / 答案形态全同）"
+                            "→ 已按确定性规则择一，但该选择无证据支撑，标记 tie_unresolved")
+                try:
+                    _pd = getattr(ctx, "_pick_diag", None)
+                    if isinstance(_pd, dict):
+                        _pd["tie_unresolved"] = True
+                        _pd["tie_pair"] = [(_cs[0].answer or "")[:40],
+                                           (_cs[1].answer or "")[:40]]
+                except Exception:  # noqa: BLE001
+                    pass
+            for c in _cs:
                 ans = c.answer or ""
                 # ★ 2026-09-16 审计修复：去掉 `len(ans) > 3`（同 :493 的理由）。
                 if (ans.strip()

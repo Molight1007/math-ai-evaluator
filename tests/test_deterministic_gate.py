@@ -22,7 +22,7 @@ def test_imports():
     import agent.verifier        # noqa: F401
     import agent.orchestrator    # noqa: F401
     import agent.solver          # noqa: F401
-    import agent.difficulty_router  # noqa: F401
+    # 2026-09-29：agent.difficulty_router 已随"统一档位"删除，不再导入。
 
 
 def test_deterministic_check_answer():

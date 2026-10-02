@@ -13,6 +13,7 @@
   1) 控制台：总览 + 错因分布 + 耗时分布
   2) Markdown 报告（默认 results/<stem>_报告.md）
 """
+# 2026-10-01 去同名：_stage_group -> _stage_group_en（它与 diagnosis_report 的同名函数逻辑相同但**返回英文标签**，加 _en 区分）
 from __future__ import annotations
 
 import argparse
@@ -31,7 +32,7 @@ ERROR_CLASS_CN = {
 }
 
 # 阶段分组：把细粒度 stage 归到主阶段
-def _stage_group(k: str) -> str:
+def _stage_group_en(k: str) -> str:
     if k.startswith("2.6"):
         return "preverify"
     if k.startswith("2.7"):
@@ -120,10 +121,6 @@ def _clues(row: dict) -> list[str]:
             out.append(f"子目标 {len(st)} 步，其中 **{len(fails)} 步求解失败**（空/占位）")
         else:
             out.append(f"子目标 {len(st)} 步均有输出，但最终结论错（错误在中间推理步骤）")
-    if d.get("calc_tool_calls"):
-        out.append(f"调用了计算工具 {len(d['calc_tool_calls'])} 次")
-    else:
-        out.append("计算工具未被调用")
 
     # 修订反馈（含错误定位）
     rf = " ".join(str(x) for x in (d.get("revise_feedback") or [])).strip()
@@ -190,7 +187,7 @@ def main() -> None:
         st = (r.get("diag") or {}).get("stage_timers") or {}
         for k, v in st.items():
             if isinstance(v, (int, float)):
-                stage_sum[_stage_group(k)] += float(v)
+                stage_sum[_stage_group_en(k)] += float(v)
     stage_total = sum(stage_sum.values()) or 1.0
 
     lines: list[str] = []

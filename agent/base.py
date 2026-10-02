@@ -1,11 +1,20 @@
 from __future__ import annotations
+
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+try:
+    from agent.switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+except ImportError:
+    from switch_registry import (
+        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 """
 多智能体基础组件
 ================
 
 提供：
 - ``Candidate`` / ``Verdict``：候选解答与验证结果的数据结构
-- ``Budget``：LLM 调用预算（防止竞赛平台超时 / 超额）
+- ``Budget``：LLM 调用预算（研究期限时/限 token 已放开，此处仅作调用计数与诊断）
 - ``TaskContext``：共享黑板（Blackboard），所有 Agent 读写同一上下文，全程可追溯
 - ``BaseAgent``：抽象基类，统一封装 LLM 安全调用、预算扣减、trace 记录
 """
@@ -115,7 +124,7 @@ _register_truncation_listener()
 #   默认**关**（`TOOLCALL_TEXT_FALLBACK=0`）—— 它直接改主链生成行为，
 #   必须先开/关 A/B。开启后：解析文本形态的调用 → 真正执行 → 把结果以
 #   `role=user` 追加后 `continue`，让模型基于真实检索结果继续推导。
-_TEXT_TOOLCALL_FALLBACK = os.environ.get("TOOLCALL_TEXT_FALLBACK", "0") == "1"
+_TEXT_TOOLCALL_FALLBACK = _sw_bool("toolcall_text_fallback")
 _TEXT_FN_RE = re.compile(r"<function\s*=\s*([A-Za-z_]\w*)\s*>", re.I)
 _TEXT_PARAM_RE = re.compile(
     r"<parameter\s*=\s*([A-Za-z_]\w*)\s*>(.*?)"
@@ -473,7 +482,11 @@ class TaskContext:
     problem: str
     metadata: dict
     domain: Optional[str] = None               # ClassifierAgent 写入
-    question_type: str = ""                    # 题型（证明题/选择题/判断题/填空题/解答题）
+    # ★ 2026-10-02：`1_classify` 阶段已删除（老师建议「聚焦推导」）⇒ 题型改**惰性求值**。
+    #   原字段 `question_type` 改名 `_question_type`，对外由下方 @property 顶替 ——
+    #   读写语法**完全不变**，下游 130+ 处 `getattr(ctx,"question_type","")` 读取点零改动。
+    _question_type: Optional[str] = None       # 惰性题型（None=未计算；证明题/选择题/判断题/填空题/解答题）
+    _enable_question_type: bool = True         # 题型识别开关（False → 属性直接返回 ""；消融实验用）
     candidates: list = field(default_factory=list)   # SolverAgent 写入
     verdicts: list = field(default_factory=list)     # VerifierAgent 写入
     revise_feedback: list = field(default_factory=list)  # 回传给 Solver 的错误原因
@@ -517,21 +530,56 @@ class TaskContext:
     blueprint_plan: dict = field(default_factory=dict)  # DAG 转出的子目标规划（兼容 SubGoalSolver）
 
     # ---- 整树 Lean 搭桥（LEAP Stage 2，#26/#28）----
-    sketch_tree: dict = field(default_factory=dict)  # DAG 叶子→Lean 声明+sorry 的整树审核结果（LeanTranslatorAgent 写入）
+    # ⚠ 2026-09-30 注释订正（原注释「LeanTranslatorAgent 写入」在主流水线里是**错的**）：
+    #   写入方 `LeanTranslatorAgent` 确实存在（`tools/lean_local/lean_translator.py`），
+    #   但它**已从主流水线（orchestrator）摘除** —— `sub_goal_solver.py:1602-1605`
+    #   刻意移除调用，理由："平台无 Lean，整树翻译+编译只空转"。
+    #   ⇒ **主流水线跑完本字段恒为空**；只有独立入口 `tools/lean_local/leap_eval.py`
+    #     才会写它（该入口自带测试，仍可用）。
+    #   判读纪律：不得因本字段为空就声称"Lean 没检查过"——主线的 Lean 检查走
+    #   `lean_gate` / `lean_dag_fails`（见下）。
+    sketch_tree: dict = field(default_factory=dict)
 
     # ---- Stage 3 迭代精炼（#29/#30/#32/#33）----
-    refine_result: dict = field(default_factory=dict)  # sorry 补全+回溯结果（LeanRefinerAgent 写入）
+    # ⚠ 2026-09-30 注释订正：同上，「LeanRefinerAgent 写入」仅在独立入口成立。
+    #   主流水线不调用 ⇒ **本字段恒为空**，故 `gap_analyzer.extract_gaps()`
+    #   （消费本字段）在主链路下**恒返回 "无 refine_result"**；
+    #   现役缺口分析走 `extract_subgoal_gaps()`（subgoal_trace）与
+    #   `extract_lean_dag_gaps()`（lean_dag_fails）。详见 gap_analyzer.ORPHAN_NOTE。
+    refine_result: dict = field(default_factory=dict)
 
     # ---- DAG 动态评审（LEAP 5.3，#34，2026-09-01）----
     # DagReviewerAgent 写入：评审 DAG 分解质量，建议触发整树重生成
     dag_review_report: dict = field(default_factory=dict)
 
-    # ---- 难题深度求解通道字段 ----
-    tier: str = "standard"                      # standard / deep（DifficultyRouter 写入；
-                                                # 2026-09-14 删除 fast 档）
-    tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（静态分/LLM分/融合说明）
-    soft_budget: float = 0.0                    # PaperPacer 分配的当前档位软预算帽（秒）
-    pacer_remaining: float = 0.0                # 全卷时间池剩余目标时间（秒，诊断用）
+    # ---- 求解前 Lean 逻辑检查结果（2026-09-30 存，截图 #6）----
+    # `SubGoalSolver._lean_dag_logic_check()` 用 `example : (expr) := by sorry`
+    # 逐节点编译；编译失败的节点**命题无法良构形式化** ⇒ 该子目标存在
+    # 可判定的逻辑/类型层缺陷。此处存原始明细，供离线做缺口性质分类
+    # （回答用户 #6「用 Lean 检测 sorry 的地方，缺的逻辑点是不是模型该推出来的」）。
+    # ★ 空字典 = 未触发该检查（无 reject 信号/预算不足/Lean 不可用），
+    #   与「检查了但全通过」不同 —— 后者会留下 `lean_dag_checked` 非空。
+    lean_dag_fails: dict = field(default_factory=dict)
+    lean_dag_checked: list = field(default_factory=list)
+
+    # ---- 领域 → 定理检索（2026-09-29 新增，截图 #3+#4）----
+    # 由 orchestrator 的 1.6) 阶段写入（实现在 agent/theorem_hint.py）。
+    # 语义：把"本题该用的 Mathlib 定理"检索出来，供 2.6 前置理解 / 3_solve
+    # 提示词按需引用；trace 供离线统计命中率与耗时。
+    # ★ 缺省为空 ⇒ 不检索时下游行为与改动前**完全一致**。
+    theorem_hints: list = field(default_factory=list)   # list[str] Mathlib 全名
+    theorem_hint_block: str = ""        # 注入提示词的文本块（空=不注入）
+    theorem_hint_trace: dict = field(default_factory=dict)  # 完整埋点
+
+    # ---- 统一档位标识（2026-09-29 起：不再分档，恒为 "deep"）----
+    # 历史：fast / standard / deep 三档，由 DifficultyRouter 按难度写入。
+    # 2026-09-29 用户决策：研究目标 = 用**全部方法**提升正确率，按时间/档位
+    # 区分遂违背初心 ⇒ 删档位路由，**一律取原 deep 档最强配置**。
+    # 本字段保留仅为观测/诊断兼容（诊断表仍按 tier 聚合），**无任何分支作用**。
+    tier: str = "deep"                          # 常量标识，恒 "deep"
+    tier_evidence: dict = field(default_factory=dict)  # 档位判定依据（统一档后恒为空）
+    soft_budget: float = 0.0                    # 单题设计预算帽（秒），来自 tier_budget["deep"]
+    # 2026-10-02：原「单题剩余时间」诊断字段随 `0_paper_pacer` 阶段删除（唯一写入点已移除）。
 
     # ---- 壁钟时间追踪（适配竞赛新规则：单题≤20分钟，总计≤6小时）----
     start_time: float = 0.0                    # 单题壁钟启动时间 (time.time())
@@ -550,6 +598,35 @@ class TaskContext:
     # 未设置（测试 fixture / 其他调用方）= 0.0 → gen_time_up() 回退 is_time_critical，
     # 行为与旧版完全一致。
     _gen_deadline: float = 0.0
+
+    # ------------------------------------------------------------
+    # 题型（惰性求值属性，2026-10-02 起）
+    # ------------------------------------------------------------
+    # `1_classify` 阶段已删除 ⇒ 题型不再预填、不缓存进 ctx；改为**首次访问时按需分类**
+    # 并缓存，对下游读取点完全透明（契约不变）。
+    # `enable_question_type=False`（消融）时直接返回 ""，不触发任何分类。
+    @property
+    def question_type(self) -> str:
+        """题型（惰性：首次访问时按需分类，不再由 `1_classify` 阶段预填）。
+
+        2026-10-02：`1_classify` 阶段已删除（老师建议「聚焦推导」）。
+        分类改为**按需计算**，对下游读取点完全透明（契约不变）。
+        """
+        if not getattr(self, "_enable_question_type", True):
+            return ""
+        if self._question_type is None:
+            try:
+                from .question_type import classify_question_type
+                self._question_type = classify_question_type(self.problem)
+            except Exception:  # noqa: BLE001  分类失败 → 空串（与旧默认一致，绝不阻断）
+                self._question_type = ""
+        return self._question_type
+
+    @question_type.setter
+    def question_type(self, value) -> None:
+        # 兼容既有**写入点**（`agent/classifier.py` 的 classifier.run、单测显式赋值）：
+        # 显式赋值即缓存该值；置 `None` 表示"重新惰性求值"。
+        self._question_type = value
 
     def verified_ids(self) -> set:
         """已验证过的候选 id 集合（避免重复验证）"""
@@ -679,34 +756,6 @@ class BaseAgent(ABC):
             entry.update(extra)
         ctx.trace.append(entry)
 
-    # ============================================================
-    # 2026-09-14：补齐「工具成功算过」的埋点
-    # ------------------------------------------------------------
-    # `diag.calc_tool_calls` 由 `orchestrator._collect_diag()`（约 :2575）按 trace 的
-    # `step == "calc_tool_call"` 导出，但**全代码库从未 record 过这个 step 名**
-    # （只 record 了 `calc_tool_mode` 与 `solver_calc_rewrite`）⇒ 该字段
-    # **结构性恒空**。后果：会把"工具从来没成功算过"误读成事实 ——
-    # 2026-09-14 就因此误导读过一次归因（与 `calc_prewarm` 白名单缺失同源）。
-    # 与 `audit_calc_fallbacks`（记**失败**）**镜像**：这里记**成功**。
-    # 纯埋点，不参与任何判定逻辑。
-    # ============================================================
-    def record_calc_successes(self, ctx: TaskContext, resolved) -> int:
-        """记录被工具**成功算出**的 `<calc>` 条目，返回成功条数。
-
-        `resolve_all_calcs()` 返回项形如 `(expr, result)`；`result` 以
-        `WARN:` / `ERROR:` 开头即失败（那部分由 `audit_calc_fallbacks` 记录，
-        走 `calc_fallback`）。此处只收成功项。
-        """
-        n = 0
-        for _ex, _rs in (resolved or []):
-            if str(_rs).startswith(("WARN:", "ERROR:")):
-                continue
-            self.record(ctx, "calc_tool_call",
-                        f"<calc>{_ex}</calc> → {_rs}",
-                        expr=str(_ex)[:90], result=str(_rs)[:120])
-            n += 1
-        return n
-
     def llm(self, ctx: TaskContext, messages: list, temperature: float,
             max_tokens: int) -> Optional[str]:
         """
@@ -732,11 +781,10 @@ class BaseAgent(ABC):
             ctx.trace.append({"agent": self.name, "step": "budget_skip",
                               "content": f"剩余时间不足 {remaining:.0f}s，跳过 LLM 调用"})
             return None
-        # 剩余 < 30s：减半 max_tokens，避免单次调用跨过 deadline
-        if remaining < 30 and max_tokens and max_tokens > 1024:
-            logger.warning("[%s] 剩余时间紧张 (%.0fs)，max_tokens %d → %d",
-                           self.name, remaining, max_tokens, max_tokens // 2)
-            max_tokens = max(1024, max_tokens // 2)
+        # 2026-10-01：比赛期「剩余 <30s ⇒ max_tokens 减半」已删除（审计 A 级第 5 条）。
+        # 该分支与下方 2026-09-03「比赛无限 token，**不裁剪 max_tokens**——截断 = 白白
+        # 丢分」的既定口径**直接矛盾**，且仅写 warning、不写 trace ⇒ 静默腰斩输出。
+        # 研究期求正确率上限：不再按剩余时间压缩输出预算。
 
         # 2026-09-03 老师：比赛无限 token，**不裁剪 max_tokens**——截断 = 白白丢分
         # （v10 实测大量 finish_reason=length，答案被腰斩）。cap 配置保留但默认 0=不限；
@@ -798,36 +846,10 @@ class BaseAgent(ABC):
 
 
     # ============================================================
-    # 2026-09-09 用户洞察落地：原生工具调用循环（与"智能体调 WebSearch"同逻辑：
-    # 检测到需求 → 生成 tool_call → 执行 → 结果回传 → 继续）。
-    # calc_eval 工具：模型在需要计算时**自己决定**调用，无需文本标签遵从。
-    # ============================================================
-    CALC_TOOL_SCHEMA = {
-        "type": "function",
-        "function": {
-            "name": "calc_eval",
-            "description": (
-                "精确数学计算器：给定一个数学表达式（如 '25*4+1'、'comb(50,3)'、"
-                "'1/2+1/3'、'sqrt(45)'、'sum(k,1,10)'），返回精确/符号/近似结果。"
-                "只传**要算的单个表达式**，不要传等号两侧的等式或 Python 代码。"),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expr": {
-                        "type": "string",
-                        "description": "要计算的数学表达式（单表达式，不含等号）",
-                    }
-                },
-                "required": ["expr"],
-            },
-        },
-    }
-
-    # ★ 2026-09-16 新增：联网搜索工具（与 calc_eval 同一套原生 tool_calls 协议）。
+    # ★ 2026-09-16 新增：联网搜索工具（原生 tool_calls 协议）。
     #   此前 `tools/web_search.py` 已实现但**全仓无调用者** ⇒ `tool_calls.web_search`
     #   恒为"未调用"、能力形同虚设（代码审计发现）。这里把它接进工具循环。
-    #   由 `config.enable_web_search`（默认 False）控制是否注册——默认关，
-    #   避免未经 A/B 就改变主链行为。
+    #   由 `config.enable_web_search`（2026-10-01 起默认 True）控制是否注册。
     WEB_SEARCH_TOOL_SCHEMA = {
         "type": "function",
         "function": {
@@ -874,49 +896,23 @@ class BaseAgent(ABC):
         except Exception as exc:  # noqa: BLE001
             return "ERROR: %s: %s" % (type(exc).__name__, str(exc)[:120])
 
-    @staticmethod
-    def _calc_tool_exec(expr: str) -> str:
-        """执行 calc_eval：本地 calc_tool.safe_eval（失败可见，原样回传）。"""
-        try:
-            from .calc_tool import safe_eval
-        except Exception:  # noqa: BLE001  提交包路径兜底
-            try:
-                from calc_tool import safe_eval
-            except Exception:  # noqa: BLE001
-                return "ERROR: 计算工具不可用"
-        try:
-            return safe_eval(expr)[:500] if expr else "ERROR: 空表达式"
-        except Exception as exc:  # noqa: BLE001
-            return f"ERROR: {type(exc).__name__}: {exc}"
-
-    def llm_with_calc(self, ctx, messages: list, temperature: float = 0.0,
+    def llm_with_tools(self, ctx, messages: list, temperature: float = 0.0,
                       max_tokens: int = 32768, max_rounds: int = 3
                       ) -> Optional[str]:
-        """带 calc_eval 原生工具的对话循环（≤max_rounds 轮）。
+        """带原生工具（web_search）的对话循环（≤max_rounds 轮）。
 
-        模型生成 tool_call → 执行 calc_tool → 结果以 tool 消息回传 → 模型继续；
+        模型生成 tool_call → 执行工具 → 结果以 tool 消息回传 → 模型继续；
         无 tool_calls → 返回最终文本。任何异常/平台不支持 tools → 回落 self.llm
         （行为与现状一致，零风险）。tool 执行次数 record 供审计。
         """
         try:
             import json
             msgs = list(messages)
-            # 2026-09-09（接线修复后仍 0 调用）：模型不知道工具存在——
-            # 单轮实验 100% 调用是因为 system 明说了"必须调用 calc_eval"。
-            # 求解 prompt 只提 <calc> 文本协议，未告知有原生函数可用 →
-            # 在 system 层自动注入工具使用说明（不改调用方 user 结构）。
-            _tool_hint = (
-                "\n\n【可用工具】你有函数 calc_eval(expr)：调用外部精确计算器"
-                "（支持 + - * / ^ 组合数 comb 求和 sum 积分 integral 开方 sqrt "
-                "对数 log·ln 指数 exp 等，返回精确/符号/近似结果）。"
-                "**易错运算（开方/根式、对数 log·ln、指数 exp 与自然常数 e、"
-                "组合数/排列/阶乘、幂运算、三角函数、取模、求和/积分、π）必须"
-                "调用它获取结果、基于返回结果继续，禁止心算**；简单加减乘除可自算。"
-                "例如需要 comb(50,3)*2**10 时，调用 calc_eval(expr='comb(50,3)*2**10')。"
-                "若返回 WARN/ERROR 说明表达式有问题，修正后重试调用。"
-            )
-            # ★ 2026-09-16：开启联网搜索时补一段工具说明（同 calc 的做法——
-            #   模型不知道工具存在就不会调用）。
+            # 模型不知道工具存在就不会调用 → 在 system 层自动注入工具使用说明
+            # （不改调用方 user 结构）。
+            _tool_hint = ""
+            # ★ 2026-09-16：联网搜索工具说明
+            #   （模型不知道工具存在就不会调用）。
             try:
                 if getattr(self.config, "enable_web_search", False):
                     _tool_hint += (
@@ -940,13 +936,16 @@ class BaseAgent(ABC):
                 pass
             n_calls = 0
             last_text = None
-            # ★ 2026-09-16：按开关决定注册哪些工具（web_search 默认不注册）
-            _tools = [self.CALC_TOOL_SCHEMA]
+            # ★ 2026-09-16：按开关决定注册哪些工具。
+            _tools = []
             try:
                 if getattr(self.config, "enable_web_search", False):
                     _tools.append(self.WEB_SEARCH_TOOL_SCHEMA)
             except Exception:  # noqa: BLE001
                 pass
+            if not _tools:
+                # 无工具可注册 → 回落普通调用（与 _maybe_tool_llm 同口径）
+                return self.llm(ctx, messages, temperature, max_tokens)
             for _round in range(max_rounds):
                 # 2026-09-12 修复（时间护栏）：工具循环此前**完全绕过** `llm()` 的
                 # 时间守卫与 max_tokens_cap，循环内不查 ctx 剩余时间 ——
@@ -960,8 +959,27 @@ class BaseAgent(ABC):
                         return last_text
                     return None
                 try:
+                    # ★ 2026-10-02 DeepSeek(thinking) 适配：与原生 tools 同发时，
+                    #   历史里**每一条** assistant 消息都必须携带 reasoning_content
+                    #   （空串即可）—— **不是只补末条**！漏一条即被硬拒 400
+                    #   `HTTP 400: reasoning_content must be passed back`。
+                    #   实测（.pytmp_probe_step2/diag_tools4.py，真实 DeepSeek
+                    #   `deepseek-v4-flash`）：R1(种子带 rc)/R2a/R2e(全带 rc) → 200；
+                    #   R2b(工具轮缺 rc)/R2c(种子缺 rc)/R2d(都缺) → 400。
+                    #   ⇒ 首版"只补末条种子"仅够第 1 轮；第 2 轮起历史里的种子
+                    #     （在 msgs 本体里仍无 rc）+ 模型工具轮共同触发 400。
+                    #   修法：**每轮发送前对整段历史补齐**（原值优先，缺失补 ""）；
+                    #   只改发请求用的浅拷贝，不动 msgs 本体（后续 append 逻辑不变）。
+                    #   为何对非 reasoning 模型（Intern）无影响：补的是**空串**、
+                    #   语义即"无思考内容"，对不消费该字段的后端是无害注入
+                    #   （且 Intern token 已 401，此路径当前不启用）。
+                    _send_msgs = [
+                        (dict(m, reasoning_content=m.get("reasoning_content", ""))
+                         if isinstance(m, dict) and m.get("role") == "assistant" else m)
+                        for m in msgs
+                    ]
                     resp = self.client.chat(
-                        messages=msgs,
+                        messages=_send_msgs,
                         temperature=temperature,
                         max_tokens=max_tokens,
                         tools=_tools,
@@ -980,23 +998,20 @@ class BaseAgent(ABC):
                             args = json.loads(fn.get("arguments", "") or "{}")
                         except Exception:  # noqa: BLE001
                             args = {}
-                        # ★ 2026-09-16：按函数名分派（此前写死 calc_eval）
+                        # ★ 2026-09-16：按函数名分派（当前仅 web_search）
                         _fname = str(fn.get("name", "") or "")
-                        if _fname == "web_search":
-                            _q = str(args.get("query", "") or "")
-                            result = self._web_search_tool_exec(_q)
-                            _ev = "<web_search> %s -> %s" % (_q[:60], result[:50])
-                        else:
-                            expr = str(args.get("expr", "") or "")
-                            result = self._calc_tool_exec(expr)
-                            _ev = "<calc_tool> %s -> %s" % (expr, result[:50])
+                        if _fname != "web_search":
+                            continue
+                        _q = str(args.get("query", "") or "")
+                        result = self._web_search_tool_exec(_q)
+                        _ev = "<web_search> %s -> %s" % (_q[:60], result[:50])
                         msgs.append({
                             "role": "tool",
                             "tool_call_id": tc.get("id", ""),
                             "content": result,
                         })
                         try:
-                            self.record(ctx, "calc_tool_call", _ev)
+                            self.record(ctx, "toolcall_exec", _ev)
                         except Exception:  # noqa: BLE001
                             pass
                     continue
@@ -1015,14 +1030,11 @@ class BaseAgent(ABC):
                     if _tc:
                         n_calls += 1
                         _fname, _args = _tc
-                        if _fname == "web_search":
-                            _q = str(_args.get("query", "") or "")
-                            _res = self._web_search_tool_exec(_q)
-                            _ev = "<web_search:text> %s -> %s" % (_q[:60], _res[:50])
-                        else:
-                            _expr = str(_args.get("expr", "") or "")
-                            _res = self._calc_tool_exec(_expr)
-                            _ev = "<calc_tool:text> %s -> %s" % (_expr, _res[:50])
+                        if _fname != "web_search":
+                            continue
+                        _q = str(_args.get("query", "") or "")
+                        _res = self._web_search_tool_exec(_q)
+                        _ev = "<web_search:text> %s -> %s" % (_q[:60], _res[:50])
                         _prev = (resp if isinstance(resp, str)
                                  else str(resp.get("content", "") or "")
                                  if isinstance(resp, dict)
@@ -1074,28 +1086,20 @@ class BaseAgent(ABC):
 
     def _maybe_tool_llm(self, ctx, messages: list, temperature: float,
                         max_tokens: int) -> Optional[str]:
-        """开关分派：满足**任一**条件即走工具循环，否则走原 llm（现状）。
+        """开关分派：`enable_web_search` 打开时走工具循环，否则走原 llm。
 
-        ★★ 2026-09-16 审计发现的**关键断链**：本方法原先只看 `tool_calc_enabled`，
-        而该键默认 **False**（`user_agent.py` 注释自述"实测 <calc> 回填 = 0、已关"）
-        ⇒ **`llm_with_calc` 从未被调用过**，工具循环是死的。
-        后果：新接线的 `enable_web_search=True` **完全无效**（工具根本不会提供给模型），
-        因为它的注册点在 `llm_with_calc` 内部。
-
-        ⇒ 改为：`tool_calc_enabled`（calc_eval）**或** `enable_web_search`（联网搜索）
-        任一为真即进入工具循环。两者都关时行为与原先**逐字一致**（零风险）。
+        ★★ 2026-09-16 审计发现过的**关键断链**：工具循环的开关判据曾与注册点不
+        一致，导致 `enable_web_search=True` 完全无效。后改为按注册点判据统一。
+        2026-10-01：`<calc>` 计算工具板块已整体删除，工具循环只剩联网搜索一个工具。
         """
-        _calc = bool(getattr(self.config, "tool_calc_enabled", False))
-        _web = bool(getattr(self.config, "enable_web_search", False))
-        if _calc or _web:
+        if bool(getattr(self.config, "enable_web_search", False)):
             try:
                 if ctx is not None:
-                    self.record(ctx, "calc_tool_mode",
-                                "工具循环开启（%s；calc=%s web=%s）"
-                                % (self.name, _calc, _web))
+                    self.record(ctx, "toolcall_mode",
+                                "工具循环开启（%s；web_search）" % self.name)
             except Exception:  # noqa: BLE001
                 pass
-            return self.llm_with_calc(ctx, messages, temperature, max_tokens)
+            return self.llm_with_tools(ctx, messages, temperature, max_tokens)
         return self.llm(ctx, messages, temperature, max_tokens)
 
 # ============================================================
@@ -1241,16 +1245,6 @@ _ENGLISH_THINK_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(User:|Assistant:|System:)\s", re.IGNORECASE), "角色标记泄露"),
 ]
 
-
-def detect_thinking_contamination(text: str) -> list[str]:
-    """检测英文思考链是否污染了中文输出。返回命中的标签列表。"""
-    if not text:
-        return []
-    found: list[str] = []
-    for pattern, label in _ENGLISH_THINK_PATTERNS:
-        if pattern.search(text):
-            found.append(label)
-    return found
 
 
 # ============================================================
