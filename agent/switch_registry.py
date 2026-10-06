@@ -189,6 +189,16 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # ---- user_agent.py / agent/orchestrator.py（题型惰性分类）----
     "enable_question_type": (
         "ENABLE_QUESTION_TYPE", "bool", True, "题型惰性分类总开关"),
+    # ---- agent/orchestrator.py（零多样性补采，2026-10-06 新增）----
+    "diversity_resample_enabled": (
+        "DIVERSITY_RESAMPLE", "bool", True,
+        "候选**零多样性**（全题只有 1 种答案）时是否触发**高温度补充采样**。"
+        "实测题 000：5 个候选答案全同 ⇒ 置信度被刷到 1.00 ⇒ 直接放行（答案错）。"
+        "「答案一致」在采样无多样性时是**采样失败信号**而非可靠性证据 ⇒ 应去创造分歧。"
+        "置 False 回退旧行为（直接按高置信放行）做 A/B"),
+    "diversity_resample_count": (
+        "DIVERSITY_RESAMPLE_COUNT", "int", 3,
+        "零多样性时补充采样的候选数（默认 3），用高温度 0.8/0.9/1.0 求差异"),
     # ---- agent/orchestrator.py（门全拒的处置策略，2026-10-06 新增）----
     "strict_all_rejected": (
         "STRICT_ALL_REJECTED", "bool", False,

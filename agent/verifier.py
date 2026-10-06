@@ -47,19 +47,45 @@ logger = logging.getLogger("MathPilot.Verifier")
 
 class AnswerCluster:
     """答案等价簇，用于跨候选多数投票。"""
-    __slots__ = ("answer_norm", "candidate_ids", "vote_correct", "vote_total")
+    __slots__ = ("answer_norm", "candidate_ids", "vote_correct", "vote_total",
+                 "n_distinct")
 
     def __init__(self, answer_norm: str):
         self.answer_norm = answer_norm
         self.candidate_ids: list[int] = []
         self.vote_correct: int = 0
         self.vote_total: int = 0
+        # ★★ 2026-10-06 新增：**本题共有几种不同的答案**（证据独立性）。
+        #   由投票方在统计时填；0 表示未知（保持旧行为）。
+        self.n_distinct: int = 0
 
     @property
     def confidence(self) -> float:
+        """置信度 = **独立证据支持度**（不是"票数一致率"）。
+
+        ★★ 2026-10-06 修（**实测驱动：置信度被"同源复制"刷满**）：
+        实测三题的最终置信度与候选分布：
+            题 000：`\\boxed{0}` × **5（全部相同）** ⇒ 置信度 **1.00** ⇒ 直接放行（答案错）
+            题 001：`-2(m-1)`×4 + 变体          ⇒ 置信度 0.00
+            题 002：`(√5−1)/2`×4 + 变体        ⇒ 置信度 0.00
+        ⇒ **候选越一致置信度越高** —— 但这在"采样没有多样性"时是**假证据**：
+        5 个候选给出同一个答案，**不是 5 份独立同意，而是 1 份答案被复制了 5 遍**。
+        ⇒ 原实现 `vote_correct / vote_total` 无法区分「独立同意」与「同源复制」。
+
+        修法：引入**证据独立性折扣** —— 全题只有 1 种答案、**且有 ≥2 个候选**
+        给出同一答案时（即"同源复制"），置信度**封顶 0.5**（低于 `accept_confidence`
+        默认 0.6 ⇒ 不再直接放行，改由"零多样性补充采样"处置）。
+        ⚠ **单候选时不折扣**：只有一个候选本来就没有多样性可言，此时票数反映的是
+          "验证器自身对该候选的判断"，折扣它只会丢失信息
+          （回归测试 `test_abstain_excluded_from_denominator` 锁定此语义）。
+        `n_distinct <= 0` 表示未统计，**保持旧行为**（保守）。
+        """
         if self.vote_total == 0:
             return 0.0
-        return self.vote_correct / self.vote_total
+        base = self.vote_correct / self.vote_total
+        if 0 < self.n_distinct <= 1 and len(self.candidate_ids) >= 2:
+            return min(base, 0.5)
+        return base
 
     @property
     def size(self) -> int:
@@ -438,9 +464,14 @@ class VerifierAgent(BaseAgent):
         groups = self._equiv_group(candidates, answers)
 
         clusters: list[AnswerCluster] = []
+        # ★★ 2026-10-06 新增：统计**本题共有几种不同答案**（证据独立性），
+        #   供 `AnswerCluster.confidence` 做折扣 —— 全题只有 1 种答案时，
+        #   票数再多也只是"1 份证据被复制"，不能算高置信（详见 confidence 注释）。
+        _n_distinct = len(groups)
         for g in groups:
             rep_idx = g[0]
             cluster = AnswerCluster(answers[rep_idx])
+            cluster.n_distinct = _n_distinct
             for idx in g:
                 cid = candidates[idx].get("id", idx) if isinstance(candidates[idx], dict) else idx
                 cluster.candidate_ids.append(cid)

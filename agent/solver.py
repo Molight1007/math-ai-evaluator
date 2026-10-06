@@ -260,9 +260,18 @@ class SolverAgent(BaseAgent):
             self._generate_initial(ctx, count=remaining)
         return ctx
 
-    def add_candidates(self, ctx: TaskContext, count: int = None) -> TaskContext:
-        """中置信度分支：补充生成普通候选（默认与初始采样数一致）"""
-        self._generate_initial(ctx, count or self.config.policy_sample_times)
+    def add_candidates(self, ctx: TaskContext, count: int = None,
+                       temperatures: list = None) -> TaskContext:
+        """补充生成普通候选。
+
+        ★★ 2026-10-06 扩参（**把"建好没接线"的能力接上**）：
+        本方法的 docstring 一直写着「中置信度分支调用 `add_candidates` 补充采样」，
+        但**全仓没有任何调用点** —— 又一例"建好没接线"。
+        新增 `temperatures` 参数：用于**零多样性**场景下**高温度补采**求差异
+        （否则补采只会再得到同一个答案，等于白跑）。
+        """
+        self._generate_initial(ctx, count or self.config.policy_sample_times,
+                               temperatures=temperatures)
         return ctx
 
     @staticmethod

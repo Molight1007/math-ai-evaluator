@@ -2269,6 +2269,38 @@ class Orchestrator(BaseAgent):
             #   而 5.5 是**验证之后的修正**，正是那 480s `verify_reserve` 要保护的时段。
             #   用生成时钟闸修正环节，等于把预留的验证时间作废。
             # 改判 `is_time_critical()`（真实剩余时间），与 4.5/4.6 之外的验证侧一致。
+            # ★★ 2026-10-06 新增（**"零多样性"分支** —— 把假高置信度变成可处置的信号）：
+            #   与下面的 `confidence < 0.5` 是**两种不同的病理**，必须分开处置：
+            #     · 置信度低（有分歧、无共识）⇒ 重写求共识（现有逻辑，合理）
+            #     · **零多样性（全题只有 1 种答案）⇒ 没有分歧可裁决**，
+            #       重写也无从对比 ⇒ 应当**去补充采样，创造分歧**
+            #   实测依据（题 000）：5 个候选答案**完全相同**（`\boxed{0}` ×5）⇒
+            #   一致率 15/15 ⇒ 置信度被刷到 **1.00** ⇒ 直接放行，而正确答案从未出现。
+            #   ★ "答案一致"在采样无多样性时**是采样失败的信号，不是答案可靠的证据** ——
+            #     它说明系统**从未探索到其他可能**。
+            #   ⇒ 接到 `solver.add_candidates()`（**此前全仓零调用**）做**高温度补采**，
+            #     让投票真正有可裁决的对象。这才是把该机制从"给个数字"变成"能用的工具"。
+            _n_distinct = int(getattr(_bc, "n_distinct", 0) or 0)
+            if (_bc is not None and 0 < _n_distinct <= 1
+                    and not ctx.state.emergency
+                    and not ctx.is_time_critical()
+                    and bool(getattr(self.config,
+                                     "diversity_resample_enabled", True))):
+                _need = max(2, int(getattr(self.config,
+                                           "diversity_resample_count", 3) or 3))
+                self.record(
+                    ctx, "control",
+                    f"候选**零多样性**（全题仅 {_n_distinct} 种答案）→ "
+                    f"触发补充采样 {_need} 个（高温度 0.8/0.9/1.0）以创造分歧")
+                try:
+                    self.solver.add_candidates(
+                        ctx, count=_need, temperatures=[0.8, 0.9, 1.0])
+                    self.record(ctx, "diversity_resample",
+                                f"补充采样完成：候选池 {len(ctx.candidates)} 个")
+                except Exception as _e_dr:  # noqa: BLE001  补采失败不阻断主流程
+                    self.record(ctx, "diversity_resample",
+                                f"补充采样失败（{type(_e_dr).__name__}）→ 继续原流程")
+
             if (_bc is not None
                     and getattr(_bc, 'confidence', 1.0) < 0.5
                     and not ctx.state.emergency

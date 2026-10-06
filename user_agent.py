@@ -298,6 +298,11 @@ class AgentConfig:
     #   默认 False = 只显式留痕（不静默保留，但也不清空）；
     #   置 True = 清空候选池，触发下游兜底/重生成链。
     strict_all_rejected: bool = False
+    # ★ 2026-10-06 新增：候选**零多样性**（全题仅 1 种答案）时是否触发高温度补充采样。
+    #   实测题 000 的 5 个候选答案全同 ⇒ 置信度被刷到 1.00 ⇒ 直接放行（答案是错的）。
+    #   「答案一致」在采样无多样性时是**采样失败信号**，不是可靠性证据。
+    diversity_resample_enabled: bool = True
+    diversity_resample_count: int = 3
     max_revise_rounds: int = 5
     max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
                                         # 覆盖 5 题 batch + 限流重试 + deep 档完整流程
@@ -938,6 +943,7 @@ class ReasoningAgent:
             "max_revise_rounds", "max_workers",
             "require_answer_in_pool",
             "strict_all_rejected",
+            "diversity_resample_enabled", "diversity_resample_count",
             "use_proof_channel", "use_lemma_accumulation",
             "lemma_domains",
             "max_answer_tokens", "revise_sample_times", "revise_min_candidates",
