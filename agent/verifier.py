@@ -440,7 +440,8 @@ class VerifierAgent(BaseAgent):
     #      ⇒ **三道闸门对错答零否决**。
     # 本方法只对**最终选定的答案**做一次**不 prefill**的复核（让模型跑完推理），
     # 成本 1 次调用/题（约占单题 1100s 预算的 6%），是目前最省的"真验证"。
-    # ⚠ 默认关（`verifier_deep_final_enabled=False`）⇒ 未 A/B 前行为完全不变。
+    # ⚠ 默认**开**（`user_agent.py:148` 实测 `verifier_deep_final_enabled: bool = True`）。
+    #   原注释写「默认关（False）」与代码相反，2026-10-04 修正注释（不改行为）。
     # ==================================================================
     def _deep_final_review(self, ctx, problem: str, best_cluster) -> str:
         """对最终选定答案做一次带推理的复核；返回原始文本（未启用/失败返回空串）。"""
@@ -514,6 +515,13 @@ class VerifierAgent(BaseAgent):
         #     ② 首段没给出可解析判定时，追加一次**廉价收敛调用**：把推理尾部喂回，
         #        要求只输出一行 `VERDICT: A/B（标签）`。成本极小（max_tokens=64），
         #        但把"4 万字符作废"变成"拿到判定"。
+        # ★ 2026-10-04 修复（判定被丢弃，机制空转）：
+        #   收敛段一旦补出判定，必须把**含 `VERDICT:` 的那段原文**带回给调用方。
+        #   否则调用方对**第一段 raw** 重新解析（`_last_verdict_ab(raw)`）恒为 None
+        #   （首段恰恰是「没有 VERDICT」才会走到收敛调用），于是
+        #   「判 B ⇒ 压制置信度 ⇒ 触发 revise」整条机制**静默失效**，
+        #   而每次仍白付 1 段 16384 自由推理 + 0~1 段 8192 收敛调用的成本。
+        _conv_text = ""
         if verdict is None and (raw or "").strip():
             try:
                 # ★ 2026-09-17 改进：收敛调用改用 **prefill** 强制以 `VERDICT: ` 开头。
@@ -543,6 +551,8 @@ class VerifierAgent(BaseAgent):
                 _v2 = _last_verdict_ab(_conv or "")
                 if _v2 is not None:
                     verdict = _v2
+                    # 收敛段命中判定 → 记下含 VERDICT 的原文，函数末尾回传（见下方 return）。
+                    _conv_text = _conv or ""
                     self.record(ctx, "deep_review",
                                 "收敛调用补出判定: %s（首段 %d 字符未给 VERDICT）"
                                 % ("A" if _v2 else "B", len(raw)),
@@ -566,6 +576,24 @@ class VerifierAgent(BaseAgent):
             verdict=("A" if verdict is True else "B" if verdict is False else "?"),
             error_type=(_extract_error_type(raw) if verdict is False else ""),
             chars=len(raw))
+        # ★ 2026-10-04：收敛段命中判定时，回传**含 VERDICT 的原文**（供调用方
+        #   `_last_verdict_ab` 正确解析，从而真正触发「判 B ⇒ revise」）；
+        #   否则维持原行为返回首段 raw（无 VERDICT 时调用方解析为 None，语义不变）。
+        # ★★ 2026-10-05 修（**推理被整段丢弃** —— 三步论第 2 步"反馈要准确"）：
+        #   原写法 `return _conv_text if _conv_text else raw` 在收敛段命中时
+        #   **只回一行 VERDICT**，把首段那 **5.5万–7.1万字符的完整推理整个丢掉**
+        #   ⇒ 实测 feedback 最终只剩 **44 字符**，模型拿不到"为什么判错"。
+        #   现改为 **「首段推理（尾部）+ 收敛判定」** 一起回传：
+        #     · `_last_verdict_ab` 取**最后一个** VERDICT ⇒ 仍解析到收敛段的判定 ✓
+        #     · 反馈里保留推理 ⇒ 模型能看到判错依据、才知道该怎么改 ✓
+        #   ⚠ 顺序不可反：判定必须在**最后**，否则会被推理中的假设性 VERDICT 覆盖。
+        if _conv_text:
+            _tail = (raw or "").strip()
+            if len(_tail) > 6000:
+                # 首段过长时保留**尾部**（最贴近结论的部分）——
+                # 否则被下游截断后只剩与结论无关的开头，等于没留。
+                _tail = "…（推理前段省略）…\n" + _tail[-6000:]
+            return (_tail + "\n\n" + _conv_text) if _tail else _conv_text
         return raw
 
     def _deep_llm(self, ctx, messages: list, temperature: float,
@@ -697,7 +725,7 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _vote_one(self, ctx, problem: str, candidate_text: str,
-                  temperature: float = 0.0) -> str:
+                  temperature: float = 0.0, full_reasoning: bool = False) -> str:
         """单次投票（返回原始文本）。
 
         v2.4.1：prefill「VERDICT: 」抑制 CoT——投票输出只需 A/B，
@@ -707,6 +735,13 @@ class VerifierAgent(BaseAgent):
         `config.verifier_temperature` 是**死配置**（声明了/进白名单/有 CLI，
         但全仓无人读），且多张票在温度 0 下几乎完全相同 ⇒ **投票没有方差**，
         "多票" 只是同一判断重复 N 次（实测：6 候选 × 3 票对错答**全票投 A**）。
+
+        ★ 2026-10-04（**B 折中**，用户决策「正确率第一位」）：新增 `full_reasoning`。
+        为 True 时**不 prefill**，让验证器跑完完整推理再给判定 —— 依据是本文件自己的
+        实测记录：「prefill 0.8s 不足以完成系统提示词要求的"**独立重算 + 逐条攻击**"
+        ⇒ 投票退化成**"看一眼就点头"**」（10 题中 5 道错题的全部候选被全票判 A）。
+        由 `_vote_profile` 在**候选分歧**时置位（折中：把昂贵算力花在真拿不准的题上）；
+        开关 `verifier_vote_reasoning` 可切 `off`(C) / `disagree`(B) / `always`(A)。
         """
         messages = [
             {"role": "system", "content": VERIFIER_SYSTEM},
@@ -716,6 +751,12 @@ class VerifierAgent(BaseAgent):
                 theorem_context=(getattr(ctx, "_leansearch_ctx", "") or "(无)"),
             )},
         ]
+        if full_reasoning:
+            # 不 prefill ⇒ 原样返回完整原文（推理 + 判定行）。
+            # ⚠ **不能**过 `stitch`：那会把 "VERDICT: " 种子里**拼到推理前面**，
+            #   凭空造出一个空前缀行（虽然 `_last_verdict_ab` 取最后一个匹配仍正确，
+            #   但文本被污染、且会给后续解析添乱）。直接返回最干净。
+            return self.llm(ctx, messages, temperature, 32768) or ""
         raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "),
                        temperature, 32768)
         return stitch("VERDICT: ", raw) if raw else raw
@@ -921,6 +962,23 @@ class VerifierAgent(BaseAgent):
     # 对策：**候选答案之间存在分歧时**（题目本身有争议/易错），自动提高票数
     # 并启用非零温度，让投票产生真实方差；分歧为 0 时保持原样（加票无意义且费时）。
     # ==================================================================
+    @staticmethod
+    def _vote_reasoning_mode() -> str:
+        """投票是否放开**完整推理**（不 prefill）。三档：``off`` | ``disagree`` | ``always``。
+
+        ★ 2026-10-04（**B 折中**，用户决策「正确率第一位」）：
+        · ``off``      = 旧行为（全部 prefill，0.8s/票；本文件自陈"看一眼就点头"）
+        · ``disagree`` = **B 折中（当前默认）**：只在**候选分歧**时放开完整推理
+                         ⇒ 把昂贵算力花在真拿不准的题上
+        · ``always``   = **A**：每票都跑完整推理（最准；约 70s/票 ⇒ 18 票 ≈ 21 分钟/题）
+        用户口径：先试 B；效果不理想即切 A。
+        """
+        try:
+            from .switch_registry import get_str as _sws
+            return str(_sws("verifier_vote_reasoning") or "disagree").strip().lower()
+        except Exception:  # noqa: BLE001
+            return "disagree"
+
     def _vote_profile(self, ctx, candidates, base_votes=None) -> tuple:
         """返回本次投票的 ``(票数, 温度)``。
 
@@ -934,8 +992,9 @@ class VerifierAgent(BaseAgent):
             base_votes if base_votes is not None
             else (getattr(self.config, "verifier_voting_times", 1) or 1))
         base_temp = float(getattr(self.config, "verifier_temperature", 0.0) or 0.0)
+        _rmode = self._vote_reasoning_mode()
         if not getattr(self.config, "verifier_diversify_enabled", True):
-            return base_votes, base_temp
+            return base_votes, base_temp, (_rmode == "always")
         try:
             answers = set()
             # ★ 2026-09-16 审计修复：必须**剥壳后再比较**，否则 `\boxed{2026}` 与
@@ -958,10 +1017,10 @@ class VerifierAgent(BaseAgent):
                         pass
                 answers.add(a)
         except Exception:  # noqa: BLE001
-            return base_votes, base_temp
+            return base_votes, base_temp, (_rmode == "always")
         if len(answers) < 2:
             # 候选答案一致 ⇒ 加票/加温都无意义（只会重复同一判断）
-            return base_votes, base_temp
+            return base_votes, base_temp, (_rmode == "always")
         n = max(base_votes, int(
             getattr(self.config, "verifier_disagreement_votes", 3) or 1))
         t = float(getattr(
@@ -970,12 +1029,12 @@ class VerifierAgent(BaseAgent):
                     "候选答案存在 %d 种分歧 → 票数 %d、温度 %.2f"
                     "（温度 0 下多票无方差，等于重复同一判断）"
                     % (len(answers), n, t))
-        return n, t
+        return n, t, (_rmode != "off")
 
     def _vote(
         self, ctx, problem: str, candidate, total_votes: int = 5,
         proportional: bool = True, use_scoring: bool = False,
-        temperature: float = 0.0,
+        temperature: float = 0.0, full_reasoning: bool = False,
     ) -> list[Verdict]:
         """
         批量投票并汇总（BUG-8 修复：用 valid_votes 替代 total_votes）。
@@ -1000,7 +1059,7 @@ class VerifierAgent(BaseAgent):
             max_workers=min(total_votes, self.config.max_workers)
         ) as executor:
             futures = [executor.submit(self._vote_one, ctx, problem, text,
-                                       temperature)
+                                       temperature, full_reasoning)
                        for _ in range(total_votes)]
             for f in concurrent.futures.as_completed(futures):
                 try:
@@ -1098,13 +1157,24 @@ class VerifierAgent(BaseAgent):
     # ------------------------------------------------------------------
     # 结构化 Bug Report（依据 IMO 2025 验证-精炼流水线论文）
     # ------------------------------------------------------------------
-    def _extract_bug_report(self, ctx, problem: str, candidate) -> dict:
+    def _extract_bug_report(self, ctx, problem: str, candidate,
+                            tool_findings: str = "") -> dict:
         """让验证器产出结构化 bug report（分类 + 精确定位），而非一句话错因。
 
         论文依据：Huang & Yang (2025) 用「验证 + 精炼」流水线把 IMO 2025
         从 best-of-32 的 21.4%~38.1% 提到 85.7%。关键不在于多采样，而在于
         验证器给出**可执行的错因**（哪一步、什么类型、为什么），
         修正步骤才能有的放矢。
+
+        ★★ 2026-10-06 新增 `tool_findings`（**补上「工具判定 → 答案定位」这一环**）：
+        工具的 finding 里 `location` 装的是**检查项名**（`answer_verify`/`lean_verify`），
+        而 `agent/base.py:365` 对 `location` 的定义是「出错位置（步骤编号/行号/引用）」
+        ⇒ **契约被违背**：模型收到 `location="answer_verify"` 等于没收到位置。
+        工具看的是**形式化代码**，天然说不出"答案第 3 步错了"；但它最可靠的是
+        「**这个等式/这条命题不成立**」（客观、可复现）。
+        ⇒ 把工具判定作为**额外输入**喂进来，让检错器**只负责定位**
+          （在答案里逐字引用写下该等式的原文），从而得到
+          「**工具级的可靠性 + 答案级的定位**」。
 
         返回 dict：{verdict, findings:[{location, type, explanation}]}
         解析失败时返回 {"verdict": "unknown", "findings": []}。
@@ -1116,6 +1186,20 @@ class VerifierAgent(BaseAgent):
                 problem=problem, candidate_answer=text
             )},
         ]
+        if tool_findings and str(tool_findings).strip():
+            # ★ 工具判定是**客观、可复现**的 ⇒ 不要求检错器复核它，只要求**定位**。
+            #   ⚠ 明确约束"不要推翻"，否则模型可能去质疑工具结论、带回噪声。
+            messages.append({"role": "user", "content": (
+                "【工具已客观判定的错误（**不可质疑**，你只需定位）】\n"
+                + str(tool_findings).strip()[:2000]
+                + "\n\n请**只针对上面这些已被工具确认的错误**做定位：\n"
+                  "  1. 在【待审查的解答】里**逐字引用**写下这些等式/命题的原文"
+                  "（这是本步唯一的产出重点）；\n"
+                  "  2. 说明它出现在第几步、为什么会写成这样；\n"
+                  "  3. 给出可执行的修法。\n"
+                  "工具看的是形式化代码、说不出答案文本里的位置 —— **这一步正是要你来补**。\n"
+                  "若在解答里找不到对应原文（可能是形式化翻译偏差），"
+                  "请如实写明，不要编造引用。")})
         empty = {"verdict": "unknown", "findings": []}
         try:
             # prefill 锚定到 JSON 开头：Intern 无短种子会先吐思维块吃满预算
@@ -1213,7 +1297,55 @@ class VerifierAgent(BaseAgent):
             for i, f in enumerate(gaps, 1):
                 lines.append(f"{i}. 位置：“{f['location']}”")
                 lines.append(f"   问题：{f['explanation']}")
+        # ★★ 2026-10-05 新增（**"以模型能理解的方式反馈 + 让它修正"**）：
+        #   ① **不生成 fix_hint**，而是把"怎么改"的责任交给解题方 —— 因为
+        #      验证器的系统提示词明确写着「**绝不要试图纠正你发现的错误或填补漏洞**」
+        #      （`prompts/verifier.py:224`），一旦让它给修法，它就会开始替解答辩护、
+        #      漏掉真错。imo2025 §2.3 的做法正是「**让被批评方把表述改清楚**」。
+        #   ② 加「逐条回应」纪律：把"报告"变成"必须逐条答复的清单"，
+        #      避免模型忽略部分条目、或只做泛泛重写。
+        #   ③ 加「**不要重写未被指出的步骤**」：防止被打回后整篇重写、
+        #      把本来正确的部分也改掉（这是"越改越错"的来源之一）。
+        lines.append("")
+        lines.append("【修正纪律（必须逐条遵守）】")
+        lines.append("1. 对上面**每一条**都要给出【同意 / 不同意】+ 理由，不许跳过；")
+        lines.append("2. **同意**的必须改，并写出**改正后的那一步（或那段论证）**；")
+        lines.append("   不同意的必须给出反驳依据（引用题目条件或已证结论）；")
+        lines.append("3. ★ **不要重写未被指出的步骤** —— 上面没有点名的地方保持原样，")
+        lines.append("   **正确的部分必须保留**（整篇重写会把对的也一起改掉）。")
         return "\n".join(lines)
+
+    def structured_report_for(self, ctx, problem: str, candidate,
+                              tool_findings: str = "") -> str:
+        """公开入口：为**指定候选**取一份结构化 bug report（位置+类型+问题）。
+
+        ★★ 2026-10-06 新增（"让结构化定位成为 revise 的**主导**反馈"）：
+        实测题 000 在 `revise_round=5` 的情况下，反馈里结构化「位置：」出现 **0 次** ——
+        因为 `_extract_revise_feedback` 的第一道门槛是
+        `if best_cluster.confidence >= 0.5: return ""`，而该题恰好是
+        **"投票高置信、但答案错误"** ⇒ **结构化报告从未生成**，
+        模型只能靠 Lean「疑似自证」与对抗那几条噪声重写（12/15 被噪声占据）。
+
+        本方法**不受 confidence 门槛约束**，供"**已经确定要重写**"的路径显式调用，
+        确保模型手上一定有一份"错在第几步、哪句话、为什么"的定位。
+        失败/未启用时返回空串，调用方按原逻辑继续（纯增量，不改变既有行为）。
+        """
+        try:
+            if not getattr(self.config, "use_bug_report_feedback", True):
+                return ""
+            if candidate is None:
+                return ""
+            rep = self._extract_bug_report(ctx, problem, candidate,
+                                           tool_findings=tool_findings)
+            out = self._format_bug_report(rep)
+            if out:
+                self.record(ctx, "bug_report",
+                            "为重写路径补取结构化 bug report（%d 字符；工具判定输入 %d 字符）"
+                            % (len(out), len(str(tool_findings or ""))))
+            return out
+        except Exception as e:  # noqa: BLE001
+            logger.warning("structured_report_for 失败（返回空）: %s", str(e)[:120])
+            return ""
 
     def _extract_revise_feedback(self, ctx, problem: str,
                                  candidates: list, best_cluster) -> str:
@@ -1448,8 +1580,8 @@ class VerifierAgent(BaseAgent):
         all_verdicts: list[list[Verdict]] = []
         # ★ 2026-09-16：按候选分歧自适应票数与温度（见 _vote_profile）。
         #   **必须把档位票数传进去**——否则 deep 档的 3 票会被压回 1 票（自审发现的回归）。
-        _d_votes, _d_temp = self._vote_profile(ctx, candidates,
-                                               base_votes=voting_times)
+        _d_votes, _d_temp, _d_reason = self._vote_profile(
+            ctx, candidates, base_votes=voting_times)
         voting_times = _d_votes
         for i, cand in enumerate(candidates):
             if use_rubric:
@@ -1459,7 +1591,8 @@ class VerifierAgent(BaseAgent):
                                         temperature=_d_temp)
             else:
                 vds = self._vote(ctx, problem, cand, total_votes=voting_times,
-                                 use_scoring=use_scoring, temperature=_d_temp)
+                                 use_scoring=use_scoring, temperature=_d_temp,
+                                 full_reasoning=_d_reason)
             # 反例挑战（P2，sq 语义）：仅"该候选无任何正确票"且非数值答案时触发，
             # LLM 生成命题 → 程序数值验证 → hard_fail 硬否决（客观证伪）。
             # 2026-09-11：若该候选**全是弃权票**（判分链路故障、无任何判定信息），
@@ -1546,25 +1679,69 @@ class VerifierAgent(BaseAgent):
         if _deep_raw and _last_verdict_ab(_deep_raw) is False:
             best_cluster.vote_correct = 0
             best_cluster.vote_total = max(1, best_cluster.vote_total)
+            # ★★ 2026-10-05 **回退我自己引入的崩溃**：
+            #   我一度在此加过 `best_cluster.confidence = 0.0`，依据是误读了
+            #   `agent/base.py:317`（那是**另一个类**的字段）。`AnswerCluster`
+            #   （`agent/verifier.py:48`，`__slots__` + `@property`）的 `confidence`
+            #   是**只读属性**，计算自 `vote_correct / vote_total`
+            #   ⇒ 赋值抛 `AttributeError: property 'confidence' has no setter`
+            #   ⇒ `Orchestrator run failed`，**整轮评测在 3 小时后崩掉、0 条结果**
+            #   （2026-10-05 19:23 实测）。
+            #   ⇒ **完全不需要这行**：`vote_correct` 清零后 confidence 自动变 0.0。
             _deep_reject = True
 
         # Reflexion 修复：恢复失败反馈提取。仅在 best_cluster 低置信度/全错时
         # 提取（受预算约束），让 revise 回环拿到真实错误定位，而非空串导致的
         # "请重新审题"泛泛提示。
-        if _deep_reject:
-            feedback = ("【带推理复核判错｜错误类型：%s】%s" % (
-                _extract_error_type(_deep_raw) or "未标注",
-                _deep_raw.strip()))[:1500]
-        else:
-            feedback = self._extract_revise_feedback(
-                ctx, problem, candidates, best_cluster)
-
-        # ★ 2026-09-15：跨候选汇总错误类型分布（含 deterministic/playoff 后的终态）。
-        # 与 `_vote` 内的同名埋点互补：那里是**单次投票**口径，这里是**整题**口径，
-        # 供 diag 统计"这题被判 B 的票里，方法不适用/计算错各占多少"。
+        # ★★ 2026-10-05 修（**结构化错因已解析、却没接进反馈** —— 三步论第 2 步）：
+        #   原顺序是"**先拼 feedback、后统计 error_types**"，于是
+        #   `漏项×4 / 前提不成立×4 / 计算错×2` 明明已从投票原文正确解析出来，
+        #   却**只写进 diag**，模型收到的永远是"未标注" ⇒ 反馈不可用、重写只能瞎猜。
+        #   现改为**先统计、再拼 feedback**，并把分布写进反馈首行。
+        # （2026-09-15 原注释：跨候选汇总错误类型分布，与 `_vote` 内的同名埋点互补 ——
+        #   那里是**单次投票**口径，这里是**整题**口径，供 diag 统计。）
         error_types = self._record_error_types(
             ctx, [v for vds in all_verdicts for v in vds],
             step="verify_error_types")
+        _et_line = ""
+        try:
+            if isinstance(error_types, dict) and error_types:
+                _ordered = sorted(error_types.items(), key=lambda kv: -kv[1])
+                _et_line = "、".join(
+                    "%s×%d" % (k, v) for k, v in _ordered[:4] if k)
+        except Exception:  # noqa: BLE001
+            _et_line = ""
+
+        if _deep_reject:
+            # ★★ 2026-10-05 修（**结构化 bug report 被深复核分支整个绕过** ——
+            #   用户判定"方法有问题"，这是最直接的证据）：
+            #   `_extract_revise_feedback` 内部已经实现了论文要求的结构化报告
+            #   （`_extract_bug_report` → `_format_bug_report`：
+            #    **位置（引用原句）+ 类型 + 问题**，按「关键错误 / 论证漏洞」分级，
+            #    开关 `use_bug_report_feedback` **默认 True**，docstring 直接引用
+            #    Huang & Yang 2025），但它**只在 else 分支执行**。
+            #   一旦深复核判 B（`_deep_reject=True`），反馈就被**替换**成一行
+            #   `【带推理复核判错｜错误类型：…】` —— 实测只剩 **44 字符**（且是乱码）
+            #   ⇒ **模型拿不到任何定位**，重写只能瞎猜（6 轮不收敛的直接原因）。
+            #   现改为：**先取结构化报告，再附复核原文作为证据**（两者互相补充，
+            #   不再互相替代）。结构化报告为空（如预算不足）时，才退回原来的单行标签。
+            _struct = self._extract_revise_feedback(
+                ctx, problem, candidates, best_cluster)
+            if _struct:
+                feedback = (_struct
+                            + "\n\n【复核依据（判错报告原文摘录）】\n"
+                            + _deep_raw.strip())[:8000]
+            else:
+                _et = _extract_error_type(_deep_raw) or _et_line or "未标注"
+                feedback = ("【带推理复核判错｜错误类型：%s】%s" % (
+                    _et, _deep_raw.strip()))[:6000]
+        else:
+            feedback = self._extract_revise_feedback(
+                ctx, problem, candidates, best_cluster)
+        # 无论走哪条分支，都把**全题错因分布**放在最前面 ——
+        # 它是模型判断"我这类错在这题犯了多少次"的最直接依据。
+        if _et_line:
+            feedback = ("【全题错因分布（各票判定）】%s\n" % _et_line) + feedback
 
         return {
             "cluster_data": cluster_data,

@@ -731,7 +731,15 @@ class MergeSpinRetryTest(unittest.TestCase):
         self.assertIn("空转", second_user)
         # 蓝图最终结论注入 user 模板（输出对齐锚点）
         first_user = m_llm.call_args_list[0].args[1][1]["content"]
-        self.assertIn("证明最终答案为 42", first_user)
+        # ★ 2026-10-04 修断言（配合 K11 注入点守卫 D8）：蓝图根结论仍被注入，
+        #   但其中**被断言的数值**会被掩为占位符
+        #   （`证明最终答案为 42` → `证明最终[待求解值：由子目标结果现场确定]`）。
+        #   原断言锁的是"未掩码的原样注入"，而那正是 K11（唯一过半根因）的注入通道，
+        #   所以改断言为：① 蓝图结论**确实被注入**（保留原文前缀）；
+        #   ② 断言数值**必须已被掩掉**（新增，正向锁住修复本身）。
+        self.assertIn("证明最终", first_user)
+        self.assertIn("待求解值", first_user)
+        self.assertNotIn("答案为 42", first_user)
 
     def test_good_merge_no_retry(self) -> None:
         agent = make_agent()

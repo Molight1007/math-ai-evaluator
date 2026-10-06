@@ -168,6 +168,21 @@ def _mask_asserted_values(text: str) -> tuple:
     return t.strip(), n
 
 
+def _k11_mask_on() -> bool:
+    """K11 注入点掩码开关（`k11_mask_statement`，默认 True）。读取失败按 True 处理。
+
+    ★ 用 try/except 包裹是刻意的：`switch_registry.get_bool()` 在字段未注册时
+    会 `KeyError`，且**不接受默认参数**；而本开关由另一路工人并行登记
+    （`user_agent.py` + `agent/switch_registry.py` + `agent/param_usage.py`）。
+    本函数必须在**注册完成前后都能跑**，且默认行为一致（都 = 守卫生效）。
+    """
+    try:
+        from .switch_registry import get_bool as _swb
+        return bool(_swb("k11_mask_statement"))
+    except Exception:  # noqa: BLE001  开关未注册/读取异常 ⇒ 保持守卫生效（研究期安全侧）
+        return True
+
+
 # ★ 2026-09-17（P-9）：穷尽性检查的**固定段落**清单。
 # ⚠ 与 `orchestrator._parse_exhaust_result` 的口径必须一致 ——
 #   由 tests/test_exhaust_sections_consistency.py 断言，防止两处漂移。
@@ -261,7 +276,10 @@ class SubGoalSolverAgent(BaseAgent):
     # 模板只翻译表达式，工具回填即结论，模型零计算面）；"inline"=推理/证明型
     # （步骤级 <calc> 截断）。规则启发先行，宁 inline 勿误 terminal（防把推理
     # 子目标截成表达式翻译）。字段总是打标进 trace（0 成本可观测分布）；
-    # 专用模板/校验由 config.subgoal_calc_router 控制（默认关待 A/B）。
+    # ★ 2026-10-04 修注释（D32）：原文写「专用模板/校验由 config.subgoal_calc_router
+    #   控制（默认关待 A/B）」—— 该配置项**已随 `<calc>` 计算工具板块一并删除**
+    #   （见 user_agent.py 的删除留痕），`calc_kind` 现为**纯观测字段**（只进 trace/diag，
+    #   不驱动任何分支）。原注释会误导后人以为它仍在生效。
     _TERM_ACTION_KW = ("代入", "求和", "化简", "展开", "求值", "积分",
                        "乘积", "计算", "算得")
 
@@ -583,6 +601,20 @@ class SubGoalSolverAgent(BaseAgent):
 
         # 阶段二：逐步求解每个子目标
         subgoal_plan_summary = self._format_plan_summary(subgoals, merge_strategy)
+        # ★ 2026-10-04（K11 注入点守卫，额外加固）：`_format_plan_summary` 会把
+        #   各子目标的 **title + description 原样** 写进摘要（约 :3480-3483），
+        #   而该摘要随后被逐字注入 **step / merge / crosscheck 三个提示词**
+        #   （`SUBGOAL_STEP_USER_TEMPLATE` 的 {subgoal_plan_summary}、merge 同名字段、
+        #   crosscheck 摘要）。⇒ 仅掩码单条 `subgoal_description` 不足以封堵——
+        #   同一断言值会经本摘要二次进入同一提示词。故在**摘要生成处**（其唯一
+        #   用途就是提示词注入）统一掩码一次，覆盖三个消费者。只改本地变量，
+        #   不动 subgoals / merge_strategy 本体。
+        if _k11_mask_on():
+            subgoal_plan_summary, _n_summ = _mask_asserted_values(subgoal_plan_summary)
+            if _n_summ:
+                self.record(ctx, "blueprint_lock_guard",
+                            f"子目标规划摘要内嵌 {_n_summ} 处断言数值 → 已屏蔽为占位符"
+                            "（K11 摘要注入点守卫）")
         results_map = {}  # subgoal_id → result_text
         _ctx_inject_chars = 0  # S4-lite 指标：累计前序注入字符数（近似上下文量）
         # 2026-09-12 新增（用户要求「原本完成的子目标要记录，不能重头再来」）：
@@ -844,8 +876,19 @@ class SubGoalSolverAgent(BaseAgent):
         full_reasoning = self._build_full_reasoning(subgoals, problem_analysis, final_answer)
         # 2026-09-02 老师需求：候选池统一封顶（与 solver.run 同口径）。
         # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）
-        if len(getattr(ctx, 'candidates', None) or []) >= 6:
-            self.record(ctx, "subgoal", "候选池已达上限 6，跳过子目标候选入池")
+        # ★ 2026-10-04 修（D7）：原硬编码 `>= 6` 与 `agent/orchestrator.py:1962-1969`
+        #   自称「候选池封顶已按研究期标尺删除、不再截断候选」**直接矛盾**，
+        #   且后果不只是少一个候选 —— 池满时**整条子目标候选来源被跳过**
+        #   （`return` 直接出函数）。现统一读 `candidate_pool_limit`（0 = 不限）。
+        _pool_lim = 0
+        try:
+            _pv = float(getattr(self.config, "candidate_pool_limit", 0.0) or 0.0)
+            _pool_lim = int(_pv) if _pv > 0 else 0
+        except (TypeError, ValueError):
+            _pool_lim = 0
+        if _pool_lim > 0 and len(getattr(ctx, 'candidates', None) or []) >= _pool_lim:
+            self.record(ctx, "subgoal",
+                        f"候选池已达上限 {_pool_lim}，跳过子目标候选入池")
             return
         candidate = Candidate(
             id=next_candidate_id(ctx.candidates),
@@ -876,12 +919,16 @@ class SubGoalSolverAgent(BaseAgent):
         # 2026-09-04 阶段预算：replan 是"候选已入池后"的改进环节（评审+重生成
         # 每轮 2-3 次 LLM），budget 用尽时跳过——不影响已产出的 merge 答案，
         # 把时间留给 orchestrator 后续 3_solve/lean 验证/答案闸门。
-        if (getattr(self.config, "enable_dag_replan", True)
-                and _stage_left() > 0):
+        # ★ 2026-10-04 修（D18）：原条件为 `enable_dag_replan and _stage_left() > 0`，
+        #   是一条纯「**按剩余时间砍方法**」的闸门 —— 750s 之后"蓝图就算错了也不再修"，
+        #   与「研究期不限时间、一切为正确率让路」的口径直接冲突。
+        #   它还是**跨文件漏网**的实例：不受 `phase_budget_enabled` 管辖，
+        #   关掉阶段预算总开关也拦不住它。
+        #   现只保留机制开关，删掉时间条件；防挂死由单题硬墙（`is_timed_out`）负责。
+        #   注：`getattr` 兜底默认值同步由 True 改为 False，与 `AgentConfig` 一致
+        #   （原先两处默认值不一致，属潜在"同一开关两套默认"）。
+        if getattr(self.config, "enable_dag_replan", False):
             self._review_and_maybe_replan(ctx, dag=ctx.blueprint)
-        elif getattr(self.config, "enable_dag_replan", True):
-            self.record(ctx, "dag_replan",
-                        f"子目标阶段预算用尽（剩 {_stage_left():.0f}s），跳过 DAG replan")
         return ctx
 
     def _note_dag_replan(self, ctx, *, triggered: bool, replanned: bool = False,
@@ -1466,7 +1513,7 @@ class SubGoalSolverAgent(BaseAgent):
         # 时间让给子目标求解与数值验证。A/B 复测时显式置 dag_replan_gate=True。
         # 门代码与 Lean 升级逻辑保留（_dag_replan_gate / _lean_dag_logic_check），
         # 不开时不产生任何调用开销。
-        if getattr(self.config, "dag_replan_gate", False):
+        if getattr(self.config, "dag_replan_gate", True):
             dag = self._dag_replan_gate(ctx, dag)
             if dag is None:
                 return None
@@ -1644,6 +1691,17 @@ class SubGoalSolverAgent(BaseAgent):
                             f"第 {round_idx + 1} 轮骨架重生成失败，保留当前骨架")
                 return dag
             dag = new_dag
+            # ★ 2026-10-04 修（写回）：`_review_and_maybe_replan` 早在 2026-09-17
+            #   就修过同型 bug（"只改局部变量 dag，从不写回 ctx.blueprint ⇒ 重规划
+            #   结果被丢弃"），但**本函数与 `_dag_replan_gate` 漏了同样的写回**
+            #   ⇒ 重生成后的骨架只经返回值进入 `to_subgoal_plan`，而下游读
+            #   `ctx.blueprint` 的地方（`_merge_results` 的 blueprint_conclusion、
+            #   orchestrator 的 `02_blueprint` 落盘、诊断）看到的仍是**旧蓝图**
+            #   ⇒ 同一份 DAG 两个版本，属"改一处=没改"。
+            try:
+                ctx.blueprint = dag.to_dict()
+            except Exception as _e_wb:  # noqa: BLE001
+                logger.warning("骨架重生成写回 ctx.blueprint 失败: %s", _e_wb)
             self.record(ctx, "skeleton_review",
                         f"骨架第 {round_idx + 1}/{max_rounds} 轮重生成: "
                         f"{len(dag.nodes)} 节点")
@@ -2040,15 +2098,32 @@ class SubGoalSolverAgent(BaseAgent):
             _prob_for_step = _safd(ctx.problem or "")
         except Exception:  # noqa: BLE001
             _prob_for_step = ctx.problem or ""
+        # ★ 2026-10-04（K11 注入点守卫）：本模板 **逐字** 注入的字段必须全部过掩码。
+        #   背景：蓝图节点 `statement` 经 `blueprint_planner.to_subgoal_plan`（:302-303）
+        #   被原样写成子目标 `title` / `description`，再由本模板送进每步求解提示词
+        #   （见 prompts/sub_goal.py:229-231）⇒ 蓝图若写「证明最小值为 4030，故答案为
+        #   4030」就等于**指令模型输出 4030**（K11，已数据确认的唯一过半根因 41.4%）。
+        #   原守卫只覆盖 merge_strategy / problem_analysis（生产点），此处为最后一道关口。
+        #   只改局部变量，**不动 sg 本体**（其它消费者与 trace 不受影响）。
+        _desc = str(sg.get("description") or "")
+        _title = str(sg.get("title") or "")
+        if _k11_mask_on():
+            _desc, _n_desc = _mask_asserted_values(_desc)
+            _title, _n_title = _mask_asserted_values(_title)
+            _n_mask = _n_desc + _n_title
+            if _n_mask:
+                self.record(ctx, "blueprint_lock_guard",
+                            f"子目标注入字段（title/description）内嵌 {_n_mask} 处断言数值"
+                            " → 已屏蔽为占位符（K11 注入点守卫）")
         user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
             problem=_prob_for_step + _obj_inj,
             subgoal_plan_summary=plan_summary,
             previous_results=prev_results,
             lemma_context=lemma_context,
             subgoal_id=sg["id"],
-            subgoal_title=sg["title"],
+            subgoal_title=_title,
             subgoal_type=sg["type"],
-            subgoal_description=sg["description"],
+            subgoal_description=_desc,
             subgoal_expected_output=sg["expected_output"],
         )
         # v2.11：0-LLM 校验反馈（S1-lite）追加在提示词末尾；只有校验真没过才带
@@ -3273,6 +3348,16 @@ class SubGoalSolverAgent(BaseAgent):
         # 2026-09-17（P-20）：同上，蓝图根节点结论里若含 \boxed /「最终答案」先剥离
         blueprint_conclusion = _strip_answer_forms(
             self._blueprint_conclusion(ctx))
+        # ★ 2026-10-04（K11 注入点守卫）：P-20 只剥「答案形态标记」，自然语句里的
+        #   **断言数值**仍会原样注入 merge 提示词（见 prompts/sub_goal.py:286-287）
+        #   ⇒ 再掩码一层（不删句，只换被断言的数）。这是 blueprint_conclusion 的
+        #   唯一注入点，故在此收口。
+        if _k11_mask_on():
+            blueprint_conclusion, _n_bc = _mask_asserted_values(blueprint_conclusion)
+            if _n_bc:
+                self.record(ctx, "blueprint_lock_guard",
+                            f"蓝图根结论内嵌 {_n_bc} 处断言数值 → 已屏蔽为占位符"
+                            "（K11 merge 注入点守卫）")
         # 2026-09-12 客观题特化（三处同源注入之③：merge 合并）——merge 直接产出
         # 最终答案署名候选，特化纪律必须在这里也在场，否则"检测到了"却"没照做"。
         _obj_inj_m = ""

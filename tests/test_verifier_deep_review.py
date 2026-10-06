@@ -351,37 +351,37 @@ class VoteDiversifyTest(unittest.TestCase):
     def test_agreement_keeps_baseline(self):
         v = self._v()
         ctx = make_ctx()
-        n, t = v._vote_profile(ctx, [{"answer": "42"}, {"answer": "42"}])
+        n, t, _ = v._vote_profile(ctx, [{"answer": "42"}, {"answer": "42"}])
         self.assertEqual(n, 1)
         self.assertEqual(t, 0.0)
 
     def test_disagreement_raises_votes_and_temperature(self):
         v = self._v()
         ctx = make_ctx()
-        n, t = v._vote_profile(ctx, [{"answer": "42"}, {"answer": "43"}])
+        n, t, _ = v._vote_profile(ctx, [{"answer": "42"}, {"answer": "43"}])
         self.assertEqual(n, 3)
         self.assertGreater(t, 0.0)
         self.assertTrue(any(x.get("step") == "vote_diversify" for x in ctx.trace))
 
     def test_never_lowers_baseline_votes(self):
         v = self._v(verifier_voting_times=5)
-        n, _ = v._vote_profile(make_ctx(), [{"answer": "a"}, {"answer": "b"}])
+        n, _, _ = v._vote_profile(make_ctx(), [{"answer": "a"}, {"answer": "b"}])
         self.assertEqual(n, 5, "分歧时不得把已有的多票降下来")
 
     def test_switch_off(self):
         v = self._v(verifier_diversify_enabled=False)
-        n, t = v._vote_profile(make_ctx(), [{"answer": "a"}, {"answer": "b"}])
+        n, t, _ = v._vote_profile(make_ctx(), [{"answer": "a"}, {"answer": "b"}])
         self.assertEqual((n, t), (1, 0.0))
 
     def test_empty_answers_no_crash(self):
         v = self._v()
-        self.assertEqual(v._vote_profile(make_ctx(), []), (1, 0.0))
-        self.assertEqual(v._vote_profile(make_ctx(), None), (1, 0.0))
-        self.assertEqual(v._vote_profile(make_ctx(), [{"answer": ""}]), (1, 0.0))
+        self.assertEqual(v._vote_profile(make_ctx(), []), (1, 0.0, False))
+        self.assertEqual(v._vote_profile(make_ctx(), None), (1, 0.0, False))
+        self.assertEqual(v._vote_profile(make_ctx(), [{"answer": ""}]), (1, 0.0, False))
 
     def test_object_candidates_supported(self):
         v = self._v()
-        n, t = v._vote_profile(
+        n, t, _ = v._vote_profile(
             make_ctx(), [SimpleNamespace(answer="AB"), SimpleNamespace(answer="AD")])
         self.assertEqual(n, 3)
         self.assertGreater(t, 0.0)
@@ -414,16 +414,16 @@ class VoteDiversifyTest(unittest.TestCase):
             verifier_disagreement_temperature=0.7))
         ctx = make_ctx()
         # 候选一致（原本会让票数掉到 base=1）
-        n, _ = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "x"}],
+        n, _, _ = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "x"}],
                                base_votes=3)
         self.assertEqual(n, 3, "档位票数不得被 base=1 覆盖")
         # 分歧时取较大者
-        n2, t2 = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "y"}],
+        n2, t2, _ = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "y"}],
                                  base_votes=3)
         self.assertEqual(n2, 3)
         self.assertGreater(t2, 0.0)
         # 不传 base_votes 时退回 config（向后兼容）
-        n3, _ = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "x"}])
+        n3, _, _ = v._vote_profile(ctx, [{"answer": "x"}, {"answer": "x"}])
         self.assertEqual(n3, 1)
 
 

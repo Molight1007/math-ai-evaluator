@@ -144,12 +144,19 @@ def test_disabled_switch_is_read_with_default_true():
 
 
 def test_injection_block_shape_is_stable():
-    """block 形态契约：首行标题，末行免责声明，中间是编号的**短名**列表。"""
+    """block 形态契约：首行标题，末行**正向引导**声明，中间是编号的短名列表。
+
+    ★ 2026-10-04 修：末行由旧的「（以上仅为线索…**不必强行使用**。）」改为
+    「（以上为检索到的**候选定理及其陈述**…**请优先采用并标注**…）」——
+    旧措辞是"采用率仅 1%"的成因之一（短名 + 免责句 ⇒ 模型无从判断、也没动力用）。
+    """
     blk = _make_block()
     lines = blk.split("\n")
     assert lines[0].startswith("【本题可能在 Mathlib 中用到的定理")
     assert "供参考" in lines[0]
-    assert lines[-1].startswith("（以上仅为线索")
+    assert lines[-1].startswith("（以上为检索到的"), (
+        "免责句应已改为正向引导（2026-10-04 采用率修复）")
+    assert "请优先采用" in lines[-1]
     numbered = [l for l in lines[1:-1]
                 if l.split(".")[0].strip().isdigit()]
     assert len(numbered) == 5, "5 条命中应产出 5 条编号项"

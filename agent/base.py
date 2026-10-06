@@ -831,10 +831,25 @@ class BaseAgent(ABC):
         except Exception as e:  # noqa: BLE001
             err_str = str(e)[:200]
             if any(kw in err_str.lower() for kw in ('context length', 'too long', 'max token')):
-                reduced = (max_tokens // 2) if max_tokens > 512 else 256
-                logger.warning("[%s] 上下文超长，降至 %s tokens 重试", self.name, reduced)
+                # ★ 2026-10-04 修（D26）：原为 `reduced = max_tokens // 2`（无下限）
+                #   ⇒ 对 reasoning 模型（reasoning 吃 77–97% 输出预算）**腰斩输出预算
+                #   = 思维块占满、正文为空**，等于把"上下文超长"这个可恢复错误
+                #   变成"空答案"这个不可恢复错误；且全程**不留痕**（静默）。
+                #   现加下限（保 reasoning 不被饿死）+ 写 trace 便于归因。
+                #   语义仍是"重试一次"，不改调用契约。
+                reduced = max(4096, max_tokens // 2) if max_tokens > 4096 else \
+                    (max_tokens // 2 if max_tokens > 512 else 256)
+                logger.warning("[%s] 上下文超长，降至 %s tokens 重试（原 %s）",
+                               self.name, reduced, max_tokens)
                 try:
-                    resp3 = self.client.chat(messages=messages, temperature=0.0, max_tokens=reduced)
+                    ctx.trace.append({
+                        "agent": self.name, "step": "llm_shrink_retry",
+                        "content": f"上下文超长 → max_tokens {max_tokens}→{reduced} 重试"})
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    resp3 = self.client.chat(messages=messages, temperature=0.0,
+                                             max_tokens=reduced)
                     return _normalize_chat_response(resp3)
                 except Exception:
                     pass

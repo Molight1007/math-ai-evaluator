@@ -408,9 +408,20 @@ def _consume_stream(resp, logger, model: str, max_tokens: Optional[int] = None) 
     finish_reason = None
     chunk_count = 0
 
-    for line in resp.iter_lines(decode_unicode=True):
-        if not line:
+    # ★★ 2026-10-05 修（**流式中文乱码根因**，用户三步论的第 2 步"反馈要准确"）：
+    #   原用 `iter_lines(decode_unicode=True)`，它按 `resp.encoding` 解码；
+    #   而 SSE 的 Content-Type 是 `text/event-stream`（属 `text/*`）
+    #   ⇒ requests 依 RFC 2616 **默认按 ISO-8859-1 解码** ⇒ UTF-8 中文被逐字节解坏。
+    #   实测：`（计算错）` → `ï¼ˆè®¡ç®—é”™ï¼‰`，导致
+    #   `_extract_error_type()` 的中文标签正则**全部匹配失败** ⇒ 一律回落"未标注"。
+    #   非流式路径走 `resp.json()`（JSON 规范强制 utf-8）⇒ 所以同一题里
+    #   "投票原文正常、深复核（流式）乱码"，这是同题内对照的强证据。
+    #   修法：拿 **bytes** 后显式按 utf-8 解码。
+    for _raw_line in resp.iter_lines(decode_unicode=False):
+        if not _raw_line:
             continue
+        line = (_raw_line.decode("utf-8", errors="replace")
+                if isinstance(_raw_line, (bytes, bytearray)) else _raw_line)
         if not line.startswith("data:"):
             continue
         data = line[5:].strip()
@@ -440,6 +451,17 @@ def _consume_stream(resp, logger, model: str, max_tokens: Optional[int] = None) 
         text_out = content
     else:
         text_out = "".join(reasoning_parts)
+    # ★ 2026-10-04 修（D30，只加留痕、不改返回语义）：流式下若服务端返回 0 个有效
+    #   chunk（content 与 reasoning 皆空），此处**原样返回 ""**，而上层（base/solver）
+    #   可能把"空响应"当成一次正常但空答案 ⇒ **静默**（对比非流式路径
+    #   `_extract_content` 会 raise LLMError，两条路径口径不一致）。
+    #   这里补一条 warning 让"空流"可观测；返回语义保持不变（上层依赖 falsy 判定）。
+    if not text_out:
+        logger.warning(
+            "LLM stream EMPTY [model=%s, chunks=%d, finish=%s] "
+            "—— 流式返回空内容（content/reasoning 皆空），按空串返回",
+            model, chunk_count, finish_reason,
+        )
     # 真实截断信号：流式路径的 finish_reason
     _mark_response(model, finish_reason, max_tokens)
     logger.debug(

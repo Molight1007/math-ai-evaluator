@@ -222,6 +222,17 @@ class SkeletonReviewerAgent(BaseAgent):
             if verdict not in ("ok", "ill_posed", "not_simplifying",
                                "direction_wrong"):
                 verdict = "ok"
+            # ★★ 2026-10-04 修（与 dag_reviewer 同源的关键设计错误，见该文件
+            #   `_llm_candidates` 的注释）：**根节点 = 原题本身**，不可能满足
+            #   "求解难度 < 原问题"。而提示词偏偏点名"携带最终结论的节点（根/结论
+            #   子目标）重点查"，再叠加"任一子目标非 ok → overall 必须 replan"
+            #   ⇒ 根节点必然触发 replan，**门结构性不收敛**
+            #   （实测 112 题中 80 题走满 2 轮仍 replan）。
+            #   处置：对根节点的 `not_simplifying` 降级为 ok（判据误用，非缺陷）；
+            #   **保留** direction_wrong / ill_posed —— 那两类对根节点真有意义。
+            if (nid == str(getattr(dag, "root_id", "") or "")
+                    and verdict == "not_simplifying"):
+                verdict = "ok"
             verdicts[nid] = SkeletonVerdict(
                 node_id=nid,
                 verdict=verdict,
@@ -232,6 +243,12 @@ class SkeletonReviewerAgent(BaseAgent):
         if overall not in ("pass", "replan"):
             overall = "replan" if verdicts and any(
                 not v.is_ok for v in verdicts.values()) else "pass"
+        # ★ 2026-10-04 修：`overall` 以**修正后的逐节点判定**为准。
+        #   判定规则本身就是「任一非 ok ⇒ replan；全部 ok ⇒ pass」，
+        #   但 LLM 常因**根节点的结构性误判**给 overall=replan（上面已把该误判
+        #   降级为 ok）⇒ 若此处仍照抄 LLM 的 replan，等于把刚修正的判定再推翻。
+        if verdicts and not any(not v.is_ok for v in verdicts.values()):
+            overall = "pass"
         feedback = str(raw.get("feedback", "") or "")[:600]
 
         report = SkeletonReviewReport(

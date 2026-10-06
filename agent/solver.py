@@ -150,6 +150,34 @@ _REINFORCED_SYSTEM = (
 # ==================================================================
 
 
+_POOL_UNLIMITED_ROOM = 12   # 「不限」时本次最多再补的候选数（安全上界，见下）
+
+def _pool_room(cfg, ctx) -> int:
+    """候选池**本次最多还能再补几个**候选（`candidate_pool_limit`，默认 6）。
+
+    ★ 2026-10-04 修（D7）：原先本文件与 `sub_goal_solver` 共 **三处硬编码 `6`**，
+    现统一到本函数（单一来源，可配）。
+    同时修掉 `agent/orchestrator.py` 那处与事实不符的注释（它自称"封顶已删除、
+    不再截断候选"，但三处仍在封顶）—— **口径以本函数为准**。
+
+    ⚠⚠ 重要语义（2026-10-04 实测踩坑）：本返回值**同时被当作本次生成数量**
+    （`run()` 里 `_generate_initial(ctx, count=remaining)`）—— 所以它**不能**是
+    一个天文数字。我最初把"不限"实现成 `10**9`，结果 `count=1e9` 会让
+    `_generate_initial` 尝试生成十亿个候选（`_adaptive_count` 对非证明题不收敛），
+    **直接跑飞**。幸被回归测试 `test_M1_full_pool_non_revise_still_early_returns`
+    抓住。故此处对"不限"设安全上界 `_POOL_UNLIMITED_ROOM`。
+    """
+    _lim = 0
+    try:
+        _v = float(getattr(cfg, "candidate_pool_limit", 6.0) or 0.0)
+        _lim = int(_v) if _v > 0 else 0
+    except (TypeError, ValueError):
+        _lim = 0
+    if _lim <= 0:
+        _lim = _POOL_UNLIMITED_ROOM
+    return _lim - len(getattr(ctx, "candidates", None) or [])
+
+
 def _is_refusal(text: str) -> bool:
     """检测模型输出是否为拒绝回答"""
     if not text or not text.strip():
@@ -211,7 +239,10 @@ class SolverAgent(BaseAgent):
         # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）。此时初始池
         # 只到 3、revise 补 ≤3，总量天然 ≤6，封顶不再主动砍候选，无 003 式风险。
         # count 只传 remaining 上限，adaptive 缩小在 _generate_initial 内部做。
-        remaining = 6 - len(getattr(ctx, 'candidates', None) or [])
+        # ★ 2026-10-04 修（D7）：原硬编码 `6 - len(...)`，与 orchestrator 自称
+        #   「已按研究期标尺删除封顶、不再截断候选」矛盾。统一读 `candidate_pool_limit`
+        #   （0 = 不限，研究期默认）—— 三处同源，见模块级 `_pool_room`。
+        remaining = _pool_room(self.config, ctx)
         # ★ 2026-09-17（M1）：池满时**不要在这里 return**。
         # 腾位逻辑写在 `_generate_revise` 内部（其 `_room <= 0` 分支），而本函数
         # 在 `remaining <= 0` 时直接返回 ⇒ **那段腾位结构性不可达**。
@@ -264,6 +295,49 @@ class SolverAgent(BaseAgent):
         模型实际输出仍克制；真正边界是 1200s 时间墙而非 token 帽。
         """
         return base_tokens
+
+    def _normalize_and_check_answer(self, ctx: TaskContext, cid,
+                                    answer) -> tuple:
+        """候选**入池前**的答案规范化 + 有效性校验。
+
+        ★ 2026-10-06 新增（由**端到端模拟**暴露的必要修正）：
+        初版只做「接受 / 拒绝」，模拟里发现它会**误杀可抢救的候选** ——
+        `'所以最小 d 是 48。'` 被判 False 直接丢，**但它能抢救出 `48`**。
+        正确做法是**先抢救、再判定**：句子形态里含明确最终值时，
+        **把 answer 换成那个值**（而不是丢候选，也不是留整句）。
+
+        判据优先级：
+          1. `_looks_like_answer(a)` 通过 ⇒ 原样可用；
+          2. 否则尝试 `_salvage_value_from_line(a)` 抽出值 ⇒ **用抽出的值**；
+          3. 都不行 ⇒ 判定不可用（调用方不入池）。
+
+        返回 `(规范化后的 answer, 是否可用)`。
+        开关 `require_answer_in_pool`（默认 True）；置 False 时恒返回 (原值, True) 做 A/B。
+        """
+        a = str(answer or "").strip()
+        if not bool(getattr(self.config, "require_answer_in_pool", True)):
+            return a, True
+        try:
+            from utils.extract import _looks_like_answer, _salvage_value_from_line
+        except Exception:  # noqa: BLE001  校验不可用时放行，不阻断
+            return a, True
+        if _looks_like_answer(a):
+            return a, True
+        _sal = _salvage_value_from_line(a)
+        if _sal and _looks_like_answer(_sal):
+            self.record(ctx, "answer_salvaged",
+                        "候选#%s **从句子中抢救出答案** %r（原句前 40 字：%r）"
+                        % (cid, _sal, a[:40]))
+            return _sal, True
+        self.record(ctx, "candidate_invalid",
+                    "候选#%s **不含最终答案 → 不入池**（answer 前 40 字：%r）"
+                    % (cid, a[:40]))
+        return a, False
+
+    def _answer_is_usable(self, ctx: TaskContext, cid, answer) -> bool:
+        """兼容旧签名的布尔包装（仅供既有调用方；新增代码请用 `_normalize_and_check_answer`）。"""
+        _norm, ok = self._normalize_and_check_answer(ctx, cid, answer)
+        return ok
 
     def _use_lemma(self, ctx: TaskContext) -> bool:
         """判断当前题是否启用 lemma 累积（按领域路由，2026-08-29）。
@@ -355,9 +429,17 @@ class SolverAgent(BaseAgent):
             "（以下为前面逐步求得的**关键中间数据 / 条件**，是本题求解的基础）\n"
             + body
             + "\n\n★ 请在**上面已确立的子目标结论**基础上，整合出本题的最终答案：\n"
-            "  1) 这些结论就是要用的数据，**直接使用、不要从头再推一遍**；\n"
-            "  2) 若整合过程中发现**某条子目标结论明显有误**（算错 / 前提误 /"
-            " 与题意矛盾 / 明显不自洽），可以**指出并纠正**它，再据修正后的结论"
+            # ★ 2026-10-04 修（引导方向）：原文写「这些结论就是要用的数据，**直接使用、
+            #   不要从头再推一遍**」—— 那是**无条件信任**上游结论，一旦某条子目标被
+            #   蓝图层提前锁错值（K11，41.4% 唯一过半根因），主求解会把错值当事实沿用
+            #   ⇒ 等于**放大错误**。用户口径是"检错的要能查出错误、推理要被引导向正确"，
+            #   故改为**先核对再使用**：核对（量纲/取值范围/关键等式是否自洽）不是
+            #   从头重推，仍遵守"主求解建立在子目标结论之上"的设计。
+            "  1) 这些结论是**待核验的中间数据**——先做一次**快速自洽核对**"
+            "（量纲 / 取值范围 / 关键等式 / 与题目已知条件是否矛盾），"
+            "**确认无误后再使用**；核对不等于从头重推，仍应在此结论之上推进；\n"
+            "  2) 若核对发现**某条子目标结论有误**（算错 / 前提误 /"
+            " 与题意矛盾 / 明显不自洽），必须**指出并纠正**它，再据修正后的结论"
             "给出最终答案 —— **不要被错误的子目标结论绑死**；\n"
             "  3) 最终答案必须**建立在这些已确立结论之上**（一致时直接整合；"
             "不一致时说明以哪个为准及理由）。\n"
@@ -1349,12 +1431,17 @@ class SolverAgent(BaseAgent):
             # 2026-09-12 符号化方程求解通道（默认关）：模型只交方程（组）+ 目标，
             # 数值一律由本地 SymPy 回代求出（模型不参与计算），异议时回传工具结果。
             resp, answer = self._maybe_symbolic_solve(ctx, resp, answer)
-            ctx.candidates.append(Candidate(
-                id=cid,
-                answer=answer,
-                reasoning=resp,
-                revised=False,
-            ))
+            # ★★ 2026-10-06：**入池门槛**（规范化 + 判定）——
+            #   不含最终答案的候选不入池；句子形态但含明确最终值的**抢救出值再入池**
+            #   （实测 59% 的候选是推理句/元话语；它们污染投票/检错/修正）。
+            answer, _ans_ok = self._normalize_and_check_answer(ctx, cid, answer)
+            if _ans_ok:
+                ctx.candidates.append(Candidate(
+                    id=cid,
+                    answer=answer,
+                    reasoning=resp,
+                    revised=False,
+                ))
             logger.debug("Candidate %d generated (len=%d)", cid, len(resp))
 
         self.record(
@@ -1368,7 +1455,35 @@ class SolverAgent(BaseAgent):
     # 纠错重解（revise 模式）
     # ----------------------------------------------------------
     def _generate_revise(self, ctx: TaskContext, cap: int = None) -> None:
-        feedback_text = "\n".join(f"- {fb}" for fb in ctx.revise_feedback)
+        # ★★ 2026-10-06 修（**反馈被重复灌入** —— 实测暴露）：
+        #   题 000/001 的 `ctx.revise_feedback` 都是 **15 条、去重后只有 9 条**
+        #   —— 同一条 706 字符的块**重复了 7 次**（6.5 重做循环每轮追加一次
+        #   `audit_reject_feedback`、每轮闸门各追加一条 Lean 建议，**没有全局去重**）。
+        #   后果：提示词里同一内容重复 7 遍 ⇒ **信噪比崩溃**，模型注意力被单一噪声占满，
+        #   真正带定位的结构化 bug report 被淹没（实测题 000 的 15 条里
+        #   「疑似自证」占 12 条、结构化「位置：」占 **0** 条）。
+        #   修法：在**渲染进提示词之前**统一去重（按归一化前 160 字，保留首次出现顺序）。
+        #   ⚠ 放在渲染处而不是各追加点：**一处修，覆盖所有来源**，
+        #     将来新增反馈通道也不会再漏（这是"只改一处=没改"教训的正向用法）。
+        #   ⚠ 关键：**归一化掉"候选编号"**。实测那 12 条「疑似自证」并非逐字相同
+        #     （分别写着 `候选 8` / `候选 6` / `候选 7`），若按原文去重一条都去不掉。
+        #     它们讲的是**同一件事**（验证代码没锚定题目数字），必须折叠成一条。
+        import re as _re_fb
+        _seen_fb, _uniq_fb = set(), []
+        for _fb in (ctx.revise_feedback or []):
+            _key = " ".join(str(_fb).split())
+            _key = _re_fb.sub(r"候选\s*\d+", "候选", _key)
+            _key = _re_fb.sub(r"#\d+", "#", _key)
+            _key = _key[:160]
+            if not _key or _key in _seen_fb:
+                continue
+            _seen_fb.add(_key)
+            _uniq_fb.append(_fb)
+        if len(_uniq_fb) < len(ctx.revise_feedback or []):
+            self.record(ctx, "revise",
+                        "反馈去重：%d 条 → %d 条（同一内容重复灌入会压低信噪比）"
+                        % (len(ctx.revise_feedback or []), len(_uniq_fb)))
+        feedback_text = "\n".join(f"- {fb}" for fb in _uniq_fb)
         # 2026-09-06 易错点记忆注入（revise 补救侧）：修订时同步带上同类题
         # 历史易错自查清单（命中才注入），让重解不只针对反馈、也避开已知坑。
         if getattr(self.config, 'enable_error_lessons', True):
@@ -1382,7 +1497,8 @@ class SolverAgent(BaseAgent):
         # 依据：6.5 的「拒绝 → 换候选 / 重解」是唯一的纠错回路，但 candidates
         # 常态就是 6 个 → `6 - len(candidates)` = 0 → count=0 → return
         # → **最需要重解时反而重解不了**（实测 revise_round 恒为 0，反馈白给）。
-        _room = 6 - len(getattr(ctx, "candidates", None) or [])
+        # ★ 2026-10-04 修（D7）：硬编码 6 → `candidate_pool_limit`（0 = 不限）。
+        _room = _pool_room(self.config, ctx)
         if _room <= 0 and getattr(ctx, "revise_feedback", None):
             # ★ 2026-09-17（M3）：腾位改为**按验证票数保留最优 3 个** ——
             # 口径与实现统一在 `base.pick_best_candidates`（可被单测直接覆盖）。
@@ -1394,7 +1510,8 @@ class SolverAgent(BaseAgent):
                         f"候选池满（{len(ctx.candidates)} 个）→ 腾位至 3 个，"
                         f"为重解让出槽位（A 修复 2026-09-12）")
             ctx.candidates = _keep
-            _room = 6 - len(ctx.candidates)
+            # ★ 2026-10-04 修（D7）：腾位后重算槽位，同样走 `candidate_pool_limit`。
+            _room = _pool_room(self.config, ctx)
         count = max(0, min(count, _room))
         # B 埋点（2026-09-12）：把「重解到底跑没跑、为什么没跑」全部记下来——
         # 此前三处静默路径（候选满 / 时间不足 / 反馈空）无法区分，
@@ -1522,6 +1639,13 @@ class SolverAgent(BaseAgent):
                 answer = rescue_final_answer(resp)[0]
             if not answer:
                 answer = smart_fallback_answer(resp)
+            # ★★ 2026-10-06：**重解路径同样做入池门槛**（与 _generate_initial 同口径）。
+            #   ⚠ 注意：上面那条 `answer=""` 的"[重解失败]"占位候选**不加门槛**
+            #   （它是显式标记的失败记录，不是"假答案"）。
+            answer, _ans_ok = self._normalize_and_check_answer(ctx, cid, answer)
+            if not _ans_ok:
+                logger.warning("Revise candidate %d 不含最终答案 → 不入池", cid)
+                continue
             ctx.candidates.append(Candidate(
                 id=cid,
                 answer=answer,
@@ -1709,7 +1833,16 @@ class SolverAgent(BaseAgent):
                 problem=ctx.problem,
                 candidate_solution=cand.reasoning,
             )
-            # 2026-09-04：prefill 种子与 SELF_IMPROVE_USER 三步法对齐——【第一步：诊断】开头
+            # ★ 2026-10-04 修（**做题逻辑错误**，用户点名担心的那条）：
+            #   3.3 自改进走 `_compressed_solve` **重写候选并覆盖 `cand.answer`**，
+            #   但它此前**不注入子目标结论** ⇒ 改进版是"**脱离子目标结论的独立重解**"，
+            #   等于把"**主求解必须建立在子目标结论之上**"的设计在自改进这一步悄悄作废
+            #   （用户原话：「会不会出现之前子目标的结论没用上，再在总解题中自己再解一遍」
+            #     —— 这里字面成立）。
+            #   已知后果：项目自陈 098 原候选答 B（正确），3.3 后被改成 D（错误）。
+            #   现与 `_generate_proof`(:954) / `_generate_initial`(:1076) /
+            #   `_generate_revise`(:1498) **同口径注入**（开关 `enable_subgoal_findings`）。
+            user_content = self._apply_subgoal_findings(ctx, user_content)
             resp = self._compressed_solve(
                 ctx,
                 get_policy_system(use_blueprint=getattr(self.config, "use_blueprint", True)),

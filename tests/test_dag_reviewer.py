@@ -223,7 +223,11 @@ class TestReviewFullFlow(unittest.TestCase):
 
     def test_dag_review_produces_report(self):
         # 启发式 reject: n1a (循环) + n1b (粒度粗)
-        # LLM reject: n2a; accept: n2b / n1 / n2 / g (非叶 + 根, 默认 accept)
+        # LLM reject: n2a; accept: n2b / n1 / n2
+        # ★ 2026-10-04 修：**根节点 g 不再参与评审**（见 `_llm_candidates` 注释）——
+        #   根节点 = 原题本身，永远无法满足"比父目标更简单/粒度更细化"的判据，
+        #   把它送进评审会**结构性必然 reject**，导致 reject_ratio 轻易越阈、
+        #   门永不收敛（实测 112 题中 80 题走满 2 轮仍 replan）。
         resp_map = {
             "n2a": json.dumps({"verdict": "reject", "quality_score": 0.3,
                                "issues": ["粒度过粗"],
@@ -243,9 +247,13 @@ class TestReviewFullFlow(unittest.TestCase):
 
         # 启发式 reject: n1a + n1b; LLM reject: n2a → 共 3 reject
         self.assertEqual(report.reject_count, 3)
-        # accept: g/n1/n2/n2b（非启发式 reject 的全走 LLM，默认 accept）→ 4
-        self.assertEqual(report.accept_count, 4)
-        # should_replan 默认 True（reject_ratio = 3/7 ≈ 0.43 > 0.40）
+        # accept: n1/n2/n2b（非启发式 reject 的全走 LLM，默认 accept）→ 3
+        # （根节点不参与评审，故不计数）
+        self.assertEqual(report.accept_count, 3)
+        # ★ 2026-10-04 正向锁定修复：根节点**不在**评审结果里
+        self.assertIsNone(report.get(dag.root_id),
+                          "根节点不应被送进 DAG 评审（结构性必然 reject）")
+        # should_replan 默认 True（reject_ratio = 3/6 = 0.50 > 0.40）
         self.assertTrue(report.should_replan())
         self.assertIn("n1a", report.rejected_nodes())
         self.assertIn("n1b", report.rejected_nodes())

@@ -385,6 +385,89 @@ def format_response(answer: str) -> str:
     return answer
 
 
+def _looks_like_answer(s: str) -> bool:
+    """判断一段文本**是否长得像一个最终答案**（而不是推理句 / 元话语）。
+
+    ★★ 2026-10-06 新增（**候选池被"非答案"污染** —— 上游根因，实测驱动）：
+    两轮 32 个候选实测：**59% 的 `answer` 字段不是答案**，而是
+      · 推理句：`'因此，似乎没有满足条件的路径，答案为 0。'`
+      · 元话语：`'让我搜索这个问题的标准解法'`、`'步骤 10：搜索相关结果'`
+      · 英文推理片段：`'If there are three or more non-zero numbers, consider the su'`
+      · 半截标题：`'步骤23：关键洞察'`
+
+    根因：`smart_fallback_answer` 的「策略 1」用**关键词**匹配行
+    （正则含 `答案|故选|正确`），于是**含"答案"二字的叙述句被整句收下**。
+    后果：候选池 59% 是垃圾 ⇒ **检错器验垃圾、投票投垃圾、修正无从下手**
+    （题 002 的 6 个候选里 4 个逐字相同，就是同一份错答案被复制）。
+
+    判据**保守、宁缺勿滥**（宁可返回空串让调用方重试，也不塞一句叙述句）：
+      1. 长度 ≤ 120 字（真答案通常很短：`20460` / `$2-2m$` / `\\frac12` / `B`）；
+      2. 不含**元话语**（让我/我需要/重新考虑/搜索/似乎/也许/但是…）；
+      3. **不以句末标点结尾**（`。`/`？`/`！`/`.` 结尾基本是叙述句）；
+      4. 含**可判分的实质**（数字、LaTeX、`\\boxed`、选项字母、等号）。
+    """
+    t = " ".join(str(s or "").split())
+    if not t or len(t) > 120:
+        return False
+    # ★ 2026-10-06 补：**步骤标题**不是答案（实测 `'步骤23：关键洞察'` 含数字、
+    #   无元话语、也不以句号结尾，前三条判据都放行 ⇒ 必须单独拦）。
+    if _STEP_HEADER_RE.match(t):
+        return False
+    if _META_ANSWER_RE.search(t):
+        return False
+    if t[-1] in "。？！.；;":
+        return False
+    # 必须含"可判分的实质"：数字 / LaTeX / 选项 / 等号 / 答案提示词
+    return bool(re.search(r"[\d$\\=]|\bboxed\b|^[A-E]$|答案", t, re.I))
+
+
+# 步骤/章节标题形态（`步骤23：…` / `第 3 步` / `Step 13:`）—— 它们是进度标记，不是答案
+_STEP_HEADER_RE = re.compile(
+    r"^\s*(步骤\s*\d*|第\s*\d+\s*步|step\s*\d*|phase\s*\d+)\s*[：:.\s]",
+    re.IGNORECASE)
+
+
+# 元话语 / 推理语气（出现在"答案"里就说明它不是答案）
+_META_ANSWER_RE = re.compile(
+    r"(让我|我们来|我们需要|需要重新|重新考虑|重新审|搜索|查询|确认|尝试|"
+    r"似乎|也许|可能|但是|不过|然而|注意到|这说明|这意味着|"
+    r"let\s+me|let'?s|we\s+need|perhaps|maybe|however|search|wait\b)",
+    re.IGNORECASE)
+
+
+def _salvage_value_from_line(line: str) -> str:
+    """从一句**叙述句**里抢救出"可判分的值"，而不是把整句当答案。
+
+    ★ 2026-10-06 新增（配合入池门槛；由回归测试暴露的必要细分）：
+    必须区分两类"句子形态"，不能一刀切：
+      · `'所以最小 d 是 48。'`            → **有明确最终值** ⇒ 应抽出 `48`
+        （`tests/test_tool_residue_fallback_paths.py` 锁定了这个行为：
+         "正文里没有 boxed 时，尾部行兜底仍要给出正文（而不是空）"）
+      · `'因此，似乎没有满足条件的路径，答案为 0。'` → 含 **`似乎`**（不确定语气）
+        ⇒ 拒绝（它自己也说"没有路径"，值不可信）
+      · `'因此水平边确实是有向的：形成一个有向环 0→1→2→…→19→0。'`
+        → 无 `是/为/=` 引导的句末值 ⇒ 抽不出 ⇒ 返回空串（正确）
+
+    判据：**先排除不确定语气**，再尝试 `\\boxed{}` 或「是/为/等于/= <值>」句末形态。
+    """
+    t = " ".join(str(line or "").split())
+    if not t:
+        return ""
+    if _META_ANSWER_RE.search(t):
+        return ""
+    m = re.search(r"\\boxed\s*\{([^{}]*)\}", t)
+    if m:
+        v = m.group(1).strip()
+        return v
+    # 句末「是/为/等于/= <值>」，值不含标点
+    m = re.search(r"(?:是|为|等于|=)\s*\$?([^，。；;、\s]{1,40})\$?\s*[。.]?$", t)
+    if m:
+        v = m.group(1).strip(" $。.")
+        if v and re.fullmatch(r"[-\d./^()a-zA-Z\\{}]*\d[-\d./^()a-zA-Z\\{}]*", v):
+            return v
+    return ""
+
+
 def smart_fallback_answer(text: str) -> str:
     """
     当 extract_final_answer 返回空或不理想时的智能回退。
@@ -414,21 +497,46 @@ def smart_fallback_answer(text: str) -> str:
     lines = text.split('\n')
 
     # 策略 1：从后往前找第一个含数学符号/答案关键词的非元行
+    # ★ 2026-10-06 收紧：**"含关键词"不够，还必须"长得像答案"**。
+    #   原实现在此把 `'因此，似乎没有满足条件的路径，答案为 0。'`（含"答案"二字）
+    #   与 `'让我搜索这个问题的标准解法'` 整句收下 ⇒ 污染候选池 59%。
+    #   但**不能一刀切**：`'所以最小 d 是 48。'` 这类"句子形态答案"要**抽出值**。
     for i in range(len(lines) - 1, max(len(lines) - 30, -1), -1):
         line = lines[i].strip()
         if not line or _is_meta_line(line):
             continue
         if re.search(r'[$\\=]|\d{2,}|答案|故选|boxed|正确|选项', line):
-            return clean_answer(line)
+            cand = clean_answer(line)
+            if _looks_like_answer(cand):
+                return cand
+            sal = _salvage_value_from_line(cand)
+            if sal:
+                return sal
 
     # 策略 2：从后往前找第一个有实质内容的非空行
+    # ★ 2026-10-06 同样收紧（原实现无条件收下任意一行）。
     for i in range(len(lines) - 1, -1, -1):
         line = lines[i].strip()
         if line and len(line) > 2 and not _is_meta_line(line):
-            return clean_answer(line)[:500]
+            cand = clean_answer(line)[:500]
+            if _looks_like_answer(cand):
+                return cand
+            sal = _salvage_value_from_line(cand)
+            if sal:
+                return sal
 
-    # 兜底：取尾部但限制长度
-    return clean_answer(text[-500:])
+    # 兜底：**不再取尾部 500 字**。
+    # ★ 2026-10-06 改：原实现 `return clean_answer(text[-500:])` 会把
+    #   **一整段推理的尾部**当成答案返回（实测正是"推理句当答案"的最后一道口子）。
+    #   现在只在**最后一行能抢救出可判分的值**时返回该值，否则返回空串 ——
+    #   让调用方知道"这个候选没有可用答案"，去做更正确的处置
+    #   （标记无效 / 不入池），**而不是用垃圾填满候选池**。
+    tail_lines = [l for l in (text.split("\n")[-3:]) if l.strip()]
+    for line in reversed(tail_lines):
+        sal = _salvage_value_from_line(line)
+        if sal:
+            return sal
+    return ""
 
 
 def safe_json_serialize(obj: dict) -> dict:

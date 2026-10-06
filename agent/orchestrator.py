@@ -269,6 +269,73 @@ def _switch_snapshot() -> dict:
         return {}
 
 
+def _answer_fingerprint(ctx) -> str:
+    """当前「答案形态」的指纹 —— 用于跨 revise 轮判断**有没有真进展**。
+
+    ★★ 2026-10-05 修（**两道"无进展保护"是死代码** —— 三步论第 3 步"修正要有效"）：
+    两处保护原本都拿 `ctx.final_response` 比较，但它**直到
+    `orchestrator.py:2191`（6_format 之后）才第一次被赋值**，而
+    `_deep_revise_loop` 的**全部 5 个调用点（P1 / 4.5 oracle / 4.6 对抗 /
+    5 全 0 票 / 5.5 低置信）都在 `:2191` 之前** ⇒ 比较对象**恒为 `""`**
+    ⇒ `if _npa is not None and _cur_ans and ...` 与
+    `if _ans_before and _ans_after and ...` **恒短路边** ⇒ 保护从未生效。
+    日志实证：`P1 重解成效：答案未变化（0→0 字符）`。
+
+    改用**候选答案集合**（排序去重后以 `|` 连接）作指纹 ——
+    它在 revise 阶段一直有值，且只有"答案集合真的变了"才算有进展。
+    """
+    try:
+        ans = sorted({str(getattr(c, "answer", "") or "").strip()
+                      for c in (getattr(ctx, "candidates", None) or [])
+                      if str(getattr(c, "answer", "") or "").strip()})
+        return "|".join(ans)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _collect_tool_findings(ctx) -> str:
+    """收集**纯工具**产出的判定（Lean 编译 / 系统命题验算 / SymPy），供结构化检错器做定位。
+
+    ★★ 2026-10-06 新增（补上「**工具判定 → 答案级定位**」这一环）：
+    工具的 finding 里 `location` 装的是**检查项名**（`answer_verify` / `lean_verify`），
+    而 `agent/base.py:365` 对 `location` 的定义是「出错位置（步骤编号/行号/引用）」
+    ⇒ **契约被违背**：模型收到 `location="answer_verify"` 等于没收到位置。
+    工具看的是**形式化代码**、天然说不出"答案第 3 步错了"，但它
+    「**这个等式/命题不成立**」的判定是**客观、可复现**的 ⇒ 是定位的最佳锚点。
+
+    本函数把这些锚点抽出来，交给 `verifier.structured_report_for(tool_findings=...)`，
+    让它**只负责在答案里逐字引用写下该等式的原文** ⇒
+    产出「工具级的可靠性 + 答案级的定位」。
+
+    去重（工具对多个候选常给出同一判定）+ 最多 3 条，避免污染提示词。
+    """
+    out = []
+    try:
+        for _k in ("lean_gate", "audit_gate"):
+            for e in (getattr(ctx, _k, None) or []):
+                if not isinstance(e, dict):
+                    continue
+                v = str(e.get("verdict") or "")
+                if v in ("proof_invalid", "unknown", "reject"):
+                    fb = str(e.get("feedback") or e.get("reason") or "").strip()
+                    if fb:
+                        out.append("[%s|%s] %s" % (_k, v, fb[:400]))
+    except Exception:  # noqa: BLE001  收集失败不影响主流程
+        pass
+    seen, uniq = set(), []
+    import re as _re_tf
+    for x in reversed(out):
+        k = " ".join(x.split())
+        k = _re_tf.sub(r"\d+", "#", k)[:120]
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(x)
+        if len(uniq) >= 3:
+            break
+    return "\n".join(reversed(uniq))
+
+
 def _tool_gateway_summary(ctx) -> dict:
     """统一工具调用遥测（2026-09-30，截图 #10）—— 纯埋点，不改分支。
 
@@ -286,17 +353,16 @@ def _tool_gateway_summary(ctx) -> dict:
       answer_falsifier 自建 LeanBridge 等）**尚未迁移到门面**，
       它们的调用量仍在各自的既有埋点里（`leansearch` / `toolcall_exec` 等）。
     """
-    try:
-        from .tool_gateway import ToolGateway
-        s = ToolGateway.summarize(ctx)
-        # 附一句口径说明，避免诊断报告读者误读（见上方红线）
-        s["_note"] = ("本表只统计走 ToolGateway 的调用；既有调用点尚未全部迁移，"
-                      "全零 ≠ 本轮没调用工具")
-        return s
-    except Exception as e:  # noqa: BLE001
-        logger.debug("[tool_gateway] 遥测汇总异常: %s", e)
-        return {"total": 0, "by_tool": {}, "by_reason": {},
-                "elapsed_total": 0.0, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+    # ★ 2026-10-04（冗余清理，用户指示"不要留下代码地雷"）：
+    #   `agent/tool_gateway.py` 整个模块（**508 行 / 17 函数**）**已删除**。
+    #   判定依据：其唯一入口 `ToolGateway.for_ctx` 全仓生产零调用 ⇒
+    #   `ctx._tool_gateway` 从不被设置 ⇒ `summarize` 恒返回全零
+    #   ⇒ 本表是一张**永远没有内容的表**（典型"不改行为的死代码 + 误导性数据"，
+    #   见 `docs/解题逻辑审核_函数级_2026-10-04.md` D16）。
+    #   本函数**保留 key**（而非删 key）是为了不破坏下游对 diag 结构的既有假设。
+    return {"total": 0, "by_tool": {}, "by_reason": {}, "elapsed_total": 0.0,
+            "_note": "ToolGateway 模块已于 2026-10-04 删除（从未接线 ⇒ 遥测恒空）。"
+                     "实际工具调用量见 leansearch / toolcall_exec 等既有埋点"}
 
 
 # ---------------------------------------------------------------------------
@@ -1821,6 +1887,28 @@ class Orchestrator(BaseAgent):
                         ctx.candidates = lean_kept
                         self.record(ctx, "lean_gate",
                                     f"Lean 硬验证通过 {len(lean_kept)}/{_lt} 候选")
+                    else:
+                        # ★★ 2026-10-06 修（**「全拒 = 全留」** —— 门等于没作用）：
+                        #   原写法 `if lean_kept: ctx.candidates = lean_kept`，
+                        #   当门把候选**全部拒掉**时 `lean_kept` 是**空列表（falsy）**
+                        #   ⇒ **`ctx.candidates` 保持原样、一个都没淘汰**。
+                        #   后果：门跑了、日志有记录，但**对候选池零影响** = 假执行
+                        #   （实测题 000 的 `degraded="non_math_answer"` 条目就是这样）。
+                        #   现改为：**显式标记 + 明确留痕**，不再静默保留；
+                        #   置 `strict_all_rejected=True` 时进一步清空候选池，
+                        #   交给下游兜底/重生成链（该链已存在：orchestrator 的
+                        #   "Solver 未产出候选 → 兜底直接求解"）。
+                        ctx._gate_all_rejected = True
+                        self.record(ctx, "lean_gate",
+                                    f"⚠ Lean 门把 {_lt} 个候选**全部拒掉** → "
+                                    f"不再静默保留（原先此处等于没过滤）；"
+                                    f"已标记 _gate_all_rejected 交给下游处置")
+                        if bool(getattr(self.config,
+                                        "strict_all_rejected", False)):
+                            ctx.candidates = []
+                            self.record(ctx, "control",
+                                        "strict_all_rejected=True → 清空候选池，"
+                                        "触发下游兜底/重生成链")
                     if lean_fb:
                         ctx.audit_reject_feedback = list(
                             getattr(ctx, "audit_reject_feedback", []) or []
@@ -1843,6 +1931,20 @@ class Orchestrator(BaseAgent):
                     ctx.candidates = audit_kept
                     self.record(ctx, "audit_gate",
                                 f"客观审核通过 {len(audit_kept)}/{_audit_total} 候选")
+                else:
+                    # ★★ 2026-10-06 修（**「全拒 = 全留」**，与 Lean 门同源）：
+                    #   同上 —— `if audit_kept:` 在**全拒**（空列表）时**不更新候选池**
+                    #   ⇒ 门等于没作用。现显式留痕，不静默。
+                    ctx._gate_all_rejected = True
+                    self.record(ctx, "audit_gate",
+                                f"⚠ 客观审核把 {_audit_total} 个候选**全部拒掉** → "
+                                f"不再静默保留；已标记 _gate_all_rejected")
+                    if bool(getattr(self.config,
+                                    "strict_all_rejected", False)):
+                        ctx.candidates = []
+                        self.record(ctx, "control",
+                                    "strict_all_rejected=True → 清空候选池，"
+                                    "触发下游兜底/重生成链")
                 if audit_feedbacks:
                     ctx.audit_reject_feedback = list(
                         getattr(ctx, "audit_reject_feedback", []) or []
@@ -1918,11 +2020,13 @@ class Orchestrator(BaseAgent):
                                 "P1 硬信号触发强制重解"
                                 f"（{len(_p1_msgs)} 条，tier={tier}，"
                                 f"剩余 {ctx.time_remaining():.0f}s）")
-                    _p1_before = str(getattr(ctx, "final_response", "") or "")
+                    _p1_before = _answer_fingerprint(ctx)
                     self._deep_revise_loop(ctx, {}, tier_votes, force=True)
                     # G1（2026-09-11）：记录重解成效——此前只能看到"触发了"，
                     # 看不到"改没改、改成什么样"，导致"触发但无效"无法量化。
-                    _p1_after = str(getattr(ctx, "final_response", "") or "")
+                    # ★ 2026-10-05：改用候选答案指纹（见 `_answer_fingerprint`）——
+                    #   原用 ctx.final_response，此处恒为 "" ⇒ 永远显示"答案未变化"。
+                    _p1_after = _answer_fingerprint(ctx)
                     self.record(
                         ctx, "revise",
                         f"P1 重解成效：{'答案已变化' if _p1_after != _p1_before else '答案未变化'}"
@@ -2179,6 +2283,18 @@ class Orchestrator(BaseAgent):
             # 6) 格式化输出
             self.formatter.run(ctx)
 
+            # ★ 2026-10-04 修（D25，主链顺序）：终答后处理（P2 数值化 / P5 客观自检 /
+            #   B0 形态闸门）**从 6.5 闸门之后移到之前**。
+            #   原顺序的缺陷（代码自己写在 `_final_answer_postprocess` docstring 里）：
+            #   后处理会**改写答案内容**，而它跑在 6.5 之后 ⇒
+            #   **闸门校验的字符串不是最终提交的字符串**（"闸门验 A、实际提交 B"），
+            #   即最后一道形式化/审核防线**对它实际放行的那个串没有约束力**。
+            #   移到闸门之前后，不变量成立：**凡是提交的答案，都经过闸门**——
+            #   闸门通过则它就是最终答案；闸门不通过会换候选，换上的候选同样要过闸门。
+            #   ⚠ 取舍：若闸门**换过候选**，那个新候选不会被后处理（数值化等）。
+            #     这是刻意选择 —— 宁可少一层锦上添花的归一化，也不让"未验证的串"被提交。
+            ctx.final_response = self._final_answer_postprocess(ctx)
+
             self._stage_start(ctx, "6.5_audit_gate")
             # 2026-10-01：原 6.5 处「`calc_inconsistent`（计算冲突）优先于 Lean
             #   answer_valid」的裁决已随 `<calc>` 计算工具板块整体删除 —— 其唯一
@@ -2214,6 +2330,10 @@ class Orchestrator(BaseAgent):
                     # 墙边，重做耗尽的题整题超时无最终答案。现改为：
                     #   fast/standard：最多 2 次打回，且整题时间超 tier_budget 即放行；
                     #   deep：保留"做到 1200s"，但每次打回前保证剩余时间够完成。
+                    #   ⚠ 2026-10-04 修注释（D32）：上面的 "1200s" 是**比赛期**口径，
+                    #     现行研究期配置下 `max_time_per_question=86400`、
+                    #     `tier_budget['deep']=86400` ⇒ 实际 `_rework_deadline`
+                    #     = start+86100s（≈23.9h，见下方 A5 无进展保护处的实测注释）。
                     _tbl_budget = getattr(self.config, 'tier_budget', None) or {}
                     _tier_budget = float(_tbl_budget.get(tier, 1200.0))
                     # ⚠ 2026-09-13 修复（审查发现；这是会导致**计 C（0 分）**的严重问题）：
@@ -2260,9 +2380,41 @@ class Orchestrator(BaseAgent):
                     #   循环因次数/时间耗尽而退出时 ctx.final_response 停在**最后换上**
                     #   的候选 = 置信度最低者；而"闸门没能确认更强" ≠ "确认更弱"。
                     _pre_rework_final = ctx.final_response
+                    # ★ 2026-10-04 防挂死（**只加「无进展保护」，不加轮数配额** ——
+                    #   研究期口径不允许「为省时间砍方法」）：
+                    #   实测复核配置：deep 档 `tier_budget['deep']=86400`、
+                    #   `max_time_per_question=86400`、`DEEP_MAX_REWORK` 未设 ⇒ `-1`
+                    #   ⇒ `_max_rework=None`（**无轮数上限**）；且
+                    #   `_rework_deadline = min(start+86400, start+86400) - 300
+                    #    = start + 86100s` ⇒ 退出条件只剩 `g_ok` 或 **≈23.9 小时**。
+                    #   循环体每轮会再调 `self.solver.run()`（单次 200-300s、不可中断）
+                    #   且**无任何进展检测** ⇒ 单题可跑满近 24h，把整轮 112 题串行评测卡死。
+                    #   处理：**时间墙 `_rework_deadline` 与轮数语义 `_max_rework` 一律不动**，
+                    #   仅在「连续 2 轮答案完全未变（本轮空转）」时提前退出。
+                    #   ⚠ 检测放在**循环体顶部**而非物理末尾：循环体有 **3 处 `continue`**
+                    #   （重生成脏答案 :2342 / 重生成未过闸门 :2351 / 换候选脏答案 :2372），
+                    #   放末尾会被 `continue` 跳过 ⇒ 保护在最常见的「重生成」路径上静默失效
+                    #   （即本项目「只改一处=没改」的老病灶）。顶部检测对全部路径等效生效。
+                    _prev_rework_ans = None
+                    _no_progress_rounds = 0
                     while (not g_ok
                            and _t3.time() < _rework_deadline - 5
                            and (_max_rework is None or _tried < _max_rework)):
+                        # ★ 无进展保护：与上一轮答案比较（首轮不判）。
+                        #   语义对齐 `_deep_revise_loop` 内同类保护（`revise 第N轮无进展`）：
+                        #   仅「答案完全未变」视为空转；答案一变即归零继续跑满。
+                        _cur_rework_ans = str(ctx.final_response or "")
+                        if (_prev_rework_ans is not None
+                                and _cur_rework_ans == _prev_rework_ans):
+                            _no_progress_rounds += 1
+                            if _no_progress_rounds >= 2:
+                                self.record(
+                                    ctx, "revise",
+                                    "6.5 重做无进展（连续 2 轮答案未变），提前退出重做循环")
+                                break
+                        else:
+                            _no_progress_rounds = 0
+                        _prev_rework_ans = _cur_rework_ans
                         # 取最近一条闸门拒绝反馈（写 ctx.lean_gate / ctx.audit_gate；
                         # lean 的拒绝 verdict=proof_invalid/unknown，audit 的=reject）
                         for _entry in reversed(getattr(ctx, _gk, []) or []):
@@ -2278,6 +2430,29 @@ class Orchestrator(BaseAgent):
                                 f"[审核闸门反馈] 上一候选 (#{_tried+1}) "
                                 f"未通过客观审核：{_last_feedback}"
                             ]
+                        # ★★ 2026-10-05 修（**真定位在这条路径上被丢掉** —— 三步论第 2 步）：
+                        #   本路径此前**只读闸门自己的日志**（`ctx[_gk]`），
+                        #   而 `ctx.audit_reject_feedback`（4.6 对抗证伪的 `to_feedback()`、
+                        #   4.5 oracle 判错反馈）**在 6.5 重写路径上从不被读取**。
+                        #   问题是：4.6 对抗是**唯一产出 `error_step` 具体定位**的检错环节
+                        #   （实测三题分别检出 boundary_missed / special_case_missed /
+                        #    skipped_step，置信 0.85~0.95）⇒ 最有用的一条被扔掉。
+                        #   现一并在闸门反馈后注入（去重、只取最近 3 条）。
+                        _audit_fb = [str(_x) for _x in (
+                            getattr(ctx, "audit_reject_feedback", None) or [])
+                            if str(_x).strip()]
+                        if _audit_fb:
+                            _seen_af, _af_lines = set(), []
+                            for _x in reversed(_audit_fb):
+                                if _x in _seen_af:
+                                    continue
+                                _seen_af.add(_x)
+                                _af_lines.append(_x[:400])
+                                if len(_af_lines) >= 3:
+                                    break
+                            ctx.revise_feedback = list(ctx.revise_feedback) + [
+                                "[已检出的具体错误（含定位步骤；此前未送达本题重写）] "
+                                + " ｜ ".join(reversed(_af_lines))]
                         self.record(ctx, _gk,
                                     f"审核拒候选 #{_tried+1}（本档位重做剩余 "
                                     f"{int(_rework_deadline - _t3.time())}s）继续换/重做")
@@ -2327,6 +2502,55 @@ class Orchestrator(BaseAgent):
                                         self.record(ctx, "control",
                                                     "审核未试过任何候选 → 保留原候选池"
                                                     "（不清空，M2 2026-09-17）")
+                                    # ★★ 2026-10-05 修（**绕过全局轮数上限**）：本路径此前
+                                    #   直接 `revise_round += 1`，**不经过
+                                    #   `_deep_revise_loop` 入口的 `max_revise_rounds` 校验**
+                                    #   （校验在 :2652 附近，只作用于该函数入口）
+                                    #   ⇒ 6.5 这一段可以无限加轮（实测 revise_round 达 6
+                                    #   = 前面入口 4 轮 + 这里 2 轮，而全局上限是 5）。
+                                    #   现与 `_deep_revise_loop` 同口径先校验上限。
+                                    _max_total = int(getattr(
+                                        self.config, "max_revise_rounds", 5) or 5)
+                                    if getattr(ctx, "revise_round", 0) >= _max_total:
+                                        self.record(
+                                            ctx, _gk,
+                                            f"6.5 重做已达全局上限 {_max_total} 轮"
+                                            "（max_revise_rounds），停止重做、提交当前答案")
+                                        break
+                                    # ★★ 2026-10-06 修（**让结构化定位成为重写的主导反馈**）：
+                                    #   实测题 000 在 revise_round=5 的情况下，反馈里结构化
+                                    #   「位置：」出现 **0 次** —— 因为 `_extract_revise_feedback`
+                                    #   被 `confidence >= 0.5` 挡住，而该题正是"**投票高置信但答错**"
+                                    #   ⇒ 结构化报告从未生成，模型只能靠 Lean「疑似自证」
+                                    #   与对抗那几条噪声重写（12/15 被噪声占据、且把答案改得更偏）。
+                                    #   本路径是**已经确定要重写**的地方 ⇒ 补齐一份"错在第几步、
+                                    #   哪句话、为什么"的定位。失败/未启用时返回空串，行为不变。
+                                    _has_struct = any("位置：" in str(_x)
+                                                      for _x in (ctx.revise_feedback or []))
+                                    if not _has_struct:
+                                        # 取"最优候选"作为报告对象：按 (正确票数, 置信度)
+                                        # 降序；属性缺失时安全回退到第一个候选。
+                                        try:
+                                            _bcs = sorted(
+                                                (ctx.candidates or []),
+                                                key=lambda c: (
+                                                    -int(getattr(c, "vote_correct", 0) or 0),
+                                                    -float(getattr(c, "confidence", 0.0) or 0.0)))
+                                            _best_for_report = _bcs[0] if _bcs else None
+                                        except Exception:  # noqa: BLE001
+                                            _best_for_report = (
+                                                (ctx.candidates or [None])[0])
+                                        try:
+                                            _rep = self.verifier.structured_report_for(
+                                                ctx, ctx.problem, _best_for_report,
+                                                tool_findings=_collect_tool_findings(ctx))
+                                            if _rep:
+                                                ctx.revise_feedback = list(
+                                                    ctx.revise_feedback) + [_rep]
+                                        except Exception as _e_rp:  # noqa: BLE001
+                                            logger.warning(
+                                                "补取结构化报告失败（继续原流程）: %s",
+                                                str(_e_rp)[:120])
                                     ctx.revise_round = getattr(ctx, "revise_round", 0) + 1
                                     _before = len(ctx.candidates or [])
                                     self.solver.run(ctx)
@@ -2451,7 +2675,10 @@ class Orchestrator(BaseAgent):
                 }
             # 最终答案后处理（P2 强制数值化 + P5 客观题自检）——统一出口挂载，
             # 每项带独立开关与埋点，便于单次评测逐项审查（2026-09-11 用户指示）
-            ctx.final_response = self._final_answer_postprocess(ctx)
+            # ★ 2026-10-04（D25）：**已上移到 6.5 闸门之前**（见 `6_format` 之后那段），
+            #   此处刻意**不再调用** —— 否则会二次执行，并重新落回
+            #   "闸门验 A、实际提交 B"。早退路径（超时兜底 / `_fallback_direct`）
+            #   仍在各自出口自行调用，不受影响。
 
             # ★ 2026-10-02 hook 08：run() 正常返回前落盘终答（08_final）。
             _artifact_put(ctx, "08_final", {
@@ -2708,14 +2935,16 @@ class Orchestrator(BaseAgent):
             #   答案一旦变化，`_npa == _cur` 自然不成立 ⇒ 标记自动失效。
             if not force:
                 _npa = getattr(ctx, "_revise_no_progress_answer", None)
-                _cur_ans = str(getattr(ctx, "final_response", "") or "")
+                # ★ 2026-10-05：改用候选答案指纹（原 ctx.final_response 此处恒为 ""）
+                _cur_ans = _answer_fingerprint(ctx)
                 if _npa is not None and _cur_ans and _npa == _cur_ans:
                     self.record(ctx, "revise",
                                 "该答案此前重解后**未发生变化** → 跳过重复 revise"
                                 "（无进展保护，:1566 置位）")
                     break
             ctx.revise_round += 1
-            _ans_before = str(getattr(ctx, "final_response", "") or "")
+            # ★ 2026-10-05：改用候选答案指纹（原 ctx.final_response 此处恒为 ""）
+            _ans_before = _answer_fingerprint(ctx)
             ctx.revise_feedback = [feedback]
             self.record(ctx, "revise",
                         f"deep 档 revise 自纠错 第{ctx.revise_round}轮",
@@ -2729,7 +2958,9 @@ class Orchestrator(BaseAgent):
             #   最终成效埋点仍记"答案未变化"）。
             # 保守性：**只在答案完全未变时停**，且**第 1 轮永远保留**（有可能一次
             # 改对）；答案一旦变化即视为有进展，继续跑满剩余轮数 —— 原有功能不变。
-            _ans_after = str(getattr(ctx, "final_response", "") or "")
+            # ★ 2026-10-05：改用候选答案指纹（原 ctx.final_response 此处恒为 ""，
+            #   导致该"round 间无进展"保护恒短路边、从未生效）
+            _ans_after = _answer_fingerprint(ctx)
             if (_ans_before and _ans_after and _ans_before == _ans_after
                     and ctx.revise_round >= 1):
                 self.record(
@@ -2993,6 +3224,17 @@ class Orchestrator(BaseAgent):
             cand = type("_C", (), {"answer": str(answer), "reasoning": ""})()
             res = f.falsify(ctx, cand, problem=getattr(ctx, "problem", "") or "")
             if not res.is_incorrect:
+                # ★★ 2026-10-05 修（**"没产出"完全不可观测** —— 用户要求"发现问题原因"）：
+                #   证伪器是**唯一能产出可机检反例**的检错环节，实测三题 0 命中；
+                #   但它的每个失败出口（`未取得证伪证书` / `证书无可机检等式` /
+                #   `答案过长，非数值型` / `时间不足` / `已达上限` / `证伪器异常`）
+                #   在 `answer_falsifier.py:135-185` 全部被 `return` 掉，
+                #   而 `falsify_events` 只在**:3035/:3071 两条命中路径**记录
+                #   ⇒ **一条失败原因都不留痕**，无法区分
+                #   "没调用 / 调了没找到 / 被前置条件挡住"。
+                #   现补一条 attempt 记录（含 reason），供后续按原因归因。
+                self.record(ctx, "falsify_miss",
+                            "证伪未命中（放行）：%s" % (res.reason or "未给出原因"))
                 return False
             # 留痕：把证伪结论记进 diag / trace，供事后审计
             self.record(ctx, "falsify",
@@ -3022,7 +3264,14 @@ class Orchestrator(BaseAgent):
         """
         try:
             from .answer_oracle import AnswerOracle
-        except Exception:  # noqa: BLE001
+        except Exception as _e_imp:  # noqa: BLE001
+            # ★ 2026-10-04 修（D5，纯可观测）：原为裸 `return`，**不写任何 record**
+            #   ⇒ 一旦导入失败，4.5 阶段整段静默消失，事后无法区分
+            #   「4.5 没触发」与「触发了但模块炸了」—— 正是本项目反复吃的
+            #   「埋点缺失 = 归因失效」坑。此处补留痕后再退，行为不变（仍放行）。
+            self.record(ctx, "oracle_review",
+                        f"AnswerOracle 导入失败，4.5 客观复核跳过: "
+                        f"{type(_e_imp).__name__}: {str(_e_imp)[:120]}")
             return
         bc = getattr(ctx, '_best_cluster', None)
         if bc is None or not ctx.candidates:

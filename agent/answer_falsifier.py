@@ -188,19 +188,34 @@ class AnswerFalsifier:
     # 次数上限（与 numeric_lean 同口径，按题计数）
     # ------------------------------------------------------------------
     def _spend_cap(self, ctx) -> bool:
+        """本次证伪是否**允许发起**。True = 允许；False = 已达上限。
+
+        ★ 2026-10-04 修（D6，口径统一 + fail-open）：
+        原实现是 `cap <= 0 → return False`，语义为「**0 = 禁用证伪**」——
+        与**全项目口径相反**（`max_subgoals` / `candidate_pool_limit` /
+        `max_tokens_cap` / `lean_numeric_max_per_q` 一律 **0 = 不限**）。
+        这个反转极危险：把 `falsify_max_per_q` 设成 0（本意"放开上限"）
+        实际会把**唯一的客观证伪器整个关掉**。现统一为 **0 或负 = 不限**。
+        另：原 `except → return False` 会在任何异常下**静默永久禁用证伪**
+        （审核 D6 指出），现改为 fail-open 并留痕。
+        """
         try:
             meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
-            cap = max(0, int(getattr(self.config, "falsify_max_per_q", 2) or 0))
-            if cap <= 0:
-                return False
+            cap = int(getattr(self.config, "falsify_max_per_q", 0) or 0)
+            if cap <= 0:                       # 0/负 = 不限（对齐全项目口径）
+                return True
             cnt = int(meta.get("falsify_count", 0) or 0)
             if cnt >= cap:
                 return False
             meta["falsify_count"] = cnt + 1
             ctx.metadata = meta
             return True
-        except Exception:  # noqa: BLE001
-            return False
+        except Exception as exc:  # noqa: BLE001
+            # 异常 ⇒ 计数不可用。研究期口径是"不限"，故放行；但必须留痕 ——
+            # 否则"证伪静默消失"无法归因（正是本项目反复吃的坑）。
+            logger.warning("[falsifier] 次数计数异常（放行本次）: %s: %s",
+                           type(exc).__name__, exc)
+            return True
 
     # ------------------------------------------------------------------
     # LLM：取证伪证书

@@ -178,6 +178,10 @@ class DagReviewResult:
     issues: list = field(default_factory=list)   # reject 时填充：["circular_risk:...", ...]
     reconstruction_hint: str = ""        # reject 时填充：给 LLM 重写时一句话指引
     heuristic_only: bool = False         # 仅启发式、未走 LLM
+    # 2026-10-04 增（fix-a1）：LLM 调用异常 / 空响应 / JSON 非 dict ⇒ 默认 accept(0.5)。
+    # 这是**解析失败导致的降级**，与「LLM 真的判 accept」不可区分，单列此信号，
+    # 供 review() 汇总后把整份报告标 degraded（宁可重规划，不要假放行）。
+    parse_failed: bool = False
 
     @property
     def is_reject(self) -> bool:
@@ -191,6 +195,7 @@ class DagReviewResult:
             "issues": list(self.issues),
             "reconstruction_hint": self.reconstruction_hint,
             "heuristic_only": self.heuristic_only,
+            "parse_failed": self.parse_failed,
         }
 
 
@@ -374,8 +379,14 @@ class DagReviewerAgent(BaseAgent):
         """
         # 预算闸门
         if ctx.is_time_critical():
-            self.record(ctx, "dag_review", "预算不足，跳过 DAG 评审")
-            return DagReviewReport()
+            # 2026-10-04 修（fix-a1）：原实现返回 **degraded 缺省 False** 的空报告，
+            # 而 should_replan() 的声明是「降级（预算耗尽跳过 LLM）→ 强制 True，
+            # 宁重构不假放行」（见 :227-239）。实际 degraded=False ⇒ 落到
+            # 「空报告 reject_count=0」⇒ should_replan 返回 False = **假放行**，
+            # 声明与实现相反。此处与下方 `report.degraded = bool(llm_skipped)`
+            # 同一写法置位，让早退分支也强制重规划。
+            self.record(ctx, "dag_review", "预算不足，跳过 DAG 评审（降级）")
+            return DagReviewReport(degraded=True)
         if not dag or not dag.nodes:
             return DagReviewReport()
 
@@ -402,7 +413,11 @@ class DagReviewerAgent(BaseAgent):
         report = DagReviewReport(results=results)
         # 9/1 增：预算耗尽导致 LLM 节点被跳过 → 标记评审降级，
         # should_replan 强制 True（宁重构不假放行，冒烟 007 教训）
-        report.degraded = bool(llm_skipped)
+        # 2026-10-04 修（fix-a1）：同一次评审里若有节点走「解析失败默认 accept」
+        # 路径（LLM 异常/空响应/JSON 非 dict），其 verdict 不可信 ⇒ 同样标降级。
+        _n_parse_failed = sum(1 for r in results.values()
+                              if getattr(r, "parse_failed", False))
+        report.degraded = bool(llm_skipped) or _n_parse_failed > 0
         ctx.dag_review_report = report.to_dict()
         replan_flag = report.should_replan(self._reject_thr,
                                            self._reject_count_thr)
@@ -420,6 +435,7 @@ class DagReviewerAgent(BaseAgent):
             f"reject={report.reject_count}/{len(results)} "
             f"({report.reject_ratio:.0%}), "
             f"llm_skipped={len(llm_skipped)}, "
+            f"parse_failed={_n_parse_failed}, "
             f"degraded={report.degraded}, "
             f"missing_rationale={_missing_rationale}/{len(dag.nodes)}, "
             f"should_replan={replan_flag}",
@@ -427,6 +443,7 @@ class DagReviewerAgent(BaseAgent):
             dag_review_reject_ratio=round(report.reject_ratio, 3),
             dag_review_reject_count=report.reject_count,
             dag_review_degraded=report.degraded,
+            dag_review_parse_failed=_n_parse_failed,
             dag_review_missing_rationale=_missing_rationale,
         )
         return report
@@ -477,17 +494,31 @@ class DagReviewerAgent(BaseAgent):
 
     def _llm_candidates(self, dag: BlueprintDAG,
                          heuristic_results: dict) -> list:
-        """LLM 评审候选 = 所有叶子 + 启发式放过（heuristic_only=False 已近邻，但不冲突）的非叶
+        """LLM 评审候选 = 所有叶子 + 启发式放过的非叶。
 
         启发式已 reject 的不再 LLM（避免烧预算 + 启发式判断已够用）。
+
+        ★★ 2026-10-04 修（关键设计错误）：**排除根节点**。
+        根节点的 `statement` 就是**原题本身**，而本评审第 1 维判据是
+        「是否比**父目标**更简单 / 粒度是否细化 / 有无'证明原题'当子目标」
+        —— 根节点按定义**永远无法满足**（它没有父目标，且它就是题目）。
+        叠加「6 维任一命中即 reject」+ `should_replan` 的
+        `reject_count>=5 或 reject_ratio>=40%`，一个小 DAG 只要 5 个 reject
+        就触发；**根节点必然贡献至少 1 个**，其余节点随手就能凑够
+        ⇒ 门**结构性不收敛**（实测：112 题中 **80 题（71%）走满 2 轮仍判 replan**）。
+        这就是它"拦得住、修不好"的真实原因 —— **不是重写救不了，是判据不可达**。
+        根节点需要的只是"等于原题陈述"，不需要"比原题更简单"。
         """
         already_rejected = set(heuristic_results.keys())
+        _root = str(getattr(dag, "root_id", "") or "")
         # 叶子：最关键的评审目标（决定求解能否展开）
         leaves = [n for nid, n in dag.nodes.items()
-                  if not n.children and nid not in already_rejected]
+                  if not n.children and nid not in already_rejected
+                  and nid != _root]
         # 启发式放过但非叶节点（仍可能有"分解不当"问题）
         non_leaves = [n for nid, n in dag.nodes.items()
-                      if n.children and nid not in already_rejected]
+                      if n.children and nid not in already_rejected
+                      and nid != _root]
         return list(leaves) + non_leaves
 
     # ----------------------------------------------------------
@@ -566,15 +597,19 @@ class DagReviewerAgent(BaseAgent):
                 resp = stitch(_PREFILL, resp)
         except Exception as exc:  # noqa: BLE001
             logger.warning("DagReviewer LLM 调用异常 %s: %s", node.id, exc)
-            return DagReviewResult(node.id, "accept", 0.5, [], "", False)
+            # 2026-10-04 修（fix-a1）：解析失败 ⇒ 标 parse_failed，由 review() 汇总降级
+            return DagReviewResult(node.id, "accept", 0.5, [], "", False,
+                                   parse_failed=True)
 
         if not resp:
-            return DagReviewResult(node.id, "accept", 0.5, [], "", False)
+            return DagReviewResult(node.id, "accept", 0.5, [], "", False,
+                                   parse_failed=True)
 
         # 复用 blueprint_planner.extract_json（容错）
         raw = extract_json(resp)
         if not isinstance(raw, dict):
-            return DagReviewResult(node.id, "accept", 0.5, [], "", False)
+            return DagReviewResult(node.id, "accept", 0.5, [], "", False,
+                                   parse_failed=True)
 
         verdict = str(raw.get("verdict", "accept")).lower().strip()
         if verdict not in ("accept", "reject"):

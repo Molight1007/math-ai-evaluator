@@ -328,7 +328,19 @@ def cmd_doctor(cfg: dict, args) -> int:
         ("swap", "(swapon --show=SIZE --noheadings | tr '\\n' ' ') || echo 无"),
         ("系统盘", "df -h . | awk 'NR==2{print $2\" 总 / \"$4\" 可用\"}'"),
         ("CPU", "nproc"),
-        ("lean", "(command -v lean && lean --version) || echo 未安装"),
+        # ★ 2026-10-04 修（假警报，属"代码地雷"）：原检查是 `command -v lean`，
+        #   只查 **非交互 SSH 会话的 PATH** —— 而服务器上的 Lean 是靠
+        #   `deploy/lean-env.sh` 激活的（导出 PATH + LD_LIBRARY_PATH + LEAN_PATH），
+        #   启动器 `run_112.py` 会 source 它，但 `doctor` 自己不会。
+        #   ⇒ 明明装好且能编译，却报"未安装"，误导判断（本次实测踩到）。
+        #   现改为：**source lean-env.sh 后再查**，并附 Mathlib 闭包条数。
+        ("lean", "cd %s 2>/dev/null && { . deploy/lean-env.sh 2>/dev/null; "
+                 "(command -v lean >/dev/null && lean --version) || echo '未安装/未激活'; } "
+                 "|| echo '仓库未上传，无法判 Lean'"
+                 % cfg["MATH_SERVER_REMOTE_DIR"]),
+        ("mathlib", "find %s/deploy/mathlib-olean/Mathlib -name '*.olean' 2>/dev/null "
+                    "| wc -l | awk '{print $1\" 个 .olean\"}'"
+                    % cfg["MATH_SERVER_REMOTE_DIR"]),
         ("仓库", f"[ -d {cfg['MATH_SERVER_REMOTE_DIR']} ] && echo 已就位 || echo 未上传"),
     ]:
         rr = ssh_run(cfg, cmd, check=False, quiet=True)

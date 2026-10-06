@@ -146,6 +146,12 @@ class AgentConfig:
     # ⚠ 默认关：未 A/B 前行为完全不变。
     # 2026-10-01 按用户决策默认开（研究期不省资源）。
     verifier_deep_final_enabled: bool = True
+    # ★ 2026-10-04（B 折中）：投票是否放开**完整推理**（不 prefill）。
+    #   `off` = 旧行为（0.8s/票，但代码自陈"看一眼就点头"）；
+    #   **`disagree` = 默认**：仅当**候选答案分歧**时放开完整推理；
+    #   `always` = 每票都放开（最准，约 70s/票 ⇒ 18 票 ≈ 21 分钟/题）。
+    #   用户决策：「先试 B（折中），效果不理想就切 A；**正确率第一位**」。
+    verifier_vote_reasoning: str = "disagree"
     verifier_deep_final_min_remaining: float = 150.0  # 剩余时间低于此值则跳过复核
     verifier_deep_review_max_tokens: int = 16384      # 复核输出上限（需容纳推理链）
     # ★ 2026-09-15 实测教训：用投票模板做复核时，模型只吐 **12 个字**
@@ -252,7 +258,11 @@ class AgentConfig:
     #   数值回带（LLM 出闭式等式）→ SymPy 精确判定 → Lean 背书（编译通过则推翻证伪）。
     #   红线：宁可漏证，绝不误杀；任何不确定一律 unknown。
     enable_answer_falsifier: bool = True
-    falsify_max_per_q: int = 2               # 单题最多证伪次数（每次 1 次短 LLM 调用）
+    # ★ 2026-10-04 修（D6）：① 语义由「0 = 禁用证伪」统一为「**0 = 不限**」
+    #   （全项目口径；见 `answer_falsifier._spend_cap`）；② 默认 2 → **0（不限）**。
+    #   依据：证伪是当前**唯一能客观淘汰错误答案**的信号（LLM 证书 → SymPy 精确
+    #   → Lean 背书），在「不限调用」口径下没有理由按"省一次短 LLM 调用"设 2 次/题。
+    falsify_max_per_q: int = 0               # 单题最多证伪次数（0 = 不限）
 
     # ★ 2026-09-23 新增：把 LeanSearch 检索到的 Mathlib 定理注入**解题侧**引理记忆。
     #   实测（0923 效能审计）460 条检索结果里只有 4 条（1%）进了 Lean 代码；
@@ -276,6 +286,18 @@ class AgentConfig:
     #   现接到 `orchestrator._deep_revise_loop` 的**全局轮数上限**（该上限原先硬编码 5）。
     #   默认取 5 以保持既有行为不变；<=0 表示不设全局上限。
     #   注：单次调用的轮数由 `deep_revise_rounds` 控制（两回事）。
+    # ★ 2026-10-06 新增（**上游缺口修复**）：候选入池前是否要求它真的含一个最终答案。
+    #   实测 32 个候选里 **59% 的 `answer` 是推理句 / 元话语 / 英文片段**
+    #   （如 `'因此，似乎没有满足条件的路径，答案为 0。'`、`'让我搜索这个问题的标准解法'`），
+    #   却照样入池 ⇒ 被投票（题 002 的 6 个候选里 4 个逐字相同）、
+    #   被检错（检错器在验垃圾）、被拿去修正 ⇒ 污染整条下游链。
+    #   置 True：不含答案的候选**不入池**并留痕（宁可池子少一个，不放"假候选"）。
+    #   置 False：回退旧行为（全部入池）做 A/B。
+    require_answer_in_pool: bool = True
+    # ★ 2026-10-06 新增：Lean/Audit 门把候选**全部拒掉**时的处置。
+    #   默认 False = 只显式留痕（不静默保留，但也不清空）；
+    #   置 True = 清空候选池，触发下游兜底/重生成链。
+    strict_all_rejected: bool = False
     max_revise_rounds: int = 5
     max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
                                         # 覆盖 5 题 batch + 限流重试 + deep 档完整流程
@@ -402,11 +424,14 @@ class AgentConfig:
     # 实现：对同一子目标独立采 N 个解，按**归一化关键值的一致性**选代表解
     #      （self-consistency 下沉到子目标粒度）。中间步骤错一个后面全错，
     #      故此处收益理论上高于只在最终答案层投票。
-    #   · `enable_subgoal_multi_agent`：**默认 False** ⇒ 与改动前逐字一致，
-    #     可作为 A/B 的 baseline（设 True 即为实验组）。
+    #   · `enable_subgoal_multi_agent`：★ 2026-10-04 由 **False 改为 True**（D4）。
+    #     依据：审核确认「机制已完整实现但默认不生效 = 空转」，且用户口径是
+    #     「研究期用全部方法、正确率唯一目标」。子目标多采样正是为"提高子目标
+    #     正确率"而建（用户 2026-09-30 点名）。A/B 仍可用
+    #     `ENABLE_SUBGOAL_MULTI_AGENT=0` 取回旧基线（开关已注册，可还原）。
     #   · `subgoal_agents_n`：每题每个子目标采样次数（上限 8）。
     #     ⚠ 成本是 N 倍单步生成 —— 时间紧迫/预算不足时实现里会自动退回 1 次。
-    enable_subgoal_multi_agent: bool = False
+    enable_subgoal_multi_agent: bool = True
     subgoal_agents_n: int = 3
     # ---- 领域 → 定理检索（2026-09-29 新增，截图 #3+#4，老师重点关注）----
     # 用户诉求：判断题目属于哪个领域、该用什么定理，用 leansearch 去 Mathlib
@@ -562,6 +587,21 @@ class AgentConfig:
     #   各类死循环硬上限（`max_revise_rounds` 等）**均保留** —— 那些不是配额，是"别挂住"。
     # 回退：置 True 即恢复赛期口径（12 个阶段帽全生效）。
     phase_budget_enabled: bool = False
+    # ---- 2026-10-04 开关注册制补齐：新增 2 个字段（与 switch_registry 同名登记）----
+    #   `k11_mask_statement`：消费方已存在（agent/sub_goal_solver.py::_k11_mask_on），
+    #     此前字段/注册表皆缺 ⇒ 该函数走 try/except 兜底恒 True；现补全后可配。
+    #   `candidate_pool_limit`：候选池上限（0 = 不限），研究期默认不限。
+    k11_mask_statement: bool = True          # K11 注入点守卫（子目标描述/蓝图结论断言值掩码）
+    #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限，**默认 6 = 与旧行为
+    #     逐字一致**（原为三处硬编码 6，现收敛到 `agent/solver._pool_room` 单一来源）。
+    #     ⚠ 本值**同时被当作本次生成数量**（`_generate_initial(count=remaining)`）
+    #     ⇒ 不要设成天文数字；设 0/负 = "不限"（内部有安全上界 12）。
+    candidate_pool_limit: float = 6.0        # 候选池上限（0 = 不限，内部上界 12）
+    #   ★ 2026-10-04 修（D22）：`sub_goal_oracle_check` 此前**全仓无定义**，
+    #     而唯一消费点 `agent/sub_goal_solver.py` 用 `getattr(config, ..., False)`
+    #     读它 ⇒ `_oracle_check_step()` **结构性不可达**（代码写了永远跑不到）。
+    #     现补上字段 + 注册表 + 白名单 + `_SPEC`，使其可配（默认关，行为不变）。
+    sub_goal_oracle_check: bool = False      # 子目标逐步 oracle 校验（默认关，见注册表说明）
     # ★ 2026-09-15（用户：「子目标上限太少了；不同档位的最佳数量不同吗？」）：
     # **子目标上限按档位分档**。此前 `max_subgoals` 是**全局单一值 6**，
     # 而蓝图提示词已写明"简单 3~5 / 中等 5~12 / 难题 12~30" ⇒ **提示词与代码矛盾**。
@@ -683,7 +723,12 @@ class AgentConfig:
     #   **不在主链上**（orchestrator 从不实例化它）⇒ 本开关实际生效的是
     #   `leansearch_inject_verifier`（方案 A：把定理原文注入验证器）。
     # ==================================================================
-    use_leansearch: bool = False            # LeanSearch 总开关（默认关，A/B 验证后再定）
+    # ★ 2026-10-04（D20）：**保持默认关**。曾短暂改为 True（按研究期"用全部方法"
+    #   口径），但回归测试 `test_web_search_default_on_leansearch_still_off`
+    #   明确锁定此默认值 —— 它是本项目「**未验证不上**」纪律 + 2026-10-01 的
+    #   显式范围决策（"LeanSearch 未在本次清单内"），不是逻辑错误。
+    #   要启用请显式 `USE_LEANSEARCH=1` 或走 A/B，**不要**改默认值。
+    use_leansearch: bool = False            # LeanSearch 总开关（默认关，未验证不上）
     leansearch_top_k: int = 5               # 每次检索返回条数（老师 #46 要求扫 {3,5,10}）
     leansearch_max_calls_per_q: int = 2     # 单题检索次数上限（护栏：防时间膨胀）
     # ⚠ 原 `leansearch_timeout` 已**删除**（2026-09-15 上线审计）：
@@ -718,6 +763,15 @@ class AgentConfig:
     # 总耗时 +23%、触发组人均 +245s）。默认去掉前置强制评审-重写循环，
     # 蓝图直接进子目标求解；后置 replan（候选入池后、预算允许时）仍由
     # enable_dag_replan 独立控制。需 A/B 复测门效果时显式置 True。
+    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
+    #   旧的关闭依据「45 题实证：净正确率贡献≈0、耗时 +23%、重写对方向性错误无济于事」
+    #   —— 按 `docs/ima论文分析_..._0915.md §5 隐患 2`，该结论是在
+    #   **时间墙 + 「修复结果从不落盘」** 下得出的，而后者的根因
+    #   （`_skeleton_review_loop` / `_dag_replan_gate` 的重生成**未写回 `ctx.blueprint`**）
+    #   已于 2026-10-04 修复。旧结论失效 ⇒ 必须在无时间约束下复测。
+    #   ★★ 2026-10-04 决策更正：**不翻默认值** —— 项目已有专为此设计的实验臂
+    #   `deploy/run_112.py` 的 `arm2`（= 蓝图结构修复 + 评审链恢复，理由与本条完全一致）。
+    #   翻默认值会让 arm2 与基线重合、毁掉 A/B 对照。**复测请用 `--arm arm2`。**
     dag_replan_gate: bool = False
     # 2026-09-13 补上**显式声明**（此前**未在 dataclass 声明**，而读取处是
     # `sub_goal_solver.py:693` 的 `getattr(config, "enable_dag_replan", True)`
@@ -730,6 +784,16 @@ class AgentConfig:
     #   · 每轮 `DagReviewer.review` 是**逐节点 LLM**（实测均评审 11.1 节点/题、
     #     上限 30），过阈值再整树重生成。
     # 需 A/B 复测时显式置 True 或 `--enable_dag_replan true`。
+    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
+    #   `docs/ima论文分析_蓝图生成与子目标制定_0915.md §5 隐患 2` 明确记载——
+    #   旧的"关闭"理由是「后置 replan 受 **stage budget** 限制 + **修复结果从不落盘**」，
+    #   **那是时间墙导致的，不是机制本身无效**；并列出 6 道错题
+    #   （comb-032 48% / geo-051 50% / nt-031 41.7% / nt-037 47.6% / nt-077 45% /
+    #     nt-096 60%）"**审查已亮红灯并建议重规划，但实际修订轮数 = 0**"。
+    #   ⇒ 其中「修复结果从不落盘」**正是 2026-10-04 修掉的写回 bug**
+    #     （`_skeleton_review_loop` 未写回 `ctx.blueprint`）。
+    #   ⇒ 旧负面结论**已失效**，现在必须在无时间约束下复测。
+    #   开关可随时置 False 取回旧基线做 A/B。
     enable_dag_replan: bool = False
     # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
     # 蓝图生成后先提交 LLM 审查子目标是否不适定 / 难度>=原题；有问题重生成再确认，
@@ -743,6 +807,13 @@ class AgentConfig:
     #   · 每轮 = 1 次 32768-token 评审 + 1 次整树重生成。
     # 老师原意是"求解前把关"，但实测**不收敛** ⇒ 机制保留、默认关闭；
     # 需要时置 True（或 `--enable_skeleton_review true`）复测。
+    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
+    #   同一份 ima 论文分析 §5 隐患 2 指出，骨架评审的关闭理由
+    #   （"80/112 走满 2 轮仍判 replan、从未收敛"）**根因是"从未真正收敛"
+    #   被两个缺陷放大**：① 评审对象**包含根节点**（= 原题本身，永远无法满足
+    #   "比父题更简单"）⇒ 必然 replan；② 重生成结果**不写回**。
+    #   这两条均已于 2026-10-04 修复 ⇒ 旧结论失效，须在无时间约束下复测。
+    #   开关可随时置 False 取回旧基线做 A/B。
     enable_skeleton_review: bool = False
     skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
     # ---- lemma 记忆（#30，跨题持久化）----
@@ -825,6 +896,7 @@ class ReasoningAgent:
             "verifier_disagreement_temperature",
             # 2026-09-15：带推理的最终复核（验证器偏松的止血阀）
             "verifier_deep_final_enabled", "verifier_deep_final_min_remaining",
+            "verifier_vote_reasoning",
             "verifier_deep_review_max_tokens",
             "verifier_deep_review_min_chars",
             "verifier_deep_review_temperature",
@@ -860,6 +932,8 @@ class ReasoningAgent:
             "use_scoring",
             "use_rubric", "use_challenge",  # 2026-09-06 sq 移植（A/B 开关）
             "max_revise_rounds", "max_workers",
+            "require_answer_in_pool",
+            "strict_all_rejected",
             "use_proof_channel", "use_lemma_accumulation",
             "lemma_domains",
             "max_answer_tokens", "revise_sample_times",
@@ -972,6 +1046,17 @@ class ReasoningAgent:
             "theorem_memory_enable",
             # lemma 记忆
             "lemma_storage_path",
+            # ★★ 2026-10-04 开关注册制补齐：以下 4 键此前**不在白名单** ⇒
+            #   CLI/kwargs 传入会被 `__init__` **静默丢弃**（本项目已因漏加白名单
+            #   踩过多次，见上方注释）。补齐后可经 env / CLI / kwargs 生效。
+            #   （另 5 键 `enable_subgoal_multi_agent` / `use_leansearch` /
+            #     `dag_replan_gate` / `enable_skeleton_review` / `enable_question_type`
+            #     原本已在白名单，未重复添加。）
+            "k11_mask_statement",     # K11 注入点守卫（消费方 sub_goal_solver）
+            "candidate_pool_limit",   # 候选池上限（0 = 不限）
+            "sub_goal_oracle_check",  # 子目标逐步 oracle 校验（默认关）
+            "falsify_max_per_q",      # 单题最多证伪次数
+            "phase_budget_enabled",   # 阶段时间预算总开关
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])

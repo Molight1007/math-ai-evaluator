@@ -56,10 +56,15 @@ class TheoremHit:
     short: str = ""           # 末段短名，如 Nat.choose
     source: str = ""          # 命中的 query（便于归因「哪个 query 找到的」）
     rank: int = 0             # 在该次检索中的位次（1-based）
+    # ★ 2026-10-04 新增：定理**陈述片段**。检索层 `lean_search` 早就返回了它
+    #   （`{"name","kind","file","line","snippet"}`），但这里构造时**丢掉了** ⇒
+    #   注入给模型的只有"短名"，模型无从判断该定理讲什么 ⇒ 历史实测**采用率仅 1%**。
+    snippet: str = ""         # 定理陈述片段（来自检索层，截断后入提示词）
 
     def to_dict(self) -> dict:
         return {"name": self.name, "short": self.short,
-                "source": self.source, "rank": self.rank}
+                "source": self.source, "rank": self.rank,
+                "snippet": self.snippet}
 
 
 @dataclass
@@ -103,17 +108,28 @@ class TheoremRetrieval:
     def render_hint_block(self, max_items: int = 5) -> str:
         """渲染成注入提示词的文本块（无命中返回空串 ⇒ 下游零成本）。
 
-        ★ 只输出短名 + 说明；全名走 `to_dict()` 埋点，不进提示词。
+        ★ 2026-10-04 修（**采用率 1% 的直接病因**）：
+        原实现「只输出短名 + 一句『不必强行使用』免责句」，模型**无从判断该定理
+        讲的是什么、适不适用** ⇒ 实测 460 条检索结果里只有 **1%** 进入实际推理。
+        现改为输出「**短名 + 一行定理陈述**」（陈述来自检索层一直就有、却被丢弃的
+        `snippet`），并把免责句改为**正向引导**（相关就优先采用并标注）。
+        ⚠ 仍保留"以你的判断为准"这一层 —— 检索是**线索**不是裁决，不得覆盖题目事实。
         """
         hits = [h for h in self.hits if (h.short or h.name)][:max(0, max_items)]
         if not hits:
             return ""
         lines = ["【本题可能在 Mathlib 中用到的定理（leansearch 自动检索，供参考）】"]
         for i, h in enumerate(hits, 1):
-            lines.append(f"{i}. {h.short or h.name}")
+            _nm = h.short or h.name
+            _sn = " ".join(str(getattr(h, "snippet", "") or "").split())
+            if _sn:
+                lines.append(f"{i}. {_nm} —— {_sn[:200]}")
+            else:
+                lines.append(f"{i}. {_nm}")
         lines.append(
-            "（以上仅为线索，若与你的推理不符，以题意与你的判断为准；"
-            "不必强行使用。）")
+            "（以上为检索到的**候选定理及其陈述**：若与本题相关，"
+            "**请优先采用并在推理中标注**它体现在哪一步；"
+            "若确实不适用，以题意与你自己的判断为准。）")
         return "\n".join(lines)
 
 
@@ -450,6 +466,8 @@ def retrieve_theorems_for_question(
                     short=name.rsplit(".", 1)[-1],
                     source=q,
                     rank=i,
+                    # ★ 2026-10-04：把检索层已有的陈述片段带上来（此前被丢弃）
+                    snippet=" ".join(str(item.get("snippet") or "").split())[:240],
                 ))
         # ★ 2026-09-29 修复（实测暴露）：多 query 结果必须**按位次重排**后再截断。
         #   原实现是「先到先得、跑满 top_k 就停」—— 但领域 query（第 1 条）本身就

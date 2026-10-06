@@ -108,6 +108,23 @@ def _norm(a: str) -> str:
     return re.sub(r"\s+", "", s).lower()
 
 
+def _items_equiv(a: str, b: str) -> bool:
+    """两个**单项**答案是否等价（SymPy 精确优先，失败回退 `_norm`）。
+
+    ★ 2026-10-04 修（D9-a）：第②层去重原先只用 `_norm`（剥壳 + 去空白 + 小写），
+    于是 `0.5` 与 `\\frac12`、`1/2` 与 `0.5` 会被当成**两个不同答案**同时输出，
+    而判分器按 `,` 拆成多项与 gold 比对 ⇒ **必错**（与 D2 同族）。
+    复用全项目唯一的等价入口 `AnswerOracle.answers_equivalent`。
+    """
+    if _norm(a) == _norm(b):
+        return True
+    try:
+        from agent.answer_oracle import AnswerOracle
+        return bool(AnswerOracle.answers_equivalent(a, b))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _is_bad_answer(a: str) -> bool:
     """空 / 拒绝词 / 结构化非答案 ⇒ 不能当终答候选。"""
     s = str(a or "").strip()
@@ -327,9 +344,31 @@ def select_final_answer(ctx, candidates, llm: Callable,
         multi = _parse_multiple(raw2)
         diag["multi_answer"] = multi
         if multi is True:
-            ans = ", ".join(a for a, _, _ in uniq)
+            # 2026-10-04 修（fix-a1）：原实现直接 `", ".join(a for a, _, _ in uniq)`，
+            # 用的是**原始答案串**——而 uniq 已按 `_norm(a)` 去重，导致
+            # 「同一答案的不同写法」「集合相同但顺序不同」被重复输出。
+            # 实测候选 ['0,2026','2026','0, 2026','2026,0'] ⇒ 旧输出
+            # '0,2026, 2026, 2026,0'（5 项）；判分器 _split_multi 只按 ',' 拆且
+            # 不去重 ⇒ 拆出 5 项 vs gold 2 项 ⇒ 判 False。
+            # 修法：拆成单项、按 `_norm(单项)` 去重（保留首次出现的原始写法）、
+            # 用 ASCII ", " 连接（对齐判分器口径，**不可用顿号**）。不设条数上限。
+            _items: List[str] = []
+            for a, _, _ in uniq:
+                for piece in re.split(r"[,，]", a):
+                    p = piece.strip()
+                    if not p:
+                        continue
+                    # ★ 2026-10-04（D9-a）：去重从 `_norm` 字符串比较升级为
+                    #   `_items_equiv`（SymPy 等价优先）⇒ `1/2` 与 `0.5`、
+                    #   `\frac12` 与 `0.5` 这类**同一答案的不同写法**不再被当成
+                    #   两项输出（判分器按 `,` 拆项与 gold 比对，多输出即必错）。
+                    if any(_items_equiv(p, q) for q in _items):
+                        continue
+                    _items.append(p)
+            diag["multi_items"] = _items
+            ans = ", ".join(_items) if _items else ", ".join(a for a, _, _ in uniq)
             diag["branch"] = "multi_answer"
-            _rec(f"五层选择②：判为多答案题 ⇒ 直接输出 {len(uniq)} 个终答，"
+            _rec(f"五层选择②：判为多答案题 ⇒ 展平去重后输出 {len(_items)} 项终答，"
                  f"跳过 ③④⑤：{ans[:80]}")
             return {"answer": ans, "branch": "multi_answer", "skipped": False,
                     "steps": steps, "diag": diag, "cand": None}

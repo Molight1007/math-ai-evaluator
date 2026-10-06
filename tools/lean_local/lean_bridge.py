@@ -267,6 +267,46 @@ def _cross_check_problem_numbers(problem: str, lean_code: str) -> bool:
         return True
 
 
+def _is_identity_statement(lean_code: str) -> bool:
+    """验证代码是否是 `X = X` 形式的**恒等式**（等号两边文本等价 ⇒ 无验证力）。
+
+    ★★ 2026-10-06 新增（**实测铁证：假执行**）：
+    题 002 的验证代码是
+        `example : (Real.sqrt 5 - 1) / 2 = (Real.sqrt 5 - 1) / 2 := by norm_num`
+    它**编译必然通过、与答案对错毫无关系**，却被判 `verdict="answer_valid"`。
+    根因：数字交叉核对 `common2 = (ans_nums & code_nums2) - {"0","1","2"}`
+    **区分不了「验证命题」与「恒等式」** —— 恒等式里**当然包含答案的数字**
+    （答案在等号两边各写了一遍）⇒ 核对通过。
+    既有的 `_is_ground_statement` 只在**题面含参数**时触发，覆盖不到本题（题面非参数型）。
+
+    判据：取 `: … := by` 之间的命题体，按**最外层等号**切两半，
+    归一化（去类型标注 / 去命名空间前缀 / 去空白括号 `$ \\ {}`）后**文本相等** ⇒ 恒等式。
+    保守：只在能明确切出两半且归一化后完全相等时判 True（不误伤真命题）。
+    """
+    code = str(lean_code or "")
+    m = re.search(r":\s*(.+?)\s*:=\s*by", code, re.DOTALL)
+    if not m:
+        return False
+    parts = re.split(r"(?<![<>=≤≥≠])=(?!=)", m.group(1))
+    if len(parts) != 2:
+        return False
+
+    def _norm(s: str) -> str:
+        # ★ 只删**类型标注**、保留其值：`(0:ℚ)` → `0`。
+        #   （首版用 `\([^()]*:[^()]*\)` 把整个 `(0:ℚ)` 删掉，连值一起丢了 ⇒
+        #    `(0:ℚ) = 0` 被误判为非恒等式。实测回归抓出。）
+        s = re.sub(r"\(([^()]*?)\s*:\s*[^()]*?\)", r"\1", s)
+        for _p in ("Real.", "Nat.", "Int.", "Rat.", "Complex."):
+            s = s.replace(_p, "")
+        s = re.sub(r"[\s$\\{}()\[\]]", "", s)
+        for _t in ("ℚ", "ℝ", "ℕ", "ℤ", "ℂ"):
+            s = s.replace(_t, "")
+        return s
+
+    lhs, rhs = _norm(parts[0]), _norm(parts[1])
+    return bool(lhs) and lhs == rhs
+
+
 def _cross_check_problem_symbols(problem: str, lean_code: str) -> bool:
     """按**题面变量符号**交叉核对 —— 数字核对失效时的兜底防线。
 
@@ -2500,6 +2540,14 @@ class LeanBridge:
                 if (_cc is not False and _problem_is_parametric(problem)
                         and _is_ground_statement(lean_code)):
                     _cc = False
+                # ★★ 2026-10-06 新增（**恒等式必须判自证** —— 实测铁证）：
+                #   题 002 的 `example : (√5-1)/2 = (√5-1)/2 := by norm_num` 是**恒等式**，
+                #   编译必然通过、与答案对错无关，却被判 `answer_valid` ⇒ 假执行。
+                #   根因：下面的 `common2 = (ans_nums & code_nums2) - {...}` 区分不了
+                #   「验证命题」与「恒等式」—— 恒等式里当然含答案的数字（写了两遍）。
+                #   既有 `_is_ground_statement` 只在**题面含参数**时触发，覆盖不到本题。
+                if _cc is not False and _is_identity_statement(lean_code):
+                    _cc = False
                 if _cc is None:
                     # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
                     ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
@@ -2521,8 +2569,18 @@ class LeanBridge:
                         findings=[Finding(
                             location="answer_verify", kind="Critical",
                             severity=5,
-                            desc="疑似自证：验证代码未引用题目关键数字/条件（只验自身恒等式），"
-                                 "无法证明答案与题目相关。请重写：把题目条件与答案一起形式化"
+                            # ★★ 2026-10-06 修（**"把非答案问题当成答案错误"**）：
+                            #   实测这条 advice 在题 000/001 里各占 **12/15 条**、
+                            #   而带定位的结构化 bug report 只占 0~1 条 ⇒ **噪声压过信号**，
+                            #   且模型被引向"重写验证代码"，把答案越改越偏
+                            #   （题 000：20 → 20971520，标准 20460）。
+                            #   本检查本身**是对的**（防 LLM 写恒真式骗过 Lean 认证），
+                            #   所以**保留拒绝判定**；但必须讲清楚：
+                            #   它说的是**验证产物**没锚定题目数字，**不等于答案错**。
+                            desc="【这不是答案错误】Lean 验证代码未引用题目的关键数字/条件"
+                                 "（只验了自身恒等式），因此本候选**无法被 Lean 认证** —— "
+                                 "但**不能据此判定答案错**。请**保持答案不变**，"
+                                 "只把题目条件与答案一起形式化"
                                  "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
                     setattr(report, "lean_code", lean_code)
                     setattr(report, "verdict_reason", "cross_check_failed")

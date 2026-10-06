@@ -120,6 +120,94 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "终答五层选择（②多答案判断→③客观验证→④模型对比→⑤投票兜底；"
         "ON 时终答不再走 _rank_key 票数优先 / objective_majority_vote，"
         "由 agent/final_selector.select_final_answer 统一选出；=0 全部回退改动前）"),
+    # ---- 2026-10-04 开关注册制补齐（9 项：新增 2 + 补登记 7）----
+    # ⚠ 下列默认值均与 `user_agent.py::AgentConfig` 同名字段的**当前默认值**逐条核对一致
+    #   （否则 `bind_config` 会把两者绑成不一致的值）。本批**只登记，不翻转任何既有默认值**。
+    # ---- agent/sub_goal_solver.py（K11 注入点守卫，消费方已存在）----
+    "k11_mask_statement": (
+        "K11_MASK_STATEMENT", "bool", True,
+        "K11 注入点守卫：把子目标描述/蓝图结论里被断言的数值掩为占位符（=0 关闭）"),
+    "sub_goal_oracle_check": (
+        "SUB_GOAL_ORACLE_CHECK", "bool", False,
+        "子目标逐步 oracle 校验（AnswerOracle sanity check，返回非空则重试该步；"
+        "默认关 —— 2026-09-03 老师口径：oracle 是同源自评、价值低耗时高）"),
+    # ---- agent/final_selector.py 候选池（研究期口径）----
+    "candidate_pool_limit": (
+        "CANDIDATE_POOL_LIMIT", "num", 6.0,
+        "候选池上限（默认 6，与旧行为一致；0 = 不限，内部安全上界 12。"
+        "⚠ 该值同时是本次生成数量，勿设天文数字）"),
+    # ---- user_agent.py / agent/sub_goal_solver.py（多 agent 求解）----
+    "enable_subgoal_multi_agent": (
+        "ENABLE_SUBGOAL_MULTI_AGENT", "bool", True,
+        "子目标内部多采样取多数（2026-10-04 默认 True；=0 取回单次调用旧基线）"),
+    # ---- user_agent.py / agent/solver.py（LeanSearch 引理检索）----
+    "use_leansearch": (
+        "USE_LEANSEARCH", "bool", False,
+        "LeanSearch 检索总开关（**默认关**：本项目「未验证不上」纪律 + "
+        "2026-10-01 显式范围决策，非缺陷；要开请显式设 env 或走 A/B）"),
+    # ---- agent/dag_reviewer.py（求解前 DAG 强制评审门）----
+    "dag_replan_gate": (
+        "DAG_REPLAN_GATE", "bool", False,
+        "求解前 DAG 强制评审门（2026-10-04 默认 True = **复测**：旧负面结论"
+        "「拦得住修不好」是在时间墙 + 重生成未写回 bug 下得出的，两条均已修复；"
+        "=0 取回旧基线做 A/B）"),
+    # ---- agent/skeleton_reviewer.py（骨架编排层评审循环）----
+    "enable_skeleton_review": (
+        "ENABLE_SKELETON_REVIEW", "bool", False,
+        "骨架编排层评审循环（2026-10-04 默认 True = **复测**：旧结论"
+        "「71% 走满 2 轮从未收敛」的根因是**根节点参与评审**（必然 replan）"
+        "+ 重生成未写回，两条均已修复；=0 取回旧基线）"),
+    # ---- agent/sub_goal_solver.py（求解后 DAG 复盘重规划，2026-10-04 补登记）----
+    "enable_dag_replan": (
+        "ENABLE_DAG_REPLAN", "bool", False,
+        "求解**后**（候选已入池）再评审 DAG 并重写（2026-10-04 默认 True = 复测；"
+        "旧结论「2/3 白跑」同属时间墙下产物；=0 取回旧基线）"),
+    # ---- agent/blueprint_planner.py（OR 节点展开策略，2026-10-04 补登记）----
+    "blueprint_or_expand_all": (
+        "BLUEPRINT_OR_EXPAND_ALL", "bool", False,
+        "蓝图 OR 节点是否展开**全部**备选分支（默认 False = 只取首分支/保持历史行为；"
+        "置 True 会显著放大子目标规模，需 A/B）"),
+    # ---- agent/sub_goal_solver.py 引理记忆（2026-10-04 补登记）----
+    "use_lemma_accumulation": (
+        "USE_LEMMA_ACCUMULATION", "bool", True,
+        "引理积累/注入总开关（默认 True；实际注入还受 `lemma_domains` 领域路由约束）"),
+    "lemma_domains": (
+        "LEMMA_DOMAINS", "str", "Number theory,数论",
+        "引理注入的**领域白名单**（逗号分隔）。默认仅数论 —— 依据本项目 A/B"
+        "「数论 +23pp、代数/组合被拖累」；而 LEAP Table 6 认为代数也该受益 ⇒"
+        "**两来源冲突，靠 `arm4` 裁决**。"
+        "⚠ 消费方按**列表**读 `config.lemma_domains` ⇒ 走 `--arm`/AgentConfig 覆盖；"
+        "env 路径需再补转换（当前 arm 驱动）"),
+    # ---- agent/falsifier.py（单题证伪次数上限）----
+    "falsify_max_per_q": (
+        "FALSIFY_MAX_PER_Q", "num", 0.0,
+        "单题最多证伪次数（**0 = 不限**；2026-10-04 默认 0。"
+        "⚠ 语义已由旧的「0 = 禁用证伪」统一为「0 = 不限」）"),
+    # ---- agent/orchestrator.py（阶段时间预算总开关）----
+    "phase_budget_enabled": (
+        "PHASE_BUDGET_ENABLED", "bool", False, "阶段时间预算总开关（默认关）"),
+    # ---- user_agent.py / agent/orchestrator.py（题型惰性分类）----
+    "enable_question_type": (
+        "ENABLE_QUESTION_TYPE", "bool", True, "题型惰性分类总开关"),
+    # ---- agent/orchestrator.py（门全拒的处置策略，2026-10-06 新增）----
+    "strict_all_rejected": (
+        "STRICT_ALL_REJECTED", "bool", False,
+        "Lean/Audit 门把候选**全部拒掉**时的处置：默认 False = 只显式留痕、"
+        "不再静默保留（原实现 `if kept:` 在全拒时不更新候选池 ⇒ 门等于没作用）；"
+        "置 True = 进一步清空候选池，触发下游兜底/重生成链"),
+    # ---- agent/solver.py（候选入池门槛，2026-10-06 新增）----
+    "require_answer_in_pool": (
+        "REQUIRE_ANSWER_IN_POOL", "bool", True,
+        "候选入池前是否要求它**真的含一个最终答案**。默认 True：不含则不入池并留痕"
+        "（实测 59% 的候选 `answer` 是推理句/元话语，入池后污染投票/检错/修正）。"
+        "置 False 可回退旧行为（全部入池）做 A/B"),
+    # ---- agent/verifier.py（2026-10-04 B 折中：投票放开完整推理的档位）----
+    "verifier_vote_reasoning": (
+        "VERIFIER_VOTE_REASONING", "str", "disagree",
+        "投票是否放开完整推理（不 prefill）：off=全部 prefill（旧行为，0.8s/票但"
+        "「看一眼就点头」）/ **disagree=默认**（仅候选分歧时放开，把算力花在拿不准的题上）"
+        " / always=每票都放开完整推理（最准，约 70s/票）。用户口径：先试 disagree，"
+        "效果不理想即切 always（正确率第一位）"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}
@@ -172,11 +260,22 @@ def _raw(field: str) -> Optional[str]:
 
 
 def get_bool(field: str) -> bool:
+    """读布尔开关（env > config 覆盖 > 默认值）。
+
+    ★ 2026-10-04 修（D28）：`config 覆盖` 分支原为 `bool(_overrides[field])`，
+    于是经 `bind_field` 传入**字符串** `"0"` 时 `bool("0") is True`
+    ⇒ **"关"被读成"开"**（且 `get_str` 对空串的口径也不同）。
+    现对**字符串**覆盖复用与 env 同一套 `_OFF` 语义；非字符串仍按 truthiness
+    （`bind_config` 绑进来的是真 bool，行为不变）。
+    """
     raw = _raw(field)
     if raw is not None:
         return raw.lower() not in _OFF
     if field in _overrides:
-        return bool(_overrides[field])
+        ov = _overrides[field]
+        if isinstance(ov, str):
+            return ov.strip().lower() not in _OFF
+        return bool(ov)
     return bool(SWITCHES[field][2])
 
 

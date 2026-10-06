@@ -656,6 +656,12 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             statement=statement,
             children=children,
             rationale=str(nd.get("rationale", nd.get("reason", ""))),
+            # 2026-10-04 修（fix-a1）：原实现**不读 node_role/role** ⇒ 所有节点都取
+            # 默认 "required" ⇒ 下游 to_subgoal_plan 收集的 anticipatory 恒为空 ⇒
+            # sub_goal_solver._inject_anticipatory_lemmas 永远拿到 []（机制空转）。
+            # prompts/blueprint.py:130/187/222 明确要求前瞻引理节点写 "role": "anticipatory"。
+            # 与同文件 BlueprintDAG.from_dict()（:526）写法完全一致。
+            node_role=nd.get("node_role", nd.get("role", "required")) or "required",
         )
     if not nodes:
         return None

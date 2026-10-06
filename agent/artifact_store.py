@@ -115,8 +115,16 @@ def current_run_id() -> str:
 
 
 def _qid_from_problem(problem: str) -> str:
+    """题面 → 稳定 qid（同一道题跨进程/跨轮次必须落到同一目录）。
+
+    ★ 2026-10-04 修（D29）：原用内置 `hash()`，受 `PYTHONHASHSEED` 随机化影响
+    ⇒ **跨进程不稳定**（实测 seed=1/2/3 得到 `q60992660`/`q31868867`/`q14196416`
+    三个不同目录名），破坏了本模块「按题归集中间结果、可离线复现」的核心目的。
+    改用 md5 摘要（确定性）。
+    """
     try:
-        return "q" + str(abs(hash(str(problem))) % 10 ** 8)
+        import hashlib
+        return "q" + hashlib.md5(str(problem).encode("utf-8")).hexdigest()[:8]
     except Exception:  # noqa: BLE001
         return "q0"
 
