@@ -37,6 +37,8 @@ CHECK_SPECS = [
     ("10", "恒等式骗过验证", "trace 中『恒等式』出现次数"),
     ("11", "门全拒等于全留", "trace 中『全部拒掉』出现次数"),
     ("12", "候选含非答案", "candidate_invalid / answer_salvaged 条目数"),
+    ("13", "零多样性不补采", "trace 中『零多样性』补采触发次数"),
+    ("14", "反馈含重做正文", "反馈中『证明：』/『正确答案应为』出现次数"),
 ]
 
 
@@ -62,6 +64,7 @@ def collect(path: pathlib.Path) -> dict:
         "反馈条数": 0, "去重后条数": 0, "恒等式": 0, "全拒": 0,
         "candidate_invalid": 0, "answer_salvaged": 0,
         "去重事件": 0, "去重前": 0, "去重后": 0, "入池拦截": 0, "抢救": 0,
+        "零多样性补采": 0, "反馈含重做": 0,
         "池含gold": 0, "候选总数": 0, "真答案候选": 0,
     }
 
@@ -108,6 +111,12 @@ def collect(path: pathlib.Path) -> dict:
                 out["入池拦截"] += 1
             if "从句子中抢救出答案" in c:
                 out["抢救"] += 1
+            if "零多样性" in c:
+                out["零多样性补采"] += 1
+        # ★ 反馈里不应再出现"重做正文"（`_clip_review_prose` 的判据）
+        for x in fb:
+            if "证明：" in x or "正确答案应为" in x:
+                out["反馈含重做"] += 1
             if t.get("step") == "falsify_miss":
                 out["falsify_miss"] += 1
         gold = _norm_ans(r.get("gold"))
@@ -159,6 +168,13 @@ def verdict(idx: str, m: dict) -> tuple:
         if m["入池拦截"] or m["抢救"]:
             return "✅", f"入池拦截 {m['入池拦截']} 个 / 抢救出答案 {m['抢救']} 个"
         return "⚪", "本轮无候选被拦或被抢救（模型给出的都已是规范答案）"
+    if idx == "13":
+        if m["零多样性补采"]:
+            return "✅", f"零多样性 → 触发补采 {m['零多样性补采']} 次"
+        return "⚪", "本轮无零多样性场景（候选本就有分歧）"
+    if idx == "14":
+        return ("✅" if m["反馈含重做"] == 0 else "❌"), \
+               f"{m['反馈含重做']} 条含『证明：/正确答案应为』（应 0）"
     return "?", ""
 
 
