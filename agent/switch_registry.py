@@ -195,6 +195,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "Lean/Audit 门把候选**全部拒掉**时的处置：默认 False = 只显式留痕、"
         "不再静默保留（原实现 `if kept:` 在全拒时不更新候选池 ⇒ 门等于没作用）；"
         "置 True = 进一步清空候选池，触发下游兜底/重生成链"),
+    # ---- agent/solver.py（revise 候选数下限，2026-10-06 新增）----
+    "revise_min_candidates": (
+        "REVISE_MIN_CANDIDATES", "int", 3,
+        "revise（纠错重解）每轮的**候选数下限**。原 count = 池剩余容量 ⇒ 随池增长单调递减"
+        "（实测逐轮 4→2→1，最后一轮只试 1 个）⇒ 越到后面改对机会越少。设下限杜绝此退化。"
+        "置 1 可回退旧行为做 A/B"),
     # ---- agent/solver.py（候选入池门槛，2026-10-06 新增）----
     "require_answer_in_pool": (
         "REQUIRE_ANSWER_IN_POOL", "bool", True,

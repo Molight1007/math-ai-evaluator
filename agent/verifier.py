@@ -208,6 +208,59 @@ def _dump_deep_review_sample(ctx, raw: str, verdict) -> None:
         fh.write(_json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def _clip_review_prose(text: str) -> str:
+    """裁掉复核输出里的**重做正文**与**越权结论断言**，只留诊断。
+
+    ★★ 2026-10-06 新增（**实测驱动：反馈把答案喂给了模型**）：
+    题 000 的反馈第 0 条 2185 字符，开头是：
+        「保留的缺陷：
+          ① 原答案 40 错误，**正确答案应为 0。下面给出严谨证明。**
+          **证明：** 设 G 为题中描述的图…（其后 2000+ 字符是复核者**自己重做了一遍**的解答）」
+    trace 完整记录了后果链：
+        [review] 反馈复核完成：…正确答案应为 0。下面给出严谨证明…
+        [revise] 重解启动 count=4、反馈 1 条、revise_round=1   ← 模型拿到这段
+        最终 = \\boxed{0}     而标准 = 20460
+    ⇒ **复核者自己判错（说"正确答案应为 0"），模型照抄了这个结论。**
+
+    两重问题：
+      ① 「**正确答案应为 X**」是**结论性断言** —— 验证器越权替解答下结论；
+      ② 后面附了**完整重做正文** —— 模型可整段照抄（远比自己去改省力）。
+    这违反验证器自身纪律：其系统提示词明写「**绝不要试图纠正你发现的错误或填补漏洞**
+    —— 一旦你开始替它修正，就会不自觉地**为它辩护**」。
+
+    判据：只保留「判定 + 诊断」，在首个"重做/mark"标记处**截断**；
+    并逐行剔除带结论断言的句子。**无标记时原样返回**（保守，不误删诊断）。
+    """
+    t = str(text or "")
+    if not t.strip():
+        return ""
+    cut = _REVIEW_PROSE_CUT.search(t)
+    if cut and cut.start() > 0:
+        t = t[:cut.start()]
+    # 再逐行剔除含"正确答案应为/是 X"这类越权断言的句子（但保留整段为空则不剔）
+    lines = []
+    for ln in t.split("\n"):
+        if _REVIEW_VERDICT_CLAIM.search(ln):
+            continue
+        lines.append(ln)
+    out = "\n".join(lines).strip()
+    return out if out else t.strip()
+
+
+_REVIEW_PROSE_CUT = re.compile(
+    r"(?:^|\n)\s*(?:\*\*)?\s*(?:"
+    r"下面(?:给出|是)?(?:严谨|完整)?(?:证明|推导|解法|解答)"
+    r"|证明\s*[:：]|证明如下|正确的?(?:答案|解法|结论)(?:应(?:该|当)?为|是|：)"
+    r"|因此[，,]?\s*正确(?:答案|解法)"
+    r"|故正确(?:答案|解法)"
+    r")")
+
+# "正确答案应为 X" 这类**结论性断言**（验证器不应下这种结论）
+_REVIEW_VERDICT_CLAIM = re.compile(
+    r"正确的?(?:答案|结果|值)(?:应(?:该|当)?为|是)\s*\S+"
+    r"|答案(?:应(?:该|当)?为|是)\s*\\?boxed")
+
+
 class VerifierAgent(BaseAgent):
     """
     过程校验智能体
@@ -1727,14 +1780,18 @@ class VerifierAgent(BaseAgent):
             #   不再互相替代）。结构化报告为空（如预算不足）时，才退回原来的单行标签。
             _struct = self._extract_revise_feedback(
                 ctx, problem, candidates, best_cluster)
+            # ★★ 2026-10-06：拼入前先**裁掉复核者的重做正文与越权结论**
+            #   （实测：`正确答案应为 0。下面给出严谨证明。**证明：**…` 被模型整段照抄
+            #   ⇒ 题 000 最终答 0、而标准答案 20460）。详见 `_clip_review_prose` 注释。
+            _deep_clip = _clip_review_prose(_deep_raw)
             if _struct:
                 feedback = (_struct
                             + "\n\n【复核依据（判错报告原文摘录）】\n"
-                            + _deep_raw.strip())[:8000]
+                            + _deep_clip)[:8000]
             else:
                 _et = _extract_error_type(_deep_raw) or _et_line or "未标注"
                 feedback = ("【带推理复核判错｜错误类型：%s】%s" % (
-                    _et, _deep_raw.strip()))[:6000]
+                    _et, _deep_clip))[:6000]
         else:
             feedback = self._extract_revise_feedback(
                 ctx, problem, candidates, best_cluster)

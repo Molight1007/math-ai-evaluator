@@ -1492,7 +1492,17 @@ class SolverAgent(BaseAgent):
                 feedback_text = feedback_text + "\n" + lessons_block
                 self.record(ctx, "error_lesson",
                             f"revise 注入历史易错自查清单 {error_lesson_ids(ctx)}")
-        count = cap if cap is not None else self.config.revise_sample_times
+        # ★★ 2026-10-06 修（**重做力度逐轮衰减** —— 实测驱动）：
+        #   `count` 原为 `cap`（= `_pool_room()` = 池剩余容量 = limit − len(candidates)），
+        #   而 revise 每轮都会往池里加候选 ⇒ **剩余容量单调递减** ⇒ 实测题 000 的
+        #   `重解启动：count=` 逐轮为 **4 → 2 → 1**，最后一轮只剩 1 个候选。
+        #   后果：**越到后面重做力度越小，改对的机会越少**（而这恰恰是最需要多试的时候）。
+        #   修法：给 revise 设**候选数下限** `revise_min_candidates`（默认 3）。
+        #   ⚠ 允许略微超出 `candidate_pool_limit` —— 该上限是**软帽**（池满时
+        #     `_generate_revise` 内部本就会自行腾位），而"最后一轮只试 1 个"的代价更大。
+        _revise_floor = int(getattr(self.config, "revise_min_candidates", 3) or 3)
+        count = max(cap if cap is not None else self.config.revise_sample_times,
+                    _revise_floor)
         # ⚠ A 修复（2026-09-12）：**候选池满时先腾位，而不是静默 return**。
         # 依据：6.5 的「拒绝 → 换候选 / 重解」是唯一的纠错回路，但 candidates
         # 常态就是 6 个 → `6 - len(candidates)` = 0 → count=0 → return

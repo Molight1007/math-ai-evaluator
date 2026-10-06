@@ -384,6 +384,10 @@ class AgentConfig:
     # ---- 自纠错参数 ----
     max_answer_tokens: int = 65536    # solver 单次调用最大 token 数（9/4 放开，防答案腰斩）
     revise_sample_times: int = 2       # 自纠错重解候选数
+    # ★ 2026-10-06 新增：revise 的**候选数下限**。原 count = 池剩余容量，而每轮都往池里
+    #   加候选 ⇒ 剩余容量单调递减 ⇒ 实测 `count` 逐轮为 4→2→1（最后一轮只试 1 个）。
+    #   设下限保证"越到后面越没有改对机会"这个退化不再发生。
+    revise_min_candidates: int = 3
 
     # ---- 新功能开关（简化）----
     # 2026-10-01 按用户决策默认开（研究期不省资源）。
@@ -936,7 +940,7 @@ class ReasoningAgent:
             "strict_all_rejected",
             "use_proof_channel", "use_lemma_accumulation",
             "lemma_domains",
-            "max_answer_tokens", "revise_sample_times",
+            "max_answer_tokens", "revise_sample_times", "revise_min_candidates",
             # 2026-10-01 开关注册制：29 个已登记开关进入白名单（可经 CLI/kwargs 传入）
             #（2026-10-02 新增 artifact_store_enabled / minimal_mode / enable_subgoal_findings
             #  / enable_final_answer_selection）

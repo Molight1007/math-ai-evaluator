@@ -382,6 +382,10 @@ _SPEC = (
      None, "bool",
      "SUB_GOAL_ORACLE_CHECK — 子目标逐步 oracle 校验（默认关；"
      "此前字段全仓缺失 ⇒ 该门控结构性不可达，2026-10-04 补登记）", None),
+    ("revise_min_candidates",
+     lambda cfg, tier, _f="revise_min_candidates", _d=3: getattr(cfg, _f, _d),
+     None, "int",
+     "REVISE_MIN_CANDIDATES — revise 每轮候选数下限（默认 3；防逐轮衰减 4→2→1）", None),
     ("require_answer_in_pool",
      lambda cfg, tier, _f="require_answer_in_pool", _d=True: getattr(cfg, _f, _d),
      None, "bool",
