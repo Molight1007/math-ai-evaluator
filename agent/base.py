@@ -20,7 +20,6 @@ except ImportError:
 """
 
 import logging
-import os        # 2026-09-18：F1 开关（TOOLCALL_TEXT_FALLBACK）需要
 import re
 import threading
 import time
@@ -121,15 +120,57 @@ _register_truncation_listener()
 # 响应归一化（P0-1 契约防线）
 # ============================================================
 # ★★ 2026-09-18（F1）：**文本通道工具调用**的开关与解析器。
-#   默认**关**（`TOOLCALL_TEXT_FALLBACK=0`）—— 它直接改主链生成行为，
-#   必须先开/关 A/B。开启后：解析文本形态的调用 → 真正执行 → 把结果以
+#   2026-10-07 修（本通道**默认翻转为开** —— 见 `switch_registry.SWITCHES` 注释）。
+#   开启后：解析文本形态的调用 → **白名单校验** → 真正执行 → 把结果以
 #   `role=user` 追加后 `continue`，让模型基于真实检索结果继续推导。
-_TEXT_TOOLCALL_FALLBACK = _sw_bool("toolcall_text_fallback")
+#
+#   ⚠ 2026-10-07：原为模块级常量 `_TEXT_TOOLCALL_FALLBACK = _sw_bool(...)`，
+#   在 **import 时**求值 ⇒ 之后 `bind_config(cfg)` 写进 `_overrides` 的
+#   **CLI/AgentConfig 覆盖永远读不到**（env 因在进程启动前设定才碰巧有效）。
+#   现改为**调用时实时读取**（`_text_toolcall_fallback_enabled()`），
+#   env 与 config 两条路径都生效，口径与 `switch_registry.get_bool` 完全一致。
 _TEXT_FN_RE = re.compile(r"<function\s*=\s*([A-Za-z_]\w*)\s*>", re.I)
 _TEXT_PARAM_RE = re.compile(
     r"<parameter\s*=\s*([A-Za-z_]\w*)\s*>(.*?)"
     r"(?:</parameter>|</function>|</tool_call>|$)",
     re.I | re.S)
+
+
+def _text_toolcall_fallback_enabled() -> bool:
+    """文本通道兜底开关是否生效（**调用时实时读取**，env/config 覆盖均有效）。"""
+    return _sw_bool("toolcall_text_fallback")
+
+
+# ------------------------------------------------------------
+# 文本通道**执行白名单**（2026-10-07）
+# ------------------------------------------------------------
+# ⚠ 安全约束：走文本通道**不放宽任何权限** —— 这里只允许执行「原生通道同样
+#   注册给模型」的工具（当前仅 `web_search`，见 `llm_with_tools._tools`）。
+#   白名单外的一律不执行，只留痕（`unknown_function:<name>`）。
+#   这样即便模型凭空捏造 `<function=os_system>`，也不会被执行。
+_TEXT_TOOLCALL_WHITELIST = ("web_search",)
+# 白名单工具的**必填参数**（与 `WEB_SEARCH_TOOL_SCHEMA.parameters.required` 一致）。
+# 缺失/空白 ⇒ 不执行（避免用空检索式打网络）。
+_TEXT_TOOLCALL_REQUIRED = {"web_search": "query"}
+# 检索式长度上限（防模型把整篇推导塞进 <parameter=query>）。
+_TEXT_TOOLCALL_MAX_PARAM = 400
+
+
+def _text_toolcall_acceptable(name, args):
+    """文本通道调用的准入判定：白名单 + 必填参数非空。
+
+    返回 `(True, "")` 或 `(False, 原因标签)`。原因标签落进 `toolcall_text_detected`
+    诊断记录，使「解析到了但没执行」与「解析到了并执行」可区分、可统计。
+    """
+    _n = str(name or "").strip()
+    if _n not in _TEXT_TOOLCALL_WHITELIST:
+        return False, "unknown_function:%s" % (_n or "?")
+    _req = _TEXT_TOOLCALL_REQUIRED.get(_n, "")
+    if _req:
+        _v = str((args or {}).get(_req, "") or "").strip()
+        if not _v:
+            return False, "missing_required_arg:%s" % _req
+    return True, ""
 
 
 def _parse_text_toolcall(text: str):
@@ -935,10 +976,12 @@ class BaseAgent(ABC):
                         "（主后端 Math StackExchange、次 arXiv），返回标题/链接/摘要。"
                         "**仅在遇到不熟悉的定义、术语、公式或需要查证已知结论时调用**，"
                         "不要滥用；检索结果仅供参考，**必须自行验证，不得直接照搬**。"
-                        "\n⚠ **调用方式**：必须使用**原生函数调用通道**（框架提供的 function calling）；"
-                        "**严禁**在正文或推理里手写 `<tool_call>` / `<function=...>` / "
-                        "`<parameter=...>` 这类文本标记 —— 实测它们**不会被框架执行**，"
-                        "只会作为乱码残留在答案里，并把整段推导毁掉。"
+                        "\n⚠ **调用方式**：**必须优先**使用**原生函数调用通道**"
+                        "（框架提供的 function calling）；**严禁**把 "
+                        "`<tool_call>` / `<function=...>` / `<parameter=...>` "
+                        "当作**正文内容**书写 —— 标签会**残留在答案里、污染整段"
+                        "推导**（2026-10-07 起系统会兜底解析**完整标签**并执行后回填，"
+                        "但仍以原生通道为首选）。"
                     )
             except Exception:  # noqa: BLE001
                 pass
@@ -951,6 +994,29 @@ class BaseAgent(ABC):
                 pass
             n_calls = 0
             last_text = None
+            # ★ 2026-10-07：文本通道可观测计数（解析到几个 / 执行了几个 / 回填了几个）。
+            #   全 `tools_call` 循环共用；出口处汇总成一条 `toolcall_text_summary`。
+            _text_seen = 0            # 响应文本里出现 `<tool_call` 的次数
+            _text_parsed = 0          # 成功解析出 (函数名, 参数) 的次数
+            _text_executed = 0        # 真正执行了工具的文本通道调用次数
+            _text_refilled = 0        # 把执行结果以 `role=user` 回填进对话的次数
+            _seen_text_calls = set()  # 幂等：同一次 tool-loop 内已执行过的 (工具, 检索式)
+            # 文本通道兜底开关：**每次工具循环开始时读一次**（实时读 → env/config 覆盖均有效）
+            _text_fb_on = _text_toolcall_fallback_enabled()
+
+            def _done(_val, _why=""):
+                """统一出口：文本通道有活动时落一条汇总计数（便于事后统计）。"""
+                if _text_seen or _text_parsed or _text_executed:
+                    try:
+                        self.record(
+                            ctx, "toolcall_text_summary",
+                            "文本通道：出现 %d / 解析 %d / 执行 %d / 回填 %d（出口=%s）"
+                            % (_text_seen, _text_parsed, _text_executed,
+                               _text_refilled, _why or "final"))
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _val
+
             # ★ 2026-09-16：按开关决定注册哪些工具。
             _tools = []
             try:
@@ -971,8 +1037,8 @@ class BaseAgent(ABC):
                 if (ctx is not None and hasattr(ctx, "gen_time_up")
                         and ctx.gen_time_up()):
                     if last_text and last_text.strip():
-                        return last_text
-                    return None
+                        return _done(last_text, _why="time_up")
+                    return _done(None, _why="time_up")
                 try:
                     # ★ 2026-10-02 DeepSeek(thinking) 适配：与原生 tools 同发时，
                     #   历史里**每一条** assistant 消息都必须携带 reasoning_content
@@ -1030,42 +1096,6 @@ class BaseAgent(ABC):
                         except Exception:  # noqa: BLE001
                             pass
                     continue
-                # ★★ 2026-09-18（F1，开关 TOOLCALL_TEXT_FALLBACK，默认关）：
-                #   **文本通道工具调用回填**。本模型把调用写在正文/推理里，
-                #   平台不填原生 `tool_calls` ⇒ 调用不执行、不回填，本轮生成到此
-                #   结束，前面的散文被 `extract_final_answer` 当答案抽出
-                #   （实测 official112-025 的 5/5、032 的 4/4 候选因此退化为散文）。
-                #   解析文本形态 → 真正执行 → 以 `role=user` 追加结果后 `continue`。
-                if _TEXT_TOOLCALL_FALLBACK and n_calls < max_rounds:
-                    _tc = _parse_text_toolcall(
-                        resp if isinstance(resp, str)
-                        else str(resp.get("content", "") or "")
-                        if isinstance(resp, dict)
-                        else _normalize_chat_response(resp))
-                    if _tc:
-                        n_calls += 1
-                        _fname, _args = _tc
-                        if _fname != "web_search":
-                            continue
-                        _q = str(_args.get("query", "") or "")
-                        _res = self._web_search_tool_exec(_q)
-                        _ev = "<web_search:text> %s -> %s" % (_q[:60], _res[:50])
-                        _prev = (resp if isinstance(resp, str)
-                                 else str(resp.get("content", "") or "")
-                                 if isinstance(resp, dict)
-                                 else _normalize_chat_response(resp))
-                        msgs.append({"role": "assistant", "content": _prev})
-                        msgs.append({
-                            "role": "user",
-                            "content": ("【系统工具执行结果】\n" + _res +
-                                        "\n\n请基于以上真实结果继续推导，"
-                                        "并在最后给出最终答案。"),
-                        })
-                        try:
-                            self.record(ctx, "toolcall_text_exec", _ev)
-                        except Exception:  # noqa: BLE001
-                            pass
-                        continue
                 # 无 tool_calls：str（文本）或 dict（content）
                 if isinstance(resp, str):
                     last_text = resp
@@ -1073,27 +1103,93 @@ class BaseAgent(ABC):
                     last_text = str(resp.get("content", "") or "")
                 else:
                     last_text = _normalize_chat_response(resp)
-                # ★★ 2026-09-18（可观测性，审核发现）：本分支**只认原生 `tool_calls`**
-                #（见上方 `isinstance(resp, dict) and resp.get("tool_calls")`），而模型
-                # 可能在**文本通道**手写 `<tool_call><function=…>`。此时调用**不执行、不回填**，
-                # 且此前**一行 record 都没有** ⇒ "模型想调用却被协议挡住"在 diag 里完全不可见。
-                # 实测代价：025 的 5/5、032 的 4/4 候选答案因此退化为散文
-                #（`步骤11：搜索已知结论`），并被选为最终答案。
-                # 此处补埋点使该现象可量化（白名单同步见 `_DIAG_MONITORED_KEYS`）。
-                try:
-                    if last_text and "<tool_call" in last_text:
+
+                # ==================================================
+                # ★★ 2026-09-18（F1）/ ★ 2026-10-07（默认翻转为开 + 白名单 + 幂等）
+                #   **文本通道工具调用回填**。
+                #   本模型把调用写在正文/推理里，平台不填原生 `tool_calls`
+                #   ⇒ 调用不执行、不回填，本轮生成到此结束，前面的散文被
+                #   `extract_final_answer` 当答案抽出。
+                #   实测（2026-10-06 smoke10 10 题）：`toolcall_text_detected` 共 93 条，
+                #   而 `tool_calls.web_search` 在多数题为 `calls:0` —— 单题：题 000 = 18、
+                #   007 = 16、003 = 15、004 = 11。题 000 模型自述「上一轮解答中，我错误地
+                #   假设水平移动只能单向…最终推出矛盾得到答案 0。但题目条…」并发出
+                #   `web_search` 去核对自纠错 —— **这条自纠错请求被整条丢弃**。
+                #   本节：解析文本形态 → 白名单校验 → 真正执行 → `role=user` 回填 → continue。
+                #
+                #   三条硬约束：
+                #   ① 权限不放宽：只执行 `_TEXT_TOOLCALL_WHITELIST`（= 原生通道注册的工具集）；
+                #   ② 幂等：原生 `tool_calls` 分支在上方且先 `continue`（同一响应不重复执行）；
+                #      文本通道单轮最多执行 1 个调用，且同一 (工具, 检索式) 只执行一次；
+                #   ③ 有界：`n_calls < max_rounds` 与循环体共同限流，不会无限执行。
+                # ==================================================
+                _skip_text_reason = None
+                if last_text and "<tool_call" in last_text:
+                    _text_seen += 1
+                    if not _text_fb_on:
+                        _skip_text_reason = "fallback_off"
+                    elif n_calls >= max_rounds:
+                        _skip_text_reason = "round_limit"
+                    else:
+                        _tc = _parse_text_toolcall(last_text)
+                        if not _tc:
+                            # 有标签但格式不完整（如 <function=...> 无参数）
+                            _skip_text_reason = "unparsed"
+                        else:
+                            _text_parsed += 1
+                            _fname, _args = _tc
+                            _q = str(_args.get("query", "") or "").strip()[
+                                :_TEXT_TOOLCALL_MAX_PARAM]
+                            _ok, _why = _text_toolcall_acceptable(_fname, _args)
+                            if _ok and (_fname, _q) in _seen_text_calls:
+                                _ok, _why = False, "duplicate_call"
+                            if not _ok:
+                                _skip_text_reason = _why
+                            else:
+                                n_calls += 1
+                                _res = self._web_search_tool_exec(_q)
+                                # 回填：保留模型原文（含标签）+ 追加工具结果
+                                msgs.append({"role": "assistant", "content": last_text})
+                                msgs.append({
+                                    "role": "user",
+                                    "content": ("【系统工具执行结果】\n" + _res +
+                                                "\n\n请基于以上真实结果继续推导，"
+                                                "并在最后给出最终答案。"),
+                                })
+                                _text_executed += 1
+                                _text_refilled += 1
+                                _seen_text_calls.add((_fname, _q))
+                                try:
+                                    self.record(
+                                        ctx, "toolcall_text_exec",
+                                        "<%s:text> %s -> %s" % (_fname, _q[:60], _res[:50]),
+                                        tool=_fname, query=_q[:200],
+                                        result_head=_res[:160])
+                                except Exception:  # noqa: BLE001
+                                    pass
+                                continue
+                # ★★ 2026-09-18（可观测性，审核发现）保留：**本分支只认原生 `tool_calls`**
+                #（见上方 `isinstance(resp, dict) and resp.get("tool_calls")`），模型一旦走
+                # 文本通道，此前**一行 record 都没有** ⇒ "模型想调用却被协议挡住"在 diag 里
+                # 完全不可见（实测代价：025 的 5/5、032 的 4/4 候选退化为散文
+                # `步骤11：搜索已知结论`，并被选为最终答案）。
+                # 现在：凡「出现 <tool_call 但未执行」一律留痕 + 落**具体不可执行原因**，
+                # 使「解析到但没执行」与「解析到并执行」可分开统计。
+                if _skip_text_reason:
+                    try:
                         self.record(ctx, "toolcall_text_detected",
-                                    "文本通道出现 <tool_call> 而原生 tool_calls 为空 "
-                                    "⇒ 未执行、未回填："
-                                    + str(last_text)[:120].replace("\n", " "))
-                except Exception:  # noqa: BLE001
-                    pass
+                                    "文本通道出现 <tool_call> 而原生 tool_calls 为空 ⇒ "
+                                    "未执行、未回填（%s）：%s"
+                                    % (_skip_text_reason,
+                                       str(last_text)[:120].replace("\n", " ")))
+                    except Exception:  # noqa: BLE001
+                        pass
                 if last_text and last_text.strip():
-                    return last_text
+                    return _done(last_text)
             # 达 max_rounds（仍连续调工具）→ 取最后一次文本兜底
             if last_text and last_text.strip():
-                return last_text
-            return None
+                return _done(last_text, _why="max_rounds")
+            return _done(None, _why="empty")
         except Exception as exc:  # noqa: BLE001  失败回落普通调用
             logger.warning("[%s] 工具循环异常（回落普通 llm）: %s",
                            self.name, str(exc)[:120])

@@ -92,6 +92,12 @@ def test_text_channel_records_detection():
 
 
 def test_text_branch_still_returns_text():
-    """埋点不得改变行为：文本分支仍应原样返回文本。"""
+    """文本分支的**返回语义不变**：仍原样返回模型文本。
+
+    2026-10-07 更新：F1 默认翻为开后，返回路径改为 `return _done(last_text)`
+    （`_done` 只补一条 `toolcall_text_summary` 计数，返回值就是 `last_text`）
+    —— "无 change 地返回最后一轮文本"这一契约未变；变化的是**返回之前**
+    会先把文本通道里的 `<tool_call>` 执行并回填。
+    """
     src = _src("agent/base.py")
-    assert "                if last_text and last_text.strip():\n                    return last_text" in src
+    assert "                if last_text and last_text.strip():\n                    return _done(last_text)" in src

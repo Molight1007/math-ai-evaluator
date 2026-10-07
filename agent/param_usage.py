@@ -371,9 +371,11 @@ _SPEC = (
      None, "bool",
      "THEOREM_HINT — 定理检索注入（=0 关闭）", None),
     ("toolcall_text_fallback",
-     lambda cfg, tier, _f="toolcall_text_fallback", _d=False: getattr(cfg, _f, _d),
+     lambda cfg, tier, _f="toolcall_text_fallback", _d=True: getattr(cfg, _f, _d),
      None, "bool",
-     "TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（直接改主链生成行为，默认关）", None),
+     "TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认开：解析正文里的 "
+     "<tool_call><function=web_search>… → 白名单校验 → 执行 → role=user 回填；"
+     "=0 回退旧行为做 A/B）", None),
 
     # ==== 2026-10-04 开关注册制补齐（9 项：新增 2 + 补登记 7）============
     # 与 `agent/switch_registry.py::SWITCHES` 同名登记；格式照抄本块既有条目。

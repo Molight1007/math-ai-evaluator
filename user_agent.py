@@ -603,7 +603,7 @@ class AgentConfig:
     self_improve_keep_original: bool = True  # SELF_IMPROVE_KEEP_ORIGINAL — 自改进保留原答案
     self_improve_objective_skip: bool = True  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
     theorem_hint: bool = True  # THEOREM_HINT — 定理检索注入（=0 关闭）
-    toolcall_text_fallback: bool = False  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（直接改主链生成行为，默认关）
+    toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
           # 子目标分解主路径（统一档位下每题执行）
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算

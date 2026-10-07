@@ -35,9 +35,30 @@ from typing import Any, Dict, Optional, Tuple
 #   kind: "bool" | "num" | "str"
 SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # ---- agent/base.py ----
+    # ★ 2026-10-07 默认值 False → **True**（本轮唯一一处默认翻转，理由如下）。
+    #   依据（2026-10-06 smoke10 实测，`results/_cloud/.../run_2026-10-06_...jsonl`）：
+    #     · 10 题里 `toolcall_text_detected` 共 **93 条**（题 000=18、007=16、003=15、
+    #       004=11、001=13…），而 `tool_calls.web_search.calls` 多数题为 **0**
+    #       ⇒ 模型把工具调用写在正文/推理里、平台不填原生 `tool_calls`
+    #       ⇒ 这些调用**一次都没执行**，前面的散文被 `extract_final_answer` 当答案。
+    #     · 题 000 最强证据：模型自己写道「上一轮解答中，我错误地假设水平移动只能单向
+    #       …最终推出矛盾得到答案 0。但题目条…」并随即发出 `web_search` 去核对自纠错
+    #       —— **这条自纠错/验证请求被整条丢弃**（该题最终答 0，标准答案 20460）。
+    #   风险评估（"误解析模型的举例说明文本"）：**低**。
+    #     · 93/93 抽样到的实例都是**真实调用意图**（`<function=web_search>` +
+    #       `<parameter=query>…检索式…`），未见"讲解语法"式的举例；
+    #     · 系统提示已明令禁止手写这些标签（`base.py::llm_with_tools` 的 `_tool_hint`），
+    #       仍出现的即为真实调用意图；
+    #     · 执行侧有**硬白名单**（仅 `web_search`）+ 必填参数非空校验 + 幂等去重 +
+    #       `max_rounds` 限流，且只有 `enable_web_search=True`（默认已 True）时
+    #       工具循环才会走到这里 ⇒ 不放宽任何权限。
+    #   收益 ≥ 风险 ⇒ 翻转。`=0` 仍可一键回退旧行为做 A/B。
     "toolcall_text_fallback": (
-        "TOOLCALL_TEXT_FALLBACK", "bool", False,
-        "文本工具调用兜底（直接改主链生成行为，默认关）"),
+        "TOOLCALL_TEXT_FALLBACK", "bool", True,
+        "文本工具调用兜底（默认开，2026-10-07）：模型在正文/推理里手写 "
+        "`<tool_call><function=web_search><parameter=query>…` 时，解析 → 白名单校验 "
+        "→ 真正执行 → 结果以 role=user 回填后继续。依据 smoke10：10 题共 93 次"
+        "文本调用被丢弃（含题 000 的自纠错检索请求）。=0 回退旧行为做 A/B"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
