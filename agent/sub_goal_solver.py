@@ -41,7 +41,9 @@ import time
 #   运行时求值 → 跑批会整轮 NameError）。这正是那条静态检查存在的意义。
 from typing import Optional
 
-from .base import (BaseAgent, TaskContext, Candidate, next_candidate_id)
+# 2026-10-07：候选入池门槛 v2 开关改为自 base 引用（去重，单一来源）。
+from .base import (
+    BaseAgent, TaskContext, Candidate, next_candidate_id, _pool_gate_v2_on)
 
 try:
     from prompts.sub_goal import (
@@ -213,20 +215,6 @@ def _k11_mask_on() -> bool:
         from .switch_registry import get_bool as _swb
         return bool(_swb("k11_mask_statement"))
     except Exception:  # noqa: BLE001  开关未注册/读取异常 ⇒ 保持守卫生效（研究期安全侧）
-        return True
-
-
-def _pool_gate_v2_on() -> bool:
-    """候选入池门槛 v2 开关（`pool_gate_v2`，默认 True；与 `agent/solver.py` 同源）。
-
-    针对问题 2.4：**子目标候选此前完全不过入池门槛** —— 它是一条独立的写入
-    `ctx.candidates` 的路径（"只改主路径 = 没改"）。打开后子目标合并/兜底的
-    `final_answer` 同样过 `utils.extract.looks_like_pool_answer`，
-    不合格则**不入池并留痕**。=0 回退旧行为做 A/B。
-    """
-    try:
-        return bool(_sw_bool("pool_gate_v2"))
-    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
         return True
 
 

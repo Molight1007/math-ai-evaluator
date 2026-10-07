@@ -21,13 +21,9 @@ Orchestrator/main 的信号量约束，本模块单题内不额外开线程）�
 import logging
 import re
 
-# 2026-10-07（问题 2.4）：候选入池门槛 v2 开关统一走注册表（与其他模块同口径）。
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
-
-from .base import (BaseAgent, TaskContext, Candidate, next_candidate_id)
+# 2026-10-07：候选入池门槛 v2 开关改为自 base 引用（去重，单一来源）。
+from .base import (
+    BaseAgent, TaskContext, Candidate, next_candidate_id, _pool_gate_v2_on)
 from utils.extract import (
     extract_final_answer,
     rescue_final_answer,
@@ -36,20 +32,6 @@ from utils.extract import (
 from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot.Collaborative")
-
-
-def _pool_gate_v2_on() -> bool:
-    """候选入池门槛 v2 开关（`pool_gate_v2`，默认 True；与 solver / sub_goal 同源）。
-
-    ★ 2026-10-07（问题 2.4 入口穷举）：协作候选的 `ctx.candidates.append` 此前
-    **完全不过门槛** —— 它是一条独立写入路径。打开后协作答案同样过
-    `utils.extract.looks_like_pool_answer`，不合格则不入池并留痕。
-    =0 回退旧行为做 A/B。
-    """
-    try:
-        return bool(_sw_bool("pool_gate_v2"))
-    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
-        return True
 
 
 # ---------------------------------------------------------------------------

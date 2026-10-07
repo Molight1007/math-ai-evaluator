@@ -38,6 +38,7 @@ from .base import (
     detect_template_leak,
     next_candidate_id,           # 2026-09-17：候选 id 单一来源（防腾位后 id 冲突）
     pick_best_candidates,        # 2026-09-17：腾位按票数选优（单一来源）
+    _pool_gate_v2_on,            # 2026-10-07：候选入池门槛 v2 开关（单一来源，见 base.py）
 )
 from prompts.policy import (
     SELF_IMPROVE_USER,
@@ -176,47 +177,6 @@ def _pool_room(cfg, ctx) -> int:
     if _lim <= 0:
         _lim = _POOL_UNLIMITED_ROOM
     return _lim - len(getattr(ctx, "candidates", None) or [])
-
-
-def _pool_gate_v2_on() -> bool:
-    """候选**入池门槛 v2** 开关（`pool_gate_v2`，默认 True）。
-
-    ★ 2026-10-07 新增（问题 2.4 第二轮修复）。True = 修好后行为：
-      · 判据换成 `utils.extract.looks_like_pool_answer`（补 4 条规划/设定句漏网、
-        修 087/088 多字母选项误杀、修 101/111 判断题误杀）；
-      · **穷举全部写入 `ctx.candidates` 的入口**（不再只覆盖 `_generate_initial`
-        一处）。
-    =0 → 完全回退上一轮口径（仅 `_generate_initial`、`_generate_revise` 主路径过
-      旧判据 `_looks_like_answer`）做 A/B。
-
-    ── 全仓"候选写入 `ctx.candidates`"入口清单（共 11 处，逐一核对）──────────
-    【新增门槛（本次）】
-      ① solver.py  `_generate_initial` 证明通道 append        （原缺 → 已补）
-      ② solver.py  `_generate_initial` 生成失败抢救 append    （原缺 → 已补）
-      ③ solver.py  `_improve_candidates_once` **改写 cand.answer**
-                    （自改进覆盖，原缺 → 已补；不合格则保留原答案）
-      ④ solver.py  `complete_truncated_candidates` 替换为续写候选
-                    （原缺 → 已补；不合格则保留原候选）
-      ⑤ sub_goal_solver.py `run()` 子目标候选 append          （原缺 → 已补）
-      ⑥ collaborative_solver.py `run()` 协作候选 append       （原缺 → 已补）
-    【本已覆盖（上一轮已有，判据升级为 v2）】
-      ⑦ solver.py  `_generate_initial` 主成功 append
-      ⑧ solver.py  `_generate_revise`   主成功 append
-      （`add_candidates` 委托 `_generate_initial`，同一入口，无需单列）
-    【刻意不过门槛（有理由，非遗漏）】
-      ⑨ solver.py  `_generate_revise` 失败占位 `Candidate(answer="", reasoning=
-                    "[重解失败]…")` —— 显式失败标记，非"假答案"
-      ⑩ solver.py  `_improve_candidates_once` 保留原版 `_orig` —— 已入池候选的
-                    深拷贝，其 answer 入池时已过门槛
-      ⑪ orchestrator.py / formatter.py 的 `ctx.candidates = <子集>`
-                    （lean_kept / audit_kept / _clean / _keep / 腾位）—— **过滤/
-                    裁剪既有候选**，不引入新答案，天然不含"新非答案"
-      （`collaborative_solver.py` 因不在其他施工员占用范围内，一并纳入本次修复。）
-    """
-    try:
-        return bool(_sw_bool("pool_gate_v2"))
-    except Exception:  # noqa: BLE001  注册表不可用时取默认（=开）
-        return True
 
 
 def _is_refusal(text: str) -> bool:
