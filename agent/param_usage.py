@@ -273,6 +273,16 @@ _SPEC = (
      lambda cfg, tier, _f="enable_final_answer_selection", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "ENABLE_FINAL_ANSWER_SELECTION — 终答五层选择（阶段二-2，默认开；=0 回退改动前）", None),
+    ("final_answer_single_source",
+     lambda cfg, tier, _f="final_answer_single_source", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "FINAL_ANSWER_SINGLE_SOURCE — 决策记录与最终产出单一来源"
+     "（picked=逐字提交值；默认开；=0 回退改动前）", None),
+    ("final_select_verify_aware",
+     lambda cfg, tier, _f="final_select_verify_aware", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "FINAL_SELECT_VERIFY_AWARE — 选择机制识别未验证候选"
+     "（未验证不参与胜出+投票并列不用推理长度；默认开；=0 回退改动前）", None),
     ("eval_alpha_equiv",
      lambda cfg, tier, _f="eval_alpha_equiv", _d=False: getattr(cfg, _f, _d),
      None, "bool",

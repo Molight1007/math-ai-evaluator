@@ -184,6 +184,23 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "CANDIDATE_POOL_LIMIT", "num", 6.0,
         "候选池上限（默认 6，与旧行为一致；0 = 不限，内部安全上界 12。"
         "⚠ 该值同时是本次生成数量，勿设天文数字）"),
+    # ---- agent/final_selector.py（终答选择两条阻断级修复，2026-10-07 smoke10）----
+    "final_answer_single_source": (
+        "FINAL_ANSWER_SINGLE_SOURCE", "bool", True,
+        "终答记录**单一来源**（默认 True = 修好后行为）：把 `_pick_diag.picked` 同步为"
+        "**逐字提交值**（`ctx.final_response`）。依据：实测 official112-002 的 "
+        "`pick_diag.picked`=计划句、而被评分的 `predicted`=`\\boxed{...}` —— 6.5 "
+        "闸门在 formatter 之后经 `_set_final_response`→`adopt_single` 改写提交值却不"
+        "动记录 ⇒ 决策与产出不同源、选择器结论无法验证。=0 回退改动前（picked 仍是"
+        "决策值/截断值）做 A/B"),
+    "final_select_verify_aware": (
+        "FINAL_SELECT_VERIFY_AWARE", "bool", True,
+        "终答选择**识别未验证候选**（默认 True = 修好后行为）：依 `ctx.verdicts[*]."
+        "answer` 建答案级验证索引；有已验证候选时 ④模型对比/⑤投票只在已验证候选里选"
+        "（跳过无验证记录者），全部未验证时显式留痕 all_unverified 且不得仅凭未验证"
+        "胜出；⑤投票并列收尾不再用推理长度。依据：实测 official112-007 的 `\\boxed{0}`"
+        "（gold=1）**无任何验证记录**（confidence/correct_votes/total_votes 全 None）"
+        "却参与投票并在 1:1 平票后胜出。=0 回退改动前做 A/B"),
     # ---- user_agent.py / agent/sub_goal_solver.py（多 agent 求解）----
     "enable_subgoal_multi_agent": (
         "ENABLE_SUBGOAL_MULTI_AGENT", "bool", True,

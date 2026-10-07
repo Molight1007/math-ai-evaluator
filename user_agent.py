@@ -497,6 +497,14 @@ class AgentConfig:
     # 不再走 formatter._rank_key 票数优先 / objective_majority_vote「一开始就投票」。
     # 默认 True（用户明确要此行为）；设 False = 全部回退改动前（A/B 抓手）。已登记 switch_registry。
     enable_final_answer_selection: bool = True
+    # ---- 终答选择两条阻断级修复（2026-10-07，smoke10 2026-10-06 实测驱动）----
+    # ① 决策记录与最终产出单一来源：把 `_pick_diag.picked` 同步为逐字提交值。
+    #    依据：official112-002 的 pick_diag.picked=计划句、predicted=`\boxed{...}`。
+    # ② 选择机制识别"未验证候选"：无验证记录者不参与胜出（全部未验证时留痕放行）；
+    #    ⑤投票并列收尾不再用推理长度。依据：official112-007 未验证的 `\boxed{0}` 胜出。
+    # 两者默认 True（= 修好后行为）；设 False 回退做 A/B。均已登记 switch_registry。
+    final_answer_single_source: bool = True
+    final_select_verify_aware: bool = True
     # 依据：3.3 无条件改进实测只有成本没有收益（smoke6_v3：占单题耗时 29~45%、
     # 总耗时 +34%，正确率 1/6 不变）。配合 A2 条件化（只改有缺陷的候选）进一步压成本。
     improve_min_remaining: float = 300.0  # 3.3 改进停手预留（距生成软截止 < 此值不再开新候选；0=关，治 alg-060 3.3=640s 烧穿）
@@ -1025,6 +1033,8 @@ class ReasoningAgent:
             "expr_eval_grounding_guard",
             "enable_subgoal_findings",  # 2026-10-02 阶段一：主求解注入子目标结论
             "enable_final_answer_selection",  # 2026-10-02 阶段二-2：终答五层选择
+            "final_answer_single_source",  # 2026-10-07：决策记录与最终产出单一来源
+            "final_select_verify_aware",  # 2026-10-07：选择机制识别未验证候选
             "lean_gate_parallel",
             "lean_gate_strict_unknown",
             "lean_crosscheck_as_unknown",  # 2026-10-07 语义分离（cross_check→unknown）
