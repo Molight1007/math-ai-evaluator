@@ -50,6 +50,28 @@ from contracts.types import BugReport, Finding
 
 logger = logging.getLogger("MathPilot")
 
+
+def _mk_report(verdict: str, findings=None, reason: str = "",
+               code: str = "", **extra) -> BugReport:
+    """构造带诊断属性的 BugReport（**早退留痕的统一出口**）。
+
+    ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：原为 `verify_answer` 的**内嵌** `_mk`。
+    本函数把它**上提为模块级**（纯移动，零行为变更），供 `verify()` /
+    `_analyze_error()` 等**其它早退路径**复用同一口径 —— 使它们的「静默跳过」
+    也能带上 `verdict_reason`（`lean_gate` 会把该属性原样带进 `diag.lean_gate` 条目，
+    见 `lean_gate.py` 的 `for _dk in ("verdict_reason", ...)`）。
+    `verify_answer` 内部改为 `_mk = _mk_report` 别名，调用点一行未改。
+    """
+    r = BugReport(verdict=verdict, findings=findings or [])
+    try:
+        setattr(r, "verdict_reason", reason)
+        setattr(r, "lean_code", code or "")
+        for _k, _v in extra.items():
+            setattr(r, _k, _v)
+    except Exception:  # noqa: BLE001
+        pass
+    return r
+
 # =====================================================================
 # Lean 编译路径常量（纯编译，与 LLM 栈解耦）
 # =====================================================================
@@ -2238,7 +2260,9 @@ class LeanBridge:
                              prefill='{"error_category":')
         parsed = _parse_analysis_json(raw)
         if not parsed:
-            return BugReport(verdict="unknown", findings=[])
+            # ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：原**静默**返回裸 unknown
+            #   （既无 logger 也无 verdict_reason）⇒ "错误分析被跳过"在 diag 里不可见。
+            return _mk_report("unknown", reason="analyze_unparsed")
 
         category = parsed.get("error_category", "uncertain")
         repairable = parsed.get("repairable", "") or ""
@@ -2298,18 +2322,20 @@ class LeanBridge:
             # 1) Lean 环境缺失 → 降级 unknown
             if not self.lean_available:
                 logger.warning("[LeanBridge] Lean 环境不可用，降级为 unknown")
-                return BugReport(verdict="unknown", findings=[])
+                # ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：原只写 logger、**不带
+                #   任何结构化原因** ⇒ diag.lean_gate 只看到 unknown、不知为何跳。补 verdict_reason。
+                return _mk_report("unknown", reason="lean_unavailable")
 
             # 2) 阶段一：NL → Lean 转化
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk_report("unknown", reason="deadline_before_convert")
             lean_code = self._convert_to_lean(problem, reasoning)
             if not lean_code:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk_report("unknown", reason="convert_to_lean_failed")
 
             # 3) 阶段二：编译验证
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk_report("unknown", reason="deadline_before_compile")
             project_dir = self._lean_project_dir
             # Mathlib 就绪判定提前：比赛环境无 lake 工程（_lean_project_dir 为空），
             # 但 LEAN_PATH 已挂载 core/full 闭包（deploy/setup_lean.sh）→ 同样
@@ -2341,13 +2367,14 @@ class LeanBridge:
             # 4) 阶段三：错误分析（project_dir 分支编译失败同样走此路径，
             #    避免 verify() 落空返回 None 导致上层拿不到 BugReport）
             if time.monotonic() > deadline:
-                return BugReport(verdict="unknown", findings=[])
+                return _mk_report("unknown", reason="deadline_before_error_analysis")
             return self._analyze_error(
                 problem, reasoning, lean_code,
                 comp.get("error", "编译失败（无详细输出）") if comp else "编译失败（无详细输出）")
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
-            return BugReport(verdict="unknown", findings=[])
+            return _mk_report("unknown",
+                              reason="exception_" + type(exc).__name__)
 
     # ------------------------------------------------------------------
     # 答案审核（轻量路径）：最终答案 norm_num/ring 结果验证（2026-09-01）
@@ -2530,16 +2557,12 @@ class LeanBridge:
         """
         def _mk(verdict: str, findings=None, reason: str = "",
                 code: str = "", **extra):
-            """构造带诊断属性的 BugReport（早退与正常路径统一走这里）。"""
-            r = BugReport(verdict=verdict, findings=findings or [])
-            try:
-                setattr(r, "verdict_reason", reason)
-                setattr(r, "lean_code", code or "")
-                for _k, _v in extra.items():
-                    setattr(r, _k, _v)
-            except Exception:  # noqa: BLE001
-                pass
-            return r
+            """构造带诊断属性的 BugReport（早退与正常路径统一走这里）。
+
+            ★ 2026-10-07（fix-obs-tail）：实现已上提为模块级 `_mk_report`（纯移动），
+            此处只留别名以保持 `verify_answer` 内调用点一行未改。
+            """
+            return _mk_report(verdict, findings, reason, code, **extra)
 
         deadline = time.monotonic() + max(1.0, timeout)
         try:

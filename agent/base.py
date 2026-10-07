@@ -950,6 +950,15 @@ class BaseAgent(ABC):
             except Exception:  # noqa: BLE001
                 pass
             if not _tools:
+                # ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：原**静默**回落普通调用
+                #   （该分支此前**一行 trace 都没有** ⇒ diag 里看不到"工具循环为何没跑"）。
+                try:
+                    if ctx is not None:
+                        self.record(ctx, "toolcall_mode",
+                                    "工具循环已跳过：无可用工具可注册"
+                                    "（enable_web_search 关闭或注册异常）→ 回落普通 llm")
+                except Exception:  # noqa: BLE001  埋点失败绝不阻断
+                    pass
                 # 无工具可注册 → 回落普通调用（与 _maybe_tool_llm 同口径）
                 return self.llm(ctx, messages, temperature, max_tokens)
             for _round in range(max_rounds):
@@ -961,6 +970,15 @@ class BaseAgent(ABC):
                 # **不再回落**（回落等于再等一轮）。
                 if (ctx is not None and hasattr(ctx, "gen_time_up")
                         and ctx.gen_time_up()):
+                    # ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：原**静默**停手返回
+                    #   （`_done(_why="time_up")` 只在文本通道有活动时才落一条汇总 ⇒
+                    #   纯原生 tool_calls 循环到点停手时 diag 无任何痕迹）。此处显式留痕。
+                    try:
+                        self.record(ctx, "toolcall_mode",
+                                    "工具循环已跳过：生成侧时间护栏触发（gen_time_up）"
+                                    "→ 取已有文本返回，不再回落普通 llm")
+                    except Exception:  # noqa: BLE001  埋点失败绝不阻断
+                        pass
                     if last_text and last_text.strip():
                         return _done(last_text, _why="time_up")
                     return _done(None, _why="time_up")
@@ -1136,6 +1154,15 @@ class BaseAgent(ABC):
             except Exception:  # noqa: BLE001
                 pass
             return self.llm_with_tools(ctx, messages, temperature, max_tokens)
+        # ★ 2026-10-07（fix-obs-tail · 静默跳过埋点）：开关关闭时原**静默**走普通 llm
+        #   （上游 ON 分支已有 `toolcall_mode` 记录，OFF 分支此前无任何留痕 ⇒
+        #   A/B 时无法从 diag 判定"工具循环是否被开关关掉"）。
+        try:
+            if ctx is not None:
+                self.record(ctx, "toolcall_mode",
+                            "工具循环已跳过：enable_web_search 关闭 → 走原 llm")
+        except Exception:  # noqa: BLE001  埋点失败绝不阻断
+            pass
         return self.llm(ctx, messages, temperature, max_tokens)
 
 # ============================================================
