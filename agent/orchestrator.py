@@ -9,6 +9,30 @@ except ImportError:
     from switch_registry import (
         get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 
+
+def _sw_bool_or(field: str, default: bool) -> bool:
+    """开关读取的**容错**版：注册表缺该字段时回退 `default`（不抛）。
+
+    为什么需要（2026-10-07 fix-gate-timing-diag）：新开关的登记落在
+    `switch_registry.py` / `user_agent.py` / `param_usage.py` 三个**共享文件**，
+    可能与本施工员的 `orchestrator.py` 改动**分批落盘**。若裸调 `_sw_bool(field)`
+    而此时注册未落，`SWITCHES[field]` 会 KeyError → 被调用点 except 吞掉 →
+    功能**静默失效**（且日志无迹）。本函数保证"注册未落也用修好后的默认值"，
+    注册落盘后自动获得 env/config 覆盖能力。
+    """
+    try:
+        return bool(_sw_bool(field))
+    except Exception:  # noqa: BLE001
+        return bool(default)
+
+
+def _sw_num_or(field: str, default: float) -> float:
+    """`get_num` 的容错版（口径同上）。"""
+    try:
+        return float(_sw_num(field))
+    except Exception:  # noqa: BLE001
+        return float(default)
+
 # 2026-10-02 中间结果存储层（李平老师架构建议 #5，老师点名的「耦合过紧」根因）：
 # 把题意理解 / 蓝图 / 子目标 / 候选 / verdict / Lean / 终答**多存一份**到
 # results/<run_id>/<qid>/。只加不改：不删分支、不改判定、不动返回值；
@@ -510,6 +534,21 @@ def _diag_completeness(ctx) -> dict:
                 _has = True
                 break
         out[_k] = "ran_with_data" if _has else "ran_no_output"
+    # ★ 2026-10-07（fix-gate-timing-diag 问题 2.7 ①）：`formal_spec` 的"跑过没有"
+    #   不能只看 `ctx.formal_spec` —— 它**只在 preverify verdict=ok 时写入**
+    #   （`tools/lean_local/lean_pre_verifier.py:127`），verdict=fail 会被刻意清空
+    #   （同文件 :174 `ctx.formal_spec = ""`）。
+    #   实测 smoke10：8/10 题有 `preverify_trace`（verdict **全部 = fail**）
+    #   ⇒ `ctx.formal_spec` 恒空，旧口径把"跑了但未通过"误报成 `not_ran`，
+    #   与同一份 diag 里 `preverify_trace.formal_spec` 有值**自相矛盾**。
+    #   现以「preverify_trace 是否留下痕迹」作为"跑过没有"的权威依据。
+    if out.get("formal_spec") == "not_ran":
+        _pv = getattr(ctx, "preverify_trace", None)
+        if isinstance(_pv, dict) and _pv:
+            out["formal_spec"] = (
+                "ran_with_data"
+                if str(getattr(ctx, "formal_spec", "") or "").strip()
+                else "ran_no_output")
     return out
 
 
@@ -821,6 +860,38 @@ class Orchestrator(BaseAgent):
 
     def _collect_stage_durs(self, ctx) -> dict:
         return dict(getattr(ctx, "_stage_durs", {}) or {})
+
+    @staticmethod
+    def _reassign_stage_time(ctx, name: str, seconds: float) -> None:
+        """把 `seconds` 从**当前正在计时**的阶段窗口里**搬**到阶段 `name`。
+
+        ★ 2026-10-07（fix-gate-timing-diag 问题 2.8）：`_deep_revise_loop` 是**共享
+        子过程**，被 4 个阶段调用（P1@4_verify :2051 / 4.6 对抗 :2210 / 5 :2225 /
+        5.5 :2339）。`_stage_start` 只在阶段入口打点 ⇒ 谁调用它，耗时就算进谁：
+        实测题 001 `4_verify=5546s` 而 `5_revise_or_fallback=7.4e-06s`
+        （revise_round=4，即 4 轮 revise 全被记进 4_verify）；题 000 恰好从 5 段
+        调用 ⇒ `5_revise_or_fallback=3683s`。同一机制两种归属 ⇒ 耗时表不可比、
+        「verify 占 51.26%」被高估。
+
+        做法：正的 `seconds` 加到 `_stage_durs[name]`，**同时把当前开放阶段的起点
+        后移** `seconds`（`dur = now - start` ⇒ 起点后移即等量扣减）。若开放的正是
+        `name` 自己（从 5 段内调用），加/扣相抵 ⇒ 幂等，不会重复计数。
+        `<=0` 直接返回；无开放阶段时只累加。
+        """
+        try:
+            s = float(seconds or 0.0)
+            if s <= 0:
+                return
+            ctx._stage_durs = getattr(ctx, "_stage_durs", {}) or {}
+            ctx._stage_durs[name] = ctx._stage_durs.get(name, 0.0) + s
+            starts = getattr(ctx, "_stage_starts", {}) or {}
+            for _open in list(starts.keys()):
+                try:
+                    starts[_open] = starts[_open] + s
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001  纯埋点，绝不阻断主流程
+            return
 
     # ------------------------------------------------------------------
     # C-lite：数值攻击蓝图极值声称（2026-09-03 老师拍板）
@@ -2872,6 +2943,30 @@ class Orchestrator(BaseAgent):
 
     def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
                           tier_votes: int, force: bool = False) -> bool:
+        """revise 自纠错回环的**计时包装**（2026-10-07，问题 2.8 修复）。
+
+        背景：`_deep_revise_loop` 由 4 个阶段共享调用（P1@4_verify / 4.6 对抗 /
+        5 / 5.5），而 `_stage_start` 只在阶段入口打点 ⇒ revise 的耗时被记进**调用方
+        阶段**。实测题 001 `4_verify=5546s` vs `5_revise_or_fallback=7.4e-06s`
+        （revise_round=4）；题 000 从 5 段调用则记进 5 段（3683s）—— 同机制两种归属。
+        本包装把回环实际墙钟统一归到 `5_revise_or_fallback`，并从调用方阶段扣减
+        （见 `_reassign_stage_time`）。开关 `stage_timer_reassign_revise`=0 回退旧埋点。
+        行为（返回值/流程）与包装前完全一致。
+        """
+        _t0 = time.time()
+        try:
+            return self._deep_revise_loop_inner(ctx, ver_result, tier_votes,
+                                                force=force)
+        finally:
+            try:
+                if _sw_bool_or("stage_timer_reassign_revise", True):
+                    self._reassign_stage_time(
+                        ctx, "5_revise_or_fallback", time.time() - _t0)
+            except Exception:  # noqa: BLE001  纯埋点，绝不阻断
+                pass
+
+    def _deep_revise_loop_inner(self, ctx: TaskContext, ver_result: dict,
+                                tier_votes: int, force: bool = False) -> bool:
         """deep 档 0 正确票时的 revise 自纠错回环。
 
         用验证器反馈驱动定向修正：最多 deep_revise_rounds 轮，
@@ -3108,6 +3203,18 @@ class Orchestrator(BaseAgent):
             if decision == "REJECT":
                 self.record(ctx, "revise", "AcceptGate 连续重大缺陷达阈值，放弃 revise")
                 return False
+            # ★ 2026-10-07（fix-gate-timing-diag 问题 2.3）：消费 ACCEPT。
+            #   旧代码只消费 REJECT ⇒ 即便门判 ACCEPT（本轮 best_cluster 已达标）
+            #   也**无人理会**，继续跑满轮数 ⇒ ACCEPT 是死分支。现让 ACCEPT 真正
+            #   改变行为：本轮复验已给出达标答案 ⇒ 结束回环并采纳（返回 True）。
+            #   仅在 `accept_gate_enforce` 打开时可达（默认阈值 = 5/10 结构性不可达，
+            #   见 `_update_accept_gate`）。
+            if decision == "ACCEPT":
+                self.record(ctx, "revise",
+                            f"AcceptGate=ACCEPT（连续通过 "
+                            f"{ctx.round_state.consecutive_pass} 次）→ 采纳本轮答案，"
+                            "结束 revise")
+                return True
             feedback = ver2.get("feedback") or feedback
         self.record(ctx, "revise", f"revise 回环 {max_rounds} 轮仍未获得正确票")
         return False
@@ -3117,6 +3224,37 @@ class Orchestrator(BaseAgent):
 
         - is_pass：best_cluster 置信度 >= accept_confidence；
         - has_major_defect：证明题全部 0 正确票，或常规题置信度 < 0.3。
+
+        ★ 2026-10-07（fix-gate-timing-diag 问题 2.3）根因与修法
+        ----------------------------------------------------------
+        「题 000 `HOLD(pass=1,defect=0)` 判定自相矛盾」的表象，实为**两项独立缺陷**：
+
+        ① 判定映射本身**不错**（`RoundState.update` 忠实于其契约）：
+           `is_pass` 只重置缺陷计数、并累加 `consecutive_pass`；只要
+           `consecutive_pass < ACCEPT_PASS_THRESHOLD(=5)` 就仍返回 `HOLD`
+           ⇒ `pass=1` 出 HOLD 是**契约内**行为，不是状态机 bug。
+
+        ② 真正的缺陷是**阈值结构性不可达**：`ACCEPT_PASS_THRESHOLD=5` /
+           `REJECT_DEFECT_THRESHOLD=10`（见 `agent/base.py::RoundState`）是按
+           「无上限连续回环」标定的；而本函数的唯一调用点是 `_deep_revise_loop_inner`
+           的每轮复验，受 `max_revise_rounds`(=5) 全局上限约束 ⇒ 单题最多被调用
+           **≤5 次**（smoke10 实测 ≤2 次）。于是 `consecutive_pass`/`defect` 永远
+           到不了 5/10 ⇒ **decision 恒为 HOLD**：smoke10 10/10 题只出现 HOLD，
+           ACCEPT/REJECT 一次未出现 ⇒ AcceptGate 是**空闸门**（"无约束力"的根因）。
+           叠加缺陷：`ACCEPT` 分支当时**无任何消费者**（只有 REJECT 被消费）
+           ⇒ 即便可达也是死分支。
+           ⚠ 特别说明：题 000 第二次的 `pass=1, defect=0` 与题 006 的
+           `pass=0, defect=0` 都是**契约内**的中间态（后者 = 本轮未通过但未达
+           "重大缺陷"，即 `accept_confidence > conf >= 0.3` 的灰区）。
+
+        修法（`accept_gate_enforce` 开关，注册制四件套）：
+          · 打开时把阈值改为**可达口径**（实例级覆盖，不动 base.py 契约）：
+            连续通过 `accept_gate_pass_threshold`(默认 1) 次 → ACCEPT；
+            连续重大缺陷 `accept_gate_reject_defect_threshold`(默认 2) 次 → REJECT；
+          · ACCEPT/REJECT 均已在 `_deep_revise_loop_inner` 被消费（改变行为）；
+          · 每轮终态写入 `ctx._accept_gate_final` ⇒ diag 可见"是 ACCEPT 采纳
+            还是 HOLD 带疑提交"（HOLD 不再是无声通过）。
+          · `=0` 回退旧行为（阈值 5/10、恒 HOLD、无约束）做 A/B。
         """
         accept_conf = getattr(self.config, 'accept_confidence', 0.6)
         bc = getattr(ctx, '_best_cluster', None)
@@ -3127,6 +3265,17 @@ class Orchestrator(BaseAgent):
             has_major = bool(ctx.verdicts) and all(v.correct_votes == 0 for v in ctx.verdicts)
         elif conf < 0.3:
             has_major = True
+        # 阈值可达化（实例级覆盖；默认 5/10 保持旧契约，不动 base.py）
+        _enforce = _sw_bool_or("accept_gate_enforce", True)
+        try:
+            rs = ctx.round_state
+            if _enforce:
+                rs.ACCEPT_PASS_THRESHOLD = max(
+                    1, int(_sw_num_or("accept_gate_pass_threshold", 1.0)))
+                rs.REJECT_DEFECT_THRESHOLD = max(
+                    1, int(_sw_num_or("accept_gate_reject_defect_threshold", 2.0)))
+        except Exception:  # noqa: BLE001
+            _enforce = False
         decision = ctx.round_state.update(is_pass=is_pass, has_major_defect=has_major)
         self.record(
             ctx, "accept_gate",
@@ -3134,6 +3283,21 @@ class Orchestrator(BaseAgent):
             f"defect={ctx.round_state.consecutive_major_defect})",
             confidence=round(conf, 3),
         )
+        # 终态留痕（供 diag）：HOLD 也要能看出"是带疑提交"
+        try:
+            ctx._accept_gate_final = {
+                "decision": str(decision),
+                "rounds": int(getattr(ctx.round_state, "rounds", 0) or 0),
+                "consecutive_pass": int(getattr(ctx.round_state, "consecutive_pass", 0) or 0),
+                "consecutive_major_defect": int(
+                    getattr(ctx.round_state, "consecutive_major_defect", 0) or 0),
+                "last_confidence": round(float(conf), 3),
+                "enforce": bool(_enforce),
+                "threshold_pass": int(getattr(ctx.round_state, "ACCEPT_PASS_THRESHOLD", 5) or 5),
+                "threshold_defect": int(getattr(ctx.round_state, "REJECT_DEFECT_THRESHOLD", 10) or 10),
+            }
+        except Exception:  # noqa: BLE001
+            pass
         return decision
 
     def _enhance_window_ok(self, ctx: TaskContext, tag: str) -> bool:
@@ -3686,6 +3850,61 @@ class Orchestrator(BaseAgent):
                     _lean_exe = str(_b._lean_executable or "")
         except Exception:  # noqa: BLE001
             pass
+        # ★ 2026-10-07（fix-gate-timing-diag 问题 2.6）：diag 计数**口径对账**。
+        #   实测三处"对不上"：① 6/10 题 `n_candidates ≠ n_verdicts`
+        #   （001: 3 vs 5；004: 3 vs 6；087: 7 vs 3）；② `pick_diag.divergent_clusters`
+        #   各簇 size 之和 > `n_candidates`（001: 5>3；004: 6>3）；③ `pick_diag.picked`
+        #   与任一簇代表不精确相等。根因是这三组数**属于不同时点/不同集合**而字段名
+        #   未标注分母：
+        #     · `n_candidates`   = 终态 `ctx.candidates`（6.5 重做/清洗后可能已裁剪）；
+        #     · `n_verdicts`     = **最后一次复验**的快照（早于 6.5 裁剪）⇒ 两者天然可不等；
+        #     · `divergent_clusters[].size` 是**终答五层输入池**（含子目标候选等）上的簇，
+        #       正确分母 = `final_selection.n_in`，**不是** `n_candidates`
+        #       （实测 001: Σsize=5=n_in；087: Σsize=3≤n_in=7 ⇒ 分母错了才"看起来矛盾"）；
+        #     · `picked` 是**后处理/修复后**的终答（可能被 B0/多答案拼接改写），
+        #       与簇代表的**原始**串不可精确比较（006 另有 `picked_pre_repair` 佐证）。
+        #   以下 `counts_reconciliation` 把三个分母与"picked 是否落在池中"一并导出，
+        #   使"据此复算选择过程"成为可能。纯读、不改任何选取行为。
+        _pd = getattr(ctx, "_pick_diag", None)
+        _pd = _pd if isinstance(_pd, dict) else {}
+        _fsd = getattr(ctx, "_final_select_diag", None)
+        _fsd = _fsd if isinstance(_fsd, dict) else {}
+        _pv = getattr(ctx, "preverify_trace", None)
+        _pv = _pv if isinstance(_pv, dict) else {}
+
+        def _nm_ans(s) -> str:  # 归一化：去空白/LaTeX 外壳，供"是否同答案"比较
+            return _re.sub(r"[\s\\$]|boxed|\{|\}", "", str(s or ""))
+
+        _clusters = _pd.get("divergent_clusters")
+        _clusters = _clusters if isinstance(_clusters, list) else []
+        _cluster_sizes = []
+        for _c in _clusters:
+            if not isinstance(_c, dict):
+                continue
+            try:
+                _cluster_sizes.append(int(_c.get("size") or 0))
+            except Exception:  # noqa: BLE001  纯埋点，脏数据不崩
+                continue
+        _picked_nm = _nm_ans(_pd.get("picked"))
+        _picked_in_pool = bool(_picked_nm) and any(
+            _nm_ans(c.get("answer")) and _nm_ans(c.get("answer")) == _picked_nm
+            for c in _clusters if isinstance(c, dict))
+        _sel_pool = _fsd.get("n_in")
+        try:
+            _sel_pool = int(_sel_pool) if _sel_pool is not None else None
+        except Exception:  # noqa: BLE001
+            _sel_pool = None
+        _counts_recon = {
+            "n_candidates_final": len(getattr(ctx, "candidates", None) or []),
+            "n_verdicts_last_verify": len(getattr(ctx, "verdicts", None) or []),
+            "selection_pool_size": _sel_pool,
+            "divergent_clusters_count": len(_clusters),
+            "divergent_clusters_size_sum": sum(_cluster_sizes),
+            "pick_diag_picked_in_selection_pool": _picked_in_pool,
+            "note": "n_verdicts 为最后一次复验快照（早于 6.5 裁剪）⇒ 可 ≠ n_candidates；"
+                    "divergent_clusters 的分母是 selection_pool_size（final_selection.n_in），"
+                    "不是 n_candidates；picked 为后处理终答，与簇原始串不必然精确相等。",
+        }
         return {
             # ① 题型与档位
             "question_type": getattr(ctx, "question_type", "") or "",
@@ -3693,17 +3912,43 @@ class Orchestrator(BaseAgent):
             "tier": getattr(ctx, "tier", "") or "",
             "tier_evidence": getattr(ctx, "tier_evidence", None) or {},
             "soft_budget": round(float(getattr(ctx, "soft_budget", 0) or 0), 1),
-            # ② 题目理解（原 Lean 前置 preverify 已去 Lean 化移除；以下为遗留字段恒空，
-            #    保留供旧日志/工具兼容）
+            # ② 题目理解（formula 语义订正 2026-10-07，问题 2.7 ①）
+            #   ⚠ 旧注释「preverify 已移除、字段恒空」**与事实不符**：preverify 仍在跑
+            #     （`preverify_trace` 8/10 题有值）。真实语义是：
+            #       · `formal_spec` = **被接受**的形式化（仅 verdict=ok 时写入，
+            #         见 lean_pre_verifier.py:127/174）⇒ smoke10 全 = fail ⇒ 恒空；
+            #       · `preverify_trace.formal_spec` = **最后一次尝试**（不管通过与否）。
+            #     两者同名但语义不同，故同时导出 `formal_spec_status` 以杜绝误读。
             "formal_spec": (getattr(ctx, "formal_spec", "") or "")[:600],
+            "formal_spec_status": {
+                "accepted": bool(str(getattr(ctx, "formal_spec", "") or "").strip()),
+                "preverify_verdict": str(_pv.get("verdict", "") or ""),
+                "attempted": bool(_pv),
+                "attempted_chars": len(str(_pv.get("formal_spec", "") or "")),
+                "note": "accepted=False 且 attempted=True ⇒ 形式化运行过但未被接受"
+                        "（verdict≠ok，属正常降级、非写入失败）",
+            },
             "formal_gaps": list(getattr(ctx, "formal_gaps", None) or [])[:10],
-            "preverify_trace": getattr(ctx, "preverify_trace", None) or {},
+            "preverify_trace": _pv or {},
             # ③ 蓝图 DAG + 骨架评审 + DAG 评审
+            #   ⚠ 2026-10-07（问题 2.7 ②）：「结构性为空」的归因明确为**开关默认关**：
+            #     `skeleton_review`/`skeleton_review_events`  ← enable_skeleton_review(默认 False)
+            #     `dag_review`/`dag_replan_events`            ← dag_replan_gate / enable_dag_replan(默认 False)
+            #     `sketch_audit`                              ← enable_preverify_sketch_audit(默认 False)
+            #   三者**不是"跑了失败"**，是**设计未启用**；`disabled_mechanisms` 字段显式列出。
             "blueprint_nodes": len((getattr(ctx, "blueprint", None) or {}).get("nodes", []) or []),
             "blueprint_merge": (getattr(ctx, "blueprint", None) or {}).get("merge_strategy", ""),
             "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
             "dag_review": getattr(ctx, "dag_review_report", None) or {},
             "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
+            "disabled_mechanisms": [
+                _n for _n, _f, _d in (
+                    ("skeleton_review", "enable_skeleton_review", False),
+                    ("dag_review/skeleton_gate", "dag_replan_gate", False),
+                    ("dag_replan", "enable_dag_replan", False),
+                    ("preverify_sketch_audit", "enable_preverify_sketch_audit", False),
+                ) if not bool(getattr(self.config, _f, _d))
+            ],
             # ③' 骨架评审事件流 + 求解前 DAG 强制门事件流（2026-09-08 补：
             #    两机制 record 只进 ctx.trace 且 trace 不落盘 → 冒烟 10 题事后
             #    查不到门是否触发/重规划几轮。现从 trace 提取进 diag，同
@@ -3723,10 +3968,24 @@ class Orchestrator(BaseAgent):
                                   for t in (getattr(ctx, "trace", None) or [])
                                   if isinstance(t, dict)
                                   and t.get("step") == "numericize"],
+            # ⚠ 2026-10-07（问题 2.7 ③）：`objective_check_events` 与相邻的
+            #   `final_selection.objective` **不是同一机制**（同前缀造成误读）：
+            #     · `objective_check_events`  ← P5 **客观题自检**（判断题写法归一 /
+            #        选项越界告警，见 `_objective_selfcheck`）。它只在"真发生归一或
+            #        越界"时才 record ⇒ smoke10 全空是**正确**的（无触发），非写入失败。
+            #     · `final_selection.objective` ← 终答五层里的**客观验证层**
+            #        （SymPy/回代淘汰），由 final_selector 产出，**不写 trace**。
+            #   为消除"空数组却有汇总数"的表象，另导出等价的顶层 `objective_filter`
+            #   （= final_selection.objective）并标注各自**触发口径**。
             "objective_check_events": [str(t.get("content", ""))[:200]
                                        for t in (getattr(ctx, "trace", None) or [])
                                        if isinstance(t, dict)
                                        and t.get("step") == "objective_check"],
+            "objective_check_scope": "P5 客观题自检（判断题归一/选项越界告警；"
+                                     "空 = 本题未触发，非失败）",
+            "objective_filter": (
+                dict(getattr(ctx, "_final_select_diag", {}).get("objective") or {})
+                if isinstance(getattr(ctx, "_final_select_diag", None), dict) else None),
             "phase_budget_events": [str(t.get("content", ""))[:200]
                                     for t in (getattr(ctx, "trace", None) or [])
                                     if isinstance(t, dict)
@@ -3932,6 +4191,12 @@ class Orchestrator(BaseAgent):
             # ⑥ 候选/验证/自纠错
             "n_candidates": len(getattr(ctx, "candidates", None) or []),
             "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
+            # ★ 2026-10-07（问题 2.6）：三组计数的**口径对账**（见函数内注释）。
+            "counts_reconciliation": _counts_recon,
+            # ★ 2026-10-07（问题 2.3 ①）：AcceptGate 终态。让 `HOLD` 不再是"无声通过"
+            #   —— 读诊断即可区分「ACCEPT 采纳」与「HOLD 带疑提交（门未能裁定）」，
+            #   并给出当时的阈值与 enforce 开关，使判定可复算。
+            "accept_gate": dict(getattr(ctx, "_accept_gate_final", None) or {}) or None,
             "revise_round": getattr(ctx, "revise_round", 0),
             "revise_feedback": list(getattr(ctx, "revise_feedback", None) or [])[:20],
             # ★ 2026-09-21（可观测性）：6.5 审核闸门的**整题终态**标量。

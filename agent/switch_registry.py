@@ -253,6 +253,31 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "Lean/Audit 门把候选**全部拒掉**时的处置：默认 False = 只显式留痕、"
         "不再静默保留（原实现 `if kept:` 在全拒时不更新候选池 ⇒ 门等于没作用）；"
         "置 True = 进一步清空候选池，触发下游兜底/重生成链"),
+    # ---- agent/orchestrator.py（AcceptGate 真实生效，2026-10-07 新增）----
+    # 背景（fix-gate-timing-diag 问题 2.3）：`base.RoundState` 契约阈值
+    # ACCEPT_PASS=5 / REJECT_DEFECT=10 按"无上限连续回环"标定；但 `_update_accept_gate`
+    # 唯一调用点在 `_deep_revise_loop_inner` 的每轮复验，受 `max_revise_rounds`(=5)
+    # 约束 ⇒ 单题最多调用 ≤5 次（smoke10 实测 ≤2）⇒ 阈值**结构性不可达**、
+    # decision 恒为 HOLD（10/10 题只出现 HOLD）⇒ AcceptGate 是空闸门；且 ACCEPT
+    # 分支当时无消费者。本组开关把它变成可达且被消费的真闸门。
+    "accept_gate_enforce": (
+        "ACCEPT_GATE_ENFORCE", "bool", True,
+        "让 AcceptGate 真正生效（默认 True = 修好后行为）：阈值改为可达口径且 "
+        "ACCEPT/REJECT 均改变 revise 行为。=0 回退旧行为（阈值 5/10、恒 HOLD、无约束）做 A/B"),
+    "accept_gate_pass_threshold": (
+        "ACCEPT_GATE_PASS_THRESHOLD", "num", 1.0,
+        "连续通过达 N 次 → ACCEPT（默认 1；仅在 accept_gate_enforce 打开时生效）"),
+    "accept_gate_reject_defect_threshold": (
+        "ACCEPT_GATE_REJECT_DEFECT_THRESHOLD", "num", 2.0,
+        "连续重大缺陷达 N 次 → REJECT（默认 2；仅在 accept_gate_enforce 打开时生效）"),
+    # ---- agent/orchestrator.py（revise 耗时归属，2026-10-07 新增）----
+    "stage_timer_reassign_revise": (
+        "STAGE_TIMER_REASSIGN_REVISE", "bool", True,
+        "把 revise 回环墙钟从调用方阶段（4_verify/4.6/5.5）改归到 "
+        "`5_revise_or_fallback`（默认 True，纯可观测性、不改行为）。"
+        "依据 smoke10：题 001 revise_round=4 却记 `4_verify=5546s` 而 "
+        "`5_revise_or_fallback=7.4e-06s`；题 000 同机制却记 3683s ⇒ 归属不一致。"
+        "=0 回退旧埋点做 A/B"),
     # ---- agent/solver.py（revise 候选数下限，2026-10-06 新增）----
     "revise_min_candidates": (
         "REVISE_MIN_CANDIDATES", "int", 3,

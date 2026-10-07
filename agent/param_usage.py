@@ -486,6 +486,25 @@ _SPEC = (
      None, "bool",
      "FEEDBACK_REVIEW_CLIP — 复核产物越权结论/重做正文清洗"
      "（默认 True，复用 verifier._clip_review_prose；=0 回退旧行为）", None),
+    # ---- agent/orchestrator.py（AcceptGate 生效 + revise 计时归属，2026-10-07 新增）----
+    ("accept_gate_enforce",
+     lambda cfg, tier, _f="accept_gate_enforce", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "ACCEPT_GATE_ENFORCE — AcceptGate 真实生效（默认 True = 修好后行为；"
+     "依据：阈值 5/10 在 max_revise_rounds=5 下结构性不可达 ⇒ 10/10 题恒 HOLD）", None),
+    ("accept_gate_pass_threshold",
+     lambda cfg, tier, _f="accept_gate_pass_threshold", _d=1.0: getattr(cfg, _f, _d),
+     None, "数",
+     "ACCEPT_GATE_PASS_THRESHOLD — 连续通过达 N 次 → ACCEPT（默认 1）", None),
+    ("accept_gate_reject_defect_threshold",
+     lambda cfg, tier, _f="accept_gate_reject_defect_threshold", _d=2.0: getattr(cfg, _f, _d),
+     None, "数",
+     "ACCEPT_GATE_REJECT_DEFECT_THRESHOLD — 连续重大缺陷达 N 次 → REJECT（默认 2）", None),
+    ("stage_timer_reassign_revise",
+     lambda cfg, tier, _f="stage_timer_reassign_revise", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "STAGE_TIMER_REASSIGN_REVISE — revise 回环墙钟归到 5_revise_or_fallback"
+     "（默认 True，纯埋点；=0 回退旧归属）", None),
 
     # ---- ① LeanSearch（用户点名）--------------------------------------
     ("leansearch_max_calls_per_q",

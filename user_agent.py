@@ -322,6 +322,19 @@ class AgentConfig:
     #   「答案一致」在采样无多样性时是**采样失败信号**，不是可靠性证据。
     diversity_resample_enabled: bool = True
     diversity_resample_count: int = 3
+    # ★ 2026-10-07 新增（fix-gate-timing-diag 问题 2.3）：AcceptGate 真实生效。
+    #   背景：`base.RoundState` 契约阈值 ACCEPT_PASS=5 / REJECT_DEFECT=10 按"无上限
+    #   连续回环"标定，而 `_update_accept_gate` 唯一调用点受 `max_revise_rounds`(=5)
+    #   约束 ⇒ 单题最多调用 ≤5 次（smoke10 实测 ≤2）⇒ 阈值结构性不可达、
+    #   decision 恒为 HOLD（10/10 题）⇒ 空闸门。置 True（默认，修好后行为）：
+    #   阈值改可达口径、ACCEPT/REJECT 均改变 revise 行为；置 False 回退旧行为。
+    accept_gate_enforce: bool = True
+    accept_gate_pass_threshold: float = 1.0
+    accept_gate_reject_defect_threshold: float = 2.0
+    # ★ 2026-10-07 新增（问题 2.8）：revise 回环墙钟归属修正（纯可观测性）。
+    #   实测题 001 revise_round=4 却记 `4_verify=5546s`、`5_revise_or_fallback=7.4e-06s`；
+    #   题 000 同机制却记 3683s ⇒ 归属不一致。置 True（默认）统一归到 5 段；=0 回退。
+    stage_timer_reassign_revise: bool = True
     max_revise_rounds: int = 5
     max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
                                         # 覆盖 5 题 batch + 限流重试 + deep 档完整流程
@@ -1131,6 +1144,11 @@ class ReasoningAgent:
             # ★ 2026-10-07 开关注册制（fix-audit-gate「解答题判别力」四件套）
             "deterministic_solution_check",   # 解答题确定性判别重写（默认 True）
             "audit_gate_rubric_nonproof",     # 解答题也跑 Level2 rubric（默认 False）
+            # ★ 2026-10-07 开关注册制（fix-gate-timing-diag：AcceptGate 生效 + 计时归属）
+            "accept_gate_enforce",            # AcceptGate 真实生效（默认 True）
+            "accept_gate_pass_threshold",
+            "accept_gate_reject_defect_threshold",
+            "stage_timer_reassign_revise",    # revise 耗时归属修正（默认 True）
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
