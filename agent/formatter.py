@@ -21,6 +21,16 @@ import re
 from .base import BaseAgent, TaskContext
 from utils.extract import format_response, is_truncated_answer
 
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+# ★ 2026-10-07（fix-tail-gaps）：本文件两处选择题判据原为裸
+#   `_os.environ.get("OBJECTIVE_*", ...) == "1"`，改走本注册制实时读
+#   （默认值与注册表逐条核对一致，见 switch_registry.SWITCHES）。
+try:
+    from agent.switch_registry import get_bool as _sw_bool
+except ImportError:
+    from switch_registry import get_bool as _sw_bool
+
 logger = logging.getLogger("MathPilot")
 
 # 2026-09-13 晚：紧急直答（最终兜底）所需的最小剩余时间（秒）。
@@ -966,13 +976,16 @@ class FormatterAgent(BaseAgent):
         # 且簇内再按"推理长度"选（下见 #0），对客观题（答案形态稳定、候选
         # 易因裸字母 `A` 与 `\boxed{A}` 的格式差异被聚类拆散 / 簇内择优失真）
         # 直接做答案频次投票更可靠——这正是 102 候选 4B/2A 却被选 A 的根因。
-        import os as _os
         # 2026-09-14：选择题**优先采纳「逐项判定」候选**（origin="itemwise"）。
         # 依据：它是**逐个选项验证过**的结论（有共享基准、有逐项依据），可靠性
         # 高于"整体求解"候选。实测 #107 逐项判定正确得出 D（gold=D），却因候选池
         # 里有 5 个整体求解的 C，被 5:1 多数投票淹没 ⇒ 必须让**有依据的结论**
         # 优先于**数量多数**。置 OBJECTIVE_ITEMWISE_PRIORITY=0 可回退。
-        if (_os.environ.get("OBJECTIVE_ITEMWISE_PRIORITY", "1") == "1"
+        # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "1"` 已改走注册制
+        #   `_sw_bool("objective_itemwise_priority")`（实时读，默认 True）。
+        #   三态核对（未设/"1"/"0"）与原 `== "1"` 逐条一致；仅非标准值
+        #   （如 "true"/"yes"）由 registry 口径判为「开」，属已文档化的统一修正。
+        if (_sw_bool("objective_itemwise_priority")
                 and getattr(ctx, "question_type", "") == "选择题"):
             _iw = [c for c in (getattr(ctx, "candidates", None) or [])
                    if getattr(c, "origin", "") == "itemwise"
@@ -996,7 +1009,10 @@ class FormatterAgent(BaseAgent):
                                 (_iw[0].answer or "")[:40], len(_iw),
                                 len(getattr(ctx, "candidates", None) or [])))
                 return _iw[0]
-        if (_os.environ.get("OBJECTIVE_MAJORITY_VOTE", "0") == "1"
+        # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "1"` 已改走注册制
+        #   `_sw_bool("objective_majority_vote")`（实时读，默认 False）。
+        #   与 orchestrator.py 同名开关判据（`_sw_bool("objective_majority_vote")`）保持同源。
+        if (_sw_bool("objective_majority_vote")
                 and getattr(ctx, "question_type", "") == "选择题"):
             _mv: dict = {}
             for _c in (ctx.candidates or []):

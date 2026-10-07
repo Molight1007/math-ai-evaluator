@@ -230,6 +230,21 @@ def _pool_gate_v2_on() -> bool:
         return True
 
 
+def _itemwise_plan_on() -> bool:
+    """子目标**规划**阶段的客观题逐项策略开关（`objective_itemwise_plan`，默认 True）。
+
+    ★ 2026-10-07（fix-tail-gaps）：原实现为裸读 `OBJECTIVE_ITEMWISE_PLAN` 并**取反**
+    （`os.environ.get(..., "1") == "0"` 才回退 LLM 规划）。改走注册制后语义为
+    `not _sw_bool("objective_itemwise_plan")` —— 未设/`"1"` ⇒ 启用逐项规划（同旧默认），
+    `"0"` ⇒ 关（同旧行为）。三态与原 `== "0"` 逐条一致；仅 `""`/`"false"` 等非标准值
+    由 registry 统一口径判为「关」，属已文档化的修正。=0 一键回退到 LLM 规划。
+    """
+    try:
+        return bool(_sw_bool("objective_itemwise_plan"))
+    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为（默认启用）
+        return True
+
+
 def _check_protocol_guard_on() -> bool:
     """`<check>` **协议守卫**开关（`check_protocol_guard`，默认 True）。
 
@@ -1369,23 +1384,39 @@ class SubGoalSolverAgent(BaseAgent):
         ③ 选项数 > max_subgoals → None（交回 LLM 规划，避免被截断丢项）。
         """
         try:
-            import os as _os
             # 独立开关（项目惯例：每项优化一个开关，便于 A/B 与逐项审查）。
-            # 默认 "1" = 启用（用户 2026-09-13 明确要求：选择题每个选项都判断）；
-            # 置 "0" 可一键回退到 LLM 规划。
-            if _os.environ.get("OBJECTIVE_ITEMWISE_PLAN", "1") == "0":
+            # 默认启用（用户 2026-09-13 明确要求：选择题每个选项都判断）；
+            # 置 OBJECTIVE_ITEMWISE_PLAN=0 可一键回退到 LLM 规划。
+            # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "0"` 已改走注册制
+            #   （`_itemwise_plan_on()` → `_sw_bool("objective_itemwise_plan")`，实时读）。
+            if not _itemwise_plan_on():
+                # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
+                self.record(ctx, "subgoal",
+                            "选择题逐项判定规划已跳过：开关 OBJECTIVE_ITEMWISE_PLAN=0 "
+                            "→ 回退 LLM 规划")
                 return None
             if getattr(ctx, "question_type", "") != "选择题":
+                self.record(ctx, "subgoal",
+                            "选择题逐项判定规划已跳过：题型非『选择题』"
+                            "（%r）→ 回退 LLM 规划"
+                            % (getattr(ctx, "question_type", "") or "",))
                 return None
             from .question_type import extract_options
             opts = extract_options(ctx.problem or "") or []
             if len(opts) < 2:
+                self.record(ctx, "subgoal",
+                            "选择题逐项判定规划已跳过：可用选项 < 2（%d 个），"
+                            "不足以逐项判定 → 回退 LLM 规划" % len(opts))
                 return None
             # ★ 2026-09-15：改走按档位分档的上限（见 _subgoal_cap）
             _max_sg = self._subgoal_cap(ctx)
             # 基准子目标(1) + N 个判定子目标(N)；超过上限则回退 LLM 规划
             # `_max_sg <= 0` = 不截断 ⇒ 逐项判定恒可用（2026-09-15 赛后口径）
             if _max_sg > 0 and len(opts) + 1 > _max_sg:
+                self.record(ctx, "subgoal",
+                            "选择题逐项判定规划已跳过：选项数 %d + 基准 1 > 子目标上限 %d，"
+                            "为避免截断丢项 → 回退 LLM 规划"
+                            % (len(opts), _max_sg))
                 return None
             # ---- 题型子类识别（2026-09-13 用户要求：解题逻辑必须随题型而变）----
             #   A 命题判定型（选项是独立陈述，多选）→ 基准 + 逐项判定 → 全选为真
@@ -1628,6 +1659,10 @@ class SubGoalSolverAgent(BaseAgent):
         planner = BlueprintPlannerAgent(self.client, self.config)
         dag = planner.generate_blueprint(ctx)
         if dag is None:
+            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
+            self.record(ctx, "blueprint",
+                        "Blueprint 路径已跳过：蓝图生成返回空（generate_blueprint=None）"
+                        "→ 回退 LLM 子目标规划")
             return None
         # 老师 9/2 建议：骨架编排层 review（求解前规划质量门）。
         # 生成骨架后先提交 LLM 审查：子目标是否不适定 / 求解难度是否 >= 原问题；
@@ -1636,6 +1671,9 @@ class SubGoalSolverAgent(BaseAgent):
         if getattr(self.config, "enable_skeleton_review", True):
             dag = self._skeleton_review_loop(ctx, dag, planner)
             if dag is None:
+                self.record(ctx, "blueprint",
+                            "Blueprint 路径已跳过：骨架评审循环返回空"
+                            "→ 回退 LLM 子目标规划")
                 return None
         # 2026-09-08 求解前 DAG 强制评审门——默认关闭（dag_replan_gate=False）。
         # 45 题实证：门"拦得住、修不好"（21/45 触发强制重写、净正确率贡献≈0、
@@ -1647,6 +1685,9 @@ class SubGoalSolverAgent(BaseAgent):
         if getattr(self.config, "dag_replan_gate", True):
             dag = self._dag_replan_gate(ctx, dag)
             if dag is None:
+                self.record(ctx, "blueprint",
+                            "Blueprint 路径已跳过：求解前 DAG 评审门返回空"
+                            "→ 回退 LLM 子目标规划")
                 return None
         # 2026-09-15 同源修复：此前不传参 ⇒ 恒用默认 6，**config.max_subgoals
         # （含 0915 新增的 --max_subgoals CLI）对 blueprint 路径完全无效**。
@@ -1661,6 +1702,11 @@ class SubGoalSolverAgent(BaseAgent):
             # 退化情形：整张 DAG 都是前瞻引理（无 required 叶子）。
             # 此时无子目标可解，仍视为规划失败并回退 LLM 规划（不静默产出空解）。
             logger.warning("Blueprint DAG 无可用叶子子目标")
+            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：trace 侧原无记录
+            #   （仅 logger.warning，评测零痕迹）→ 补足。
+            self.record(ctx, "blueprint",
+                        "Blueprint 路径已跳过：DAG 无可用叶子子目标（整树均为前瞻引理）"
+                        "→ 回退 LLM 子目标规划")
             return None
         # ★ 前瞻引理规划（LEAP §2.3）：anticipatory 节点不进求解链，
         #   其陈述写入引理记忆（ctx.lemma_repo），供后续子目标提示词的
@@ -1700,12 +1746,23 @@ class SubGoalSolverAgent(BaseAgent):
         """
         try:
             if not getattr(self.config, "inject_mathlib_to_solver", True):
+                # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return 0。
+                self.record(ctx, "leansearch",
+                            "解题前 Mathlib 注入已跳过：开关 "
+                            "inject_mathlib_to_solver=0")
                 return 0
             if not getattr(self.config, "use_leansearch", False):
+                self.record(ctx, "leansearch",
+                            "解题前 Mathlib 注入已跳过：LeanSearch 总开关 "
+                            "use_leansearch 未开启（默认关）")
                 return 0
             if ctx.is_time_critical():
+                self.record(ctx, "leansearch",
+                            "解题前 Mathlib 注入已跳过：当前处于时间紧迫区")
                 return 0
             if getattr(ctx, "_mathlib_injected", False):
+                self.record(ctx, "leansearch",
+                            "解题前 Mathlib 注入已跳过：本轮回合已注入过（去重短路）")
                 return 0
             cap = int(getattr(self.config, "leansearch_max_calls_per_q", 2) or 0)
             used = int(getattr(ctx, "_leansearch_calls", 0) or 0)
@@ -1768,6 +1825,9 @@ class SubGoalSolverAgent(BaseAgent):
         if not self._use_lemma(ctx):
             # 领域路由关闭时不注入（与 _accumulate_lemma 同规则，
             # 避免"引理注入只在数论开"这条既有实测结论被悄悄绕过）
+            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return 0。
+            self.record(ctx, "blueprint",
+                        "前瞻引理注入已跳过：领域路由（_use_lemma）判定本域不做引理注入")
             return 0
         added = 0
         for item in lemmas:
@@ -1861,6 +1921,9 @@ class SubGoalSolverAgent(BaseAgent):
         """
         from .dag_reviewer import DagReviewerAgent
         if dag is None:
+            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
+            self.record(ctx, "dag_replan",
+                        "求解前 DAG 评审门已跳过：入参 dag 为 None")
             return None
         if isinstance(dag, dict):
             from .blueprint_planner import BlueprintDAG
@@ -2007,10 +2070,15 @@ class SubGoalSolverAgent(BaseAgent):
         """
         try:
             if not getattr(self.config, "dag_replan_lean_check", True):
+                # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return {}。
+                self.record(ctx, "dag_replan",
+                            "求解前 Lean 逻辑检查已跳过：开关 dag_replan_lean_check=0")
                 return {}
             if not node_ids:
                 return {}
             if ctx.is_time_critical() or ctx.gen_time_up():
+                self.record(ctx, "dag_replan",
+                            "求解前 Lean 逻辑检查已跳过：当前处于时间紧迫/生成侧截止")
                 return {}
             from tools.lean_local.lean_bridge import LeanBridge
             from tools.lean_local.lean_bridge import _trash_lean_file
