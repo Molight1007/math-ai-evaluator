@@ -297,3 +297,27 @@ def oracle_review_stage(self, ctx, tier: str, ver_result, tier_votes) -> None:
             and not ctx.is_time_critical()
             and self._enhance_window_ok(ctx, "oracle")):
         self._oracle_review_best(ctx, ver_result, tier_votes)
+
+
+def adversarial_stage(self, ctx, tier: str, ver_result, tier_votes) -> None:
+    """4.6 对抗式验证（正向通过后主动证伪，抓漏检）。
+
+    参数 `self` 即 `Orchestrator` 实例（沿用方法体原文，故保留名 `self`）；
+    `ctx` 为 `TaskContext`，`tier` 为当前档位；`ver_result` / `tier_votes` 为
+    4_verify 段算出、本段**只读**使用（透传 `self._deep_revise_loop`）。
+    返回 None；结果写回 `ctx`。
+    """
+    # 4.6) 对抗式验证（#16）：正向通过后主动证伪，抓漏检。
+    #      仅当"确有候选被正向判对"时才跑——正向全错的会走 revise，
+    #      再证伪一次是纯浪费（每轮调用都吃预算，见 #43 归因）。
+    _any_correct = any(
+        getattr(v, 'correct_votes', 0) > 0 for v in (ctx.verdicts or []))
+    if _any_correct:
+        # 2026-09-04 修复：对抗检出错误 → 立即触发定向修正（原反馈滞留 bug）。
+        # 原实现仅把反馈塞进 audit_reject_feedback（曾名 lean_reject_feedback），
+        # 而 5（全 0 票）/5.5（置信<0.5）触发条件都看投票共识 → 验证器自信
+        # 通过时对抗检出的错误无人消费、答案带错提交（与 4.5 Oracle 判错即
+        # revise 不对称）。误报风险由 Step4 _review_bug_feedback 复核兜底，
+        # 死循环由 revise_round 全局上限 5 + 时间检查防护。
+        if self._adversarial_probe(ctx, tier):
+            self._deep_revise_loop(ctx, ver_result, tier_votes)

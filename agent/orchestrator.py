@@ -172,6 +172,9 @@ from .orchestrator__prep import theorem_hint_stage  # noqa: F401
 # 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import pre_audit_stage  # noqa: F401
+# 2026-10-07 阶段C6：4.6_adv 段已抽到 agent/orchestrator__verify.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__verify import adversarial_stage  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1523,20 +1526,7 @@ class Orchestrator(BaseAgent):
             oracle_review_stage(self, ctx, tier, ver_result, tier_votes)
 
             self._stage_start(ctx, "4.6_adv")
-            # 4.6) 对抗式验证（#16）：正向通过后主动证伪，抓漏检。
-            #      仅当"确有候选被正向判对"时才跑——正向全错的会走 revise，
-            #      再证伪一次是纯浪费（每轮调用都吃预算，见 #43 归因）。
-            _any_correct = any(
-                getattr(v, 'correct_votes', 0) > 0 for v in (ctx.verdicts or []))
-            if _any_correct:
-                # 2026-09-04 修复：对抗检出错误 → 立即触发定向修正（原反馈滞留 bug）。
-                # 原实现仅把反馈塞进 audit_reject_feedback（曾名 lean_reject_feedback），
-                # 而 5（全 0 票）/5.5（置信<0.5）触发条件都看投票共识 → 验证器自信
-                # 通过时对抗检出的错误无人消费、答案带错提交（与 4.5 Oracle 判错即
-                # revise 不对称）。误报风险由 Step4 _review_bug_feedback 复核兜底，
-                # 死循环由 revise_round 全局上限 5 + 时间检查防护。
-                if self._adversarial_probe(ctx, tier):
-                    self._deep_revise_loop(ctx, ver_result, tier_votes)
+            adversarial_stage(self, ctx, tier, ver_result, tier_votes)
 
             self._stage_start(ctx, "5_revise_or_fallback")
             # 5) 全部 0 正确票：
