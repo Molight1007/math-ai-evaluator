@@ -168,6 +168,7 @@ from .orchestrator__verify import oracle_review_stage  # noqa: F401
 from .orchestrator__verify import verify_stage  # noqa: F401
 # 2026-10-07 阶段C6：1.2_theorem_hint 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__prep import prep_tier_budget  # noqa: F401
 from .orchestrator__prep import theorem_hint_stage  # noqa: F401
 # 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
@@ -1354,50 +1355,7 @@ class Orchestrator(BaseAgent):
             # 无法关闭（审计报告 DEF-A3；云端实测 12/112 题命中）。
             # 现统一走下面的完整链路，不再有任何旁路。
 
-            # 2.5) 2026-09-29：**难度路由已删除，统一为单一档位**（用户决策）。
-            # 原 DifficultyRouter 静态预判 + LLM 自评 → fast/standard/deep 三档，
-            # 档位再决定候选数/投票数/子目标数/预算等"方法集"——违背"用全部方法
-            # 测试大模型能力"的初衷。现 `ctx.tier` 恒为 "deep"（= 原最强档配置），
-            # 不再有任何按难度分流的分支。
-            # ⚠ 同时删除的还有：应急降档（emergency → standard）、deep 全卷配额闸
-            #   （allow_deep()，`deep_quota_ratio=0.25` × 112 = 28 恰等于实测 deep 题数，
-            #   即"研究档下仍按配额裁剪方法"的头号来源）。
-            ctx.tier = "deep"
-            tier = "deep"
-            # 2026-10-01 按用户决策：研究期不限时 —— **删除"单题按剩余时间收紧 deadline"
-            # 的降级路径**（原 `min(硬顶, 档位软预算)` 会把单题拦腰截断）。
-            # 现单题只受 `max_time_per_question`（86400，仅防挂死）约束，不再按预算降级。
-            # soft_budget 仅保留为诊断字段（值=档位预算，已=86400）。
-            ctx.soft_budget = float(
-                (getattr(self.config, 'tier_budget', None) or {}).get("deep", 86400.0))
-            # 尾部阈值：统一取 deep 档值 60s（把时间用得更尽）。
-            # 2026-09-29：原 `if tier == 'deep'` 分支已因统一档位删除。
-            ctx.critical_tail_seconds = float(
-                getattr(self.config, 'deep_critical_tail_seconds', 60.0))
-            # 2026-10-01 按用户决策：研究期不限时 —— **删除"生成侧软截止 (verify_reserve)"
-            # 降级路径**。原逻辑预留 540s 给验证侧、逼生成在同一截止点前停手；
-            # 研究期不省资源，生成/验证不再互相掐预算。
-            # `_gen_deadline` 保持未设（0.0）⇒ `gen_time_up()` 回退 `is_time_critical()`，
-            # 而单题 deadline 已达 86400 ⇒ 实际不再触发任何"按剩余时间降级"。
-            ctx._gen_deadline = 0.0
-            # 按档位调整 LLM 调用预算（deep 档需要更多调用次数）
-            max_calls = self.config.tier_max_calls.get(
-                tier, self.config.max_total_calls)
-            if ctx.budget is not None:
-                ctx.budget.set_max_calls(max_calls)
-            else:
-                # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原
-                #   `if ctx.budget is not None:` 无 else ⇒ 无 budget 时调用预算**静默
-                #   不设**，而下方 record 仍会打印 max_calls，造成"看起来设了其实没设"。
-                self.record(ctx, "paper_pacer",
-                            f"调用预算未设置（ctx.budget 为空，跳过 set_max_calls，"
-                            f"计划值 {max_calls}）")
-            # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
-            #   内容（档位/调用预算）仍有效，2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
-            self.record(ctx, "paper_pacer",
-                        f"档位 {tier} 软预算帽 {ctx.soft_budget:.0f}s "
-                        f"(调用预算 {max_calls})",
-                        tier=tier, soft_budget=round(ctx.soft_budget))
+            tier = prep_tier_budget(self, ctx)
 
             self._stage_start(ctx, "2.6_pre_audit")
             pre_audit_stage(self, ctx, tier)
