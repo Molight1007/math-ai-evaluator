@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import re
 
@@ -22,6 +23,25 @@ import pytest
 
 from agent.base import RunState
 from user_agent import AgentConfig
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _orch_src() -> str:
+    """orchestrator.py + 已抽出的 `agent/orchestrator__*.py` 模块的**并集**。
+
+    2026-10-07 阶段C3：`Orchestrator.run` 的若干阶段段（3.6_audit_filter /
+    3.4_collab / 5.5_low_conf）已**逐字搬**到 `agent/orchestrator__*.py`。
+    源码级守卫改为读「主文件 + 抽出模块」并集 —— 断言的字面量与守卫意图
+    均不变（只是被查代码换了文件，非放宽判据）。
+    """
+    txt = open(os.path.join(ROOT, "agent", "orchestrator.py"),
+               encoding="utf-8").read()
+    for p in sorted(glob.glob(
+            os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+        with open(p, encoding="utf-8") as fh:
+            txt += "\n" + fh.read()
+    return txt
 
 
 def test_runstate_verify_only_field():
@@ -64,9 +84,7 @@ def test_generation_steps_all_gated_by_verify_only():
     启发式：对每个生成步骤，检查它所在最近的 if 块（向前 400 字符）里
     出现 `verify_only`。防止新增生成步骤时忘记加门禁。
     """
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "agent", "orchestrator.py")
-    src = open(path, encoding="utf-8").read()
+    src = _orch_src()
 
     for needle in _GENERATION_STEPS:
         idx = src.find(needle)
@@ -127,8 +145,6 @@ def test_generation_steps_all_gated_by_verify_only():
 
 def test_verify_only_skips_audit_filter():
     """AuditGate 候选审核（3.6）：verify_only 分支里有显式的跳过记录。"""
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "agent", "orchestrator.py")
-    src = open(path, encoding="utf-8").read()
+    src = _orch_src()
     assert "ctx.state.verify_only" in src
     assert "L1 验证优先：跳过 AuditGate 候选审核（时间不足）" in src

@@ -40,6 +40,19 @@ GUARDED = [
     "user_agent.py",
 ]
 
+# 2026-10-07 阶段C3：`Orchestrator.run` 的阶段段已逐步抽到
+# `agent/orchestrator__*.py`（C2: 6.5_audit_gate；C3: 3.6_audit_filter /
+# 5.5_low_conf / 3.4_collab）。守卫意图不变：这些模块承载主流程代码，
+# 同样必须在 pyflakes 下无未定义名称（未抽出的文件不存在则自动跳过）。
+_EXTRACTED_MAIN_FLOW = [
+    "agent/orchestrator__final_gate.py",
+    "agent/orchestrator__audit_filter.py",
+    "agent/orchestrator__collab.py",
+    "agent/orchestrator__low_conf.py",
+]
+GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
+            if os.path.exists(os.path.join(ROOT, p))]
+
 
 def _pyflakes_available() -> bool:
     try:
