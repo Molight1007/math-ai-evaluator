@@ -24,7 +24,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.test_report import (
+from cli.test_report import (
     sec_stage_dashboard,
     _stage_dashboard_rows,
     _stage_reached,

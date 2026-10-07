@@ -35,7 +35,7 @@
 | agent/lean_bridge.py …（7 文件） | tools/lean_local/*.py |
 | prompts/lean_pre_verify.py、lean_refiner.py、lean_translator.py | tools/lean_local/prompts/ |
 | tests/test_lean_*.py（9）+ test_sketch_audit + test_theorem_call_stats + validate_mathlib | tools/lean_local/tests/ |
-| tools/leap_eval.py（LEAP 三阶段 Lean 端到端跑分） | tools/lean_local/leap_eval.py |
+| cli/leap_eval.py（LEAP 三阶段 Lean 端到端跑分） | cli/leap_eval.py |
 
 ## 运行前提（全部在仓库根目录 D:/挑战杯 下执行）
 
@@ -57,7 +57,7 @@ python -m pytest tools/lean_local/tests/test_lean_bridge.py -q
 python tools/lean_local/tests/validate_mathlib.py
 
 # LEAP 三阶段 Lean 端到端跑分（需有效 API key）
-python tools/lean_local/leap_eval.py --backend intern --limit 3 --out eval_out
+python cli/leap_eval.py --backend intern --limit 3 --out eval_out
 ```
 
 ## 注意

@@ -311,11 +311,11 @@ class TestWiringGuards:
 
 
 # ================================================================
-# ⑧ 报告脚本（tools/param_usage_report.py）的防错逻辑
+# ⑧ 报告脚本（cli/param_usage_report.py）的防错逻辑
 # ================================================================
 def _rep():
     import importlib
-    return importlib.import_module("tools.param_usage_report")
+    return importlib.import_module("cli.param_usage_report")
 
 
 class TestReportScript:

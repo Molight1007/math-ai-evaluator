@@ -343,7 +343,7 @@ def sec_g(rows):
     have = [r for r in rows if (r.get("diag") or {}).get("param_usage")]
     if not have:
         print("  该轮无 param_usage 字段 ⇒ 需本轮之后的代码跑出的结果才有。")
-        print("  （可用 tools/param_usage_report.py 对新结果出详细表）")
+        print("  （可用 cli/param_usage_report.py 对新结果出详细表）")
         return
     agg = defaultdict(lambda: {"cap": [], "used": [], "capped": 0, "n": 0})
     for r in have:

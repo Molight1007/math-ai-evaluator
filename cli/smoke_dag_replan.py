@@ -9,8 +9,8 @@
     4. 重生成后再次评审通过 → 闭环终止（不死循环）
 
 两种运行模式：
-    python tools/smoke_dag_replan.py            # mock LLM（无 key 也能跑，验证机制）
-    python tools/smoke_dag_replan.py --real     # 真实 LLM（需 INTERN_API_KEY 有效）
+    python cli/smoke_dag_replan.py            # mock LLM（无 key 也能跑，验证机制）
+    python cli/smoke_dag_replan.py --real     # 真实 LLM（需 INTERN_API_KEY 有效）
 
 mock 模式脚本化剧情：
     - 第一轮蓝图：故意画错（子目标粒度粗、含循环依赖、漏 case）
@@ -197,7 +197,7 @@ def run_mock_smoke() -> bool:
 def run_real_smoke() -> bool:
     """真实 LLM 模式：用 eval_dag/problems.jsonl 前 2 题验证闭环。"""
     import time
-    from tools.lean_local.leap_eval import make_client  # noqa: E402
+    from cli.leap_eval import make_client  # noqa: E402
 
     api_key = os.environ.get("INTERN_API_KEY", "")
     if not api_key:

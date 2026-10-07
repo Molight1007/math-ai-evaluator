@@ -1,7 +1,7 @@
 """标注表特异性过滤（tools/theorem_gt_dedup.py）单测。
 
 背景（为什么必须做这件事）：
-    tools/build_theorem_gt.py 早期版本把 **LeanSearch 检索结果的前 N 条**
+    cli/build_theorem_gt.py 早期版本把 **LeanSearch 检索结果的前 N 条**
     直接当作 required（"解本题必须用到的定理"）。而检索是**关键词泛化匹配**——
     一个短名（如 card_perms_of_finset）会被几十道题共同命中。
     于是"标准答案"与"被评测的检索结果"同源 ⇒ 命中率变成循环自证。

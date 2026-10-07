@@ -2,7 +2,7 @@
 """Stage 1（Blueprint DAG 生成）专项验收脚本。
 
 用途：隔离验证 BlueprintPlanner 的 LLM 调用是否稳定产出可解析的 DAG JSON，
-不牵涉 Stage 2 翻译与 Stage 3 Lean 编译——因此比 tools/leap_eval.py 便宜得多
+不牵涉 Stage 2 翻译与 Stage 3 Lean 编译——因此比 cli/leap_eval.py 便宜得多
 （每题最多 3 次 LLM 调用，无编译、无 Mathlib 依赖）。
 
 背景（2026-08-28 修复）：
@@ -11,9 +11,9 @@
     → 表现为「Blueprint: JSON 解析失败」重试 3 次全败（eval_A 0/3 的根因）。
 
 用法：
-    python tools/validate_blueprint.py --limit 3
-    python tools/validate_blueprint.py --problems PB-Basic-001,PB-Basic-002
-    python tools/validate_blueprint.py --limit 3 --backend deepseek
+    python cli/validate_blueprint.py --limit 3
+    python cli/validate_blueprint.py --problems PB-Basic-001,PB-Basic-002
+    python cli/validate_blueprint.py --limit 3 --backend deepseek
 
 验收标准：DAG 生成成功率 ≥ 2/3（计划 §6 D2'）。
 """
@@ -32,7 +32,7 @@ sys.path.insert(0, _ROOT)
 from agent.base import TaskContext, Budget  # noqa: E402
 from agent.blueprint_planner import BlueprintPlannerAgent  # noqa: E402
 from user_agent import AgentConfig  # noqa: E402
-from tools.lean_local.leap_eval import load_bench, make_client  # noqa: E402
+from cli.leap_eval import load_bench, make_client  # noqa: E402
 
 
 def make_ctx_validate_blueprint(problem: str) -> TaskContext:

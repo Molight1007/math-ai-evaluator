@@ -77,7 +77,7 @@ python run_research.py --test_file <题单.jsonl> --output <结果.jsonl>
 | **主链路** `utils/llm_client.py` | `OPENAI_API_KEY` | 密钥 |
 | | `OPENAI_BASE_URL` | **基址**（末尾带 `/v1`，客户端自行拼接 `/chat/completions`） |
 | | `LLM_MODEL` | 模型名 |
-| `tools/lean_local/leap_eval.py` | `DEEPSEEK_API_KEY` / `DEEPSEEK_API_BASE` / `DEEPSEEK_MODEL` | 仅 LEAP 对照评测用，平时可不设 |
+| `cli/leap_eval.py` | `DEEPSEEK_API_KEY` / `DEEPSEEK_API_BASE` / `DEEPSEEK_MODEL` | 仅 LEAP 对照评测用，平时可不设 |
 
 ### ⚠ 最容易踩的坑
 

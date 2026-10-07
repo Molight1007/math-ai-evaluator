@@ -575,7 +575,7 @@ class TaskContext:
     #   写入方 `LeanTranslatorAgent` 确实存在（`tools/lean_local/lean_translator.py`），
     #   但它**已从主流水线（orchestrator）摘除** —— `sub_goal_solver.py:1602-1605`
     #   刻意移除调用，理由："平台无 Lean，整树翻译+编译只空转"。
-    #   ⇒ **主流水线跑完本字段恒为空**；只有独立入口 `tools/lean_local/leap_eval.py`
+    #   ⇒ **主流水线跑完本字段恒为空**；只有独立入口 `cli/leap_eval.py`
     #     才会写它（该入口自带测试，仍可用）。
     #   判读纪律：不得因本字段为空就声称"Lean 没检查过"——主线的 Lean 检查走
     #   `lean_gate` / `lean_dag_fails`（见下）。

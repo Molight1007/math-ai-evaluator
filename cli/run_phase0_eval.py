@@ -8,9 +8,9 @@ OPENAI_BASE_URL / LLM_MODEL，而项目 .env 里存的是 INTERN_* 系列，
 本脚本把 .env 里的书生配置映射为 run_eval 期望的变量后再调用它。
 
 用法：
-    python tools/run_phase0_eval.py
-    python tools/run_phase0_eval.py --limit 5          # 小样本冒烟
-    python tools/run_phase0_eval.py --concurrency 3 --output results/xxx.jsonl
+    python cli/run_phase0_eval.py
+    python cli/run_phase0_eval.py --limit 5          # 小样本冒烟
+    python cli/run_phase0_eval.py --concurrency 3 --output results/xxx.jsonl
 """
 
 from __future__ import annotations

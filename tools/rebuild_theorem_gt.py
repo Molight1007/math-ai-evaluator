@@ -245,7 +245,7 @@ def main() -> int:
         return 1
     if not os.path.isfile(args.probe):
         print(f"probe 结果不存在: {args.probe}")
-        print("请先运行: python tools/theorem_probe.py --resume")
+        print("请先运行: python cli/theorem_probe.py --resume")
         return 1
     with io.open(args.probe, encoding="utf-8") as f:
         probe = (json.load(f).get("per_question") or {})

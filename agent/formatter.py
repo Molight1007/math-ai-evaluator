@@ -41,7 +41,7 @@ logger = logging.getLogger("MathPilot")
 #   `_FINAL_ANSWER_MIN_SEC = float(os.getenv(...))`，本函数下方同类常量亦如此。
 #   两个隐患：① 报告要还原"当时用的默认值"得靠 diag 快照，而 import 期求值后
 #   快照**看不到**它；② 仓库里存在「先 import 模块、再 os.environ.update」的写法
-#   （tools/run_phase0_eval.py / debug_one_trace.py / run_small_ds.py）⇒ import 期
+#   （cli/run_phase0_eval.py / debug_one_trace.py / run_small_ds.py）⇒ import 期
 #   求值会让后设的环境变量**静默失效**。改为**调用时实时读**，默认值不变（45 / 8192）。
 _DEFAULT_FINAL_ANSWER_MIN_SEC = 45.0
 _DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS = 8192

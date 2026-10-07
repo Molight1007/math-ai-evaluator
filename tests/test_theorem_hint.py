@@ -264,7 +264,7 @@ class GroundTruthFileTest(unittest.TestCase):
 
     def test_file_parses_and_has_required_keys(self) -> None:
         if not os.path.isfile(self.PATH):
-            self.skipTest("预标注表尚未生成（先跑 tools/build_theorem_gt.py）")
+            self.skipTest("预标注表尚未生成（先跑 cli/build_theorem_gt.py）")
         n = 0
         for line in open(self.PATH, encoding="utf-8"):
             s = line.strip()

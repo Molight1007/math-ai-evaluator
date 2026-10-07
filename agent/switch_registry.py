@@ -131,7 +131,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "LLM_TIMEOUT", "num", 120,
         "LLM 调用读超时（秒）。原为 utils/llm_client.py 的**模块级常量**"
         "`_DEFAULT_TIMEOUT_llm_client = int(os.getenv('LLM_TIMEOUT','120'))` —— "
-        "① import 期求值，遇'先 import 后改 env'（tools/run_phase0_eval.py 等正是此写法）会静默失效；"
+        "① import 期求值，遇'先 import 后改 env'（cli/run_phase0_eval.py 等正是此写法）会静默失效；"
         "② 不入注册表 ⇒ diag 的 switch_snapshot 看不到、config/CLI 覆盖读不到。"
         "现改为调用时经注册表读（显式传入的 timeout 仍最高优先）"),
     "lean_crosscheck_as_unknown": (

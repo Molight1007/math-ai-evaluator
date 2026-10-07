@@ -2,8 +2,8 @@
 """A/B 对比工具（D6 三把钥匙用）：比较两份评测结果，给出逐题变化。
 
 用法：
-    python tools/compare_ab.py results/ab_baseline.jsonl results/ab_lemma.jsonl
-    python tools/compare_ab.py results/ab_baseline.jsonl results/ab_lemma.jsonl --detail
+    python cli/compare_ab.py results/ab_baseline.jsonl results/ab_lemma.jsonl
+    python cli/compare_ab.py results/ab_baseline.jsonl results/ab_lemma.jsonl --detail
 """
 
 from __future__ import annotations

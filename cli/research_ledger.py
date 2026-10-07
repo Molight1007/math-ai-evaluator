@@ -4,7 +4,7 @@
 
 设计口径
 --------
-- 输入 ① 逐题分析：`results/_deepseek_audit/*.jsonl`（由 tools/deepseek_error_analyst.py 逐题追加）
+- 输入 ① 逐题分析：`results/_deepseek_audit/*.jsonl`（由 cli/deepseek_error_analyst.py 逐题追加）
 - 输入 ② 云端轮次：评测结果 jsonl（`results/run_*.jsonl` 或仓库外只读快照）
 - 输出 ① `results/_research/ledger.jsonl`  ── 规范化逐题台账（累积、按 tag+id 去重、幂等）
 - 输出 ② `results/_research/research_ledger.md` ── 轮次概览 + 归因直方图 + 优化计划候选
@@ -14,9 +14,9 @@
 
 用法
 ----
-  python tools/research_ledger.py
-  python tools/research_ledger.py --cloud results/run_2026-09-22_0922_1955.jsonl
-  python tools/research_ledger.py --cloud-dir C:/Users/35174/_cloud_snap_0923_2217
+  python cli/research_ledger.py
+  python cli/research_ledger.py --cloud results/run_2026-09-22_0922_1955.jsonl
+  python cli/research_ledger.py --cloud-dir C:/Users/35174/_cloud_snap_0923_2217
 """
 # 2026-10-01 去同名：write_text -> write_text_mkdir（写文本**并建父目录**（另一处同名的不建），加 _mkdir 区分）
 from __future__ import annotations

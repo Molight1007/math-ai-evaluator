@@ -277,7 +277,7 @@ def cmd_plan(args) -> None:
     print("       --off <A−的输出目录> --on <A+的输出目录>")
     print()
     print("★ 配套的「检索是否找对定理」（不依赖评测，可先跑）")
-    print("   D:/python/python.exe tools/theorem_probe.py --report")
+    print("   D:/python/python.exe cli/theorem_probe.py --report")
     print("=" * 68)
 
 

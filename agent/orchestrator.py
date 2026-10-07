@@ -89,7 +89,7 @@ _DEGRADED_ANSWER_RE = _re.compile(
 #
 # ★ 2026-10-07 修（问题总账 §2.6 / §2.3「B 类裸 env 未登记 + import 期求值」）：
 #   原为模块级常量 `_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv(...))` ——
-#   ① import 期求值 ⇒ 若"先 import 后改 env"（仓库里 `tools/run_phase0_eval.py`
+#   ① import 期求值 ⇒ 若"先 import 后改 env"（仓库里 `cli/run_phase0_eval.py`
 #      等正是这种写法）会**静默失效**；② 常量不入注册表 ⇒ diag 的 switch_snapshot
 #      看不到、报告还原不出来。
 #   现改为**调用时**经注册表读取（`emergency_direct_max_tokens`，字段已于
@@ -1681,7 +1681,7 @@ class Orchestrator(BaseAgent):
             #      定理对大模型的推理效果如何？」
             #      本阶段负责**找**（检索命中定理并写入 ctx，供 2.6 前置理解 /
             #      3_solve 提示词使用）；**判定命中率**由离线脚本
-            #      `tools/theorem_probe.py` 对预标注表做（非运行时）；
+            #      `cli/theorem_probe.py` 对预标注表做（非运行时）；
             #      **效用**由 有/无定理 的 A/B（开关 enable_theorem_hint）回答。
             #      ★ 全程 try 包裹且超时可跳过 —— 检索失败绝不阻断主流程。
             self._stage_start(ctx, "1.2_theorem_hint")

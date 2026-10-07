@@ -3,8 +3,8 @@
 """评测诊断报告：环节归因 → 错误情况 → 耗时情况（Markdown 输出）
 
 用法:
-  D:/python/python.exe tools/diagnosis_report.py results/official112_local_0910.jsonl
-  D:/python/python.exe tools/diagnosis_report.py <results.jsonl> --md <out.md> [--top 12]
+  D:/python/python.exe cli/diagnosis_report.py results/official112_local_0910.jsonl
+  D:/python/python.exe cli/diagnosis_report.py <results.jsonl> --md <out.md> [--top 12]
 
 判据对齐 tools/analyze_errors.py：
   理解环节 = diag.preverify_trace.verdict == "fail"

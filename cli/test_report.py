@@ -18,7 +18,7 @@
 
 用法
 ----
-    D:/python/python.exe tools/test_report.py \
+    D:/python/python.exe cli/test_report.py \
         --results results/_cloud/results/results/arm2c2full2_0921_2136.jsonl
 
 自动发现同名产物：<results 同目录> 下的 `.env` / `.arm.json` / `.log`，
@@ -44,12 +44,12 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-sys.path.insert(0, HERE)
+sys.path.insert(0, ROOT)
 
-from deepseek_error_analyst import (  # noqa: E402
+from cli.deepseek_error_analyst import (  # noqa: E402
     _as_dict, _as_list, classify_validity, load_jsonl, PLACEHOLDERS,
 )
-from gen_test_report import safe  # noqa: E402
+from tools.gen_test_report import safe  # noqa: E402
 
 # ★ 2026-09-30（截图 #10）：子目标失败判据的**唯一来源** = `agent.gap_analyzer`。
 #   本文件的四维仪表盘需要判断"子目标主链是否达标"，必须与
@@ -1180,7 +1180,7 @@ def sec_conclusion(recs, vc, by_type, amap):
                  % (safe(top[0], 20), top[1],
                     fmt(pct(top[1], sum(by_type.values())))))
     L.append("")
-    L.append("> 本报告由 `tools/test_report.py` 自动生成，"
+    L.append("> 本报告由 `cli/test_report.py` 自动生成，"
              "一次测试一个文档；文件名 = 日期-题目数量-正确的题数。")
     L.append("")
     return L

@@ -10,9 +10,9 @@
     输出只用于「检错线索」，**不得**直接作为判分依据。
 
 用法：
-    python tools/deepseek_error_analyst.py --results <结果.jsonl> --tag <标签>
-    python tools/deepseek_error_analyst.py --results r.jsonl --tag t --limit 4
-    python tools/deepseek_error_analyst.py --results r.jsonl --tag t \\
+    python cli/deepseek_error_analyst.py --results <结果.jsonl> --tag <标签>
+    python cli/deepseek_error_analyst.py --results r.jsonl --tag t --limit 4
+    python cli/deepseek_error_analyst.py --results r.jsonl --tag t \\
         --ids official112-000,official112-001 --include-invalid
 
 输出（默认目录 results/_deepseek_audit）：
@@ -44,7 +44,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 # 复用项目既有的 OpenAI 兼容客户端工厂（读 .env 的 DEEPSEEK_* 凭据）
-from tools.lean_local.leap_eval import make_client  # noqa: E402
+from cli.leap_eval import make_client  # noqa: E402
 
 PLACEHOLDERS = (
     "未给出有效解答。",

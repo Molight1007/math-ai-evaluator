@@ -24,16 +24,16 @@
 若"标注基准"与"被评测的检索"用**同一套 query 构造逻辑**，则评测退化成
 恒等式。故本脚本做了两件独立化处理：
   1. **标注侧**用 `--annot-queries`（默认 3 条，含领域词 + 题干词 + 组合）；
-  2. **评测侧**（`tools/theorem_probe.py`）默认只用 2 条。
+  2. **评测侧**（`cli/theorem_probe.py`）默认只用 2 条。
   两者的 query 集合**不完全相同**，因此"检索能否找到标注"是真实信息。
   进一步地，标注表是**人可编辑的 JSONL** —— 老师/我们校正后即为权威基准。
 
 用法
 ----
-    python tools/build_theorem_gt.py                       # 全量（快，纯本地检索）
-    python tools/build_theorem_gt.py --limit 10            # 先看 10 题
-    python tools/build_theorem_gt.py --top-n 4             # 每题取前 4 条作 required
-    python tools/build_theorem_gt.py --overwrite           # 覆盖已有（默认增量保留人工编辑）
+    python cli/build_theorem_gt.py                       # 全量（快，纯本地检索）
+    python cli/build_theorem_gt.py --limit 10            # 先看 10 题
+    python cli/build_theorem_gt.py --top-n 4             # 每题取前 4 条作 required
+    python cli/build_theorem_gt.py --overwrite           # 覆盖已有（默认增量保留人工编辑）
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ _HEADER = (
     "# required = 解本题**必须**用到的 Mathlib 定理（评测的召回基准）\n"
     "# optional = 辅助定理（不参与命中率，仅供参考）\n"
     "# ★ 可人工编辑：改完直接存，theorem_probe.py 会按此评测。\n"
-    "# ★ 本表由 tools/build_theorem_gt.py 确定性生成（非大模型），生成逻辑见脚本 docstring。\n"
+    "# ★ 本表由 cli/build_theorem_gt.py 确定性生成（非大模型），生成逻辑见脚本 docstring。\n"
 )
 
 

@@ -4,8 +4,8 @@
 
 用法（仓库根）：::
 
-    python tools/param_usage_report.py results/arm2c2t_0921_1551.jsonl
-    python tools/param_usage_report.py <run.jsonl> --log <run.log> --out <out.md>
+    python cli/param_usage_report.py results/arm2c2t_0921_1551.jsonl
+    python cli/param_usage_report.py <run.jsonl> --log <run.log> --out <out.md>
 
 为什么要这个脚本
     用户诉求：『对于 leansearch 到底要找多少 mathlib 的定理，检测打回要搞多少次，

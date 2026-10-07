@@ -2,8 +2,8 @@
 """LEAP 三阶段端到端跑分脚本（工具）
 
 用法示例（在项目根目录 D:/挑战杯 下运行）：
-    python tools/lean_local/leap_eval.py --backend intern --problems PB-Basic-001 --out eval_out
-    python tools/lean_local/leap_eval.py --backend deepseek --limit 3 --out eval_out_ds
+    python cli/leap_eval.py --backend intern --problems PB-Basic-001 --out eval_out
+    python cli/leap_eval.py --backend deepseek --limit 3 --out eval_out_ds
 
 参数：
     --backend  intern | deepseek     模型后端（书生 / DeepSeek）
@@ -34,7 +34,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

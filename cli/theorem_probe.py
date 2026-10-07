@@ -7,7 +7,7 @@
 > ② 定理对大模型的推理效果如何
 
 本脚本负责 **①**（检索侧的客观测量）：
-   拿题库预标注表（`tools/build_theorem_gt.py` 产出，人工可校正）作基准，
+   拿题库预标注表（`cli/build_theorem_gt.py` 产出，人工可校正）作基准，
    对每题跑 `agent.theorem_hint.retrieve_theorems_for_question()`，
    比对命中情况，产出**逐题 + 汇总**指标。
 
@@ -25,10 +25,10 @@
 
 用法
 ----
-    python tools/theorem_probe.py --limit 20            # 先跑 20 题看效果
-    python tools/theorem_probe.py                       # 全量
-    python tools/theorem_probe.py --top-k 10 --max-queries 3
-    python tools/theorem_probe.py --report out.md       # 另出 markdown 小结
+    python cli/theorem_probe.py --limit 20            # 先跑 20 题看效果
+    python cli/theorem_probe.py                       # 全量
+    python cli/theorem_probe.py --top-k 10 --max-queries 3
+    python cli/theorem_probe.py --report out.md       # 另出 markdown 小结
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ def main() -> int:
         return 1
     if not gt_rows:
         print(f"预标注表为空或不存在: {args.gt}")
-        print("请先运行: python tools/build_theorem_gt.py")
+        print("请先运行: python cli/build_theorem_gt.py")
         return 1
 
     gt_map = {str(r.get("id")): r for r in gt_rows}
@@ -281,7 +281,7 @@ def _write_report(path: str, summary: dict, per_q: list) -> None:
     #   检索结果，等于用检索去考检索自己，命中率天然趋近 100%。
     #   必须人工校正标注表后，这个指标才有解释力。
     L.append("## ⚠ 读表前必看（同源性警示）\n")
-    L.append("本报告的基准（required）由 `tools/build_theorem_gt.py` 生成，")
+    L.append("本报告的基准（required）由 `cli/build_theorem_gt.py` 生成，")
     L.append("其 `source` 字段为 **auto:leansearch** —— 即**基准答案本身取自 leansearch 检索结果**。")
     L.append("因此「命中率」在此衡量的是**检索的自洽性**，不是「检索能否找对定理」的能力。\n")
     L.append("· 已被修正的污染：早期版本把检索**前 N 条直接当 required**，")
