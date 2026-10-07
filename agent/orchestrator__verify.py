@@ -10,12 +10,14 @@
 耦合实测（AST 自由变量分析）：
   · 4_verify 段：对 `run` 的依赖仅 `ctx` + `tier`（无 run 局部需传参）；
     **生产** `ver_result` / `tier_votes` 并返回给 `run`（二者被后续 4.5/4.6/5/5.5
-    **只读**使用）——这是本段唯一的外泄点。段内其余绑定（`is_proof` /
-    `_tier_vote_map` / `_p1_*` / `_pre_verify_n` / `_clean` / `_bc6` 等）段后零读取；
-    `v`/`g`/`_c` 系推导式变量、`_keep_cand` 系段内嵌套函数（均非外泄）。
+    **只读**使用）——这是本段唯一的外泄点。
     段内引用 3 个 orchestrator 模块级符号（`_answer_fingerprint` / `_artifact_put`
     / `_re`）⇒ 在函数内**惰性 import**（单一来源仍在 orchestrator，不复制）。
-    段内 `return` 仅属嵌套函数 `_keep_cand`；无 `yield`/`break`/`continue`。
+**2026-10-07 二次拆分**：`verify_stage`（原 247 行）已按语义拆为 `_verify_*`
+模块级 helper（各自 ≤150 行），主函数只留编排。**P1 硬信号块（`if not
+getattr(ctx, "_p1_triggered", False)`，含触发分支）与 `self.verifier.run(...)`
+保持内联** ⇒ 「tier_votes 赋值 → P1 → verifier.run」相对顺序不变（AST 断言锁定），
+P1 仍落在 `_stage_start("4_verify")` 计时窗口内。
   · 4.5 段：对 `run` 的依赖为 `ctx` + `tier` + **只读** `ver_result` / `tier_votes`
     （两者均由 4_verify 段赋值，本段只读透传）；段内**无任何局部绑定**、
     无 `return`/`yield`/`break`/`continue`。外部符号全部经 `self` 访问
@@ -35,7 +37,7 @@ def verify_stage(self, ctx, tier: str):
     P1 硬信号块随本段整体搬迁 ⇒ 仍在 `verifier.run` 之前、`tier_votes` 就绪之后、
     且在 `_stage_start("4_verify")` 计时窗口内（相对位置与计时窗口均不变）。
     """
-    from .orchestrator import _answer_fingerprint, _artifact_put, _re
+    from .orchestrator import _answer_fingerprint
 
     # 4) 验证（投票数按档位：fast=1/standard=1/deep=3）
     # P0-4 修复：playoff 复算按时间宽裕度开关，deep 档且时间宽裕时启用
@@ -48,33 +50,7 @@ def verify_stage(self, ctx, tier: str):
     # 严格度），属于正当用途，必须保留。
     is_proof = (getattr(ctx, 'question_type', '') == '证明题'
                 or getattr(ctx, 'domain', '') in ('证明', '证明题'))
-    tier_votes = self.config.tier_voting_times.get(tier, 1)
-    # ★ 2026-10-07 修「假开关 --voting_times」（问题总账 §2.6）：
-    #   主路径此前**只**读 `tier_voting_times`，并把结果**显式**传给
-    #   `verifier.run(voting_times=tier_votes)`；而 `verifier.run` 仅在
-    #   `voting_times is None` 时才回退 `config.verifier_voting_times`
-    #   ⇒ `run_eval.py --voting_times N`（→ `verifier_voting_times`）
-    #   对主路径**完全无效**（旧注释所称"可调"只对非主路径成立）。
-    #   现让主路径取「档位票数」与「用户配置」的**较大者**：
-    #     · 默认配置下 `verifier_voting_times`(2) ≤ `tier_voting_times[deep]`(3)
-    #       ⇒ **默认行为零变化**；
-    #     · 用户 CLI 调大（如 `--voting_times 5`）⇒ 真正生效。
-    #   与 `verifier._vote_profile` 既有的「以下限方式合并」同口径。
-    #   ⚠ 仅当该 tier 在 `tier_voting_times` 里有显式条目时才合并，避免影响
-    #     无条目档位的默认 1 票；调**小**不生效（档位计划票数是下限）。
-    _tier_vote_map = getattr(self.config, "tier_voting_times", None) or {}
-    if tier in _tier_vote_map:
-        try:
-            _user_votes = int(getattr(
-                self.config, "verifier_voting_times", 0) or 0)
-        except (TypeError, ValueError):
-            _user_votes = 0
-        if _user_votes > int(tier_votes):
-            self.record(ctx, "verifier",
-                        f"投票票数提升：用户配置 verifier_voting_times="
-                        f"{_user_votes} > 档位 {tier_votes} → 采用 {_user_votes}"
-                        f"（--voting_times 对主路径生效）")
-            tier_votes = _user_votes
+    tier_votes = _verify_resolve_tier_votes(self, ctx, tier)
 
     # P1 v3（2026-09-11）：验证硬信号 → 强制重解（official112 头号靶点）。
     # 演进记录（三次实测定位）：
@@ -160,26 +136,90 @@ def verify_stage(self, ctx, tier: str):
                                 f"（{type(_e_np).__name__}: {str(_e_np)[:120]}）"
                                 f"→ 同源 revise 可能对同答案重复重解")
         else:
-            # 2026-09-12 可观测性补强（Bug 4 跟进）：P1"0 触发"必须能区分
-            # 是「**没有硬信号**」还是「**有时间但因档位/emergency/门槛被拦**」。
-            # 此前两者在日志里都表现为"什么都没记"，导致无法定位。
-            # 事件名用 `p1_check`（不写 `revise`）以免污染 revise 统计口径。
-            _p1_why = []
-            if not _p1_msgs:
-                _p1_why.append(
-                    "无硬信号（数值攻击证伪 / AuditGate reject / "
-                    "3.6 Lean 候选级淘汰 三者皆空）")
-            if tier not in ("deep", "standard"):
-                _p1_why.append(f"档位 {tier} 不在 deep/standard")
-            if ctx.state.emergency:
-                _p1_why.append("处于 emergency 状态")
-            if ctx.time_remaining() <= 150:
-                _p1_why.append(
-                    f"剩余 {ctx.time_remaining():.0f}s ≤ 150s 门槛")
-            if _p1_why:
-                self.record(ctx, "p1_check",
-                            "P1 未触发：" + "；".join(_p1_why))
+            _verify_p1_cold_diag(self, ctx, tier, _p1_msgs)
 
+    _verify_filter_candidates(self, ctx)
+
+    ver_result = self.verifier.run(
+        ctx, problem=ctx.problem, candidates=ctx.candidates,
+        use_clustering=True,
+        use_scoring=self.config.use_scoring,
+        is_proof=is_proof,
+        use_playoff=(
+            (tier == 'deep' and getattr(self.config, 'deep_use_playoff', True))
+            or (tier != 'deep' and ctx.state.playoff_enabled)
+        ),
+        use_deterministic=getattr(self.config, 'enable_deterministic', True),
+        use_rubric=getattr(self.config, 'use_rubric', False),
+        use_challenge=getattr(self.config, 'use_challenge', False),
+        voting_times=tier_votes,
+    )
+    ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
+    ctx._best_cluster = ver_result.get("best_cluster")
+    ctx._cluster_data = ver_result.get("cluster_data", [])
+
+    _verify_artifact_verdicts(self, ctx, ver_result)
+    return ver_result, tier_votes
+
+
+def _verify_resolve_tier_votes(self, ctx, tier):
+    """档位票数解析：取「档位计划票数」与「用户配置」的较大者（后者默认不生效）。"""
+    tier_votes = self.config.tier_voting_times.get(tier, 1)
+    # ★ 2026-10-07 修「假开关 --voting_times」（问题总账 §2.6）：
+    #   主路径此前**只**读 `tier_voting_times`，并把结果**显式**传给
+    #   `verifier.run(voting_times=tier_votes)`；而 `verifier.run` 仅在
+    #   `voting_times is None` 时才回退 `config.verifier_voting_times`
+    #   ⇒ `run_eval.py --voting_times N`（→ `verifier_voting_times`）
+    #   对主路径**完全无效**（旧注释所称"可调"只对非主路径成立）。
+    #   现让主路径取「档位票数」与「用户配置」的**较大者**：
+    #     · 默认配置下 `verifier_voting_times`(2) ≤ `tier_voting_times[deep]`(3)
+    #       ⇒ **默认行为零变化**；
+    #     · 用户 CLI 调大（如 `--voting_times 5`）⇒ 真正生效。
+    #   与 `verifier._vote_profile` 既有的「以下限方式合并」同口径。
+    #   ⚠ 仅当该 tier 在 `tier_voting_times` 里有显式条目时才合并，避免影响
+    #     无条目档位的默认 1 票；调**小**不生效（档位计划票数是下限）。
+    _tier_vote_map = getattr(self.config, "tier_voting_times", None) or {}
+    if tier in _tier_vote_map:
+        try:
+            _user_votes = int(getattr(
+                self.config, "verifier_voting_times", 0) or 0)
+        except (TypeError, ValueError):
+            _user_votes = 0
+        if _user_votes > int(tier_votes):
+            self.record(ctx, "verifier",
+                        f"投票票数提升：用户配置 verifier_voting_times="
+                        f"{_user_votes} > 档位 {tier_votes} → 采用 {_user_votes}"
+                        f"（--voting_times 对主路径生效）")
+            tier_votes = _user_votes
+    return tier_votes
+
+
+def _verify_p1_cold_diag(self, ctx, tier, _p1_msgs) -> None:
+    """P1 未触发时的原因记录（区分「无硬信号」与「有时间但被档位/emergency/门槛拦」）。"""
+    # 2026-09-12 可观测性补强（Bug 4 跟进）：P1"0 触发"必须能区分
+    # 是「**没有硬信号**」还是「**有时间但因档位/emergency/门槛被拦**」。
+    # 此前两者在日志里都表现为"什么都没记"，导致无法定位。
+    # 事件名用 `p1_check`（不写 `revise`）以免污染 revise 统计口径。
+    _p1_why = []
+    if not _p1_msgs:
+        _p1_why.append(
+            "无硬信号（数值攻击证伪 / AuditGate reject / "
+            "3.6 Lean 候选级淘汰 三者皆空）")
+    if tier not in ("deep", "standard"):
+        _p1_why.append(f"档位 {tier} 不在 deep/standard")
+    if ctx.state.emergency:
+        _p1_why.append("处于 emergency 状态")
+    if ctx.time_remaining() <= 150:
+        _p1_why.append(
+            f"剩余 {ctx.time_remaining():.0f}s ≤ 150s 门槛")
+    if _p1_why:
+        self.record(ctx, "p1_check",
+                    "P1 未触发：" + "；".join(_p1_why))
+
+
+def _verify_filter_candidates(self, ctx) -> None:
+    """候选池上界记录 + 过滤「非答案形态」候选（Markdown 标记 / 过程叙述）。"""
+    from .orchestrator import _re
     # 2026-10-01：比赛期「候选池统一封顶 6」已按研究期标尺删除
     # （审计 A 级第 6 条）。原注释自述 `cap 8→6（deep 候选 4→3 配套，
     # 验证成本 -25%）` —— 属以成本为由裁剪候选粒度。研究期求正确率上限，
@@ -234,25 +274,11 @@ def verify_stage(self, ctx, tier: str):
         self.record(ctx, "control",
                     f"非答案形态候选过滤失败（{type(_e_f36).__name__}: "
                     f"{str(_e_f36)[:120]}）→ 脏候选可能进入投票")
-    ver_result = self.verifier.run(
-        ctx, problem=ctx.problem, candidates=ctx.candidates,
-        use_clustering=True,
-        use_scoring=self.config.use_scoring,
-        is_proof=is_proof,
-        use_playoff=(
-            (tier == 'deep' and getattr(self.config, 'deep_use_playoff', True))
-            or (tier != 'deep' and ctx.state.playoff_enabled)
-        ),
-        use_deterministic=getattr(self.config, 'enable_deterministic', True),
-        use_rubric=getattr(self.config, 'use_rubric', False),
-        use_challenge=getattr(self.config, 'use_challenge', False),
-        voting_times=tier_votes,
-    )
-    ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
-    ctx._best_cluster = ver_result.get("best_cluster")
-    ctx._cluster_data = ver_result.get("cluster_data", [])
 
-    # ★ 2026-10-02 hook 06：4_verify 后落盘 verdict（06_verdicts）。
+
+def _verify_artifact_verdicts(self, ctx, ver_result) -> None:
+    """4_verify 后落盘 verdict（hook 06：06_verdicts）。"""
+    from .orchestrator import _artifact_put
     _bc6 = getattr(ctx, "_best_cluster", None)
     _artifact_put(ctx, "06_verdicts", {
         "verdicts": [
@@ -270,7 +296,6 @@ def verify_stage(self, ctx, tier: str):
             "candidate_ids": getattr(_bc6, "candidate_ids", None),
         }),
     })
-    return ver_result, tier_votes
 
 
 def oracle_review_stage(self, ctx, tier: str, ver_result, tier_votes) -> None:
