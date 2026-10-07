@@ -32,15 +32,24 @@ SKIP_DIRS = {"vendor", "lean下载版", "lean-lsp-mcp", ".git", "__pycache__",
 
 # 分层规则（顺序敏感：具体的在前）
 LAYER_RULES = [
+    ("L5 入口", ["cli/"]),
     ("L5 入口", ["run_eval.py", "run_research.py", "main.py"]),
     ("L5 入口", ["deploy/"]),
     ("L4 编排", ["user_agent.py", "agent/orchestrator.py"]),
+    # ★ 2026-10-07 架构解耦（方案 架构解耦方案_2026-10-07.md）：
+    #   · 新增 `contracts/` 零依赖契约层（Budget/Finding/BugReport + TaskContext Protocol
+    #     + switch_registry 已下沉于此）——必须排在 `agent/` 之前，否则会被归到「其它」层。
+    #   · `agent/base.py` 与 `agent/switch_registry.py` 现为**re-export shim**（指向 contracts/），
+    #     仍判 L3 契约；顺序必须在 `agent/`（L2 业务）之前 —— 匹配是前缀匹配，靠顺序区分。
+    #   · `utils/` 现位于 `tools/` **之下**（目标分层 contracts ← utils ← tools ← agent），
+    #     故由 L1 工具降为 L0 基础。
+    ("L3 契约", ["contracts/"]),
     ("L3 契约", ["agent/base.py"]),
     ("L3 契约", ["agent/switch_registry.py"]),
     ("L2 业务", ["agent/"]),
     ("L2 业务", ["prompts/"]),
     ("L1 工具", ["tools/"]),
-    ("L1 工具", ["utils/"]),
+    ("L0 基础", ["utils/"]),
     ("测试", ["tests/"]),
     ("一次性脚本", ["scripts/"]),
 ]

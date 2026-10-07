@@ -31,7 +31,9 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 一方包名（本仓库自有的四层 + 顶层入口模块）
-FIRST_PARTY = {"contracts", "utils", "tools", "agent"}
+# ★ 2026-10-07：加入 `cli/`（消费 agent/root 的上层 CLI 入口，由 tools/ 归位而来）。
+#   它是**最上层**，可以 import 任何一方包 ⇒ 门禁对它只做"已知层"登记，不加禁令。
+FIRST_PARTY = {"contracts", "utils", "tools", "agent", "cli"}
 
 # ---------------------------------------------------------------------------
 # tools/ → agent 的**显式豁免清单**（每条必须给出可核对理由）。
