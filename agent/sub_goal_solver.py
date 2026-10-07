@@ -49,6 +49,7 @@ try:
         SUBGOAL_PLAN_USER_TEMPLATE,
         SUBGOAL_STEP_SYSTEM,
         SUBGOAL_STEP_USER_TEMPLATE,
+        SUBGOAL_CONCLUSION_CONTRACT,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
         SUBGOAL_CROSSCHECK_SYSTEM,
@@ -63,6 +64,7 @@ except ImportError:
         SUBGOAL_PLAN_USER_TEMPLATE,
         SUBGOAL_STEP_SYSTEM,
         SUBGOAL_STEP_USER_TEMPLATE,
+        SUBGOAL_CONCLUSION_CONTRACT,
         SUBGOAL_MERGE_SYSTEM,
         SUBGOAL_MERGE_USER_TEMPLATE,
         SUBGOAL_CROSSCHECK_SYSTEM,
@@ -166,6 +168,37 @@ def _mask_asserted_values(text: str) -> tuple:
         n += k
     t = re.sub(r"[ \t]{2,}", " ", t)
     return t.strip(), n
+
+
+def _conclusion_contract_on() -> bool:
+    """子目标**结论契约**开关（`subgoal_conclusion_contract`，默认 True）。
+
+    打开时：step 提示词追加「结论契约」块（prompts/sub_goal.py::
+    SUBGOAL_CONCLUSION_CONTRACT），强制每步产出 `本步结论: 值/等式/判定`
+    三形态之一 + `本步依据` 行 + 验算段；`_call_step` 解析并把结构化结论、
+    推导长度、「是否只有结论」标记写进 trace，供客观判定（B）与
+    主求解警示（C）消费。=0 回退旧行为（只给自由文本结论）。
+    """
+    try:
+        return bool(_sw_bool("subgoal_conclusion_contract"))
+    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
+        return True
+
+
+def _objective_judge_on() -> bool:
+    """子目标结论**客观判定**开关（`subgoal_objective_judge`，默认 True）。
+
+    打开时：每个子目标的结论都走一次 0-LLM 客观判定（SymPy 判等式真伪 /
+    多候选符号多数 / 判定真假的留痕），并把 `objective_verdict` /
+    `objective_reason` / `candidates_verified_index` 写进 trace。
+    实测背景：`n_judged = 0/73`（一个都没判定过）——原判定**只在多 agent
+    路径**且要求全部候选可解析为数学表达式，结论是自然语言时静默返回 -1。
+    =0 回退旧行为（只在多 agent 路径判定、判不出不给原因）。
+    """
+    try:
+        return bool(_sw_bool("subgoal_objective_judge"))
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _k11_mask_on() -> bool:
@@ -639,26 +672,19 @@ class SubGoalSolverAgent(BaseAgent):
             _fp = "|".join(str(sg.get(_k, "")) for _k in
                            ("title", "description", "type"))[:240]
             if _reuse_on and _fp in _done:
-                step_result = _done[_fp]
+                # ★ 2026-10-06：缓存值可能是**旧格式**（纯结果字符串）或新格式
+                #   （{"result": …, "contract": {…}}）。两种都要能读，否则升级
+                #   后跨 run() 复用的子目标会丢失结论契约字段（被误标"无推导"）。
+                _cached = _done[_fp]
+                if isinstance(_cached, dict):
+                    step_result = str(_cached.get("result") or "")
+                    self._restore_contract(sg, _cached.get("contract") or {})
+                else:
+                    step_result = _cached
                 results_map[sg["id"]] = step_result
                 sg["result"] = step_result
-                ctx.subgoal_trace.append({
-                    "id": sg["id"],
-                    "title": sg["title"],
-                    "description": sg["description"],
-                    "type": sg["type"],
-                    "calc_kind": sg.get("calc_kind", "inline"),
-                    "depends_on": sg["depends_on"],
-                    "expected_output": sg["expected_output"],
-                    "result": step_result,
-                    # ★ 阶段二-1/二-2：保留全部候选（多 agent 时非空；**复用路径无候选**）。
-                    "candidates": list(sg.get("candidates") or []),
-                    "candidates_picked_index": sg.get("candidates_picked_index", -1),
-                    "candidate_answers": list(sg.get("candidate_answers") or []),
-                    "candidates_verified_index": sg.get(
-                        "candidates_verified_index", -1),
-                    "reused": True,
-                })
+                ctx.subgoal_trace.append(
+                    self._build_trace_item(sg, step_result, reused=True))
                 # ★ 2026-10-02 hook 04：子目标结果即时落盘（存储层 04，append-only jsonl）。
                 try:
                     _artifact_append(ctx, "04_subgoal_results", ctx.subgoal_trace[-1])
@@ -807,24 +833,12 @@ class SubGoalSolverAgent(BaseAgent):
             results_map[sg["id"]] = step_result
             sg["result"] = step_result
             if _reuse_on:
-                _done[_fp] = step_result     # 写回 ctx，供**后续 run() 调用**复用
+                # 写回 ctx，供**后续 run() 调用**复用（连同结论契约字段一起存，
+                # 否则复用路径拿不到 has_derivation / 客观判定 → 误标"无推导"）。
+                _done[_fp] = {"result": step_result,
+                              "contract": self._contract_snapshot(sg)}
             # v2.9：结构化输出每步子目标的过程与中间结果
-            ctx.subgoal_trace.append({
-                "id": sg["id"],
-                "title": sg["title"],
-                "description": sg["description"],
-                "type": sg["type"],
-                "calc_kind": sg.get("calc_kind", "inline"),
-                "depends_on": sg["depends_on"],
-                "expected_output": sg["expected_output"],
-                "result": step_result,
-                # ★ 阶段二-1/二-2：保留全部候选（「淘汰」→「保留」）+ 抽取答案 + 客观验证下标。
-                "candidates": list(sg.get("candidates") or []),
-                "candidates_picked_index": sg.get("candidates_picked_index", -1),
-                "candidate_answers": list(sg.get("candidate_answers") or []),
-                "candidates_verified_index": sg.get(
-                    "candidates_verified_index", -1),
-            })
+            ctx.subgoal_trace.append(self._build_trace_item(sg, step_result))
             # ★ 2026-10-02 hook 04：子目标结果即时落盘（存储层 04，append-only jsonl）。
             try:
                 _artifact_append(ctx, "04_subgoal_results", ctx.subgoal_trace[-1])
@@ -2183,6 +2197,12 @@ class SubGoalSolverAgent(BaseAgent):
             return
         title = (sg.get("title") or "").strip()
         text = str(result).strip()
+        # ★ 2026-10-06（结论契约）：有结构化结论时用结论入引理记忆 ——
+        #   引理是"可直接引用、无需重新推导"的前置结论，混入验算正文只会
+        #   撑大后续每步提示词。
+        _concl = str(sg.get("conclusion") or "").strip()
+        if _concl:
+            text = _concl
         if not title or not text:
             return
         entry = f"{title}: {text}"
@@ -2225,6 +2245,12 @@ class SubGoalSolverAgent(BaseAgent):
             _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
             if _th:
                 _step_system = _step_system + "\n\n" + _th
+        # ★★ 2026-10-06（子目标交付重写 A）：结论契约注入（开关
+        #   `subgoal_conclusion_contract`，默认开）。放 system 而非 user：
+        #   user_msg 的收尾结构有历史教训（2026-08-29：末尾追加会让模型进入
+        #   续写模式、泄漏占位符），system 追加无此风险。
+        if _conclusion_contract_on():
+            _step_system = _step_system + "\n" + SUBGOAL_CONCLUSION_CONTRACT
 
         # ★ 2026-09-30（截图 #8）：**多 agent 求解子目标**。
         #   用户原话：「多 agent 拿子目标的求解能不能换成多 agent？
@@ -2270,9 +2296,15 @@ class SubGoalSolverAgent(BaseAgent):
         # 再经 merge 变成最终答案。剥壳后为空则返回空串，交给上层兜底。
         result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
         if result_match:
-            return self._strip_tool_residue(result_match.group(1)).strip()
-        # 如果没有标记，取最后 500 字符（同样先剥壳再切片）
-        return self._strip_tool_residue(resp).strip()[-500:]
+            step_result = self._strip_tool_residue(result_match.group(1)).strip()
+        else:
+            # 如果没有标记，取最后 500 字符（同样先剥壳再切片）
+            step_result = self._strip_tool_residue(resp).strip()[-500:]
+        # ★★ 2026-10-06（子目标交付重写 A/B/C）：把结论契约解析 + 客观判定
+        #   落到 sg（trace 由 run() 落盘）。传 resp 供兜底找【推导过程】块。
+        if sg is not None and _conclusion_contract_on():
+            self._apply_conclusion_contract(sg, step_result, raw_text=resp)
+        return step_result
 
     # ------------------------------------------------------------------
     # 多 agent 子目标求解（2026-09-30，截图 #8）
@@ -2389,7 +2421,11 @@ class SubGoalSolverAgent(BaseAgent):
         #   `candidate_answers` = 各候选**抽取后的干净答案串**（客观验证的输入——
         #   原文带推理没法算）；客观验证判出"对的那个" ⇒ **用它续推**（"按正确率选"，
         #   而非按长度/字符串多数）；判不出 ⇒ 保留多个、标未定（verified=-1）沿用代表解。
-        _answers: list = [self._extract_step_result(s) for s in _kept]
+        # ★ 2026-10-06（结论契约）：候选答案取**结构化结论**（值/等式表达式），
+        #   而非整段「本步结论+依据+验算」原文 —— 否则客观判定拿到的仍是
+        #   不可解析的中文正文（实测 candidate_answers 大量是 <check> 包的中文句
+        #   ⇒ `n_judged = 0/73`）。
+        _answers: list = [self._answer_from_raw(s) for s in _kept]
         _verified_idx = self._verify_candidates_objective(_answers)
         if 0 <= _verified_idx < len(_kept):
             picked = _kept[_verified_idx]
@@ -2454,6 +2490,250 @@ class SubGoalSolverAgent(BaseAgent):
         # 组内选最长（推理最完整）；并列时取先出现的，保证确定性
         picked = max(best, key=lambda x: len(str(x)))
         return picked, best_key, n_distinct
+
+    # ==================================================================
+    # 子目标**结论契约**：解析 / 客观判定 / 落 trace（2026-10-06 重写 A/B/C）
+    # ==================================================================
+    # 契约（见 prompts/sub_goal.py::SUBGOAL_CONCLUSION_CONTRACT）要求【本步结果】
+    # 段内头两行固定为：
+    #   本步结论: 值 = <expr> | 等式 = <L> = <R> | 判定 = 真|假|不确定
+    #   本步依据: <前序编号 / 题设 / 本步推导>
+    # 之后 ≤300 字为关键验算（= "有推导" 的证据）。
+    _CONCL_LINE_RE = re.compile(
+        r"本步结论\s*[:：]\s*(值|等式|判定)\s*=\s*(.+)")
+    _SUPPORT_LINE_RE = re.compile(r"本步依据\s*[:：]\s*(.+)")
+    # 「有推导」的最小验算篇幅（字符）：低于此视为"只给结论、未给推导"
+    _MIN_DERIVATION_CHARS = 20
+
+    @classmethod
+    def _parse_step_contract(cls, section: str) -> dict:
+        """解析【本步结果】段内的结论契约。返回结构化字典（永不抛异常）。
+
+        返回字段：
+          ok          是否给出合法 `本步结论:` 行（契约是否达成）
+          kind        "value" | "equation" | "verdict" | ""
+          expr        value→表达式；equation→"L = R"；verdict→真/假/不确定
+          lhs / rhs   equation 形态的左右两侧（客观判定输入）
+          verdict     verdict 形态的判定词
+          support     `本步依据:` 行（空 = 模型没写）
+          derivation  头两行之后的验算/论证正文
+          has_derivation 验算篇幅 >= `_MIN_DERIVATION_CHARS`
+          reason      未达成契约时的**原因**（供 B 留痕，不返回空串）
+        """
+        out = {"ok": False, "kind": "", "expr": "", "lhs": "", "rhs": "",
+               "verdict": "", "support": "", "derivation": "",
+               "has_derivation": False, "reason": ""}
+        text = str(section or "")
+        if not text.strip():
+            out["reason"] = "本步结果为空"
+            return out
+        m = cls._CONCL_LINE_RE.search(text)
+        if not m:
+            out["reason"] = "未给出结构化结论行（本步结论: 值/等式/判定 = …）"
+            # 未达成契约也要把验算正文抽出来（供 C 判"是否有推导"）
+            out["derivation"] = cls._tail_after_conclusion(text)
+            out["has_derivation"] = (
+                len(out["derivation"].strip()) >= cls._MIN_DERIVATION_CHARS)
+            return out
+        kind_cn, body = m.group(1), m.group(2).strip()
+        ms = cls._SUPPORT_LINE_RE.search(text)
+        out["support"] = ms.group(1).strip() if ms else ""
+        if kind_cn == "值":
+            out["kind"], out["expr"] = "value", body
+        elif kind_cn == "等式":
+            out["kind"] = "equation"
+            out["expr"] = body
+            parts = body.split("=")
+            if len(parts) >= 2:
+                out["lhs"], out["rhs"] = parts[0].strip(), "=".join(parts[1:]).strip()
+        elif kind_cn == "判定":
+            out["kind"] = "verdict"
+            _v = body.strip()
+            for token in ("不确定", "真", "假"):
+                if token in _v:
+                    out["verdict"] = token
+                    break
+            out["expr"] = _v
+        # 验算正文：结论行 + 依据行之后的内容
+        out["derivation"] = cls._tail_after_conclusion(text)
+        out["has_derivation"] = (
+            len(out["derivation"].strip()) >= cls._MIN_DERIVATION_CHARS)
+        out["ok"] = bool(out["kind"])
+        if not out["kind"]:
+            out["reason"] = "结论形态无法识别"
+        return out
+
+    @staticmethod
+    def _extract_derivation_block(raw: str) -> str:
+        """从模型原文里取「【推导过程】…（到下一个 【 段头或结尾）」块（无则空串）。"""
+        if not raw:
+            return ""
+        m = re.search(r"【推导过程】\s*\n?(.*?)(?=\n?【|$)", str(raw), re.DOTALL)
+        return m.group(1).strip() if m else ""
+
+    @classmethod
+    def _tail_after_conclusion(cls, text: str) -> str:
+        """去掉 `本步结论:` / `本步依据:` 两行后剩下的正文（= 验算/论证段）。"""
+        lines = str(text or "").split("\n")
+        kept = []
+        for ln in lines:
+            if cls._CONCL_LINE_RE.search(ln) or cls._SUPPORT_LINE_RE.search(ln):
+                continue
+            kept.append(ln)
+        return "\n".join(kept).strip()
+
+    def _judge_subgoal_objective(self, sg: dict, contract: dict,
+                                 result_text: str,
+                                 answers: list,
+                                 existing_idx: int = -1) -> tuple:
+        """对一个子目标结论做 **0-LLM 客观判定**。
+
+        返回 ``(verified_index, verdict, reason)``：
+          · verdict: "correct" | "incorrect" | "undecided"
+          · verified_index: >=0 = 客观判定的候选下标；-1 = 判不出
+          · reason: **总是**非空说明（判不出时即为"为什么判不出"的留痕）
+
+        客观信号（按可靠性排序，全部本地 SymPy / 0-LLM）：
+          ① 契约等式断言：`本步结论: 等式 = L = R` → `_sympy_judge(L, R)`；
+          ② 多候选符号多数：同一子目标多采样结果按 SymPy 等价归组取严格多数
+             （复用 `_verify_candidates_objective`）；
+          ③ `<check>` 协议断言：结果里显式声明的等式（复用 `_extract_check_asserts`）；
+          ④ 以上皆不适用 → undecided + **明确原因**（不再静默计 -1）。
+        """
+        # 已由多 agent 路径判出 → 直接沿用（不重复判、不覆盖）
+        if existing_idx is not None and existing_idx >= 0:
+            return existing_idx, "correct", "多候选符号多数（多 agent 路径已判定）"
+        # ① 契约等式断言
+        _chk = []          # [(L, R, info)] 通过的 / 失败的
+        if contract.get("kind") == "equation" and contract.get("lhs") \
+                and contract.get("rhs"):
+            _v, _info = self._sympy_judge(contract["lhs"], contract["rhs"])
+            if _v == "fail":
+                return (-1, "incorrect",
+                        "本步结论等式经 SymPy 客观判定**不成立**"
+                        + (f"（{_info}）" if _info else ""))
+            if _v == "pass":
+                _chk.append(("pass", ""))
+        # ③ <check> 协议断言（结论行未给等式时兜底）
+        if not _chk:
+            for L, R in self._extract_check_asserts(result_text):
+                _v, _info = self._sympy_judge(L, R)
+                if _v == "fail":
+                    return (-1, "incorrect",
+                            f"结果中 <check> 断言「{L} = {R}」客观判定不成立"
+                            + (f"（{_info}）" if _info else ""))
+                if _v == "pass":
+                    _chk.append(("pass", ""))
+        if _chk:
+            return 0, "correct", "等式断言经 SymPy 判定成立（恒等/数值为真）"
+        # ② 多候选符号多数
+        if answers and len(answers) >= 2:
+            _idx = self._verify_candidates_objective(answers)
+            if _idx >= 0:
+                return _idx, "correct", "多候选符号等价取得严格多数"
+            return (-1, "undecided",
+                    "多候选可解析但**无严格多数**（意见分歧，无客观依据选边）")
+        # ④ 判不出 → 留痕说明原因
+        kind = contract.get("kind") or ""
+        if not contract.get("ok"):
+            return (-1, "undecided",
+                    "未达成结论契约：" + (contract.get("reason") or "无结构化结论"))
+        if kind == "verdict":
+            return (-1, "undecided",
+                    f"结论为『判定 = {contract.get('verdict') or '?'}』型自然语言判定，"
+                    "无外部真值可比对，客观手段判不出真伪")
+        if kind == "value":
+            return (-1, "undecided",
+                    f"结论为『值 = {contract.get('expr')}』型单值断言，"
+                    "单次求解无可比对对象（多采样时方可按符号多数判定）")
+        return (-1, "undecided", "无可用客观判据")
+
+    def _apply_conclusion_contract(self, sg: dict, result_text: str,
+                                   raw_text: str = "") -> None:
+        """把结论契约结果落到 `sg`（供 `run()` 写进 trace）。异常一律吞掉。
+
+        ★ 只写 `sg`，不改 `result_text` —— 返回给上层的字符串语义保持不变。
+        `raw_text`（模型原始响应）仅用于**兜底找推导段**：prefill 会把
+        「【本步结果】」钉在开头，模型若仍另外输出「【推导过程】」块，
+        该块不在【本步结果】切片内，需从原文补取（否则 C 的「是否有推导」
+        会误判为「无推导」）。
+        """
+        try:
+            contract = self._parse_step_contract(result_text)
+            if not contract.get("has_derivation") and raw_text:
+                _db = self._extract_derivation_block(raw_text)
+                if len(_db.strip()) > len(contract.get("derivation") or ""):
+                    contract["derivation"] = _db
+                    contract["has_derivation"] = (
+                        len(_db.strip()) >= self._MIN_DERIVATION_CHARS)
+            _ans = list(sg.get("candidate_answers") or [])
+            if not _ans and contract.get("kind") == "value" and contract.get("expr"):
+                _ans = [contract["expr"]]
+            _existing = int(sg.get("candidates_verified_index", -1) or -1)
+            if _objective_judge_on():
+                idx, verdict, reason = self._judge_subgoal_objective(
+                    sg, contract, result_text, _ans, existing_idx=_existing)
+            else:
+                idx, verdict, reason = _existing, "undecided", ""
+            sg["conclusion"] = (
+                contract.get("expr") if contract.get("ok") else "")
+            sg["conclusion_kind"] = contract.get("kind", "")
+            sg["conclusion_support"] = contract.get("support", "")
+            sg["conclusion_contract_ok"] = bool(contract.get("ok"))
+            sg["conclusion_reason"] = contract.get("reason", "")
+            sg["has_derivation"] = bool(contract.get("has_derivation"))
+            sg["derivation_chars"] = len(contract.get("derivation") or "")
+            sg["objective_verdict"] = verdict
+            sg["objective_reason"] = reason
+            if _objective_judge_on():
+                if idx >= 0:
+                    # 单次求解（无多 agent 候选）也要让客观判定**可归因**：
+                    # 候选集 = {本步自己的结论}，verified_index 指向它。
+                    if not list(sg.get("candidates") or []):
+                        sg["candidates"] = [result_text]
+                        sg["candidate_answers"] = _ans or [result_text]
+                        sg["candidates_picked_index"] = 0
+                    sg["candidates_verified_index"] = idx
+                else:
+                    sg["candidates_verified_index"] = -1
+        except Exception as _e:  # noqa: BLE001  契约解析失败绝不影响求解
+            logger.debug("结论契约落盘异常（忽略）: %s: %s", type(_e).__name__, _e)
+
+    # 决策缓存需一起跨 run() 复用的契约字段（见 `_build_trace_item` 同名键）。
+    _CONTRACT_KEYS = (
+        "conclusion", "conclusion_kind", "conclusion_support",
+        "conclusion_contract_ok", "has_derivation", "derivation_chars",
+        "objective_verdict", "objective_reason",
+        "candidates", "candidates_picked_index", "candidate_answers",
+        "candidates_verified_index",
+    )
+
+    @classmethod
+    def _contract_snapshot(cls, sg: dict) -> dict:
+        """快照与结论契约/客观判定相关的 sg 字段（供决策缓存跨 run() 复用）。"""
+        return {k: sg.get(k) for k in cls._CONTRACT_KEYS if k in sg}
+
+    @classmethod
+    def _restore_contract(cls, sg: dict, snap: dict) -> None:
+        """把快照写回 sg（只写存在的键，异常吞掉）。"""
+        if not isinstance(snap, dict):
+            return
+        for k in cls._CONTRACT_KEYS:
+            if k in snap:
+                sg[k] = snap[k]
+
+    def _answer_from_raw(self, raw: str) -> str:
+        """从子目标采样原文取**可判定的答案串**（2026-10-06 结论契约）。
+
+        结论契约达成 → 返回结构化结论（`值 =`/`等式 =` 的右半，或 `判定 =` 词），
+        这是客观判定（SymPy 等价 / 多数）能直接消费的形态；
+        未达成 → 退回既有的「本步结果」切片（保持旧行为）。
+        """
+        sec = self._extract_step_result(raw)
+        c = self._parse_step_contract(sec)
+        if c.get("ok") and c.get("expr"):
+            return str(c["expr"]).strip()
+        return sec
 
     @staticmethod
     def _extract_step_result(text: str) -> str:
@@ -3443,6 +3723,39 @@ class SubGoalSolverAgent(BaseAgent):
                          type(exc).__name__, exc)
         if conflict_note:
             user_msg = user_msg + conflict_note
+        # ★★ 2026-10-06（子目标交付重写 C）：把"仅断言、无推导"与"客观判定不成立"
+        #   的子目标**显式交给合并层裁决**。实测题 official112-007：子目标直接给
+        #   结论、无推导，且其中一条是臆造（真值 0 写成 1），而合并层此前**看不到
+        #   "哪条没有推导支撑"** —— 只能照抄。现按 trace 打标后注入，要求逐条复核。
+        try:
+            _weak = []
+            for _t in (getattr(ctx, "subgoal_trace", None) or []):
+                if not isinstance(_t, dict):
+                    continue
+                _v = str(_t.get("objective_verdict", "") or "")
+                _hd = bool(_t.get("has_derivation", False))
+                if _v == "incorrect":
+                    _weak.append(
+                        f"  · 子目标 #{_t.get('id')}「{_t.get('title', '')}」"
+                        f"—— **客观判定不成立**（{_t.get('objective_reason', '')}），"
+                        "必须纠正后再合并")
+                elif _v != "correct" and not _hd:
+                    # 未被客观判定为成立、且无推导支撑 ⇒ 仅断言
+                    _weak.append(
+                        f"  · 子目标 #{_t.get('id')}「{_t.get('title', '')}」"
+                        "—— **仅断言、无推导支撑**（未给出验算），须独立复核")
+            if _weak:
+                user_msg = user_msg + (
+                    "\n\n【⚠ 结论可信度标记（合并前必须逐条处理）】\n"
+                    + "\n".join(_weak[:12])
+                    + "\n对上述子目标：**不得**直接采用其结论；须用代入 / 另一条路径"
+                    "重算 / 与题意对照等方式复核，判定其可信后再合并；"
+                    "若复核发现错误，以复核结果为准。")
+                self.record(ctx, "subgoal_merge",
+                            f"合并前注入可信度标记 {len(_weak)} 条"
+                            "（无推导支撑/客观判定不成立）")
+        except Exception:  # noqa: BLE001  标记注入失败不阻断 merge
+            pass
         _merge_system = SUBGOAL_MERGE_SYSTEM
         # ★ 2026-09-29（截图 #8）：合并阶段是"把子目标答案总结成最终答案"的出口，
         # 是定理线索真正能落到**最终答案**上的最后机会，故同样注入。
@@ -3536,6 +3849,44 @@ class SubGoalSolverAgent(BaseAgent):
             return "（无——按题目与子目标规划合并）"
 
     # ---------- 辅助方法 ----------
+    @staticmethod
+    def _build_trace_item(sg: dict, step_result: str, reused: bool = False) -> dict:
+        """构建一条 `ctx.subgoal_trace` 记录（唯一出口，防两处漂移）。
+
+        2026-10-06（子目标交付重写 A/B/C）：在原有字段基础上补上结论契约与
+        客观判定的可归因字段 —— 这些字段进 `diag.subgoal_trace`（结果文件），
+        使"这一步到底交付了什么、有没有被客观判定过、有没有推导支撑"**可被
+        事后核验**（此前只能看到 `result` 与空的 `expected_output`）。
+        """
+        item = {
+            "id": sg["id"],
+            "title": sg["title"],
+            "description": sg["description"],
+            "type": sg["type"],
+            "calc_kind": sg.get("calc_kind", "inline"),
+            "depends_on": sg["depends_on"],
+            "expected_output": sg["expected_output"],
+            "result": step_result,
+            # ★ 阶段二-1/二-2：保留全部候选（「淘汰」→「保留」）+ 抽取答案 + 客观验证下标。
+            "candidates": list(sg.get("candidates") or []),
+            "candidates_picked_index": sg.get("candidates_picked_index", -1),
+            "candidate_answers": list(sg.get("candidate_answers") or []),
+            "candidates_verified_index": sg.get("candidates_verified_index", -1),
+            # ---- 2026-10-06 结论契约（A/C）----
+            "conclusion": sg.get("conclusion", ""),
+            "conclusion_kind": sg.get("conclusion_kind", ""),
+            "conclusion_support": sg.get("conclusion_support", ""),
+            "conclusion_contract_ok": sg.get("conclusion_contract_ok", False),
+            "has_derivation": sg.get("has_derivation", False),
+            "derivation_chars": sg.get("derivation_chars", 0),
+            # ---- 2026-10-06 客观判定（B）----
+            "objective_verdict": sg.get("objective_verdict", ""),
+            "objective_reason": sg.get("objective_reason", ""),
+        }
+        if reused:
+            item["reused"] = True
+        return item
+
     @staticmethod
     def _subgoal_stats(subgoals: list[dict]) -> dict:
         """S4-lite 独立性指标（老师 9/6：减少子目标数、降低上下文依赖）。
@@ -3700,7 +4051,13 @@ class SubGoalSolverAgent(BaseAgent):
            真值，若最后一个子目标是空壳（纯标签）就被当答案返回，故剥壳后
            为空则继续往前找，避免"空壳顶替真结论"。
         """
+        # ★ 2026-10-06（结论契约）：结论契约生效后 `result` 会包含「结论行 +
+        #   依据行 + 验算段」，整体当最终答案过于冗长 ⇒ **优先取结构化结论**
+        #   （`value`/`equation` 形态可直接作为答案），没有再退回 result。
         for sg in reversed(subgoals):
+            _concl = str(sg.get("conclusion") or "").strip()
+            if _concl:
+                return SubGoalSolverAgent._strip_tool_residue(_concl).strip()
             _res = sg.get("result")
             if not _res:
                 continue

@@ -425,7 +425,25 @@ class SolverAgent(BaseAgent):
             _head = f"- 子目标 {_sid}「{_title}」"
             if _exp:
                 _head += f"（应产出：{_exp}）"
-            items.append(_head + f"\n  结论：{_res}")
+            # ★★ 2026-10-06（子目标交付重写 C）：**无推导支撑的结论必须打标**。
+            #   实测题 official112-007：7 个子目标**直接给结论、无任何推导**，
+            #   主求解把其中被臆造的结论（f(3/71) 真值 0、子目标写 1）原样采信
+            #   ⇒ 最终答错。此前子目标结论**不带"有没有推导"的信息**，主求解
+            #   无从区分"算出来的"与"断言出来的"。现按 trace 的
+            #   `has_derivation`（结论契约解析：结论行之后是否有 ≥20 字验算）
+            #   与客观判定结论打标：未判定 + 无推导 = 「仅断言」。
+            _verdict = str(sg.get("objective_verdict", "") or "")
+            _has_der = bool(sg.get("has_derivation", False))
+            _warn = ""
+            if _verdict == "incorrect":
+                _warn = ("\n  ⚠⚠【客观判定：**不成立**】"
+                         + str(sg.get("objective_reason", "") or ""))
+            elif not _has_der:
+                _warn = ("\n  ⚠【**仅断言、无推导支撑** —— 本步未给出验算/论证，"
+                         "不可无条件采信；请**独立核对**后再使用】")
+            elif _verdict == "correct":
+                _warn = "\n  ✔【客观判定：成立】"
+            items.append(_head + f"\n  结论：{_res}" + _warn)
         if not items:
             return ""
         body = "\n".join(items)
@@ -452,6 +470,11 @@ class SolverAgent(BaseAgent):
             "给出最终答案 —— **不要被错误的子目标结论绑死**；\n"
             "  3) 最终答案必须**建立在这些已确立结论之上**（一致时直接整合；"
             "不一致时说明以哪个为准及理由）。\n"
+            # ★★ 2026-10-06（子目标交付重写 C）：把"仅断言"降级为待核项。
+            "  4) 标注「⚠ 仅断言、无推导支撑」的子目标结论**没有给出验算**，"
+            "可能是臆造：**不得**直接作为最终答案的依据 —— 必须自己独立复核"
+            "（代入 / 用另一条路径重算 / 检查是否与题意矛盾），确认后才可使用；"
+            "标注「⚠⚠ 客观判定：不成立」的结论**已被客观手段判错**，必须纠正。\n"
         )
 
     def _apply_subgoal_findings(self, ctx: TaskContext, text: str) -> str:

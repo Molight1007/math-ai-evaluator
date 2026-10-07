@@ -87,6 +87,29 @@ def cap_subgoals_keep_last(items: list, max_n) -> tuple:
     return seq[:max_n - 1] + seq[-1:], seq[max_n - 1:-1]
 
 
+def _flatten_produces(value) -> str:
+    """把模型声明的「产出物」字段摊平成单行文本（2026-10-06，子目标交付重写 A）。
+
+    为什么需要：`produces` 由模型自由生成，实测有三种形态——
+      · 字符串：`"一条关于下界估计的单项不等式"`
+      · dict（本提示词 `inputs` 是同款结构，模型会串用）：
+        `{"object": "下界不等式", "use": "供 n3 使用"}`
+      · list：`["不等式 A", "不等式 B"]`
+    摊平失败一律返回 ""（宁可 expected_output 为空，也不塞入非文本垃圾）。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        parts = [str(v).strip() for v in value.values() if str(v).strip()]
+        return "；".join(parts)
+    if isinstance(value, (list, tuple)):
+        parts = [_flatten_produces(v) for v in value]
+        return "；".join(p for p in parts if p)
+    return str(value).strip()
+
+
 # ============================================================
 # 数据结构
 # ============================================================
@@ -114,6 +137,16 @@ class BlueprintNode:
     children: list = field(default_factory=list)
     rationale: str = ""                 # 分解依据（可选，用于 trace 与审查）
     node_role: str = "required"         # "required" | "anticipatory"
+    # ★★ 2026-10-06（子目标交付重写 A）：`produces` = 该节点**产出什么可核验对象**
+    #   （提示词 prompts/blueprint.py:89-101 一直要求模型逐节点声明，示例见 :179
+    #   "一条关于下界估计的单项不等式"）。但**此前本 dataclass 根本没有该字段、
+    #   `_parse_blueprint_json`/`from_dict` 也不读它** ⇒ 字段被静默丢弃，
+    #   最终 `to_subgoal_plan`（:306）只能把 `expected_output` 硬编码成 ""。
+    #   实测（smoke10 2026-10-06）：10 题中 8 题走蓝图路径 ⇒ 73 个子目标里
+    #   **59 个 expected_output 为空（81%）**，step 提示词里"期望输出：{空}"
+    #   ⇒ 模型没有"该产出什么"的约束 ⇒ 64/73（88%）交付 <120 字。
+    #   本字段即该缺口的落点：解析 → 下传 → `expected_output`。
+    produces: str = ""
 
     @property
     def is_anticipatory(self) -> bool:
@@ -303,7 +336,13 @@ class BlueprintDAG:
                 "description": node.statement,
                 "type": self._infer_type(node.statement),
                 "depends_on": deps,
-                "expected_output": "",
+                # ★★ 2026-10-06（子目标交付重写 A）：原实现**硬编码空串** ⇒ 蓝图
+                #   路径（实测 smoke10 8/10 题走此路径）下每个子目标的
+                #   `expected_output` 都是 ""，step 提示词里"期望输出："恒为空
+                #   ⇒ 模型没有"该产出什么可核验对象"的约束 ⇒ 73 个子目标里
+                #   59 个（81%）该字段为空、64 个（88%）交付 <120 字。
+                #   现取节点声明的 `produces`（可核验对象）；模型没写时才为空。
+                "expected_output": str(node.produces or "").strip(),
                 "result": "",
             })
         return {
@@ -423,6 +462,7 @@ class BlueprintDAG:
                 id=nid, node_type=node.node_type, statement=node.statement,
                 children=kept_children if nid != root_id else [],
                 rationale=node.rationale,
+                produces=node.produces,     # ★ 2026-10-06：产出物必须随裁剪保留
             )
         return BlueprintDAG(
             nodes=nodes, root_id=self.root_id,
@@ -454,6 +494,7 @@ class BlueprintDAG:
                 children=[f"{id_prefix}_{c}" if c in new_dag.nodes else c
                           for c in node.children],
                 rationale=node.rationale,
+                produces=node.produces,     # ★ 2026-10-06：产出物随子树嫁接保留
             )
         # 先摘除 root_id 的旧子树（root 保留为锚点），避免旧节点残留
         base = self._prune_subtree(root_id) if root_id in self.nodes else self
@@ -463,6 +504,7 @@ class BlueprintDAG:
             nodes[nid] = BlueprintNode(
                 id=nid, node_type=node.node_type, statement=node.statement,
                 children=list(node.children), rationale=node.rationale,
+                produces=node.produces,     # ★ 2026-10-06：产出物随深拷贝保留
             )
         if root_id not in nodes:
             return None
@@ -507,7 +549,7 @@ class BlueprintDAG:
             "nodes": [
                 {"id": n.id, "type": n.node_type, "statement": n.statement,
                  "children": n.children, "rationale": n.rationale,
-                 "node_role": n.node_role}
+                 "node_role": n.node_role, "produces": n.produces}
                 for n in self.nodes.values()
             ],
         }
@@ -524,6 +566,8 @@ class BlueprintDAG:
                 rationale=nd.get("rationale", ""),
                 # 缺省 required：旧 DAG 序列化（无该字段）行为不变
                 node_role=nd.get("node_role", nd.get("role", "required")) or "required",
+                # ★ 2026-10-06：产出物（可核验对象）；旧序列化无该字段 → ""（不破坏）
+                produces=str(nd.get("produces", nd.get("output", "")) or ""),
             )
         return cls(
             nodes=nodes,
@@ -656,6 +700,14 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             statement=statement,
             children=children,
             rationale=str(nd.get("rationale", nd.get("reason", ""))),
+            # ★ 2026-10-06（子目标交付重写 A）：读取模型声明的**产出物**
+            #   （prompts/blueprint.py:89-101/:179 一直要求 `produces`，但此前
+            #   解析器不读 ⇒ 静默丢弃 ⇒ to_subgoal_plan 的 expected_output 恒空）。
+            #   兼容别名 `output` / `expected_output`，且把 `produces` 里模型
+            #   偶尔写成 dict（{object, use}）的形态摊平为文本。
+            produces=_flatten_produces(
+                nd.get("produces", nd.get("output",
+                       nd.get("expected_output", "")))),
             # 2026-10-04 修（fix-a1）：原实现**不读 node_role/role** ⇒ 所有节点都取
             # 默认 "required" ⇒ 下游 to_subgoal_plan 收集的 anticipatory 恒为空 ⇒
             # sub_goal_solver._inject_anticipatory_lemmas 永远拿到 []（机制空转）。
