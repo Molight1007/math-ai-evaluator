@@ -3,9 +3,16 @@
 
 已抽出段（按 run 内顺序）：
   · 2.7_subgoal_main —— 子目标细化主路径 + C-lite 蓝图数值攻击
+  · 3_solve          —— 求解主采样（deep P&E / 蓝图·候选落盘 / Solver 多路采样 / 无可用候选兜底）
 
-**纯搬迁**：段内源码逐字搬入（仅去 8 空格缩进），调用点由 `run` 改为一行委托。
-`run` 保留 `self._stage_start(ctx, "2.7_subgoal_main")` 打点**原位不动**
+**搬迁方式分两类**：
+  · 2.7_subgoal_main —— **纯搬迁**：段内源码逐字搬入（仅去 8 空格缩进），调用点改为一行委托。
+  · 3_solve          —— **哨兵 + 解包**（⚠ 非纯逐字搬）：本段是 `run` 中唯一带 run 级
+    `return self._fallback_direct(ctx)` 的段 ⇒ 段体逐字搬入后**新增**末尾
+    `return _SOLVE_CONTINUE`，原 return 原样保留，调用侧以 `is not` 透传（详见
+    `solve_stage` docstring）。
+
+各段 `run` 保留 `self._stage_start(ctx, "<阶段名>")` 打点**原位不动**
 （阶段名是稳定契约，被 tools/stage_audit.py / tools/test_report.py 按名聚合）。
 
 耦合实测（AST 自由变量分析）：2.7 段对 `run` 的局部变量依赖**仅为 `ctx` 与 `tier`**；
@@ -23,6 +30,10 @@ import logging
 import time
 
 logger = logging.getLogger("MathPilot")
+
+# 3_solve 段「哨兵 + 解包」哨兵：段内唯一 run 级 return 是 `_fallback_direct`，
+# 其余路径一律返回本哨兵；调用侧以 `is not` 判定是否透传该 return。
+_SOLVE_CONTINUE = object()
 
 
 def subgoal_main_path(self, ctx, tier: str) -> None:
@@ -162,3 +173,121 @@ def self_improve_step(self, ctx) -> None:
             self.record(ctx, "control",
                         f"Step2 自改进跳过（剩余 {_imp_left:.0f}s "
                         f"< 门槛 {getattr(self.config, 'self_improve_min_left_sec', 150.0):.0f}s）")
+
+
+def solve_stage(self, ctx, tier: str) -> object:
+    """3_solve 求解主采样段（deep P&E / 蓝图·候选落盘 / Solver 多路采样 / 兜底）。
+
+    参数 `self` 即 `Orchestrator` 实例（沿用方法体原文，故保留名 `self`），
+    `ctx` 为 `TaskContext`，`tier` 为当前档位（本项目恒为 "deep"）。
+
+    ⚠ **非纯逐字搬**（与 2.7/3.2/3.3 段不同）：本段是 `run` 中**唯一带 run 级
+    return** 的段（`return self._fallback_direct(ctx)`，在 `_has_usable_candidate`
+    守卫内、且为该守卫与整段的末句）。为在不改 `run` 控制流语义的前提下搬出，
+    采用**哨兵 + 解包**：段体逐字搬入（仅去 8 空格缩进），仅**新增**末尾
+    `return _SOLVE_CONTINUE`；原 `return self._fallback_direct(ctx)` **原样保留**。
+    调用侧以 `if _r is not _SOLVE_CONTINUE: return _r` 透传（严格 `is not`）。
+    副作用顺序、异常传播（本段仍处原外层 try 内）均不变。
+
+    耦合实测（AST 自由变量）：对 run 的局部变量依赖为空；段内 10 个局部名
+    （`_dsp_*` / `_sp_*` / `_bp02` / `_pl03` / `_st03` 及推导式 `c`）零外泄、
+    无 yield/break/continue。唯一模块级外部符号是 `_artifact_put` ⇒ 函数内惰性
+    import（单一来源不复制，见 orchestrator__prep.py 同型做法）；`time` 已模块级 import。
+
+    返回 `_SOLVE_CONTINUE`（本段正常走完）或 `self._fallback_direct(ctx)` 的结果
+    （无可用候选兜底，调用方须直接 return）。
+    """
+
+    from .orchestrator import _artifact_put
+
+    # 3) 求解
+    # deep 档：Plan-and-Execute 主路径先行（子目标分解逐步求解 + 每步 oracle 校验），
+    # 让结构化计划-执行候选先进入后续客观审核与投票。
+    if (tier == 'deep'
+            and getattr(self.config, 'deep_use_sub_goal', True)
+            and not getattr(ctx, '_subgoal_main_done', False)
+            and not ctx.state.emergency
+            and not ctx.gen_time_up()):
+        self.record(ctx, "control", "deep 档 Plan-and-Execute 主路径先行（子目标分解）")
+        # P4-2（2026-09-11）：deep 档 P&E 同样纳入阶段预算（否则它可独占 3_solve）
+        # 2026-09-13：改走实测上限口径（实测 max 1148s × 余量）。
+        _dsp_cap = self._phase_budget(ctx, stage="3_solve")
+        _dsp_t0, _dsp_saved = self._phase_deadline_guard(ctx, _dsp_cap)
+        try:
+            self.sub_goal_solver.run(ctx)
+        finally:
+            self._phase_deadline_restore(ctx, _dsp_saved)
+        self.record(ctx, "control",
+                    f"3_solve(deep P&E) 阶段预算 {_dsp_cap:.0f}s"
+                    f"（实耗 {time.time() - _dsp_t0:.0f}s）")
+
+    # ★ 2026-10-02 hook 02/03：蓝图(DAG) / 子目标落盘（只加不改）。
+    #   位置刻意放在 **2.7 主路径 + deep 档 P&E 之后**：两条路径谁产出了蓝图
+    #   都能覆盖；二者互斥（P&E 有 `not _subgoal_main_done` 守卫）故只写一次。
+    #   02_blueprint = AND-OR DAG；03_subgoals = DAG 转出的子目标规划 + 逐步结果。
+    _bp02 = getattr(ctx, "blueprint", None) or {}
+    _pl03 = getattr(ctx, "blueprint_plan", None) or {}
+    _st03 = getattr(ctx, "subgoal_trace", None) or []
+    if _bp02:
+        _artifact_put(ctx, "02_blueprint", _bp02)
+    if _pl03 or _st03:
+        _artifact_put(ctx, "03_subgoals", {"plan": _pl03, "trace": _st03})
+
+    # Solver 多路采样（候选数/温度分层按档位，solver 内部读取 ctx.tier）
+    # 2026-10-01 按用户决策：研究期不限时 —— **删除"L1 验证优先"触发路径**
+    # （原：剩余 < verify_only_seconds 时停止生成新候选）。`ctx.state.verify_only`
+    # 不再被置位（恒 False）⇒ 下游 `not ctx.state.verify_only` 门禁恒放行，
+    # 不再有任何"为省时间而跳过生成/审核"的降级。
+    if not ctx.state.verify_only:
+        # 2026-09-06 超时修复：生成侧软截止已到且已有候选 → 不再追加
+        # 生成（solver.run 单次可能 200-300s），直接带现有候选进验证。
+        # 无候选时仍必须跑（兜底产出第一候选）。
+        if ctx.gen_time_up() and ctx.candidates:
+            # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
+            #   2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
+            self.record(ctx, "paper_pacer",
+                        "生成侧软截止已到且已有候选，跳过追加生成"
+                        "直接进入验证/审核")
+        else:
+            # P4-2（2026-09-11）：3_solve 阶段预算上限。
+            # v5 冒烟实证：`3_solve` 是本链路的**预算黑洞**（单阶段耗 303–1094s；
+            # 014 至 3.6 累计 1348s，远超当时的生成截止 900s 达 448s）——原因是
+            # `solver.run` 内部虽查 `gen_time_up()`，但**单次 LLM 调用可达 200-300s**，
+            # 多次调用叠加即可穿越截止点。故对本次调用临时收紧 deadline，
+            # 使循环边界的检查真正生效。
+            # 2026-09-13：改走**实测上限**口径（实测 max 1148s × 余量）。
+            # 旧比例切分（0.30 × (soft−420)）无实测依据，且把预算切成
+            # 234s 碎块。跨阶段保护改由 `_gen_deadline` + `verify_reserve`
+            # 统一负责，不再在此扣 reserve。
+            _sp_cap = self._phase_budget(ctx, stage="3_solve")
+            # 2026-09-13 修复（Explore 审计发现）：此处原为**手写**收紧，
+            # 只改 `ctx.deadline`、**未改 `_gen_deadline`** ⇒ solver 内部
+            # 循环查的 `gen_time_up()`（看 _gen_deadline）完全不受本阶段
+            # 预算约束，单次 LLM 调用 200-300s 可反复叠加穿越预算
+            # （实测 3_solve 超预算 1.7×）。统一改用 _phase_deadline_guard
+            # （两个字段一起收紧），与 2.7 / 3.4 / 6.5 口径一致。
+            _sp_t0, _sp_saved = self._phase_deadline_guard(ctx, _sp_cap)
+            try:
+                self.solver.run(ctx)
+            finally:
+                self._phase_deadline_restore(ctx, _sp_saved)
+            self.record(ctx, "control",
+                        f"3_solve 阶段预算 {_sp_cap:.0f}s"
+                        f"（实耗 {time.time() - _sp_t0:.0f}s）")
+
+    # ★ 2026-10-02 hook 05：3_solve 生成后落盘候选池（05_candidates）。
+    _artifact_put(ctx, "05_candidates", [
+        {"id": c.id, "answer": getattr(c, "answer", ""),
+         "reasoning": getattr(c, "reasoning", ""),
+         "revised": getattr(c, "revised", False)}
+        for c in (getattr(ctx, "candidates", None) or [])
+    ])
+
+    if not self._has_usable_candidate(ctx):
+        # 2026-09-13 晚：判据从 `not ctx.candidates` 放宽为"无**可用**候选"。
+        # 旧判据只看池子空不空，而 solver 原先会塞占位候选 ⇒ 池子非空但
+        # 全是占位符，这条兜底（以及 `_emergency_direct_solve`）永远不触发。
+        self.record(ctx, "control",
+                    "Solver 未产出可用候选（空/占位符），触发兜底直接求解")
+        return self._fallback_direct(ctx)
+    return _SOLVE_CONTINUE

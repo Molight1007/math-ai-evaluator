@@ -32,6 +32,7 @@ def _orch_src() -> str:
 
     2026-10-07 阶段C3：`Orchestrator.run` 的若干阶段段（3.6_audit_filter /
     3.4_collab / 5.5_low_conf）已**逐字搬**到 `agent/orchestrator__*.py`。
+    2026-10-08 阶段C4e：3_solve 主采样段亦搬入 `agent/orchestrator__solve.py`。
     源码级守卫改为读「主文件 + 抽出模块」并集 —— 断言的字面量与守卫意图
     均不变（只是被查代码换了文件，非放宽判据）。
     """
@@ -87,7 +88,21 @@ def test_generation_steps_all_gated_by_verify_only():
     src = _orch_src()
 
     for needle in _GENERATION_STEPS:
-        idx = src.find(needle)
+        if needle == "self.solver.run(ctx)":
+            # ★ 2026-10-08 阶段C4e：3_solve 主采样段已搬入 agent/orchestrator__solve.py
+            #   ⇒ 全串里的 **首个** `self.solver.run(ctx)` 不再是被查语句（现为
+            #   orchestrator.py 里 revise 回环 `_deep_revise_loop_inner` 的调用）。
+            #   被查语句所在主采样块是**唯一**以 `_sp_saved` 收紧/还原阶段预算的块
+            #   ⇒ 以该块独占的后随锚点定位被查语句。**仅改被查代码的定位方式**：
+            #   下方所有断言的字面量与比较逻辑（gate 存在 / gate 在 solver.run 之前 /
+            #   gen_time_up 在位）**一字未改**，非放宽判据。
+            _sp_anchor = src.find("_phase_deadline_restore(ctx, _sp_saved)")
+            assert _sp_anchor >= 0, (
+                "找不到 3_solve 主采样块锚点（`_sp_saved`）—— "
+                "代码可能重构，请更新测试")
+            idx = src.rfind(needle, 0, _sp_anchor)
+        else:
+            idx = src.find(needle)
         assert idx >= 0, f"找不到生成步骤锚点：{needle}（代码可能重构，请更新测试）"
         # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符
         # solver.run 前有长注释（2026-09-06 超时修复），回溯窗口放宽到 700 字符；

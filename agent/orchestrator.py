@@ -160,6 +160,10 @@ from .orchestrator__solve import complete_truncated  # noqa: F401
 # 2026-10-07 阶段C4c：3.3_improve 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__solve import self_improve_step  # noqa: F401
+# 2026-10-08 阶段C4e：3_solve 段已抽到 agent/orchestrator__solve.py，
+# 由 run 以「哨兵 + 解包」方式委托（阶段打点原位保留，契约不变）。
+# ⚠ 非纯逐字搬：段体末尾新增哨兵 return，调用点由裸段改为解包透传。
+from .orchestrator__solve import solve_stage, _SOLVE_CONTINUE  # noqa: F401
 # 2026-10-07 阶段C4d：4.5_oracle 段已抽到 agent/orchestrator__verify.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__verify import oracle_review_stage  # noqa: F401
@@ -1371,96 +1375,12 @@ class Orchestrator(BaseAgent):
             subgoal_main_path(self, ctx, tier)
 
             self._stage_start(ctx, "3_solve")
-            # 3) 求解
-            # deep 档：Plan-and-Execute 主路径先行（子目标分解逐步求解 + 每步 oracle 校验），
-            # 让结构化计划-执行候选先进入后续客观审核与投票。
-            if (tier == 'deep'
-                    and getattr(self.config, 'deep_use_sub_goal', True)
-                    and not getattr(ctx, '_subgoal_main_done', False)
-                    and not ctx.state.emergency
-                    and not ctx.gen_time_up()):
-                self.record(ctx, "control", "deep 档 Plan-and-Execute 主路径先行（子目标分解）")
-                # P4-2（2026-09-11）：deep 档 P&E 同样纳入阶段预算（否则它可独占 3_solve）
-                # 2026-09-13：改走实测上限口径（实测 max 1148s × 余量）。
-                _dsp_cap = self._phase_budget(ctx, stage="3_solve")
-                _dsp_t0, _dsp_saved = self._phase_deadline_guard(ctx, _dsp_cap)
-                try:
-                    self.sub_goal_solver.run(ctx)
-                finally:
-                    self._phase_deadline_restore(ctx, _dsp_saved)
-                self.record(ctx, "control",
-                            f"3_solve(deep P&E) 阶段预算 {_dsp_cap:.0f}s"
-                            f"（实耗 {time.time() - _dsp_t0:.0f}s）")
-
-            # ★ 2026-10-02 hook 02/03：蓝图(DAG) / 子目标落盘（只加不改）。
-            #   位置刻意放在 **2.7 主路径 + deep 档 P&E 之后**：两条路径谁产出了蓝图
-            #   都能覆盖；二者互斥（P&E 有 `not _subgoal_main_done` 守卫）故只写一次。
-            #   02_blueprint = AND-OR DAG；03_subgoals = DAG 转出的子目标规划 + 逐步结果。
-            _bp02 = getattr(ctx, "blueprint", None) or {}
-            _pl03 = getattr(ctx, "blueprint_plan", None) or {}
-            _st03 = getattr(ctx, "subgoal_trace", None) or []
-            if _bp02:
-                _artifact_put(ctx, "02_blueprint", _bp02)
-            if _pl03 or _st03:
-                _artifact_put(ctx, "03_subgoals", {"plan": _pl03, "trace": _st03})
-
-            # Solver 多路采样（候选数/温度分层按档位，solver 内部读取 ctx.tier）
-            # 2026-10-01 按用户决策：研究期不限时 —— **删除"L1 验证优先"触发路径**
-            # （原：剩余 < verify_only_seconds 时停止生成新候选）。`ctx.state.verify_only`
-            # 不再被置位（恒 False）⇒ 下游 `not ctx.state.verify_only` 门禁恒放行，
-            # 不再有任何"为省时间而跳过生成/审核"的降级。
-            if not ctx.state.verify_only:
-                # 2026-09-06 超时修复：生成侧软截止已到且已有候选 → 不再追加
-                # 生成（solver.run 单次可能 200-300s），直接带现有候选进验证。
-                # 无候选时仍必须跑（兜底产出第一候选）。
-                if ctx.gen_time_up() and ctx.candidates:
-                    # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
-                    #   2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
-                    self.record(ctx, "paper_pacer",
-                                "生成侧软截止已到且已有候选，跳过追加生成"
-                                "直接进入验证/审核")
-                else:
-                    # P4-2（2026-09-11）：3_solve 阶段预算上限。
-                    # v5 冒烟实证：`3_solve` 是本链路的**预算黑洞**（单阶段耗 303–1094s；
-                    # 014 至 3.6 累计 1348s，远超当时的生成截止 900s 达 448s）——原因是
-                    # `solver.run` 内部虽查 `gen_time_up()`，但**单次 LLM 调用可达 200-300s**，
-                    # 多次调用叠加即可穿越截止点。故对本次调用临时收紧 deadline，
-                    # 使循环边界的检查真正生效。
-                    # 2026-09-13：改走**实测上限**口径（实测 max 1148s × 余量）。
-                    # 旧比例切分（0.30 × (soft−420)）无实测依据，且把预算切成
-                    # 234s 碎块。跨阶段保护改由 `_gen_deadline` + `verify_reserve`
-                    # 统一负责，不再在此扣 reserve。
-                    _sp_cap = self._phase_budget(ctx, stage="3_solve")
-                    # 2026-09-13 修复（Explore 审计发现）：此处原为**手写**收紧，
-                    # 只改 `ctx.deadline`、**未改 `_gen_deadline`** ⇒ solver 内部
-                    # 循环查的 `gen_time_up()`（看 _gen_deadline）完全不受本阶段
-                    # 预算约束，单次 LLM 调用 200-300s 可反复叠加穿越预算
-                    # （实测 3_solve 超预算 1.7×）。统一改用 _phase_deadline_guard
-                    # （两个字段一起收紧），与 2.7 / 3.4 / 6.5 口径一致。
-                    _sp_t0, _sp_saved = self._phase_deadline_guard(ctx, _sp_cap)
-                    try:
-                        self.solver.run(ctx)
-                    finally:
-                        self._phase_deadline_restore(ctx, _sp_saved)
-                    self.record(ctx, "control",
-                                f"3_solve 阶段预算 {_sp_cap:.0f}s"
-                                f"（实耗 {time.time() - _sp_t0:.0f}s）")
-
-            # ★ 2026-10-02 hook 05：3_solve 生成后落盘候选池（05_candidates）。
-            _artifact_put(ctx, "05_candidates", [
-                {"id": c.id, "answer": getattr(c, "answer", ""),
-                 "reasoning": getattr(c, "reasoning", ""),
-                 "revised": getattr(c, "revised", False)}
-                for c in (getattr(ctx, "candidates", None) or [])
-            ])
-
-            if not self._has_usable_candidate(ctx):
-                # 2026-09-13 晚：判据从 `not ctx.candidates` 放宽为"无**可用**候选"。
-                # 旧判据只看池子空不空，而 solver 原先会塞占位候选 ⇒ 池子非空但
-                # 全是占位符，这条兜底（以及 `_emergency_direct_solve`）永远不触发。
-                self.record(ctx, "control",
-                            "Solver 未产出可用候选（空/占位符），触发兜底直接求解")
-                return self._fallback_direct(ctx)
+            # 3_solve 求解段已抽到 agent/orchestrator__solve.py::solve_stage，
+            # 以「哨兵 + 解包」委托：段内唯一 run 级 return（_fallback_direct）
+            # 经哨兵透传，其余路径返回 _SOLVE_CONTINUE。
+            _r = solve_stage(self, ctx, tier)
+            if _r is not _SOLVE_CONTINUE:
+                return _r
 
             self._stage_start(ctx, "3.2_complete")
             complete_truncated(self, ctx, tier)
