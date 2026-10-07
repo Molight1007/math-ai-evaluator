@@ -572,6 +572,19 @@ _SPEC = (
          else len(_cfg_get(cfg, "max_subgoals_by_tier"))),
      lambda ctx: (None, ""), "档位",
      "档位化上限表（本身不是数值上限，仅登记其存在与档位数）", False),
+
+    # ==== 2026-10-07 开关注册制补齐（fix-audit-gate「解答题判别力」）========
+    # 与 `agent/switch_registry.py::SWITCHES` 同名登记；开关型 used/capped=None。
+    ("deterministic_solution_check",
+     lambda cfg, tier, _f="deterministic_solution_check", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "DETERMINISTIC_SOLUTION_CHECK — 解答题确定性判别重写总开关"
+     "（默认 True：归一答案外壳 + 全量等式回代 + 函数方程回代；=0 回退旧行为）", None),
+    ("audit_gate_rubric_nonproof",
+     lambda cfg, tier, _f="audit_gate_rubric_nonproof", _d=False: getattr(cfg, _f, _d),
+     None, "bool",
+     "AUDIT_GATE_RUBRIC_NONPROOF — 解答题是否也跑 Level2 rubric"
+     "（默认 False：LLM 同源自评、价值低耗时高；=1 开启）", None),
 )
 
 

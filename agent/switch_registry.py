@@ -260,6 +260,24 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "`verifier._clip_review_prose`）：实测题 000 复核者输出「正确答案应为 0。"
         "下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而"
         "标准 20460。=0 回退旧行为（不清洗）做 A/B"),
+    # ---- agent/deterministic.py（2026-10-07「审计闸门对解答题结构性无输出」修复）----
+    "deterministic_solution_check": (
+        "DETERMINISTIC_SOLUTION_CHECK", "bool", True,
+        "解答题确定性判别重写总开关。=1（默认，修好后的行为）：① 解析前归一答案"
+        "（剥 `\\boxed{}`/`$`/LaTeX 外壳 —— 实测 smoke10 有 7/10 题因带壳在 method=\"parse\" "
+        "即返回 unknown，Level0 根本没进入判据）；② 常量等式回代由「只取最后一条」"
+        "改为「全量等式合取判定」；③ 新增**函数方程回代**判据（覆盖「求满足函数方程的"
+        "函数」这一解答题子类，对候选函数做符号代入 + 恒等判定）。=0 完全回退改动前"
+        "（raw parse、只取最后一条等式、无函数方程判据）做 A/B"),
+    # ---- agent/audit_gate.py（2026-10-07 同上）----
+    "audit_gate_rubric_nonproof": (
+        "AUDIT_GATE_RUBRIC_NONPROOF", "bool", False,
+        "是否允许 AuditGate 的 Level2 rubric 结构化判分对**解答题**（非证明题）运行。"
+        "旧行为：rubric 仅对证明题运行 ⇒ 解答题 Level2 结构性不适用。经查 rubric 提示词"
+        "（VERIFIER_RUBRIC_SYSTEM）为通用「数学解答评审」，并无证明专用假设 ⇒ 原限制缺少"
+        "依据。**默认 False（保守）**：rubric 系 LLM 同源自评（价值低、耗时高），且候选级"
+        "投票链本已可选跑 rubric；开启前应做 A/B。=1 则解答题也走 Level2（仍沿用高置信 B "
+        "才否决的阈值）"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}

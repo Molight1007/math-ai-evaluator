@@ -276,6 +276,25 @@ class AgentConfig:
     #   置 False 可回退到"照常跑但全 unknown"的旧行为。
     audit_gate_skip_non_proof: bool = True
 
+    # ★ 2026-10-07 新增（fix-audit-gate）：**解答题确定性判别重写**总开关。
+    #   诊断（smoke10 = run_2026-10-06_smoke10_1006_2347.jsonl，10 题实测）：
+    #     · audit_gate 38 条 candidate_audit 全 verdict=unknown / applicable=false；
+    #     · 根因两层：① **Level0 死在第一步** —— 答案仍带 `\boxed{...}` 外壳，
+    #       `_safe_parse('\boxed{-4}')` → None ⇒ method="parse" 即返回 unknown，
+    #       7/10 题命中（题面要求 within \boxed{}，模型照做反而解析失败）；
+    #       ② 即使剥壳，原判据只认「最后一条一侧为常量的单变量等式」，而 8 道解答题
+    #       全是竞赛题（计数 / 函数方程 / 极值 / 集合完备性）⇒ 无此结构 ⇒ 全 unknown。
+    #   置 True（默认，修好后的行为）：解析前归一 + 全量等式回代 + 函数方程回代。
+    #   置 False：完全回退改动前行为做 A/B。
+    deterministic_solution_check: bool = True
+
+    # ★ 2026-10-07 新增：是否允许 AuditGate 的 Level2 rubric 对**解答题**运行。
+    #   旧行为 rubric 仅对证明题运行（解答题结构性不适用）；经查 rubric 提示词为通用
+    #   「数学解答评审」、无证明专用假设 ⇒ 原限制缺少依据。默认 False（保守）：
+    #   rubric 系 LLM 同源自评（价值低、耗时高），且候选级投票链本已可选跑 rubric。
+    #   置 True 则解答题也走 Level2（仍沿用高置信 B 才否决的阈值）。
+    audit_gate_rubric_nonproof: bool = False
+
     # ★ 2026-09-16 删除死字段 `extraction_mode`：AgentConfig 声明了、
     #   override 白名单里也列了，但**全仓 0 个读取点**（实测确认）⇒
     #   CLI/kwargs 传它会被静默丢弃，只给人"可调"的假象。
@@ -1101,6 +1120,9 @@ class ReasoningAgent:
             "sub_goal_oracle_check",  # 子目标逐步 oracle 校验（默认关）
             "falsify_max_per_q",      # 单题最多证伪次数
             "phase_budget_enabled",   # 阶段时间预算总开关
+            # ★ 2026-10-07 开关注册制（fix-audit-gate「解答题判别力」四件套）
+            "deterministic_solution_check",   # 解答题确定性判别重写（默认 True）
+            "audit_gate_rubric_nonproof",     # 解答题也跑 Level2 rubric（默认 False）
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
