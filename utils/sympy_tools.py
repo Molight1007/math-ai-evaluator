@@ -113,6 +113,30 @@ def _insert_implicit_mul(s: str) -> str:
         return name + "*"
 
     s = re.sub(r"([A-Za-z]+)(?=\()", _var_open, s)
+
+    # ★★ 2026-10-07 修复（**数字紧跟字母/括号的隐式乘法被整体漏掉** —— 题 001 根因）：
+    #   原实现只处理了上述四种"括号相关"形态，**完全没处理最常见的一类**：
+    #       数字紧跟字母  `2m`     （应 → `2*m`）
+    #       数字紧跟括号  `2(x+1)` （应 → `2*(x+1)`；本函数 docstring 自陈 `2(` 会报错，
+    #                              但一直没修）
+    #   实测证据（修复前）：
+    #       _insert_implicit_mul('-2m+2') → '-2m+2'   ← 原样返回，未插 *
+    #       _insert_implicit_mul('2m')    → '2m'
+    #       ⇒ _try_parse('-2m+2') 失败、_try_parse('2-2m') 失败
+    #       ⇒ AnswerOracle.is_parseable('-2m+2') = **False**（连 gold 的写法 `2-2m` 也是 False）
+    #       ⇒ 而 is_parseable('-4') = True（纯数字能过）
+    #   后果（run_2026-10-06_smoke10 题 001 实测）：
+    #       agent/final_selector.py:229 的"可解析性淘汰"把正确答案 `-2m+2`
+    #       （≡ gold `2-2m`，审计员独立核实等价）当 unparseable 扔掉，
+    #       池里只剩纯数字错答案 `-4` ⇒ **最终提交错的**。
+    #   ★ 这是一条**系统性缺陷**：只要池里混有一个纯数字答案，
+    #     所有含变量的答案（哪怕完全正确）都会被淘汰。
+    #   修法：补两类规则。⚠ 必须先**保护科学计数法**（`1e5` / `2E-3`），
+    #   否则会被插成 `1*e5`。
+    s = re.sub(r"(\d)([eE])([+-]?\d)", r"\1@@SCI@@\2\3", s)
+    s = re.sub(r"(\d)(?=[A-Za-z])", r"\1*", s)
+    s = s.replace("@@SCI@@", "")
+    s = re.sub(r"(\d)(?=\()", r"\1*", s)
     return s
 
 
