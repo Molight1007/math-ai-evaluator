@@ -166,6 +166,12 @@ from .orchestrator__verify import oracle_review_stage  # noqa: F401
 # 2026-10-07 阶段C5：4_verify 段已抽到 agent/orchestrator__verify.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__verify import verify_stage  # noqa: F401
+# 2026-10-07 阶段C6：1.2_theorem_hint 段已抽到 agent/orchestrator__prep.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__prep import theorem_hint_stage  # noqa: F401
+# 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__prep import pre_audit_stage  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1333,9 +1339,7 @@ class Orchestrator(BaseAgent):
             #      **效用**由 有/无定理 的 A/B（开关 enable_theorem_hint）回答。
             #      ★ 全程 try 包裹且超时可跳过 —— 检索失败绝不阻断主流程。
             self._stage_start(ctx, "1.2_theorem_hint")
-            if (getattr(self.config, "enable_theorem_hint", True)
-                    and not ctx.state.emergency):
-                self._retrieve_theorem_hints(ctx)
+            theorem_hint_stage(self, ctx)
 
             # 2) 2026-09-29：**快车道旁路已删除**（用户决策）。
             # 原 `_fast_path()` 用正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后
@@ -1390,37 +1394,7 @@ class Orchestrator(BaseAgent):
                         tier=tier, soft_budget=round(ctx.soft_budget))
 
             self._stage_start(ctx, "2.6_pre_audit")
-            # 2.6) 题意理解确认（2026-09-06 晚恢复 Lean 前置形式化：lean 可用且
-            # 命中档位 → 题目转 Lean 声明编译校验理解，失败带错误强制重新审题；
-            # lean 不可用/档位不命中 → AuditGate 可选 LLM 题意复核，默认关闭，
-            # 失败不阻断主流程，由下游 revise/重理解兜底）。
-            if not ctx.state.emergency:
-                if (self._lean_active()
-                        and self._lean_applicable(ctx)
-                        and getattr(self.config, "enable_lean_preverify", True)
-                        and tier in tuple(getattr(
-                            self.config, "lean_preverify_tiers", ("deep",)))):
-                    try:
-                        self.lean_pre_verifier.run(ctx)
-                    except Exception as _e2:  # noqa: BLE001
-                        self.record(ctx, "lean_preverify",
-                                    f"前置形式化异常（跳过，不阻断）: "
-                                    f"{type(_e2).__name__}: {str(_e2)[:120]}")
-                else:
-                    self.audit_gate.confirm_understanding(ctx)
-
-            # ★ 2026-10-02 hook 01：题意理解确认后落盘（2.6_pre_audit → 01_understanding）。
-            _artifact_put(ctx, "01_understanding", {
-                "question_type": getattr(ctx, "question_type", ""),
-                "domain": getattr(ctx, "domain", ""),
-                "lean_applicable": (ctx.metadata or {}).get("lean_applicable"),
-                "lean_skip_reason": (ctx.metadata or {}).get("lean_skip_reason"),
-                "trace": [t for t in (getattr(ctx, "trace", None) or [])
-                          if isinstance(t, dict)
-                          and t.get("step") in ("classify_type",
-                                                "confirm_understanding",
-                                                "lean_preverify")][-20:],
-            })
+            pre_audit_stage(self, ctx, tier)
 
             # 2026-09-29：**2.65_calc_prewarm 阶段已删除**（用户决策：
             # 「预计算没必要，且不合逻辑，删了。之后对于计算部分我们会再想办法」）。
