@@ -151,6 +151,9 @@ from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
 # 2026-10-07 阶段C3c：3.4_collab 段已抽到 agent/orchestrator__collab.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
+# 2026-10-07 阶段C4a：2.7_subgoal_main 段已抽到 agent/orchestrator__solve.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__solve import subgoal_main_path  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1415,57 +1418,7 @@ class Orchestrator(BaseAgent):
             # 阶段名 "2.65_calc_prewarm" 已从收尾 stage 列表中同步移除。
 
             self._stage_start(ctx, "2.7_subgoal_main")
-            # 2.7) 子目标细化主路径（v2.9）：统一档位下先跑一次子目标分解逐步求解
-            # 2026-09-06：时间判断升级 gen_time_up（生成侧软截止，给验证留预算）
-            if (getattr(self.config, 'enable_subgoal_main_path', True)
-                    and not ctx.state.emergency
-                    and not ctx.gen_time_up()):
-                self.record(ctx, "control",
-                            "子目标细化主路径先行（前置形式化已校准题意）")
-                # P4（2026-09-11）：2.7 阶段预算上限——把超额时间让给验证与重解。
-                # 数据依据（official112 冒烟实测）：2.7 单阶段耗 753–1078s（占 1200s 硬顶的
-                #   63–90%），波动可达 base 均值(513s)的 2 倍；致 3.x / 4 验证 / 4.6 对抗 /
-                #   P1 重解全部无预算（P1 三次前移均因时间耗尽而未触发）。
-                # 口径：档位软预算 × ratio（默认 0.55 → standard≈297s / deep≈660s），
-                #   且不低于 240s（保证子目标链有基本时间）；ratio 可经 config 覆盖
-                #   （subgoal_phase_budget_ratio，设 1.0 等价于关闭本限制，便于 A/B 对照）。
-                # 实现：临时收紧 ctx.deadline（子目标链内部的时间判断随之生效），
-                #   finally 恢复原 deadline，不影响后续阶段。
-                # 2026-09-13 预算修复（两处问题）：
-                # ① 原用 `soft_budget × ratio`，**未扣除 reserve** ⇒ deep 档 660s
-                #    直接吃掉本该留给后段（4_verify/4.6/6.5）的配额；
-                # ② 默认 0.55 过大（实测 2.7 常跑到 816s，预算形同虚设）。
-                # 现统一走 `_phase_budget`（(soft − reserve) × ratio）并下调到 0.30
-                # ⇒ deep：(1200−420)×0.30 = **234s**，为 3_solve / 3.3 / 后段留空间。
-                # 2026-09-13：改走**实测上限**口径（旧的比例切分 ratio 无实测依据，
-                # 且把单题预算切成 234s 碎块、砍掉有用工作 —— 详见 `_phase_budget`
-                # docstring）。本阶段上限 = 实测 max 1168s × 余量。
-                _p4_cap = self._phase_budget(ctx, stage="2.7_subgoal_main")
-                _p4_t0, _p4_saved_dl = self._phase_deadline_guard(ctx, _p4_cap)
-                try:
-                    self.sub_goal_solver.run(ctx)
-                finally:
-                    self._phase_deadline_restore(ctx, _p4_saved_dl)
-                ctx._subgoal_main_done = True
-                self.record(ctx, "control",
-                            f"2.7 阶段预算 {_p4_cap:.0f}s"
-                            f"（实耗 {time.time() - _p4_t0:.0f}s）")
-
-            # C-lite（2026-09-03）：子目标蓝图 merge 产出后、候选生成前，
-            # 数值攻击蓝图极值声称——009 型"蓝图心算错值"在求解前就证伪。
-            # 审核修正（2026-09-03）：原读 `_blueprint_value_false`（带下划线），
-            # 写入处是 `blueprint_value_false`（无下划线）→ 幂等守卫从未生效。
-            if not getattr(ctx, "blueprint_value_false", None):
-                try:
-                    self._value_attack_blueprint(ctx, tier)
-                except Exception as exc:  # noqa: BLE001  数值攻击失败不阻断主链路
-                    # 2026-09-03 审核：原为 `pass` 无日志 → v17 全程 0 痕迹时
-                    # 无法区分"未触发"与"异常被吞"（与 lean_gate 吞 AttributeError
-                    # 同型）。改为 warning + 埋点，任何失败都留证据。
-                    logger.warning("[C-lite] 数值攻击异常（已跳过）: %s: %s",
-                                   type(exc).__name__, exc)
-                    self.record(ctx, "value_attack",
-                                f"数值攻击异常跳过: {type(exc).__name__}: {exc}")
+            subgoal_main_path(self, ctx, tier)
 
             self._stage_start(ctx, "3_solve")
             # 3) 求解

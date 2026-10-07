@@ -49,6 +49,10 @@ _EXTRACTED_MAIN_FLOW = [
     "agent/orchestrator__audit_filter.py",
     "agent/orchestrator__collab.py",
     "agent/orchestrator__low_conf.py",
+    # 2026-10-07 阶段C4：求解族 2.7/3.2/3.3 段（orchestrator__solve.py）与
+    # 验证族 4.5 段（orchestrator__verify.py）。
+    "agent/orchestrator__solve.py",
+    "agent/orchestrator__verify.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
