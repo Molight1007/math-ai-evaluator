@@ -156,7 +156,14 @@ def test_force_bypasses_dedup():
 # ---------------------------------------------------------------------------
 def _src() -> str:
     with open(ORCH_PATH, "r", encoding="utf-8") as fh:
-        return fh.read()
+        txt = fh.read()
+    # 2026-10-07 阶段C2：run 的 6.5_audit_gate 段（含回滚分支）已**逐字搬**到
+    # agent/orchestrator__final_gate.py。源码级守卫改为读「主文件 + 抽取模块」**并集**
+    # —— 断言的字面量与守卫意图均不变（只是被查代码换了文件，非放宽判据）。
+    with open(os.path.join(ROOT, "agent", "orchestrator__final_gate.py"),
+              "r", encoding="utf-8") as fh:
+        txt += "\n" + fh.read()
+    return txt
 
 
 def _src_diag() -> str:

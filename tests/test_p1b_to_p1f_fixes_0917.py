@@ -27,8 +27,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _src(rel):
-    return io.open(os.path.join(ROOT, rel), encoding="utf-8",
-                   errors="replace").read()
+    txt = io.open(os.path.join(ROOT, rel), encoding="utf-8",
+                  errors="replace").read()
+    # 2026-10-07 阶段C2：run 的 6.5_audit_gate 段已逐字搬到
+    # agent/orchestrator__final_gate.py。读 orchestrator.py 的源码级守卫改为读
+    #「主文件 + 抽取模块」并集 —— 断言字面量与守卫意图均不变（非放宽判据）。
+    if rel.replace("\\", "/") == "agent/orchestrator.py":
+        txt += "\n" + io.open(
+            os.path.join(ROOT, "agent", "orchestrator__final_gate.py"),
+            encoding="utf-8", errors="replace").read()
+    return txt
 
 
 # ============================ Z1 ============================
