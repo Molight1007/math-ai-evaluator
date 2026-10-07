@@ -1078,10 +1078,17 @@ class EvalEngine:
         self.resume = resume
         self.verbose = verbose
         # 创建 LLM 客户端（通过环境变量或参数配置）
+        # ★ 2026-10-07 架构解耦（阶段 A）：`LLMClient` 不再自行 import agent.switch_registry
+        #   读开关（utils 不得依赖 agent）。改由**本构造点**从注册表读后注入：
+        #   · timeout 与改前同点取值（构造时读 llm_timeout，env > config > 默认）；
+        #   · retry_on_timeout 传 **getter**（每次 chat 求值）—— 保持原"调用时读"语义，
+        #     使 config 覆盖（bind_config 发生在本行之后）仍然生效。
         self.llm_client = LLMClient(
             api_key=api_key or None,
             base_url=base_url or None,
             model=model or None,
+            timeout=int(_sw_num("llm_timeout")),
+            retry_on_timeout=lambda: _sw_bool("llm_retry_on_timeout"),
         )
         # 配置覆盖：先取本地评测默认值，再叠加 CLI 传入的 A/B 开关
         overrides = dict(DEFAULT_AGENT_OVERRIDES)
