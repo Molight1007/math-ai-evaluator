@@ -477,6 +477,17 @@ class AgentConfig:
     # 论文：模型可驳回验证器的错误反馈，避免好答案被误报引导改坏。
     # 仅 deep 档 revise 回环触发（每次 +1 次 LLM 调用，预算可承受）。
     enable_feedback_review: bool = True
+    # ★ 2026-10-06 修两处已确认缺陷（见 agent/orchestrator.py:2759 `_review_bug_feedback`）：
+    #   ① 复核产物**附加**而非覆盖：verifier 已把深复核推理（`【复核依据（判错报告
+    #      原文摘录）】`，上限 8000）保留进 feedback，但复核会把它整段摘要成短清单
+    #      再覆盖 `ctx.revise_feedback`（实测 q1–q6 最长仅 2.4–3.0k、且不含该段）
+    #      ⇒ 推理始终没到模型手上。默认 True = 复核只做判定/标注、以 `【复核意见】`
+    #      段并入；设 False 回退旧的「整段覆盖」做 A/B。已登记 switch_registry。
+    feedback_review_append: bool = True
+    #   ② 复核产物**长度上限**（保头截断）：实测 official112-007 单题返回了
+    #      157,550 字符裸输出并被原样拼进提示词。默认 8000，与 verifier 的复核反馈
+    #      同口径（verifier.py:1821 结构化分支 `[:8000]`）。设 0 = 不截断。
+    feedback_review_max_chars: int = 8000
 
     # ---- 对抗式验证（#16，2026-08-30）----
     # 正向验证**通过**后主动证伪：假设答案错误，反向找反例 / 第一个错误步骤。
@@ -1039,6 +1050,8 @@ class ReasoningAgent:
             "enable_error_lessons",
             # Step 4 bug report 复核
             "enable_feedback_review",
+            # 2026-10-06：Step 4 复核的两处修复（附加而非覆盖 / 产物长度上限）
+            "feedback_review_append", "feedback_review_max_chars",
             # 对抗式验证（#16）
             "enable_adversarial_verify", "adversarial_tiers",
             "adversarial_min_confidence", "adversarial_max_tokens",

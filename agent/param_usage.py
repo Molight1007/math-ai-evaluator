@@ -452,6 +452,17 @@ _SPEC = (
      lambda cfg, tier, _f="enable_question_type", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "ENABLE_QUESTION_TYPE — 题型惰性分类总开关", None),
+    # ---- agent/orchestrator.py（Step 4 反馈复核两处修复，2026-10-06 新增）----
+    ("feedback_review_append",
+     lambda cfg, tier, _f="feedback_review_append", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "FEEDBACK_REVIEW_APPEND — 复核产物附加而非覆盖（默认 True = 修好后行为；"
+     "=0 回退旧行为做 A/B）", None),
+    ("feedback_review_max_chars",
+     lambda cfg, tier, _f="feedback_review_max_chars", _d=8000: getattr(cfg, _f, _d),
+     None, "数",
+     "FEEDBACK_REVIEW_MAX_CHARS — 复核产物长度上限（默认 8000，与 verifier 同口径；"
+     "治实测 157,550 字符裸输出；=0 不截断）", None),
 
     # ---- ① LeanSearch（用户点名）--------------------------------------
     ("leansearch_max_calls_per_q",

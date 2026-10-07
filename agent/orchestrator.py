@@ -293,6 +293,30 @@ def _answer_fingerprint(ctx) -> str:
         return ""
 
 
+def _merge_review_into_feedback(original: str, review: str,
+                                append: bool) -> str:
+    """把 Step 4 复核产物并入 revise 反馈 —— **附加**而非覆盖（默认）。
+
+    ★★ 2026-10-06 修（**两处修复互相抵消**）：
+      上游 `verifier.py:1819-1821` 已把「深复核推理」（尾段 6000 字符 + 判定段，
+      标题 `【复核依据（判错报告原文摘录）】`，整体上限 8000）保留进 feedback；
+      但 `_deep_revise_loop` 随后把复核产物**整段覆盖**回 `feedback`
+      ⇒ 实测 q1–q6 最终 `diag.revise_feedback` 最长仅 2.4–3.0k、且**不含该段**
+      ⇒ 那 2.5–6 万字符的推理仍没到模型手上。
+
+      语义：复核只做「某条缺陷是否属实」的判定与标注，其产物以
+      `【复核意见（逐条是否属实，误报已驳回）】` 段**附加**在原文之后；
+      `append=False` 回退旧的「整段覆盖」行为（A/B 抓手）。
+    """
+    if not review:
+        return original
+    if not append:
+        return review
+    return (original
+            + "\n\n【复核意见（逐条是否属实，误报已驳回）】\n"
+            + review)
+
+
 def _collect_tool_findings(ctx) -> str:
     """收集**纯工具**产出的判定（Lean 编译 / 系统命题验算 / SymPy），供结构化检错器做定位。
 
@@ -2761,7 +2785,16 @@ class Orchestrator(BaseAgent):
 
         论文（Huang & Yang 2025）：验证器产出的 bug report 不一定全对，
         模型复核后可驳回误报——避免好答案被错误反馈引导改坏。
-        返回复核后的 feedback；复核失败/无实质缺陷时返回精简反馈。
+        返回复核后**保留的缺陷清单**（非空）；复核失败/复核判定无实质缺陷时
+        返回**空串**（由调用方据此结束 revise）。
+
+        ★ 2026-10-06 修（**模型裸输出无上限直接灌进提示词**）：
+          实测 official112-007 本题，本函数返回了 **157,550 字符**
+          （英文独白 + 同一条 Lean 消息重复几十遍）；随后经 `ctx.revise_feedback`
+          被 `solver._generate_revise` **原样拼进提示词** ⇒ 提示词被灌爆。
+          现对返回加长度上限，并**保头**截断（复核结论在开头：要么「无实质缺陷」、
+          要么「保留的缺陷清单」）。上限与 verifier 复核反馈同口径，
+          精确数字见下方 `_cap` 注释。
         """
         if not feedback or len(feedback) < 10:
             return feedback
@@ -2790,8 +2823,14 @@ class Orchestrator(BaseAgent):
         if not raw or not raw.strip():
             return feedback
         reviewed = raw.strip()
-        self.record(ctx, "review",
-                    f"反馈复核完成: {reviewed[:60]}")
+        # ★ 2026-10-06 长度上限（治「157,550 字符裸输出」）。
+        # 口径与 verifier 的复核反馈**保持一致**（已核实确切数字）：
+        #   · `verifier.py:1821` 结构化分支（缺陷清单 + 复核依据）= `[:8000]`；
+        #   · `verifier.py:1825` 单行标签分支（标签 + 复核推理）= `[:6000]`。
+        # 本函数产出的是**缺陷清单**（与结构化分支同类产物），故取 **8000**。
+        # 保头截断（结论在开头），末尾加标记；开关 `feedback_review_max_chars`
+        # 默认 8000，置 0 = 不截断（回退旧行为的 A/B 抓手）。
+        _reviewed_raw_len = len(reviewed)
         if "无实质缺陷" in reviewed:
             # ★ 2026-09-17（泛化句）：返回**空串** = "复核未发现实质缺陷"。
             # 原返回一句泛化建议「解答已较完整，请重新审题核对计算细节后给出最终答案。」，
@@ -2799,8 +2838,15 @@ class Orchestrator(BaseAgent):
             # `diag.revise_feedback[0]` 正是这句），白烧一轮"生成 + 验证"。
             # 改由调用方据此**结束 revise**，而不是拿它去空转。
             self.record(ctx, "review",
-                        "复核判定无实质缺陷 → 不做盲目重解（2026-09-17）")
+                        f"复核判定无实质缺陷 → 不做盲目重解（2026-09-17）"
+                        f"（原始 {_reviewed_raw_len} 字符）")
             return ""
+        _cap = int(getattr(self.config, 'feedback_review_max_chars', 8000) or 0)
+        if _cap > 0 and len(reviewed) > _cap:
+            reviewed = reviewed[:_cap] + "\n…（已截断）"
+        self.record(ctx, "review",
+                    f"反馈复核完成: {reviewed[:60]}"
+                    f"（原始 {_reviewed_raw_len} 字符 → 截断后 {len(reviewed)} 字符）")
         return reviewed
 
     def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
@@ -2920,7 +2966,21 @@ class Orchestrator(BaseAgent):
                 and len(feedback) > 10):
             _rv = self._review_bug_feedback(ctx, feedback)
             if _rv:
-                feedback = _rv
+                # ★★ 2026-10-06 修（**复核把深复核推理整段摘要掉，两处修复互相抵消**）：
+                #   上游 `verifier.py:1819-1821` 已把「深复核推理」保留进 feedback ——
+                #   尾段 6000 字符推理 + 判定段，以
+                #   `【复核依据（判错报告原文摘录）】` 为标题，整体上限 8000
+                #   （`_clip_review_prose` + `[:8000]`，见 verifier.py:1817-1821）。
+                #   但此处原为 `feedback = _rv` **整段覆盖** ⇒ 刚被保留的 2.5–6 万
+                #   字符推理又被摘要成短清单 ⇒ 实测 q1–q6 最终 `diag.revise_feedback`
+                #   最长仅 2.4–3.0k，且**不含 `【复核依据（判错报告原文摘录）】` 段**
+                #   ⇒ 深复核推理**始终没到模型手上**。
+                #   现改为**附加**（`_merge_review_into_feedback`）：复核只做
+                #   "是否属实"的判定与标注，其产物以 `【复核意见…】` 段并入，
+                #   **不替换/不摘要掉**原有推理。
+                feedback = _merge_review_into_feedback(
+                    feedback, _rv,
+                    getattr(self.config, 'feedback_review_append', True))
             else:
                 _reviewed_empty = True
         # 注入各客观审核环节（3.6 AuditGate / 4.6 对抗 / 4.5 Oracle）淘汰反馈，

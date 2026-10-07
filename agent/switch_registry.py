@@ -224,6 +224,21 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "「看一眼就点头」）/ **disagree=默认**（仅候选分歧时放开，把算力花在拿不准的题上）"
         " / always=每票都放开完整推理（最准，约 70s/票）。用户口径：先试 disagree，"
         "效果不理想即切 always（正确率第一位）"),
+    # ---- agent/orchestrator.py（Step 4 反馈复核的两处修复，2026-10-06 新增）----
+    # 背景（审计已确认）：① 一次实测灌入 157,550 字符反馈（`:2759`
+    #   `_review_bug_feedback` 把模型裸输出不加限直接当反馈返回）；
+    #   ② 该函数把 verifier 保留的深复核推理**整段重新摘要成短清单**再覆盖
+    #   `ctx.revise_feedback` ⇒ 两处修复互相抵消、推理始终没到模型手上。
+    "feedback_review_append": (
+        "FEEDBACK_REVIEW_APPEND", "bool", True,
+        "Step 4 复核产物**附加**而非覆盖（默认 True = 修好后行为）："
+        "复核只做「是否属实」的判定与标注，以 `【复核意见】` 段并入原反馈，"
+        "不摘要掉 verifier 保留的深复核推理；=0 回退旧行为（整段覆盖）做 A/B"),
+    "feedback_review_max_chars": (
+        "FEEDBACK_REVIEW_MAX_CHARS", "num", 8000,
+        "Step 4 复核产物长度上限（默认 8000，与 verifier 复核反馈同口径："
+        "`verifier.py:1821` 结构化分支 `[:8000]`；**保头**截断，末尾加「…（已截断）」）。"
+        "治实测 157,550 字符裸输出灌进提示词；=0 不截断（回退旧行为）"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}
