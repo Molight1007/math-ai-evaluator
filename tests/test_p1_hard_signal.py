@@ -10,13 +10,25 @@
 否则注释里的历史说明会误判）。
 行为级验证依赖冒烟 / 全量 A/B（见 后续优化计划_0910.md）。
 """
+import glob
 import os
 
 
 def _src() -> str:
-    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     "agent", "orchestrator.py")
-    return open(p, encoding="utf-8").read()
+    """orchestrator.py + 已抽出的 `agent/orchestrator__*.py` 模块的**并集**。
+
+    2026-10-07 阶段C5：`Orchestrator.run` 的 4_verify 段（含 P1 硬信号块与
+    `ver_result = self.verifier.run(` 调用）已**逐字搬**到
+    agent/orchestrator__verify.py。本测试的 P1 位置型守卫改为读「主文件 +
+    抽出模块」并集 —— 断言的字面量与守卫意图均不变（段文本逐字相同，只是被查
+    代码换了文件，非放宽判据）。与 tests/test_verify_only.py::_orch_src 同口径。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    txt = open(os.path.join(root, "agent", "orchestrator.py"),
+               encoding="utf-8").read()
+    for p in sorted(glob.glob(os.path.join(root, "agent", "orchestrator__*.py"))):
+        txt += "\n" + open(p, encoding="utf-8").read()
+    return txt
 
 
 def _p1_code() -> str:

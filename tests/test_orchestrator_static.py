@@ -84,19 +84,38 @@ def test_no_undefined_names_in_main_flow():
     )
 
 
+def _orch_union_src() -> str:
+    """orchestrator.py + 已抽出的 `agent/orchestrator__*.py` 模块的**并集**。
+
+    2026-10-07 阶段C5：`Orchestrator.run` 的 4_verify 段（含 `is_proof` 赋值与
+    `verifier.run(is_proof=is_proof)` 调用）已**逐字搬**到
+    `agent/orchestrator__verify.py`。源码级守卫改为读「主文件 + 抽出模块」并集 ——
+    断言的字面量与守卫意图**均不变**（只是被查代码换了文件，非放宽判据）。
+    与 tests/test_verify_only.py::_orch_src 同口径。
+    """
+    import glob
+    txt = open(os.path.join(ROOT, "agent", "orchestrator.py"),
+               encoding="utf-8").read()
+    for p in sorted(glob.glob(
+            os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+        with open(p, encoding="utf-8") as fh:
+            txt += "\n" + fh.read()
+    return txt
+
+
 def test_is_proof_still_defined_before_verifier_call():
     """针对性回归：`is_proof` 必须在 orchestrator.run 内被赋值后再传给 verifier。
 
     只查源码文本，不依赖 pyflakes。即便将来有人再次删掉赋值行，
     这个断言会先于 pyflakes 给出人话解释。
+    （2026-10-07 阶段C5：4_verify 段搬走后改读「主文件 + 抽出模块」并集；
+      被查字面量与「赋值早于使用」的守卫意图均不变，非放宽判据。）
     """
-    path = os.path.join(ROOT, "agent", "orchestrator.py")
-    with open(path, encoding="utf-8") as fh:
-        src = fh.read()
+    src = _orch_union_src()
 
     assert "is_proof=is_proof" in src, (
-        "orchestrator.py 里已找不到 `is_proof=is_proof`（verifier.run 的入参）。"
-        "若是有意重构，请同步更新本测试。"
+        "orchestrator（含抽取模块）里已找不到 `is_proof=is_proof`"
+        "（verifier.run 的入参）。若是有意重构，请同步更新本测试。"
     )
     # `is_proof = ` 必须出现（赋值），且出现在调用之前
     assign_idx = src.find("is_proof = (")
@@ -104,7 +123,7 @@ def test_is_proof_still_defined_before_verifier_call():
         assign_idx = src.find("is_proof = getattr")
     call_idx = src.find("is_proof=is_proof")
     assert assign_idx >= 0, (
-        "orchestrator.py 使用了 is_proof 但没有赋值 —— "
+        "orchestrator 使用了 is_proof 但没有赋值 —— "
         "2026-08-31 的 NameError 就是这样产生的"
     )
     assert assign_idx < call_idx, (

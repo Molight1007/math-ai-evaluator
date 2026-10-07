@@ -16,8 +16,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _src(rel):
-    return io.open(os.path.join(ROOT, rel), encoding="utf-8",
-                   errors="replace").read()
+    txt = io.open(os.path.join(ROOT, rel), encoding="utf-8",
+                  errors="replace").read()
+    # 2026-10-07 阶段C5：run 的 4_verify 段（含「3.6 过滤复用
+    # _looks_like_non_answer」的 `_nma36` / `_keep_cand` / 全滤空提示）已**逐字搬**
+    # 到 agent/orchestrator__*.py。读 orchestrator.py 的源码级守卫改为读
+    #「主文件 + 抽取模块」并集 —— 断言字面量与守卫意图均不变（非放宽判据）。
+    if rel.replace("\\", "/") == "agent/orchestrator.py":
+        import glob
+        for p in sorted(glob.glob(
+                os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+            txt += "\n" + io.open(p, encoding="utf-8",
+                                  errors="replace").read()
+    return txt
 
 
 # ============ ① formatter 的第 4 个直写点 ============
