@@ -25,8 +25,12 @@ import logging
 import re
 from typing import Optional
 
-from agent.base import BaseAgent, TaskContext
+# ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
+# `contracts/protocols.py`（Protocol）导入。`BaseAgent`（真继承）、`BlueprintDAG`/
+# `extract_json`（业务）为功能性依赖，保留。
+from agent.base import BaseAgent
 from agent.blueprint_planner import BlueprintDAG, extract_json
+from contracts.protocols import TaskContext
 # 复用 lean_bridge 的 import 归一化（full 聚合入口 / core 具体模块导入自适应，
 # 2026-09-01：core 闭包缺 Mathlib/Tactic.olean 聚合入口，硬编码会导致验证全降级）
 from tools.lean_local.lean_bridge import _mathlib_import_block, _prepend_mathlib_import

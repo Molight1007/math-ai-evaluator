@@ -46,7 +46,9 @@ import threading
 import time
 from typing import Any, Optional
 
-from agent.base import BugReport, Finding
+# ★ 2026-10-07 架构解耦（阶段 B1）：BugReport/Finding 为纯数据，下沉到零依赖的
+# `contracts/types.py` ⇒ 本模块不再为此依赖 agent。（`BugReport/Finding` 契约不变）
+from contracts.types import BugReport, Finding
 
 logger = logging.getLogger("MathPilot")
 

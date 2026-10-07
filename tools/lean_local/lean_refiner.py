@@ -25,9 +25,13 @@ import os
 import re
 import time
 
-from agent.base import BaseAgent, TaskContext
+# ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
+# `contracts/protocols.py`（Protocol）导入。`BaseAgent`（真继承）、`BlueprintDAG`/
+# `extract_json`（业务）、`LemmaMemory`（业务）为功能性依赖，保留。
+from agent.base import BaseAgent
 from agent.blueprint_planner import BlueprintDAG, extract_json
 from agent.lemma_memory import LemmaMemory
+from contracts.protocols import TaskContext
 
 logger = logging.getLogger("MathPilot")
 

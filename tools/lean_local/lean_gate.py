@@ -44,7 +44,13 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from agent.base import BaseAgent, Budget, TaskContext
+from agent.base import BaseAgent
+# ★ 2026-10-07 架构解耦（阶段 B1）：`Budget`（纯数据）与 `TaskContext`（仅类型注解）
+# 改从零依赖的 contracts 导入 —— 消除本模块对 agent 这两项的依赖。
+# （`BaseAgent` 仍保留：本模块**运行期**调用其静态方法 add_used_theorems/note_compile_valid，
+#  属功能性依赖，不可拆 —— 见交付说明。）
+from contracts.protocols import TaskContext
+from contracts.types import Budget
 from tools.lean_local.lean_bridge import (
     LeanBridge, hint_for_compile_error, lean_parallelism, mcp_available)
 

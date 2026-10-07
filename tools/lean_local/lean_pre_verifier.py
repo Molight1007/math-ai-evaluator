@@ -21,7 +21,10 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 
 import logging
 
-from agent.base import BaseAgent, TaskContext
+# ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
+# `contracts/protocols.py`（Protocol）导入。`BaseAgent` 保留（本类**真继承**它）。
+from agent.base import BaseAgent
+from contracts.protocols import TaskContext
 from tools.lean_local.lean_bridge import (
     LeanBridge, hint_for_compile_error,
     _parse_analysis_json, _strip_code_fence)
