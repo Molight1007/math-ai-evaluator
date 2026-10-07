@@ -148,6 +148,9 @@ from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
+# 2026-10-07 阶段C3c：3.4_collab 段已抽到 agent/orchestrator__collab.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1624,37 +1627,7 @@ class Orchestrator(BaseAgent):
                                 f"< 门槛 {getattr(self.config, 'self_improve_min_left_sec', 150.0):.0f}s）")
 
             self._stage_start(ctx, "3.4_collab")
-            # 3.4) deep 档难题：三Agent协作（解题→审查→整合→反复验证）
-            #      只要时间未到且未验证通过，CollaborativeSolver 内部反复循环，
-            #      保证难题高正确率。
-            if (tier == 'deep'
-                    and getattr(self.config, 'enable_collaborative_deep', True)
-                    and not ctx.state.emergency
-                    and not ctx.state.verify_only
-                    and not ctx.gen_time_up()):
-                # 2026-09-13 **加阶段预算**（照搬 2.7 / 3_solve 的 P4 做法）。
-                # 实测（004 复现）：本阶段**此前无任何上限**，单题烧掉 **691s**，
-                # 把 `3.3`(自改进) / `4_verify`(投票) / `6.5`(闸门) 全部挤成 0s
-                # ⇒ 错误答案未经任何后续防线直接提交（1012 ≠ 2024）。
-                # 另：`3.3` 与 `3.4` 语义重叠（都是"生成后改进候选"），故二者
-                # **共享"改进阶段总预算"**：`3.3` 先用、`3.4` 只用余额 ⇒
-                # 既保住 3.3（论文实测 22.2%→31.1% 的强杠杆），又不让 3.4 重复吃时间。
-                # 2026-09-13：改走**实测上限**口径（3.4 实测 max 691s × 余量）。
-                # 3.3 与 3.4 语义重叠（都是"生成后改进候选"），继续共享同一额度：
-                # 3.3 先用，3.4 只用余额。
-                _improve_total = self._phase_budget(ctx, stage="3.4_collab")
-                _imp_used = float(getattr(ctx, "_improve_phase_used", 0.0) or 0.0)
-                _collab_cap = max(60.0, _improve_total - _imp_used)
-                _collab_t0, _collab_saved = self._phase_deadline_guard(ctx, _collab_cap)
-                try:
-                    self.record(ctx, "control", "deep 档启用三Agent协作验证机制")
-                    self.collab.run(ctx)
-                finally:
-                    self._phase_deadline_restore(ctx, _collab_saved)
-                self.record(ctx, "control",
-                            f"3.4 阶段预算 {_collab_cap:.0f}s"
-                            f"（改进共享预算 {_improve_total:.0f}s − 3.3 已用 "
-                            f"{_imp_used:.0f}s；实耗 {time.time() - _collab_t0:.0f}s）")
+            collaborative_deep_improve(self, ctx, tier)
 
             # 2026-09-29：**3.5_subgoal_sup 阶段已删除**（用户决策）。
             # 原逻辑「仅非 deep 档 + 候选不足时补跑子目标分解」在统一档位后
