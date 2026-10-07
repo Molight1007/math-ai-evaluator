@@ -1522,6 +1522,39 @@ def main():
     parser.add_argument("--theorem_hint_max_queries", type=int, default=None,
                         help="1.6 单题最多发几次 leansearch 检索（默认 2）")
     # 2026-09-29：--deep_quota_ratio / --paper_total_questions 随 PaperPacer 删除。
+    # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：9 条此前**漏加白名单**的
+    #      A/B 开关补 CLI 入口（原只有 AgentConfig 字段 + 读取点，命令行传不进 ⇒
+    #      「回退路径在代码层面不存在」）。全部 default=None ⇒ 不传即保持类默认，
+    #      行为与改动前逐字一致。9 键均经 grep 确认有**真实消费点**（非死配置），
+    #      故全部面向命令行；无「不该有 CLI」的排除项。
+    parser.add_argument("--accept_confidence", type=float, default=None,
+                        help="AcceptGate 可接受置信度阈值（默认 0.6；"
+                             "orchestrator._update_accept_gate）")
+    parser.add_argument("--enable_deterministic", type=str, default=None,
+                        choices=["true", "false"],
+                        help="确定性硬否决：SymPy 回验 fail 淘汰候选、unknown 放行"
+                             "（默认 true；orchestrator）")
+    parser.add_argument("--enable_answer_falsifier", type=str, default=None,
+                        choices=["true", "false"],
+                        help="候选答案证伪器（默认 true；answer_falsifier/orchestrator）")
+    parser.add_argument("--audit_gate_skip_non_proof", type=str, default=None,
+                        choices=["true", "false"],
+                        help="6.5 AuditGate 对非证明题早退、不再产 unknown 噪音"
+                             "（默认 true；audit_gate）")
+    parser.add_argument("--enable_subgoal_main_path", type=str, default=None,
+                        choices=["true", "false"],
+                        help="子目标细化作为主路径（默认 true；orchestrator）")
+    parser.add_argument("--inject_mathlib_to_solver", type=str, default=None,
+                        choices=["true", "false"],
+                        help="把 LeanSearch 检索到的 Mathlib 定理注入解题侧引理记忆"
+                             "（默认 true；sub_goal_solver）")
+    parser.add_argument("--objective_tactic_enabled", type=str, default=None,
+                        choices=["true", "false"],
+                        help="客观题特化解法纪律（默认 true；solver/sub_goal_solver）")
+    parser.add_argument("--symbolic_max_tokens", type=int, default=None,
+                        help="独立符号建模复核单次 max_tokens（默认 8192；solver）")
+    parser.add_argument("--symbolic_solve_max_tokens", type=int, default=None,
+                        help="符号化方程求解建模单次 max_tokens（默认 8192；solver）")
     args = parser.parse_args()
 
     if args.list_banks:
@@ -1667,6 +1700,29 @@ def main():
     if args.theorem_hint_max_queries is not None:
         overrides["theorem_hint_max_queries"] = args.theorem_hint_max_queries
     # 2026-09-29：--deep_quota_ratio / --paper_total_questions 随 PaperPacer 删除。
+    # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：9 条 A/B 开关的 CLI → 覆盖 ----
+    if args.accept_confidence is not None:
+        overrides["accept_confidence"] = args.accept_confidence
+    if args.enable_deterministic is not None:
+        overrides["enable_deterministic"] = args.enable_deterministic == "true"
+    if args.enable_answer_falsifier is not None:
+        overrides["enable_answer_falsifier"] = args.enable_answer_falsifier == "true"
+    if args.audit_gate_skip_non_proof is not None:
+        overrides["audit_gate_skip_non_proof"] = (
+            args.audit_gate_skip_non_proof == "true")
+    if args.enable_subgoal_main_path is not None:
+        overrides["enable_subgoal_main_path"] = (
+            args.enable_subgoal_main_path == "true")
+    if args.inject_mathlib_to_solver is not None:
+        overrides["inject_mathlib_to_solver"] = (
+            args.inject_mathlib_to_solver == "true")
+    if args.objective_tactic_enabled is not None:
+        overrides["objective_tactic_enabled"] = (
+            args.objective_tactic_enabled == "true")
+    if args.symbolic_max_tokens is not None:
+        overrides["symbolic_max_tokens"] = args.symbolic_max_tokens
+    if args.symbolic_solve_max_tokens is not None:
+        overrides["symbolic_solve_max_tokens"] = args.symbolic_solve_max_tokens
 
     engine = EvalEngine(
         concurrency=args.concurrency, resume=args.resume,
