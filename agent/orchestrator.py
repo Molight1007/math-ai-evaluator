@@ -68,7 +68,10 @@ from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_respo
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
-from .verifier import VerifierAgent
+# ★ 2026-10-06：`_clip_review_prose` **直接 import 复用**（不复制正则）——
+#   复核清单与 verifier 深复核原文需同一道清洗口径，两处各写一份必然分叉
+#   （仓库既有教训）。verifier 不 import orchestrator ⇒ 无循环导入。
+from .verifier import VerifierAgent, _clip_review_prose
 from .formatter import FormatterAgent
 from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
@@ -2841,12 +2844,30 @@ class Orchestrator(BaseAgent):
                         f"复核判定无实质缺陷 → 不做盲目重解（2026-09-17）"
                         f"（原始 {_reviewed_raw_len} 字符）")
             return ""
+        # ★★ 2026-10-06 C 项（**复核者的「越权结论 + 重做正文」被模型照抄**）：
+        #   实测题 000 复核输出含「① 原答案 40 错误，**正确答案应为 0。下面给出
+        #   严谨证明。** 证明：设 G 为题中描述的图…（其后 2000+ 字符是复核者自己
+        #   重做了一遍的解答）」；trace 完整记录：`[review] 反馈复核完成：…正确答案
+        #   应为 0…` → `[revise] 重解启动` → **最终答 `\boxed{0}`，标准答案 20460**。
+        #   ⇒ 模型照抄了复核者给出的"正确答案"。两重问题：
+        #     ①「正确答案应为 X」是**结论性断言**（验证器越权替解答下结论，违反其
+        #        系统提示词「绝不要试图纠正你发现的错误或填补漏洞」）；
+        #     ② 其后附**完整重做正文**，模型可整段照抄。
+        #   verifier 侧已有 `_clip_review_prose` 专裁这两样，但只作用于 verifier 的
+        #   深复核原文；本函数产出并**并入反馈**的复核清单此前**没走这道清洗**。
+        #   现直接复用同一函数（不复制正则，避免两处口径分叉）。
+        #   开关 `feedback_review_clip` 默认 True；`_clip_review_prose` 是**保守**的：
+        #   无标记时原样返回，只裁「重做正文」与「越权结论断言」，不误删缺陷清单
+        #   （缺陷清单形态「位置：… 问题：…」不含那两类标记）。
+        if getattr(self.config, 'feedback_review_clip', True):
+            reviewed = _clip_review_prose(reviewed)
         _cap = int(getattr(self.config, 'feedback_review_max_chars', 8000) or 0)
         if _cap > 0 and len(reviewed) > _cap:
             reviewed = reviewed[:_cap] + "\n…（已截断）"
         self.record(ctx, "review",
                     f"反馈复核完成: {reviewed[:60]}"
-                    f"（原始 {_reviewed_raw_len} 字符 → 截断后 {len(reviewed)} 字符）")
+                    f"（原始 {_reviewed_raw_len} 字符 → 清洗+截断后 "
+                    f"{len(reviewed)} 字符）")
         return reviewed
 
     def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,

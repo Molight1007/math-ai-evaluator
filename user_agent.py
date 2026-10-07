@@ -488,6 +488,11 @@ class AgentConfig:
     #      157,550 字符裸输出并被原样拼进提示词。默认 8000，与 verifier 的复核反馈
     #      同口径（verifier.py:1821 结构化分支 `[:8000]`）。设 0 = 不截断。
     feedback_review_max_chars: int = 8000
+    #   ③ 复核产物**越权结论/重做正文清洗**：实测题 000 复核者输出「正确答案应为 0。
+    #      下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而
+    #      标准 20460。默认 True = 复用 `verifier._clip_review_prose` 同一道清洗
+    #      （不复制正则，避免两处口径分叉）；设 False 回退旧行为做 A/B。
+    feedback_review_clip: bool = True
 
     # ---- 对抗式验证（#16，2026-08-30）----
     # 正向验证**通过**后主动证伪：假设答案错误，反向找反例 / 第一个错误步骤。
@@ -1050,8 +1055,9 @@ class ReasoningAgent:
             "enable_error_lessons",
             # Step 4 bug report 复核
             "enable_feedback_review",
-            # 2026-10-06：Step 4 复核的两处修复（附加而非覆盖 / 产物长度上限）
+            # 2026-10-06：Step 4 复核的修复（附加而非覆盖 / 产物长度上限 / 越权清洗）
             "feedback_review_append", "feedback_review_max_chars",
+            "feedback_review_clip",
             # 对抗式验证（#16）
             "enable_adversarial_verify", "adversarial_tiers",
             "adversarial_min_confidence", "adversarial_max_tokens",

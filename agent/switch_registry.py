@@ -239,6 +239,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "Step 4 复核产物长度上限（默认 8000，与 verifier 复核反馈同口径："
         "`verifier.py:1821` 结构化分支 `[:8000]`；**保头**截断，末尾加「…（已截断）」）。"
         "治实测 157,550 字符裸输出灌进提示词；=0 不截断（回退旧行为）"),
+    "feedback_review_clip": (
+        "FEEDBACK_REVIEW_CLIP", "bool", True,
+        "Step 4 复核产物**越权结论/重做正文清洗**（默认 True = 修好后行为，复用 "
+        "`verifier._clip_review_prose`）：实测题 000 复核者输出「正确答案应为 0。"
+        "下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而"
+        "标准 20460。=0 回退旧行为（不清洗）做 A/B"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}

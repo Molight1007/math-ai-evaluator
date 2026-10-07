@@ -463,6 +463,11 @@ _SPEC = (
      None, "数",
      "FEEDBACK_REVIEW_MAX_CHARS — 复核产物长度上限（默认 8000，与 verifier 同口径；"
      "治实测 157,550 字符裸输出；=0 不截断）", None),
+    ("feedback_review_clip",
+     lambda cfg, tier, _f="feedback_review_clip", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "FEEDBACK_REVIEW_CLIP — 复核产物越权结论/重做正文清洗"
+     "（默认 True，复用 verifier._clip_review_prose；=0 回退旧行为）", None),
 
     # ---- ① LeanSearch（用户点名）--------------------------------------
     ("leansearch_max_calls_per_q",

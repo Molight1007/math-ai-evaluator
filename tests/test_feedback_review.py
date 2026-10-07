@@ -113,6 +113,53 @@ class ReviewFeedbackLengthCapTest(unittest.TestCase):
         self.assertGreater(len(out), 19000, "max_chars=0 ⇒ 不截断（回退旧行为）")
 
 
+class ReviewFeedbackClipTest(unittest.TestCase):
+    """★ 2026-10-06 C 项：复核产物的**越权结论/重做正文清洗**（复用 verifier 清洗）。
+
+    依据（审计已确认）：题 000 复核输出含「① 原答案 40 错误，**正确答案应为 0。
+    下面给出严谨证明。** 证明：设 G 为题中描述的图…（其后 2000+ 字符是复核者自己
+    重做了一遍的解答）」；trace：`[review] …正确答案应为 0。下面给出严谨证明…`
+    → `[revise] 重解启动` → **最终答 \\boxed{0}，标准答案 20460**
+    ⇒ 模型照抄了复核者的"正确答案"。
+    """
+
+    _PROSE = (
+        "保留的缺陷：\n"
+        "① 原答案 40 错误，正确答案应为 0。下面给出严谨证明。\n"
+        "证明：设 G 为题中描述的图，顶点集为 V，则按握手定理…\n"
+        "（此处 2000+ 字符是复核者自己重做了一遍的解答，模型可整段照抄）"
+    )
+    _LIST = (
+        "保留的缺陷清单：\n"
+        "位置：第 2 步「由 x^2=4 得 x=2」；问题：漏掉了负根 x=-2，属漏项。\n"
+        "位置：第 5 步；问题：符号错误（-a 写成 a），影响最终结果。\n"
+        "建议：补齐负根分支并重新给出 \\boxed{} 答案。"
+    )
+
+    def test_clip_removes_verdict_claim_and_redo_prose(self) -> None:
+        orch, ctx = _make_ctx_and_orch([self._PROSE])
+        out = orch._review_bug_feedback(ctx, "缺陷：某处符号错误（影响结果）")
+        self.assertNotIn("正确答案应为", out, "越权结论断言必须被裁掉")
+        self.assertNotIn("下面给出严谨证明", out, "重做正文标记必须被裁掉")
+        self.assertNotIn("握手定理", out, "重做正文不得透传给模型")
+        self.assertIn("保留的缺陷", out, "诊断标题应保留")
+
+    def test_clip_keeps_defect_list_intact(self) -> None:
+        orch, ctx = _make_ctx_and_orch([self._LIST])
+        out = orch._review_bug_feedback(ctx, "缺陷：某处符号错误（影响结果）")
+        self.assertIn("位置：第 2 步", out)
+        self.assertIn("漏掉了负根 x=-2", out)
+        self.assertIn("位置：第 5 步", out)
+        self.assertEqual(out, self._LIST.strip(), "纯缺陷清单必须原样保留（不误删）")
+
+    def test_clip_disabled_keeps_raw(self) -> None:
+        from types import SimpleNamespace as NS
+        orch, ctx = _make_ctx_and_orch([self._PROSE])
+        orch.config = NS(enable_feedback_review=True, feedback_review_clip=False)
+        out = orch._review_bug_feedback(ctx, "缺陷：某处符号错误（影响结果）")
+        self.assertIn("正确答案应为 0", out, "feedback_review_clip=False ⇒ 不清洗")
+
+
 class MergeReviewIntoFeedbackTest(unittest.TestCase):
     """★ 2026-10-06：复核产物**附加**而非覆盖 —— 保住 verifier 的深复核推理段。
 
