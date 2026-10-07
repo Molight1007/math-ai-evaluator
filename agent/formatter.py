@@ -666,11 +666,42 @@ class FormatterAgent(BaseAgent):
         #   原值移入 `picked_pre_repair` 保留追溯性。此改动**只影响埋点**，
         #   不改变任何选答/修复行为（`_pick_diag` 全项目无功能性读取点，
         #   仅由 `Orchestrator._collect_diag` 落盘进 diag）。
+        #   OFF ⇒ 逐字保持改动前（`picked = _picked_final[:60]`）做 A/B。
+        _ss_on = False
+        try:
+            try:
+                from .final_selector import _single_source_enabled
+            except ImportError:
+                from final_selector import _single_source_enabled
+            _ss_on = bool(_single_source_enabled())
+        except Exception:  # noqa: BLE001
+            _ss_on = False
         if isinstance(getattr(ctx, "_pick_diag", None), dict):
             _picked_final = str(ctx.final_response or "")
-            if _picked_final and _picked_final != ctx._pick_diag.get("picked"):
-                ctx._pick_diag["picked_pre_repair"] = ctx._pick_diag.get("picked")
-                ctx._pick_diag["picked"] = _picked_final[:60]
+            if _picked_final:
+                if _picked_final != ctx._pick_diag.get("picked"):
+                    ctx._pick_diag["picked_pre_repair"] = ctx._pick_diag.get("picked")
+                if _ss_on:
+                    ctx._pick_diag.setdefault(
+                        "picked_decision", ctx._pick_diag.get("picked"))
+                    ctx._pick_diag["picked"] = _picked_final
+                    ctx._pick_diag["final_submit"] = _picked_final
+                    ctx._pick_diag["final_submit_source"] = "formatter"
+                    ctx._pick_diag["final_submit_seq"] = int(
+                        ctx._pick_diag.get("final_submit_seq", 0) or 0) + 1
+                elif _picked_final != ctx._pick_diag.get("picked"):
+                    ctx._pick_diag["picked"] = _picked_final[:60]
+        # ★ 2026-10-07（问题 2.2）：把 `picked` 归入哪个 cluster 写进记录
+        #   （未归入则写明原因）—— 回应「picked 必须能追溯到某个 cluster」。
+        try:
+            try:
+                from .final_selector import record_pick_cluster, _verify_aware_enabled
+            except ImportError:
+                from final_selector import record_pick_cluster, _verify_aware_enabled
+            if _verify_aware_enabled():
+                record_pick_cluster(ctx)
+        except Exception:  # noqa: BLE001
+            pass
         self.record(
             ctx, "finalize",
             f"最终答案: {ctx.final_response[:200]} (置信度: {confidence:.2f})",
