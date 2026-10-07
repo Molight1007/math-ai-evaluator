@@ -302,9 +302,16 @@ class TestWiringGuards:
         # 2026-10-07 阶段C1：`_collect_diag` 实现已抽到 agent/diag_export.py
         # （纯搬迁）；其中 `self.config` 改为注入参数 `config`。守卫改指向新模块，
         # 仍守卫"diag 必须导出 param_usage / leansearch"这条接线。
+        # 2026-10-07 二次拆分（split-coldiag）：`collect_diag` 已按语义拆为
+        # `_diag_*` 模块级 helper，这两条字面量随所属段搬到 helper 内。
+        # 守卫的**读源入口**由「collect_diag 单个函数」改为「diag 导出模块源码」
+        # （= collect_diag + 各 helper 的并集，与同仓 test_gate_rollback_* 的
+        #  "主文件 + 抽取模块并集" 口径一致）。**断言字符串与比较逻辑均未改，
+        # 被查字面量与守卫意图（diag 必须导出 param_usage / leansearch）不变，
+        # 非放宽判据。**
         import inspect
         from agent import diag_export
-        src = inspect.getsource(diag_export.collect_diag)
+        src = inspect.getsource(diag_export)
         assert '"param_usage": collect_param_usage(ctx, config)' in src
         assert '"leansearch": _summarize_leansearch(ctx, config)' in src
 

@@ -6,6 +6,8 @@ Lean→验证→预算），由 run_eval.solve_one 落盘为结果行 `diag` 字
 **纯搬迁**：键名与取值口径与迁移前逐字一致（下游 tools/*.py 按键名消费，
 改名/漏键 = 静默断链）。
 依赖由调用方 `Orchestrator` 注入：config / lean_probe / lean_gate / stage_durs。
+**2026-10-07 二次拆分**：collect_diag 已按语义拆为 `_diag_*` 模块级
+helper（每个 ≤150 行），本函数只留编排 + 组装 dict（键名/取值口径一字不变）。
 """
 from __future__ import annotations
 
@@ -39,6 +41,22 @@ def collect_diag(ctx, *,
     #     lean_executable 就绝不能声称 Lean 跑过 —— 闸门身份会被静默降级
     #     顶换成 audit_gate 而输出看起来完全正常）。只读已算好的 _lean_probe，
     #     不在此触发新的环境探测。
+    _lean_on, _lean_exe = _diag_lean_probe_state(lean_probe, lean_gate)
+    _pv = getattr(ctx, "preverify_trace", None)
+    _pv = _pv if isinstance(_pv, dict) else {}
+    _counts_recon = _diag_counts_reconciliation(ctx)
+    return {
+        **_diag_identity_and_problem(ctx, _pv),
+        **_diag_blueprint_review(ctx, config),
+        **_diag_subgoal_selection(ctx),
+        **_diag_pipeline_lean(ctx, _md, _lean_on, _lean_exe),
+        **_diag_verdicts_metrics(ctx, config, _md, _counts_recon),
+        **_diag_budget_health(ctx, stage_durs),
+    }
+
+
+def _diag_lean_probe_state(lean_probe, lean_gate):
+    """Lean 链路自证状态（lean_probe 是否启用 + 桥接到的 lean 可执行文件）。"""
     _lean_on, _lean_exe = False, ""
     try:
         _lean_on = bool(lean_probe)
@@ -48,6 +66,11 @@ def collect_diag(ctx, *,
                 _lean_exe = str(_b._lean_executable or "")
     except Exception:  # noqa: BLE001
         pass
+    return _lean_on, _lean_exe
+
+
+def _diag_counts_reconciliation(ctx) -> dict:
+    """diag 计数的口径对账（n_candidates / n_verdicts / 选择池 的分母标注）。"""
     # ★ 2026-10-07（fix-gate-timing-diag 问题 2.6）：diag 计数**口径对账**。
     #   实测三处"对不上"：① 6/10 题 `n_candidates ≠ n_verdicts`
     #   （001: 3 vs 5；004: 3 vs 6；087: 7 vs 3）；② `pick_diag.divergent_clusters`
@@ -67,8 +90,6 @@ def collect_diag(ctx, *,
     _pd = _pd if isinstance(_pd, dict) else {}
     _fsd = getattr(ctx, "_final_select_diag", None)
     _fsd = _fsd if isinstance(_fsd, dict) else {}
-    _pv = getattr(ctx, "preverify_trace", None)
-    _pv = _pv if isinstance(_pv, dict) else {}
 
     def _nm_ans(s) -> str:  # 归一化：去空白/LaTeX 外壳，供"是否同答案"比较
         return _re.sub(r"[\s\\$]|boxed|\{|\}", "", str(s or ""))
@@ -103,6 +124,11 @@ def collect_diag(ctx, *,
                 "divergent_clusters 的分母是 selection_pool_size（final_selection.n_in），"
                 "不是 n_candidates；picked 为后处理终答，与簇原始串不必然精确相等。",
     }
+    return _counts_recon
+
+
+def _diag_identity_and_problem(ctx, _pv) -> dict:
+    """① 题型与档位 + ② 题目理解（formula 语义订正 + preverify 轨迹）。"""
     return {
         # ① 题型与档位
         "question_type": getattr(ctx, "question_type", "") or "",
@@ -128,6 +154,12 @@ def collect_diag(ctx, *,
         },
         "formal_gaps": list(getattr(ctx, "formal_gaps", None) or [])[:10],
         "preverify_trace": _pv or {},
+    }
+
+
+def _diag_blueprint_review(ctx, config) -> dict:
+    """③ 蓝图 DAG / 骨架评审 / DAG 评审 + 相关逐轮事件流 + 被客观证伪答案。"""
+    return {
         # ③ 蓝图 DAG + 骨架评审 + DAG 评审
         #   ⚠ 2026-10-07（问题 2.7 ②）：「结构性为空」的归因明确为**开关默认关**：
         #     `skeleton_review`/`skeleton_review_events`  ← enable_skeleton_review(默认 False)
@@ -210,6 +242,12 @@ def collect_diag(ctx, *,
             str(x.get("answer"))[:160] for x in
             ((ctx.metadata or {}).get("falsified_answers") or [])
         ] if isinstance(getattr(ctx, "metadata", None), dict) else [],
+    }
+
+
+def _diag_subgoal_selection(ctx) -> dict:
+    """子目标交付度/候选保留 + 终答五层选择观测 + 事件白名单 + verdicts 明细。"""
+    return {
         # ★ 2026-09-23 新增：子目标「做成了没」的度量（用户判据：
         #   目标不是"跑通/有数据"，而是"有没有起到作用"）。
         #   0923 实测：279 个子目标里 88% 的 result < 120 字符（中位仅 30）、
@@ -332,6 +370,12 @@ def collect_diag(ctx, *,
              "correct": getattr(v, "correct", None),
              "confidence": getattr(v, "confidence", None)}
             for v in (getattr(ctx, "verdicts", None) or [])],
+    }
+
+
+def _diag_pipeline_lean(ctx, _md, _lean_on, _lean_exe) -> dict:
+    """④ 子目标求解/值攻击/工具通道 + ⑤ 检测链 AuditGate / Lean 双通道自证。"""
+    return {
         # ⚠ 2026-09-17：此处原先还有一条 `"audit_gate": [...][:6]`，与本文件
         #   下方（`_collect_diag` 的 ⑤ 段）**同名重复**。字典字面量里后键覆盖
         #   前键 ⇒ 那条"只留 dict、限 6 条"的实现**被静默丢弃**，一直是死代码。
@@ -386,6 +430,12 @@ def collect_diag(ctx, *,
         #      才可声称本题走过 Lean 通道（闸门身份 = diag.lean_gate 非空）。
         "lean_active": _lean_on,
         "lean_executable": _lean_exe,
+    }
+
+
+def _diag_verdicts_metrics(ctx, config, _md, _counts_recon) -> dict:
+    """⑥ 候选/验证/自纠错/闸门终态 + 错误类型/检索/工具门面/参数/预算等汇总指标。"""
+    return {
         # ⑥ 候选/验证/自纠错
         "n_candidates": len(getattr(ctx, "candidates", None) or []),
         "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
@@ -489,6 +539,12 @@ def collect_diag(ctx, *,
         #   `complete=False` 即可机检的"未完成检查"信号。
         "exhaust_result": _parse_exhaust_result(
             getattr(ctx, "subgoal_trace", None) or []),
+    }
+
+
+def _diag_budget_health(ctx, stage_durs) -> dict:
+    """⑦ 预算健康（budget_skip/degraded/占位符）+ 阶段计时 + 埋点三态自查。"""
+    return {
         # ⑦ 预算健康（trace 中 budget_skip / degraded / 占位符计数）
         "budget_skips": sum(1 for t in (getattr(ctx, "trace", None) or [])
                             if isinstance(t, dict) and t.get("step") == "budget_skip"),
