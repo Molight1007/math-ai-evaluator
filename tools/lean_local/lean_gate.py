@@ -541,6 +541,8 @@ class LeanGate:
                             _dv = None
                         if _dv is not None:
                             entry[_dk] = _dv
+                    # ★★ 2026-10-07：自证类成因单独落一条 trace（供效果脚本独立观测）
+                    self._note_self_proof_trace(ctx, report)
                 if report is None:
                     entry["degraded"] = "no_report"
                     _unknown_streak += 1
@@ -701,6 +703,14 @@ class LeanGate:
             entry["degraded"] = "no_report"
             self._record_ctx(ctx, entry)
             return True
+        # ★★ 2026-10-07：把验证器诊断（成因/是否编译通过）带进 final_gate 记录，
+        #   使「无法核验（形式化不充分）」与「证明失败」在最终闸门处同样可区分；
+        #   并对自证类成因单独落一条 trace（见 `_note_self_proof_trace`）。
+        for _dk in ("verdict_reason", "cross_check", "compiled"):
+            _dv = getattr(report, _dk, None)
+            if _dv is not None:
+                entry[_dk] = _dv
+        self._note_self_proof_trace(ctx, report)
         if report.verdict in ("proof_valid", "answer_valid"):
             entry["verdict"] = report.verdict
             entry["lean_valid"] = True
@@ -777,6 +787,43 @@ class LeanGate:
             ctx.lean_gate.append(data)
         except Exception:  # noqa: BLE001
             ctx.lean_gate = [data]
+
+    def _note_self_proof_trace(self, ctx: TaskContext, report) -> None:
+        """把「自证 → 形式化不充分」判定写一条 **trace**（供外部效果指标单独观测）。
+
+        ★★ 2026-10-07（本次修复 B 项）：`lean_bridge.verify_answer` 的三类自证
+        成因（数字/符号未交叉 / 闭式自证 / **恒等式自证**）此前**复用同一条失败
+        分支、产出同一句 desc** ⇒ 外部**无法区分**「真的检测到恒等式」与「普通
+        cross_check 失败」。效果捕捉脚本 `tools/effect_capture.py` 的 #10 判据
+        （`trace` 中『恒等式』出现次数）因此**恒为 0、无法判定该机制是否生效**。
+        现在 `verify_answer` 已为各成因设独立 `verdict_reason`（随 diag 落盘）；
+        本函数再把**自证类**成因单独落一条 trace，使「是否拦截了恒等式自证」
+        可被 trace / 效果脚本**独立计数**（`step == "lean_self_proof"`）。
+        """
+        try:
+            reason = getattr(report, "verdict_reason", "") or ""
+            if reason not in ("identity_self_proof", "ground_self_proof"):
+                return
+            # 同一题内同一成因只记一次（报告可能被多个候选复用）
+            seen = getattr(ctx, "_self_proof_traced", None)
+            if seen is None:
+                seen = set()
+                setattr(ctx, "_self_proof_traced", seen)
+            if reason in seen:
+                return
+            seen.add(reason)
+            label = ("恒等式自证（X = X，等号两边文本等价）"
+                     if reason == "identity_self_proof"
+                     else "闭式自证（含参题面 + ground 验证代码）")
+            ctx.trace.append({
+                "agent": self.name, "step": "lean_self_proof",
+                "reason": reason,
+                "content": ("Lean 验证拦截自证（%s）：%s；代码已编译通过 ⇒ "
+                            "属**形式化不充分**（无法核验，非答案错）"
+                            % (reason, label)),
+            })
+        except Exception:  # noqa: BLE001  埋点失败不影响主链
+            pass
 
     def _note_theorems_adopted(self, names: list) -> None:
         """#44 埋点：回记「最终被采用」的定理（Lean 编译通过＝真采用）。

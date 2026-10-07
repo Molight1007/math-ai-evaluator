@@ -10,6 +10,7 @@
 """
 import unittest
 import json
+import os
 
 from agent.base import BugReport, Finding
 from tools.lean_local.lean_bridge import (
@@ -342,6 +343,119 @@ class SolverProofDefaultTest(unittest.TestCase):
         # 默认开关下不应产生 lean_verify trace
         lean_steps = [t for t in ctx.trace if t.get("step") == "lean_verify"]
         self.assertEqual(len(lean_steps), 0)
+
+
+# ---------------------------------------------------------------------------
+# 语义分离（2026-10-07）：「形式化不充分」≠「命题为假」
+#   实测依据 results/_cloud/results/results/run_2026-10-06_smoke10_1006_2347.jsonl：
+#   lean_gate 123 条 → proof_invalid 73 / unknown 41 / answer_valid 1；
+#   其中 51 条 cross_check_failed **全部 compiled=true**。铁证 official112-004：
+#   `example : (2025 : ℕ) / 2 = 1012 := by norm_num`（真命题、编译通过）被判
+#   proof_invalid —— 把「无法核验」误判为「证明失败」。
+# ---------------------------------------------------------------------------
+class TestCrossCheckSemantics(unittest.TestCase):
+    """cross_check / 自证拦截的结论码分离 + 独立留痕。"""
+
+    def _patched_bridge(self, lean_code):
+        b = LeanBridge(client=MockClient(), config=None)
+        b._lean_env_cache = {"available": True}
+        b._mathlib_ready_cache = True
+        b._convert_answer_to_lean = lambda p, r, a: lean_code
+        b._verify_answer_by_system = lambda r, a: None
+        b._compile = lambda *a, **k: {"ok": True}
+        b._analyze_error = lambda *a, **k: None
+        return b
+
+    def test_verdict_helper_default_and_rollback(self):
+        from tools.lean_local.lean_bridge import _crosscheck_failure_verdict
+        self.assertEqual(_crosscheck_failure_verdict(), "unknown")
+        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "0"
+        try:
+            self.assertEqual(_crosscheck_failure_verdict(), "proof_invalid")
+        finally:
+            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
+
+    def test_ground_self_proof_is_unknown_not_invalid(self):
+        # official112-004 样本：题面含参数 + ground 闭式验证代码（编译通过）
+        prob = ("Find the minimum integer N: Given 2025 non-degenerate triangles, "
+                "each triangle has one side colored green ... find N.")
+        code = "example : (2025 : \u2115) / 2 = 1012 := by\n  norm_num"
+        r = self._patched_bridge(code).verify_answer(prob, "推理", "1012")
+        self.assertEqual(r.verdict, "unknown")
+        self.assertEqual(r.verdict_reason, "ground_self_proof")
+        self.assertTrue(r.compiled)
+
+    def test_identity_self_proof_marker(self):
+        # 题 002 样本：X = X 恒等式 ⇒ 独立 reason（供外部指标单独观测）
+        prob = ("For a real T, no matter how five distinct positive reals are given, "
+                "it is possible to choose four ...")
+        code = ("example : (Real.sqrt 5 - 1) / 2 = (Real.sqrt 5 - 1) / 2 := by\n"
+                "  norm_num")
+        r = self._patched_bridge(code).verify_answer(prob, "推理", "(sqrt5-1)/2")
+        self.assertEqual(r.verdict, "unknown")
+        self.assertEqual(r.verdict_reason, "identity_self_proof")
+        self.assertTrue(r.compiled)
+
+    def test_plain_cross_check_failed_marker(self):
+        # 验证代码未引用题目关键数字（非恒等式、非含参题面）→ cross_check_failed
+        prob = "There are 987654 apples in the box. Compute the value."
+        code = "example : (2 : \u2115) + 3 = 5 := by\n  norm_num"
+        r = self._patched_bridge(code).verify_answer(prob, "推理", "42")
+        self.assertEqual(r.verdict, "unknown")
+        self.assertEqual(r.verdict_reason, "cross_check_failed")
+        self.assertTrue(r.compiled)
+
+    def test_rollback_switch_restores_proof_invalid(self):
+        prob = ("For a real T, no matter how five distinct positive reals are given, "
+                "it is possible to choose four ...")
+        code = ("example : (Real.sqrt 5 - 1) / 2 = (Real.sqrt 5 - 1) / 2 := by\n"
+                "  norm_num")
+        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "0"
+        try:
+            r = self._patched_bridge(code).verify_answer(prob, "推理", "(sqrt5-1)/2")
+        finally:
+            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
+        # 回退旧语义：结论码回到 proof_invalid，但**留痕 reason 仍独立**
+        self.assertEqual(r.verdict, "proof_invalid")
+        self.assertEqual(r.verdict_reason, "identity_self_proof")
+
+    def test_lean_gate_records_self_proof_trace(self):
+        # lean_gate 对自证成因单独落一条 trace（step=lean_self_proof），
+        # 使 effect_capture #10「恒等式骗过验证」可被独立计数。
+        from tools.lean_local.lean_gate import LeanGate
+        from agent.base import TaskContext
+        from types import SimpleNamespace
+
+        class _R:
+            verdict = "unknown"
+            findings = []
+            suggestion = ""
+            lean_code = ("example : (Real.sqrt 5 - 1) / 2 = (Real.sqrt 5 - 1) / 2 "
+                         ":= by norm_num")
+            verdict_reason = "identity_self_proof"
+            cross_check = False
+            compiled = True
+
+        class _FB:
+            lean_available = True
+
+            def verify_answer(self, **kw):
+                return _R()
+
+        gate = LeanGate(client=MockClient(),
+                        config=SimpleNamespace(lean_gate_strict=False))
+        gate._bridge = _FB()
+        ctx = TaskContext(problem="For a real T ...", metadata={})
+        ctx.domain = ""
+        ctx.question_type = "解答题"
+        ctx.start_time = 0
+        gate.gate_final_answer(ctx, "deep", "(sqrt5-1)/2", "推理")
+        hits = [t for t in ctx.trace if t.get("step") == "lean_self_proof"]
+        self.assertEqual(len(hits), 1)
+        self.assertIn("恒等式", hits[0].get("content", ""))
+        # final_gate 记录也带上独立成因
+        fg = [e for e in ctx.lean_gate if e.get("step") == "final_gate"]
+        self.assertEqual(fg[-1].get("verdict_reason"), "identity_self_proof")
 
 
 if __name__ == "__main__":

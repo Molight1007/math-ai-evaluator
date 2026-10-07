@@ -399,6 +399,45 @@ def _is_ground_statement(lean_code: str) -> bool:
         return False          # 判不出就不改变既有行为
 
 
+# ★★ 2026-10-07（**语义分离**：「形式化不充分」≠「命题为假」）
+#   实测依据（results/_cloud/results/results/run_2026-10-06_smoke10_1006_2347.jsonl）：
+#     · `lean_gate` 共 **123 条**：proof_invalid **73** / unknown **41** /
+#       answer_valid **仅 1** ⇒ 闸门几乎不产出有效判定；
+#     · 73 条 proof_invalid 中 **51 条** 的 `verdict_reason == "cross_check_failed"`，
+#       而这 51 条**全部 `compiled == true`**（代码在 Lean 下**编译通过**）。
+#     · 铁证 official112-004：
+#         lean_code = "example : (2025 : ℕ) / 2 = 1012 := by norm_num"
+#         compiled  = true
+#         verdict   = "proof_invalid" / verdict_reason = "cross_check_failed"
+#       命题 `(2025:ℕ)/2 = 1012` 在 ℕ 下**为真**、代码被 Lean 接受，却因
+#       `_problem_is_parametric ∧ _is_ground_statement` 命中「闭式自证拦截」
+#       (`_cc=False`) 落到 `proof_invalid`。
+#   ⇒ 这是把「**形式化不充分**（验证代码没锚定题目条件/只验了自证恒等式）」误当成
+#     「**命题为假**」。两者必须分属不同结论：
+#       · 命题为假（`sys_verify_conflict` / 真编译报错）→ `proof_invalid`（证明失败）
+#       · 形式化不充分（`cross_check_failed` / `ground_self_proof` /
+#         `identity_self_proof`）→ `unknown`（**无法核验**，**不等于答案错**）
+#   本开关控制新语义：默认 True = 分开（cross_check 系失败 → unknown）；
+#   设 `LEAN_CROSSCHECK_AS_UNKNOWN=0` 可回退旧行为（一律 proof_invalid）做 A/B 对照。
+#   注：开关注册四件套需改 agent/ 下文件（switch_registry / AgentConfig /
+#   user_agent 覆盖白名单 / param_usage._SPEC）；本任务施工期间 agent/ 有并发改动，
+#   为避免与他人的未提交改动互相污染，**此处只落模块级常量 + env 直读**（等效开关），
+#   待 agent/ 施工结束后再补登注册制。
+_DEFAULT_CROSSCHECK_AS_UNKNOWN = True
+
+
+def _crosscheck_failure_verdict() -> str:
+    """cross_check / 自证拦截命中时的**结论码**（语义分离开关）。
+
+    - 默认 ``"unknown"``（新语义：形式化不充分 = **无法核验**，非答案错）；
+    - 设 ``LEAN_CROSSCHECK_AS_UNKNOWN=0`` 返回 ``"proof_invalid"``（旧语义，做 A/B）。
+    """
+    raw = (os.environ.get("LEAN_CROSSCHECK_AS_UNKNOWN", "") or "").strip().lower()
+    as_unknown = (_DEFAULT_CROSSCHECK_AS_UNKNOWN if raw == ""
+                  else raw not in {"0", "false", "no", "off"})
+    return "unknown" if as_unknown else "proof_invalid"
+
+
 def _to_exact_number_safe(v: Any) -> Optional[str]:
     """把答案串转成 Lean 可用的**精确数值字面量**（本地实现，不 import agent.*）。
 
@@ -2460,6 +2499,14 @@ class LeanBridge:
         - 编译通过 → BugReport(verdict='answer_valid')（计算/答案经 Lean 判定正确）
         - 逻辑错误（norm_num 证不出 / 计算与推理矛盾）→ verdict='proof_invalid'
         - 翻译问题 / 答案无法形式化 / 环境缺失 / 超时 → verdict='unknown' 降级放行
+        - ★ 2026-10-07（**语义分离**）：**形式化不充分**（验证代码未锚定题目条件 /
+          只验了自证恒等式）**不再**判 'proof_invalid'，改判 'unknown'
+          —— 代码已编译通过，属**无法核验**、**不等于答案错**。成因经
+          `verdict_reason` 区分：`cross_check_failed` / `ground_self_proof` /
+          `identity_self_proof`（由 `LEAN_CROSSCHECK_AS_UNKNOWN=0` 可回退旧语义）。
+          依据：实测 smoke10 `lean_gate` 123 条中 51 条 `cross_check_failed`
+          **全部 compiled=true**，其中 official112-004 的
+          `example : (2025 : ℕ) / 2 = 1012` 为真命题却被判 `proof_invalid`。
 
         返回的 BugReport 附加 ``lean_code`` 属性（供上层埋点提取 import/example）。
 
@@ -2534,12 +2581,19 @@ class LeanBridge:
                 # v17 补丁：题目无大数字时退而用"答案数字"核对——答案里的
                 # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
                 _cc = _cross_check_problem_numbers(problem, lean_code)
+                # ★★ 2026-10-07：`_cc_reason` 记录**为什么** `_cc` 被置 False。
+                #   此前三个失败成因（数字/符号未交叉 / 闭式自证 / 恒等式自证）**复用
+                #   同一条失败分支、产出同一句 desc 与同一 reason**，外部无法区分
+                #   （effect_capture #10「恒等式骗过验证」因此**无独立留痕、无法判定**）。
+                #   现分设独立 reason，供 diag / cloud_health_report / 效果脚本单独观测。
+                _cc_reason = "cross_check_failed"
                 # ★★ 2026-09-22：**闭式自证拦截**（补上循环判据的缺口，见上方 helper 注释）。
                 #   题面含参数 + 验证代码是 ground 闭式 ⇒ 只证明了 `X = X` 型恒等式，
                 #   不可能形式化题目 ⇒ 直接判自证，不再看数字是否"出现在代码里"。
                 if (_cc is not False and _problem_is_parametric(problem)
                         and _is_ground_statement(lean_code)):
                     _cc = False
+                    _cc_reason = "ground_self_proof"
                 # ★★ 2026-10-06 新增（**恒等式必须判自证** —— 实测铁证）：
                 #   题 002 的 `example : (√5-1)/2 = (√5-1)/2 := by norm_num` 是**恒等式**，
                 #   编译必然通过、与答案对错无关，却被判 `answer_valid` ⇒ 假执行。
@@ -2548,6 +2602,7 @@ class LeanBridge:
                 #   既有 `_is_ground_statement` 只在**题面含参数**时触发，覆盖不到本题。
                 if _cc is not False and _is_identity_statement(lean_code):
                     _cc = False
+                    _cc_reason = "identity_self_proof"   # ★ B 项：独立留痕
                 if _cc is None:
                     # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
                     ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
@@ -2564,8 +2619,16 @@ class LeanBridge:
                         # 2026-09-13 修复：改用**题面变量符号**核对（真验证必引题目变量）。
                         _cc = _cross_check_problem_symbols(problem, lean_code)
                 if not _cc:
+                    # ★★ 2026-10-07（**语义分离**）：本分支的全部成因都是「验证代码
+                    #   没锚定题目条件 ⇒ **形式化不充分**」，**不是**「命题为假」。
+                    #   实测 official112-004 的代码 `(2025:ℕ)/2 = 1012` 编译通过
+                    #   （`compiled=true`）却因闭式自证拦截落到 `proof_invalid` —— 把
+                    #   「无法核验」误判成「证明失败」。故结论码改由开关决定：
+                    #   默认 → `unknown`（**无法核验**，非答案错）；设
+                    #   `LEAN_CROSSCHECK_AS_UNKNOWN=0` 回退旧 `proof_invalid`。
+                    _cc_verdict = _crosscheck_failure_verdict()
                     report = BugReport(
-                        verdict="proof_invalid",
+                        verdict=_cc_verdict,
                         findings=[Finding(
                             location="answer_verify", kind="Critical",
                             severity=5,
@@ -2583,12 +2646,16 @@ class LeanBridge:
                                  "只把题目条件与答案一起形式化"
                                  "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
                     setattr(report, "lean_code", lean_code)
-                    setattr(report, "verdict_reason", "cross_check_failed")
+                    # 独立留痕：区分「数字未交叉」/「闭式自证」/「恒等式自证」三类成因
+                    setattr(report, "verdict_reason", _cc_reason)
                     setattr(report, "cross_check", False)
                     setattr(report, "compiled", True)
                     setattr(report, "suggestion",
                             "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
-                    logger.warning("[LeanBridge] 答案验证疑似自证，拒绝（代码未引用题目数字）")
+                    logger.warning(
+                        "[LeanBridge] 答案验证形式化不充分（%s），判 %s"
+                        "（代码已编译通过 ⇒ 无法核验 ≠ 答案错）",
+                        _cc_reason, _cc_verdict)
                     return report
                 # 2026-09-13 新增：**系统命题验算**（命题由系统构造，非 LLM 自由发挥）。
                 # 动机：Lean 只能验证"命题可证"，无法验证"命题 = 题目"；LLM 写恒真式
