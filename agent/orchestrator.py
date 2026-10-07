@@ -141,7 +141,7 @@ from .diag_metrics import (  # noqa: F401
 from .diag_export import collect_diag  # noqa: F401  （供 _collect_diag 委托）
 # 2026-10-07 阶段C2：6.5_audit_gate 段已抽到 agent/orchestrator__final_gate.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__final_gate import final_answer_gate  # noqa: F401
+from .orchestrator__final_gate import final_answer_gate, format_stage  # noqa: F401
 # 2026-10-07 阶段C3a：3.6_audit_filter 段已抽到 agent/orchestrator__audit_filter.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
@@ -175,6 +175,9 @@ from .orchestrator__prep import pre_audit_stage  # noqa: F401
 # 2026-10-07 阶段C6：4.6_adv 段已抽到 agent/orchestrator__verify.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__verify import adversarial_stage  # noqa: F401
+# 2026-10-07 阶段C6：5_revise_or_fallback 段已抽到 agent/orchestrator__low_conf.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__low_conf import revise_or_fallback_stage  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1529,104 +1532,13 @@ class Orchestrator(BaseAgent):
             adversarial_stage(self, ctx, tier, ver_result, tier_votes)
 
             self._stage_start(ctx, "5_revise_or_fallback")
-            # 5) 全部 0 正确票：
-            #    - deep 档：先 revise 自纠错回环（最多 deep_revise_rounds 轮）
-            #    - 其他档：直接兜底直接求解
-            if (ctx.verdicts
-                    and all(v.total_votes > 0 for v in ctx.verdicts)
-                    and all(v.correct_votes == 0 for v in ctx.verdicts)):
-                revised_ok = False
-                # ★ 2026-09-17（Audit-3）：同上，改用 `is_time_critical()`。
-                # 全 0 票后的强制重解属**验证之后的修正**，不是生成；原用生成侧
-                # 软截止闸它，与同文件 5.5（已改 `is_time_critical`）形成新的不一致。
-                if (tier == 'deep' and not ctx.state.emergency
-                        and not ctx.is_time_critical()):
-                    revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
-                if not revised_ok:
-                    self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
-                    # 2026-09-02 bug 修复：不再提前 return！
-                    # 旧代码 direct_solve/_pick_best 后直接 return，跳过了
-                    # formatter(6步：占位符拦截/截断续写/拒绝兜底) 和
-                    # 6.5 AuditGate 最终闸门 → 闸门 10/10 题 0 执行、
-                    # 003 直答 "No such function" 裸奔的根因。
-                    # 现改为：兜底答案先存入 ctx.final_response，落回统一出口，
-                    # 由 formatter 校验/修复（候选都差时保留预设答案），
-                    # 再进 6.5 AuditGate 闸门把关，最后统一 return。
-                    # ★ 2026-09-23 改造：改为「**证伪优先**」。
-                    #   本路径原文是"候选全 0 票 ⇒ 池不可信 ⇒ 弃池、改取 direct_solve
-                    #   的另一条产线答案"。但 0923 环节效能审计推翻了该前提：
-                    #   · 两个主力闸门（4_verify 全 0 票 / lean_gate proof_invalid）
-                    #     在**正确题**上的误报率都是 **56%** ⇒ "全 0 票"不等于池不可信；
-                    #   · 弃池的代价实测为：18 题终答出池、16 题判错（= 全部错题 43.2%）。
-                    #   用户判据："**错误答案一定是能证明错误的**" ⇒ 择优的正确姿势是
-                    #   **先淘汰能被客观证伪的候选**，再在幸存者中择优；只有幸存者为 0
-                    #   （或证伪器不可用）时，才回退到原来的 direct_solve 兜底。
-                    #   红线：证伪器只做证伪、不做证实；不确定一律放行（宁漏不误杀）。
-                    _avail, _n_surv = self._falsify_candidates(ctx)
-                    direct_answer = ""
-                    if _avail and _n_surv > 0:
-                        # 池中仍有未被证伪的候选 ⇒ **不采纳池外直答**，交 Formatter 从池中择优
-                        self.record(ctx, "control",
-                                    "零票兜底：证伪淘汰后仍剩 %d 个未被证伪候选 → "
-                                    "改由候选池择优（不采纳 direct_solve 的池外答案）"
-                                    % _n_surv)
-                        ctx._zero_vote_fallback = False
-                    else:
-                        direct_answer = self.solver.direct_solve(ctx)
-                        if (str(direct_answer or "").strip()
-                                and self._falsify_rejects(ctx, direct_answer)):
-                            self.record(ctx, "control",
-                                        "零票兜底直答被客观证伪（数值回带 + SymPy 精确判定）"
-                                        "→ 拒绝采纳，退回候选池择优")
-                            direct_answer = ""
-                        # 2026-09-18：过 `_set_final_response`（非答案闸门）
-                        if not self._set_final_response(ctx, direct_answer,
-                                                        "zero_vote_direct"):
-                            if str(direct_answer or "").strip():
-                                self.record(ctx, "control",
-                                            "零票兜底直答被判为非答案（过程叙述/脏文本）"
-                                            "→ 退回候选池择优")
-                            self._set_final_response(
-                                ctx, self._pick_best_from_candidates(ctx) or "",
-                                "zero_vote_pick_best")
-                        # 标记 0 票兜底路径：formatter 需要它来判断是否保留预设答案
-                        ctx._zero_vote_fallback = True
+            revise_or_fallback_stage(self, ctx, tier, ver_result, tier_votes)
 
             self._stage_start(ctx, "5.5_low_conf")
             low_confidence_recheck(self, ctx, ver_result, tier_votes)
 
             self._stage_start(ctx, "6_format")
-            # 6) 格式化输出
-            self.formatter.run(ctx)
-
-            # ★ 2026-10-04 修（D25，主链顺序）：终答后处理（P2 数值化 / P5 客观自检 /
-            #   B0 形态闸门）**从 6.5 闸门之后移到之前**。
-            #   原顺序的缺陷（代码自己写在 `_final_answer_postprocess` docstring 里）：
-            #   后处理会**改写答案内容**，而它跑在 6.5 之后 ⇒
-            #   **闸门校验的字符串不是最终提交的字符串**（"闸门验 A、实际提交 B"），
-            #   即最后一道形式化/审核防线**对它实际放行的那个串没有约束力**。
-            #   移到闸门之前后，不变量成立：**凡是提交的答案，都经过闸门**——
-            #   闸门通过则它就是最终答案；闸门不通过会换候选，换上的候选同样要过闸门。
-            #   ⚠ 取舍：若闸门**换过候选**，那个新候选不会被后处理（数值化等）。
-            #     这是刻意选择 —— 宁可少一层锦上添花的归一化，也不让"未验证的串"被提交。
-            ctx.final_response = self._final_answer_postprocess(ctx)
-            # ★ 2026-10-07（问题 2.1 第三条路径补漏，fix-select-consistency 提供入口）：
-            #   后处理会**改写答案内容**且不经过 `adopt_single` ⇒ `_pick_diag.picked`
-            #   会与真正提交的 `ctx.final_response` 不同源。前两条路径（`adopt_single`
-            #   = 6.5 换候选、`formatter.finalize`）它已覆盖，此处补第三条。
-            #   无条件调用：`sync_pick_diag_to_final` 内部按开关 `final_answer_single_source`
-            #   自行决定是否生效（OFF ⇒ 空操作），且任何异常自吞 ⇒ 无条件调用最简且不破坏行为。
-            #   依据（team-lead 转述）：`run_eval.py:1153` 用 `final_response` 决定
-            #   `predicted` 与被评分值，它是真值；本路径 smoke10 触发 0 次（防御性补漏）。
-            try:
-                try:
-                    from .final_selector import sync_pick_diag_to_final
-                except ImportError:  # noqa: BLE001  平台扁平导入
-                    from final_selector import sync_pick_diag_to_final
-                sync_pick_diag_to_final(ctx, "postprocess")
-            except Exception:  # noqa: BLE001  纯埋点同步，绝不阻断主流程
-                pass
-
+            format_stage(self, ctx)
             self._stage_start(ctx, "6.5_audit_gate")
             final_answer_gate(self, ctx, tier)
 

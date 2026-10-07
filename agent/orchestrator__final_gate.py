@@ -395,3 +395,36 @@ def final_answer_gate(self, ctx, tier: str) -> None:
         except Exception as _e:  # noqa: BLE001  闸门异常绝不阻断
             self.record(ctx, _gk,
                         f"审核闸门异常，降级放行: {str(_e)[:120]}")
+
+
+def format_stage(self, ctx) -> None:
+    # 6) 格式化输出
+    self.formatter.run(ctx)
+
+    # ★ 2026-10-04 修（D25，主链顺序）：终答后处理（P2 数值化 / P5 客观自检 /
+    #   B0 形态闸门）**从 6.5 闸门之后移到之前**。
+    #   原顺序的缺陷（代码自己写在 `_final_answer_postprocess` docstring 里）：
+    #   后处理会**改写答案内容**，而它跑在 6.5 之后 ⇒
+    #   **闸门校验的字符串不是最终提交的字符串**（"闸门验 A、实际提交 B"），
+    #   即最后一道形式化/审核防线**对它实际放行的那个串没有约束力**。
+    #   移到闸门之前后，不变量成立：**凡是提交的答案，都经过闸门**——
+    #   闸门通过则它就是最终答案；闸门不通过会换候选，换上的候选同样要过闸门。
+    #   ⚠ 取舍：若闸门**换过候选**，那个新候选不会被后处理（数值化等）。
+    #     这是刻意选择 —— 宁可少一层锦上添花的归一化，也不让"未验证的串"被提交。
+    ctx.final_response = self._final_answer_postprocess(ctx)
+    # ★ 2026-10-07（问题 2.1 第三条路径补漏，fix-select-consistency 提供入口）：
+    #   后处理会**改写答案内容**且不经过 `adopt_single` ⇒ `_pick_diag.picked`
+    #   会与真正提交的 `ctx.final_response` 不同源。前两条路径（`adopt_single`
+    #   = 6.5 换候选、`formatter.finalize`）它已覆盖，此处补第三条。
+    #   无条件调用：`sync_pick_diag_to_final` 内部按开关 `final_answer_single_source`
+    #   自行决定是否生效（OFF ⇒ 空操作），且任何异常自吞 ⇒ 无条件调用最简且不破坏行为。
+    #   依据（team-lead 转述）：`run_eval.py:1153` 用 `final_response` 决定
+    #   `predicted` 与被评分值，它是真值；本路径 smoke10 触发 0 次（防御性补漏）。
+    try:
+        try:
+            from .final_selector import sync_pick_diag_to_final
+        except ImportError:  # noqa: BLE001  平台扁平导入
+            from final_selector import sync_pick_diag_to_final
+        sync_pick_diag_to_final(ctx, "postprocess")
+    except Exception:  # noqa: BLE001  纯埋点同步，绝不阻断主流程
+        pass

@@ -85,3 +85,68 @@ def low_confidence_recheck(self, ctx, ver_result, tier_votes) -> None:
             f"deep 档低置信度({_bc.confidence:.2f})，强制 revise 复核提升共识",
         )
         self._deep_revise_loop(ctx, ver_result, tier_votes)
+
+
+def revise_or_fallback_stage(self, ctx, tier: str, ver_result, tier_votes) -> None:
+    # 5) 全部 0 正确票：
+    #    - deep 档：先 revise 自纠错回环（最多 deep_revise_rounds 轮）
+    #    - 其他档：直接兜底直接求解
+    if (ctx.verdicts
+            and all(v.total_votes > 0 for v in ctx.verdicts)
+            and all(v.correct_votes == 0 for v in ctx.verdicts)):
+        revised_ok = False
+        # ★ 2026-09-17（Audit-3）：同上，改用 `is_time_critical()`。
+        # 全 0 票后的强制重解属**验证之后的修正**，不是生成；原用生成侧
+        # 软截止闸它，与同文件 5.5（已改 `is_time_critical`）形成新的不一致。
+        if (tier == 'deep' and not ctx.state.emergency
+                and not ctx.is_time_critical()):
+            revised_ok = self._deep_revise_loop(ctx, ver_result, tier_votes)
+        if not revised_ok:
+            self.record(ctx, "control", "全部 0 正确票，触发兜底直接求解")
+            # 2026-09-02 bug 修复：不再提前 return！
+            # 旧代码 direct_solve/_pick_best 后直接 return，跳过了
+            # formatter(6步：占位符拦截/截断续写/拒绝兜底) 和
+            # 6.5 AuditGate 最终闸门 → 闸门 10/10 题 0 执行、
+            # 003 直答 "No such function" 裸奔的根因。
+            # 现改为：兜底答案先存入 ctx.final_response，落回统一出口，
+            # 由 formatter 校验/修复（候选都差时保留预设答案），
+            # 再进 6.5 AuditGate 闸门把关，最后统一 return。
+            # ★ 2026-09-23 改造：改为「**证伪优先**」。
+            #   本路径原文是"候选全 0 票 ⇒ 池不可信 ⇒ 弃池、改取 direct_solve
+            #   的另一条产线答案"。但 0923 环节效能审计推翻了该前提：
+            #   · 两个主力闸门（4_verify 全 0 票 / lean_gate proof_invalid）
+            #     在**正确题**上的误报率都是 **56%** ⇒ "全 0 票"不等于池不可信；
+            #   · 弃池的代价实测为：18 题终答出池、16 题判错（= 全部错题 43.2%）。
+            #   用户判据："**错误答案一定是能证明错误的**" ⇒ 择优的正确姿势是
+            #   **先淘汰能被客观证伪的候选**，再在幸存者中择优；只有幸存者为 0
+            #   （或证伪器不可用）时，才回退到原来的 direct_solve 兜底。
+            #   红线：证伪器只做证伪、不做证实；不确定一律放行（宁漏不误杀）。
+            _avail, _n_surv = self._falsify_candidates(ctx)
+            direct_answer = ""
+            if _avail and _n_surv > 0:
+                # 池中仍有未被证伪的候选 ⇒ **不采纳池外直答**，交 Formatter 从池中择优
+                self.record(ctx, "control",
+                            "零票兜底：证伪淘汰后仍剩 %d 个未被证伪候选 → "
+                            "改由候选池择优（不采纳 direct_solve 的池外答案）"
+                            % _n_surv)
+                ctx._zero_vote_fallback = False
+            else:
+                direct_answer = self.solver.direct_solve(ctx)
+                if (str(direct_answer or "").strip()
+                        and self._falsify_rejects(ctx, direct_answer)):
+                    self.record(ctx, "control",
+                                "零票兜底直答被客观证伪（数值回带 + SymPy 精确判定）"
+                                "→ 拒绝采纳，退回候选池择优")
+                    direct_answer = ""
+                # 2026-09-18：过 `_set_final_response`（非答案闸门）
+                if not self._set_final_response(ctx, direct_answer,
+                                                "zero_vote_direct"):
+                    if str(direct_answer or "").strip():
+                        self.record(ctx, "control",
+                                    "零票兜底直答被判为非答案（过程叙述/脏文本）"
+                                    "→ 退回候选池择优")
+                    self._set_final_response(
+                        ctx, self._pick_best_from_candidates(ctx) or "",
+                        "zero_vote_pick_best")
+                # 标记 0 票兜底路径：formatter 需要它来判断是否保留预设答案
+                ctx._zero_vote_fallback = True

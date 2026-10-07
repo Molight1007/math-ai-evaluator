@@ -53,6 +53,8 @@ _EXTRACTED_MAIN_FLOW = [
     # 验证族 4.5 段（orchestrator__verify.py）。
     "agent/orchestrator__solve.py",
     "agent/orchestrator__verify.py",
+    # 2026-10-07 阶段C6：求解前准备族 1.2/2.6 段（orchestrator__prep.py）。
+    "agent/orchestrator__prep.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]

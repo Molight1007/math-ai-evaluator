@@ -38,9 +38,15 @@ ORCH = os.path.join(ROOT, "agent", "orchestrator.py")
 # agent/orchestrator__low_conf.py（调用点改为一行委托）。本测试的 5.5 位置型
 # 守卫改为读该模块的函数体 —— 段文本与搬迁前一致，断言与守卫意图不变
 # （只是被查代码换了文件，非放宽判据）。
+# 2026-10-07 阶段C6：`Orchestrator.run` 的 5_revise_or_fallback 段亦已**逐字搬**入
+# **同一模块** agent/orchestrator__low_conf.py（调用点改为一行委托）。该段位置型
+# 守卫同样改为读该模块的函数体 —— 段文本与搬迁前逐字相同，断言
+# （`_zero_vote_fallback` / `direct_solve` 仍在）与守卫意图不变，**非放宽判据**。
 _STAGE_MODULE = {
     'self._stage_start(ctx, "5.5_low_conf")':
         ("orchestrator__low_conf.py", "def low_confidence_recheck"),
+    'self._stage_start(ctx, "5_revise_or_fallback")':
+        ("orchestrator__low_conf.py", "def revise_or_fallback_stage"),
 }
 
 
