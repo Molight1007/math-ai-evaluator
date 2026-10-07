@@ -82,3 +82,36 @@ def subgoal_main_path(self, ctx, tier: str) -> None:
                            type(exc).__name__, exc)
             self.record(ctx, "value_attack",
                         f"数值攻击异常跳过: {type(exc).__name__}: {exc}")
+
+
+def complete_truncated(self, ctx, tier: str) -> None:
+    """3.2 截断候选续写（统一档位 max_completions 个，emergency/verify_only 跳过）。
+
+    参数 `self` 即 `Orchestrator` 实例（沿用方法体原文，故保留名 `self`），
+    `ctx` 为 `TaskContext`，`tier` 为当前档位（本项目恒为 "deep"）。
+    返回 None；结果写回 `ctx.candidates`。
+    """
+    # 3.2) 截断候选续写：统一档位 max_completions 个，应急模式跳过
+    if (getattr(ctx, 'candidates', None)
+            and not ctx.state.emergency
+            and not ctx.state.verify_only):
+        max_comp = self.config.tier_max_completions.get(tier, 1)
+        if max_comp > 0:
+            n_completed = self.solver.complete_truncated_candidates(
+                ctx, max_count=max_comp)
+            if n_completed > 0:
+                self.record(ctx, "control",
+                            f"截断续写完成 {n_completed} 个候选")
+        else:
+            # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原
+            #   `if max_comp > 0:` 无 else ⇒ max_completions 配 0 时**静默跳过
+            #   整个 3.2**，阶段耗时为 0 却看不出"是配置 0 还是没触发"。
+            self.record(ctx, "control",
+                        f"3.2 截断续写跳过：档位 {tier} max_completions="
+                        f"{max_comp}（<=0 ⇒ 本阶段不执行）")
+    else:
+        self.record(ctx, "control",
+                    "3.2 截断续写跳过："
+                    + ("无候选" if not getattr(ctx, "candidates", None) else
+                       ("emergency 状态" if ctx.state.emergency else
+                        "verify_only 状态")))

@@ -154,6 +154,9 @@ from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
 # 2026-10-07 阶段C4a：2.7_subgoal_main 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__solve import subgoal_main_path  # noqa: F401
+# 2026-10-07 阶段C4b：3.2_complete 段已抽到 agent/orchestrator__solve.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__solve import complete_truncated  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1513,30 +1516,7 @@ class Orchestrator(BaseAgent):
                 return self._fallback_direct(ctx)
 
             self._stage_start(ctx, "3.2_complete")
-            # 3.2) 截断候选续写：统一档位 max_completions 个，应急模式跳过
-            if (getattr(ctx, 'candidates', None)
-                    and not ctx.state.emergency
-                    and not ctx.state.verify_only):
-                max_comp = self.config.tier_max_completions.get(tier, 1)
-                if max_comp > 0:
-                    n_completed = self.solver.complete_truncated_candidates(
-                        ctx, max_count=max_comp)
-                    if n_completed > 0:
-                        self.record(ctx, "control",
-                                    f"截断续写完成 {n_completed} 个候选")
-                else:
-                    # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原
-                    #   `if max_comp > 0:` 无 else ⇒ max_completions 配 0 时**静默跳过
-                    #   整个 3.2**，阶段耗时为 0 却看不出"是配置 0 还是没触发"。
-                    self.record(ctx, "control",
-                                f"3.2 截断续写跳过：档位 {tier} max_completions="
-                                f"{max_comp}（<=0 ⇒ 本阶段不执行）")
-            else:
-                self.record(ctx, "control",
-                            "3.2 截断续写跳过："
-                            + ("无候选" if not getattr(ctx, "candidates", None) else
-                               ("emergency 状态" if ctx.state.emergency else
-                                "verify_only 状态")))
+            complete_truncated(self, ctx, tier)
 
             self._stage_start(ctx, "3.3_improve")
             # 3.3) Step 2 无条件自改进（IMO2025 论文流水线）：
