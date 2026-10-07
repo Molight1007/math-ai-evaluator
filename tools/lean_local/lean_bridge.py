@@ -417,24 +417,32 @@ def _is_ground_statement(lean_code: str) -> bool:
 #       · 命题为假（`sys_verify_conflict` / 真编译报错）→ `proof_invalid`（证明失败）
 #       · 形式化不充分（`cross_check_failed` / `ground_self_proof` /
 #         `identity_self_proof`）→ `unknown`（**无法核验**，**不等于答案错**）
-#   本开关控制新语义：默认 True = 分开（cross_check 系失败 → unknown）；
-#   设 `LEAN_CROSSCHECK_AS_UNKNOWN=0` 可回退旧行为（一律 proof_invalid）做 A/B 对照。
-#   注：开关注册四件套需改 agent/ 下文件（switch_registry / AgentConfig /
-#   user_agent 覆盖白名单 / param_usage._SPEC）；本任务施工期间 agent/ 有并发改动，
-#   为避免与他人的未提交改动互相污染，**此处只落模块级常量 + env 直读**（等效开关），
-#   待 agent/ 施工结束后再补登注册制。
-_DEFAULT_CROSSCHECK_AS_UNKNOWN = True
+#   本开关（注册名 `lean_crosscheck_as_unknown`，env `LEAN_CROSSCHECK_AS_UNKNOWN`，
+#   默认 True）控制新语义：True = 分开（cross_check 系失败 → `unknown`）；
+#   设 `LEAN_CROSSCHECK_AS_UNKNOWN=0`（或 config 字段 False）可回退旧行为
+#   （一律 `proof_invalid`）做 A/B 对照。
+#   读取走 `switch_registry`（与仓库其它开关**同口径**）：**env > config > 默认值**。
+#   四件套已补登（2026-10-07）：agent/switch_registry.py / user_agent.AgentConfig
+#   （含 kwargs 覆盖白名单）/ agent/param_usage._SPEC。
 
 
 def _crosscheck_failure_verdict() -> str:
     """cross_check / 自证拦截命中时的**结论码**（语义分离开关）。
 
-    - 默认 ``"unknown"``（新语义：形式化不充分 = **无法核验**，非答案错）；
-    - 设 ``LEAN_CROSSCHECK_AS_UNKNOWN=0`` 返回 ``"proof_invalid"``（旧语义，做 A/B）。
+    经 ``switch_registry.get_bool("lean_crosscheck_as_unknown")`` 读取，优先级
+    **env(`LEAN_CROSSCHECK_AS_UNKNOWN`) > config(`AgentConfig.lean_crosscheck_as_unknown`)
+    > 默认 True**（与仓库其它开关一致，不另造口径）。
+
+    - True（默认）→ ``"unknown"``：形式化不充分 = **无法核验**，非答案错；
+    - False       → ``"proof_invalid"``：旧语义（用于 A/B 对照）。
+
+    容错：注册表/配置读取异常时回落**新语义** `unknown`（宁可判"无法核验"，
+    也不把"代码已编译通过"的候选误判成"证明失败"）。
     """
-    raw = (os.environ.get("LEAN_CROSSCHECK_AS_UNKNOWN", "") or "").strip().lower()
-    as_unknown = (_DEFAULT_CROSSCHECK_AS_UNKNOWN if raw == ""
-                  else raw not in {"0", "false", "no", "off"})
+    try:
+        as_unknown = _sw_bool("lean_crosscheck_as_unknown")
+    except Exception:  # noqa: BLE001  注册表不可用 → 按新语义（不误伤答案）
+        as_unknown = True
     return "unknown" if as_unknown else "proof_invalid"
 
 

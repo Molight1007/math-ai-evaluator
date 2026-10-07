@@ -578,6 +578,13 @@ class AgentConfig:
     expr_eval_grounding_guard: bool = True  # EXPR_EVAL_GROUNDING_GUARD — 表达式求值接地护栏
     lean_gate_parallel: bool = True  # LEAN_GATE_PARALLEL — Lean 门禁并行预取（=0 串行）
     lean_gate_strict_unknown: bool = True  # LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严
+    # ★ 2026-10-07（语义分离）：「形式化不充分」≠「命题为假」。见 agent/switch_registry.py
+    #   与 tools/lean_local/lean_bridge.py `_crosscheck_failure_verdict()`。
+    #   实测 smoke10：51 条 cross_check_failed **全部 compiled=true**（代码已编译通过）
+    #   却因自证拦截被判 proof_invalid（铁证 official112-004 的真命题 (2025:ℕ)/2=1012）。
+    #   True（默认）= 这类命中落 unknown（**无法核验，非答案错**）；False = 回退旧
+    #   proof_invalid 语义做 A/B。读取链 = env > config > 默认（经 switch_registry）。
+    lean_crosscheck_as_unknown: bool = True  # LEAN_CROSSCHECK_AS_UNKNOWN — cross_check/自证拦截落 unknown
     lean_mcp_autolake: bool = True  # LEAN_MCP_AUTOLAKE — MCP 自动 lake 环境准备
     lean_mcp_goal_loc: bool = False  # LEAN_MCP_GOAL_LOC — MCP 回报 goal 位置（默认关）
     lean_mcp_hover_check: bool = False  # LEAN_MCP_HOVER_CHECK — MCP hover 检查（默认关）
@@ -1007,6 +1014,7 @@ class ReasoningAgent:
             "enable_final_answer_selection",  # 2026-10-02 阶段二-2：终答五层选择
             "lean_gate_parallel",
             "lean_gate_strict_unknown",
+            "lean_crosscheck_as_unknown",  # 2026-10-07 语义分离（cross_check→unknown）
             "lean_mcp_autolake",
             "lean_mcp_goal_loc",
             "lean_mcp_hover_check",

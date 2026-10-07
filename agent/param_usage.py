@@ -293,6 +293,11 @@ _SPEC = (
      lambda cfg, tier, _f="lean_gate_strict_unknown", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严", None),
+    ("lean_crosscheck_as_unknown",
+     lambda cfg, tier, _f="lean_crosscheck_as_unknown", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "LEAN_CROSSCHECK_AS_UNKNOWN — cross_check/自证拦截落 unknown"
+     "（形式化不充分=无法核验，非答案错）；=0 回退 proof_invalid", None),
     ("lean_mcp_autolake",
      lambda cfg, tier, _f="lean_mcp_autolake", _d=True: getattr(cfg, _f, _d),
      None, "bool",

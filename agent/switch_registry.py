@@ -97,6 +97,18 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "LEAN_GATE_PARALLEL", "bool", True, "Lean 门禁并行预取（=0 串行）"),
     "lean_gate_strict_unknown": (
         "LEAN_GATE_STRICT_UNKNOWN", "bool", True, "Lean 门禁对 unknown 从严"),
+    # ---- tools/lean_local/lean_bridge.py（verify_answer 的 cross_check/自证守卫）----
+    # ★ 2026-10-07（语义分离）：「形式化不充分」≠「命题为假」。
+    #   实测 smoke10 `lean_gate` 123 条 = proof_invalid 73 / unknown 41 /
+    #   answer_valid 1，其中 51 条 cross_check_failed **全部 compiled=true**；
+    #   铁证 official112-004：`example : (2025 : ℕ) / 2 = 1012 := by norm_num`
+    #   （真命题、编译通过）被判 `proof_invalid` —— 把「无法核验」误当成「证明失败」。
+    #   本开关=True 时 cross_check/自证拦截落 `unknown`（**无法核验，非答案错**）；
+    #   =False 回退旧语义（一律 `proof_invalid`），用于 A/B 对照。
+    "lean_crosscheck_as_unknown": (
+        "LEAN_CROSSCHECK_AS_UNKNOWN", "bool", True,
+        "cross_check/自证拦截命中时落 unknown（形式化不充分=无法核验，非答案错）；"
+        "=0 回退旧语义（一律 proof_invalid）做 A/B"),
     # ---- run_eval.py ----
     "eval_split_cn": (
         "EVAL_SPLIT_CN", "bool", True, "中文答案分隔符切分"),

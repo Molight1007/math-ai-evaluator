@@ -367,13 +367,27 @@ class TestCrossCheckSemantics(unittest.TestCase):
         return b
 
     def test_verdict_helper_default_and_rollback(self):
+        # 读取链：env > config > 默认（经 switch_registry，2026-10-07 补登四件套）
         from tools.lean_local.lean_bridge import _crosscheck_failure_verdict
+        from agent.switch_registry import bind_field
+        bind_field("lean_crosscheck_as_unknown", True)     # 复位（清跨用例污染）
         self.assertEqual(_crosscheck_failure_verdict(), "unknown")
+        # config 覆盖（False → 旧语义）
+        bind_field("lean_crosscheck_as_unknown", False)
+        self.assertEqual(_crosscheck_failure_verdict(), "proof_invalid")
+        # env 覆盖 config
+        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "1"
+        try:
+            self.assertEqual(_crosscheck_failure_verdict(), "unknown")
+        finally:
+            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
+        # env=0 → 旧语义
         os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "0"
         try:
             self.assertEqual(_crosscheck_failure_verdict(), "proof_invalid")
         finally:
             os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
+            bind_field("lean_crosscheck_as_unknown", True)  # 还原，避免污染后续用例
 
     def test_ground_self_proof_is_unknown_not_invalid(self):
         # official112-004 样本：题面含参数 + ground 闭式验证代码（编译通过）
