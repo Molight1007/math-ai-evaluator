@@ -115,3 +115,50 @@ def complete_truncated(self, ctx, tier: str) -> None:
                     + ("无候选" if not getattr(ctx, "candidates", None) else
                        ("emergency 状态" if ctx.state.emergency else
                         "verify_only 状态")))
+
+
+def self_improve_step(self, ctx) -> None:
+    """3.3 Step 2 无条件自改进（生成后、验证前对候选 review+improve 一遍）。
+
+    参数 `self` 即 `Orchestrator` 实例（沿用方法体原文，故保留名 `self`），
+    `ctx` 为 `TaskContext`。返回 None；结果写回 `ctx`（候选改进 + `_improve_phase_used`）。
+    """
+    # 3.3) Step 2 无条件自改进（IMO2025 论文流水线）：
+    #      生成后、验证前，对候选先 review+improve 一遍（注入第二段推理
+    #      预算）。论文实测初始解质量低、此步显著改进。
+    #      仅非应急模式执行（2026-09-14：fast 档已删除，原
+    #      `tier != 'fast'` 条件恒真 ⇒ 移除，见 difficulty_router）。
+    if (getattr(self.config, 'enable_self_improve', True)
+            and not ctx.state.emergency
+            and not ctx.state.verify_only
+            and ctx.candidates
+            and self._self_improve_applicable(ctx)):
+        # N1''（2026-09-11 修正）：3.3 是「验证前的最后改进机会」，也是论文
+        # 验证的最大杠杆（22.2%→31.1%），**不能用生成侧软截止拦它**。
+        # 原因：3.3 排在 2.7/3_solve 之后，而 gen_time_up() 用的是
+        # _gen_deadline = deadline − verify_reserve(480s) = 720s ——
+        # 走到这里时必然已越过 720s → 恒被跳过（smoke6_v2 六题 3.3 全为 0s）。
+        # 改用**硬墙口径**：只要距 1200s 墙还够一次改进调用，就执行。
+        _imp_left = float(ctx.time_remaining())
+        if _imp_left > float(getattr(
+                self.config, "self_improve_min_left_sec", 150.0)):
+            # 注意：本调用已由上方条件块门控
+            # （`not ctx.state.verify_only` / `not ctx.state.emergency`）。
+            _imp_t0 = time.time()
+            n_imp = self.solver.improve_candidates(ctx)
+            # 2026-09-13：记录本阶段实耗，供 3.4 计算"改进类共享预算"的余额
+            # （两者语义重叠：3.3 是单 Agent 自审自改，3.4 是三 Agent 协作改进）。
+            try:
+                ctx._improve_phase_used = (float(
+                    getattr(ctx, "_improve_phase_used", 0.0) or 0.0)
+                    + (time.time() - _imp_t0))
+            except Exception:  # noqa: BLE001
+                pass
+            if n_imp > 0:
+                self.record(ctx, "control",
+                            f"Step2 自改进完成 {n_imp} 个候选"
+                            f"（剩余 {_imp_left:.0f}s）")
+        else:
+            self.record(ctx, "control",
+                        f"Step2 自改进跳过（剩余 {_imp_left:.0f}s "
+                        f"< 门槛 {getattr(self.config, 'self_improve_min_left_sec', 150.0):.0f}s）")
