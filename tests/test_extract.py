@@ -294,11 +294,15 @@ class SingleCharAnswerGateTest(unittest.TestCase):
 
 
 class PoolGateNaturalLanguageTest(unittest.TestCase):
-    """B（2026-10-07）：自然语言 gold 误杀修复 —— 双向证据。
+    """B（2026-10-07）+ B2（ledger2）：自然语言 gold 误杀修复 —— 双向证据。
 
     · 默认口径（`question_type=None`）：相对 v2 **仅去掉"必含数值"白名单**
-      ⇒ 修复 037 / 104 / 105，且对现存候选语料**零新增误收**。
-    · 容忍口径（显式传自然语言题型）：再放宽句末标点/长度 ⇒ 修复 108 / 095。
+      ⇒ 修复 037 / 104 / 105，且对现存候选语料**零新增误收**；
+      ★ ledger2-B2：长度闸门对"含显示数学块（方括号 LaTeX / `$$` / 环境）"的文本加例外
+        ⇒ 默认口径再修回 in-scope 题 095（gold 为两段方括号 LaTeX），仍零新增误收。
+    · 容忍口径（显式传自然语言题型）：再放宽句末标点/长度 ⇒ 修复 108
+      （108 是统计论述句、以句号结尾，默认口径**刻意不放**：实测容忍口径会新增
+       45 条推理句误收 + 丢失 1 条真答案）。
     · 两口径下 4 条"规划/设定句"**都必须仍被拦**。
     """
 
@@ -322,8 +326,17 @@ class PoolGateNaturalLanguageTest(unittest.TestCase):
         for k in ("037", "104", "105"):
             self.assertTrue(looks_like_pool_answer(self.GOLDS[k]), k)
 
+    def test_default_fixes_long_display_math_gold(self) -> None:
+        # ledger2-B2：095（in-scope 解答题，gold 为两段方括号 LaTeX、>120 字）
+        # 在**默认口径**下也应放行（长度闸门对显示数学块加例外）。
+        self.assertTrue(looks_like_pool_answer(self.GOLDS["095"]), "095 in-scope gold")
+        # 108 是统计论述句、以句末句号结尾 —— 默认口径**刻意不放**：
+        # 修它需容忍口径，而实测容忍口径会新增 45 条推理句误收 + 丢失 1 条真答案。
+        self.assertFalse(looks_like_pool_answer(self.GOLDS["108"]),
+                         "108 默认口径应仍被拦（不能用有害的容忍口径修）")
+
     def test_tolerant_fixes_sentence_and_long_golds(self) -> None:
-        # 容忍口径：108（以 。结尾）/ 095（>120 字）也放行；5 条全部通过
+        # 容忍口径：108（以句末句号结尾）/ 095（>120 字）也放行；5 条全部通过
         for k, g in self.GOLDS.items():
             self.assertTrue(looks_like_pool_answer(g, "解答题"), k)
 

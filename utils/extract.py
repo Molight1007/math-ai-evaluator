@@ -500,6 +500,9 @@ def _salvage_value_from_line(line: str) -> str:
 #       ★ 2026-10-07（B）：这 5 条已由**下游 v3 自然语言容忍层**修复 ——
 #         默认口径去掉"必含数值"白名单（修回 037/104/105），显式传
 #         `question_type` 时再放宽句末标点/长度（修回 108/095）。
+#       ★ 2026-10-07（ledger2-B2）**复验补修**：095（in-scope 解答题，gold 为两段
+#         `\[…\]`）在**默认口径**下也被长度闸门误杀 ⇒ 追加"含显示数学块则不按长度拒"
+#         的例外（零新增误收，见下）。108（统计论述句）仍需 tolerant 口径，**不默认放开**。
 #         详见下方「入池判据 v3」段（含"题型无法自动区分"的关键实测）。
 #
 # v2 判据 = 先补**两条确定性修正**（修误杀，不扩大误杀面），再修漏网，最后复用 v1：
@@ -571,6 +574,12 @@ def _looks_like_plan_or_setup(s: str) -> bool:
 #         被结构兜底全兜住）；修复 037/104/105。
 #       - 容忍口径（再放宽"句末标点 / 长度"）⇒ 新增 **44 条**（多为中文推理句）
 #         ⇒ **不可默认放开**，故置于 `question_type` 参数之下；修复 108/095。
+#   ★ 2026-10-07（ledger2-B2）复验：在 **537 条真实候选**语料上重测，容忍口径新增
+#     **45** 条（全是 `但…。` / `So the condition…` 这类推理句）、并**丢失 1 条**
+#     （`$$\sum…$$` 真答案）⇒ 证实"容忍口径是有害的，不能开在生产调用点"。
+#     故 095 改由**默认口径的最小放宽**（仅长度闸门对显示数学块例外）修复：
+#     同语料新增 0 / 丢失 0；108 保留在 tolerant 之下（调用方不传 `question_type` ⇒
+#     生产链路**不触达**）。
 # ---------------------------------------------------------------------------
 _POOL_TOOL_TAG_RE = re.compile(
     r"</?tool_calls?>|</?function\b|<parameter=|</parameter>", re.IGNORECASE)
@@ -593,6 +602,10 @@ _POOL_CN_REASONING_RE = re.compile(
     r"由此|综上|注意到|由于|已知|结论(?:无效|是|为)?[:：]|对于本题|对于这种|对于固定|"
     r"这种在|覆盖格子|若第|最后一步|最终的正确|以上|上述|一切|综上所|总而言之)")
 _POOL_SENT_TERM = "。！？!?"
+# 显示数学块标记（`\[…\]` / `$$…$$` / `\begin{…}`）—— 答案里出现整块 LaTeX 排版时，
+# 文本自然变长（题 095 的 gold 是两段 `\[…\]`），此时**不应再按"长度"当推理句拒掉**。
+# 实测（537 条真实候选 + 112 条 gold）：放宽后**零新增误收**，只修回 095。
+_POOL_DISPLAY_MATH_RE = re.compile(r"\\\[|\$\$|\\begin\{")
 
 
 def _looks_like_hard_noise(t: str) -> bool:
@@ -647,8 +660,12 @@ def _looks_like_answer_v3(t: str, tolerant: bool) -> bool:
     · `tolerant=False`（默认）：= v2 的 `_looks_like_answer` **去掉"必含数值"白名单**，
       其余（长度 ≤120 / 非步骤标题 / 无元话语 / 不以句末标点结尾）逐条保留 ⇒
       实测零新增误收，修复 037/104/105；
+      ★ 2026-10-07（ledger2-B2）：长度闸门**加例外** —— 含 LaTeX 显示数学块
+        （方括号 LaTeX / 双美元 / 环境）的文本不因超长被拒，修回 in-scope 题 095
+        （LZ 编码 gold 为两段方括号 LaTeX）；实测 537 条真实候选零新增误收。
+        108（统计论述句，以句末句号结尾）**不在此列**。
     · `tolerant=True`：只要求"不是推理句"（`_looks_like_hard_noise`），
-      连长度/句末标点也放宽 ⇒ 修复 108/095（代价见模块注释）。
+      连长度/句末标点也放宽 ⇒ 修复 108（095 已由默认口径的长度例外修复）。
     """
     if _POOL_TOOL_TAG_RE.search(t):
         return False
@@ -658,7 +675,7 @@ def _looks_like_answer_v3(t: str, tolerant: bool) -> bool:
         return False
     if tolerant:
         return not _looks_like_hard_noise(t)
-    if len(t) > 120:
+    if len(t) > 120 and not _POOL_DISPLAY_MATH_RE.search(t):
         return False
     if _STEP_HEADER_RE.match(t):
         return False
