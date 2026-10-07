@@ -156,7 +156,9 @@ def test_p1f_three_states():
 
 
 def test_p1f_diag_exposes_completeness():
-    assert '"diag_completeness": _diag_completeness(ctx),' in _src("agent/orchestrator.py")
+    # 2026-10-07 阶段C1：`_collect_diag` 实现已抽到 agent/diag_export.py（纯搬迁），
+    # 故源码守卫改指向新模块（字面量不变，仍守卫"diag 必须导出 diag_completeness"）。
+    assert '"diag_completeness": _diag_completeness(ctx),' in _src("agent/diag_export.py")
 
 
 # ============================ P1-C / P1-D ============================

@@ -159,6 +159,13 @@ def _src() -> str:
         return fh.read()
 
 
+def _src_diag() -> str:
+    """`_collect_diag` 的源码（2026-10-07 阶段C1 起实现位于 agent/diag_export.py）。"""
+    with open(os.path.join(ROOT, "agent", "diag_export.py"),
+              "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
 def test_gate_rollback_branch_present():
     """① 未过审核时必须存在回滚分支（且用统一写入口并置标志位）。"""
     src = _src()
@@ -174,7 +181,8 @@ def test_gate_rollback_branch_present():
 
 def test_diag_exports_oracle_and_adversarial_events():
     """⑤ 两个事件桶必须在 _collect_diag 的导出白名单里。"""
-    src = _src()
+    # 2026-10-07 阶段C1：实现已抽到 agent/diag_export.py（纯搬迁）。
+    src = _src_diag()
     m = re.search(r'for _k in \(("final_postprocess_change".*?)\)\}', src, re.S)
     assert m, "未找到事件桶白名单"
     names = set(re.findall(r'"([a-z_]+)"', m.group(1)))
@@ -186,6 +194,7 @@ def test_diag_exports_oracle_and_adversarial_events():
 
 
 def test_diag_exports_gate_scalars():
-    src = _src()
+    # 2026-10-07 阶段C1：实现已抽到 agent/diag_export.py（纯搬迁）。
+    src = _src_diag()
     for key in ('"gate_rejected"', '"gate_tried"', '"gate_rollback"'):
         assert key in src, key

@@ -299,11 +299,14 @@ class TestTruncationBreakdown:
 # ================================================================
 class TestWiringGuards:
     def test_collect_diag_exports_param_usage(self):
+        # 2026-10-07 阶段C1：`_collect_diag` 实现已抽到 agent/diag_export.py
+        # （纯搬迁）；其中 `self.config` 改为注入参数 `config`。守卫改指向新模块，
+        # 仍守卫"diag 必须导出 param_usage / leansearch"这条接线。
         import inspect
-        import agent.orchestrator as o
-        src = inspect.getsource(o.Orchestrator._collect_diag)
-        assert '"param_usage": collect_param_usage(ctx, self.config)' in src
-        assert '"leansearch": _summarize_leansearch(ctx, self.config)' in src
+        from agent import diag_export
+        src = inspect.getsource(diag_export.collect_diag)
+        assert '"param_usage": collect_param_usage(ctx, config)' in src
+        assert '"leansearch": _summarize_leansearch(ctx, config)' in src
 
     def test_orchestrator_imports_symbol(self):
         import agent.orchestrator as o
