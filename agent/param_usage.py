@@ -321,6 +321,11 @@ _SPEC = (
      lambda cfg, tier, _f="lean_gate_strict_unknown", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严", None),
+    ("llm_timeout",
+     lambda cfg, tier, _f="llm_timeout", _d=120: getattr(cfg, _f, _d),
+     None, "int",
+     "LLM_TIMEOUT — LLM 读超时（秒，默认 120）。原为 utils/llm_client 模块级常量，"
+     "现为调用时实时读", None),
     ("lean_crosscheck_as_unknown",
      lambda cfg, tier, _f="lean_crosscheck_as_unknown", _d=True: getattr(cfg, _f, _d),
      None, "bool",

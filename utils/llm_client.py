@@ -38,7 +38,14 @@ import requests
 
 logger = logging.getLogger("MathPilot.LLMClient")
 
-_DEFAULT_TIMEOUT_llm_client = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
+# ★ 2026-10-07（问题总账 §2.6 / §2.3）：此处原为**模块级常量**
+#   `_DEFAULT_TIMEOUT_llm_client = int(os.getenv("LLM_TIMEOUT", "120"))`，有两重问题：
+#   ① **import 期求值** ⇒ 若"先 import 后改 env"（仓库里 `tools/run_phase0_eval.py`
+#      等正是这种写法）会**静默失效**；② 常量**不入注册表** ⇒ diag 的 switch_snapshot
+#      看不到、报告还原不出来，且 config/CLI 覆盖读不到。
+#   现改为**调用时**经注册表读（开关 `llm_timeout`，默认 120，读取优先级 env > config > 默认）。
+#   保留同名字面量仅为「注册未落时的兜底」，不再是模块级求值。
+_LLM_TIMEOUT_FALLBACK = 120  # 秒；仅在注册表不可用时兜底
 # 2026-09-13 晚（4 题实测复盘）：超时后**重试**才是真正的成本黑洞。
 # 实测 4 题里 `failed after 2 attempts` 出现 5 次、5/5 全败，而单次故障 =
 # 180s × 2 + 退避 ≈ **365s** —— 010/016 两题各被两轮 365s 烧光整题预算，
@@ -221,7 +228,7 @@ class LLMClient:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: int = _DEFAULT_TIMEOUT_llm_client,
+        timeout: Optional[int] = None,
         max_retries: int = _MAX_RETRIES,
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "not-needed")
@@ -229,6 +236,13 @@ class LLMClient:
         # 规范化 URL：去尾部 /，确保以 /v1 结尾
         self.base_url = self.base_url.rstrip("/")
         self.model = model or os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+        # ★ 2026-10-07：超时改为**调用时**经注册表实时读（原为模块级默认参数值 ⇒ import 期冻结、
+        #   且不入注册表 ⇒ config/CLI 覆盖读不到）。显式传入的 timeout 仍最高优先。
+        if timeout is None:
+            try:
+                timeout = int(_sw_num("llm_timeout"))
+            except Exception:  # noqa: BLE001
+                timeout = _LLM_TIMEOUT_FALLBACK
         self.timeout = timeout
         self.max_retries = max_retries
 

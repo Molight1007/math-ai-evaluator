@@ -126,6 +126,14 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     #   （真命题、编译通过）被判 `proof_invalid` —— 把「无法核验」误当成「证明失败」。
     #   本开关=True 时 cross_check/自证拦截落 `unknown`（**无法核验，非答案错**）；
     #   =False 回退旧语义（一律 `proof_invalid`），用于 A/B 对照。
+    # ---- utils/llm_client.py（2026-10-07 补齐：原为模块级常量且未登记）----
+    "llm_timeout": (
+        "LLM_TIMEOUT", "num", 120,
+        "LLM 调用读超时（秒）。原为 utils/llm_client.py 的**模块级常量**"
+        "`_DEFAULT_TIMEOUT_llm_client = int(os.getenv('LLM_TIMEOUT','120'))` —— "
+        "① import 期求值，遇'先 import 后改 env'（tools/run_phase0_eval.py 等正是此写法）会静默失效；"
+        "② 不入注册表 ⇒ diag 的 switch_snapshot 看不到、config/CLI 覆盖读不到。"
+        "现改为调用时经注册表读（显式传入的 timeout 仍最高优先）"),
     "lean_crosscheck_as_unknown": (
         "LEAN_CROSSCHECK_AS_UNKNOWN", "bool", True,
         "cross_check/自证拦截命中时落 unknown（形式化不充分=无法核验，非答案错）；"

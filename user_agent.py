@@ -628,6 +628,8 @@ class AgentConfig:
     lean_verify: bool = True  # LEAN_VERIFY — Lean 通道总开关（=0 一键关闭）
     lean_xcheck_numeric: bool = True  # LEAN_XCHECK_NUMERIC — 数值答案的 Lean 交叉校验
     llm_retry_on_timeout: bool = False  # LLM_RETRY_ON_TIMEOUT — LLM 超时是否重试（默认不重试）
+    # ★ 2026-10-07 补登：LLM 读超时（秒）。原为 utils/llm_client 的模块级常量，import 期求值 + 不入注册表 ⇒ config/CLI 覆盖读不到。
+    llm_timeout: int = 120
     mp_arm: str = 'baseline'  # MP_ARM — 实验臂名称（deploy 用）
     minimal_mode: bool = False  # MINIMAL_MODE — 最小基础模式（只留主链，默认关）
     numericize_final: bool = True  # NUMERICIZE_FINAL — 终答数值化（把精确式转小数）
@@ -1073,6 +1075,7 @@ class ReasoningAgent:
             "lean_verify",
             "lean_xcheck_numeric",
             "llm_retry_on_timeout",
+            "llm_timeout",
             "mp_arm",
             "minimal_mode",  # 2026-10-02 最小基础模式（只留主链）
             "numericize_final",
