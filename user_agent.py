@@ -617,6 +617,18 @@ class AgentConfig:
     #     此前字段/注册表皆缺 ⇒ 该函数走 try/except 兜底恒 True；现补全后可配。
     #   `candidate_pool_limit`：候选池上限（0 = 不限），研究期默认不限。
     k11_mask_statement: bool = True          # K11 注入点守卫（子目标描述/蓝图结论断言值掩码）
+    # ---- 2026-10-06 子目标交付重写（A/B/C）----
+    # A: 让每个子目标产出**可独立校验的结论**（值/等式/判定），并把蓝图节点的
+    #    `produces` 真正下传为 `expected_output`。依据（smoke10 实测）：73 个子目标
+    #    里 59 个 expected_output 为空（81%）、64 个交付 <120 字（88%）——根因是
+    #    蓝图路径 `to_subgoal_plan` 把该字段硬编码成 ""，且模型只给自然语言结论。
+    # B: 让子目标结论**真的被客观判定**（SymPy 判等式真伪 / 多候选符号多数），
+    #    判不出时显式留痕原因。依据：原实现 `n_judged = 0/73`（一个都没判定过）。
+    # C: **无推导支撑的结论打标**并警示主求解/合并层。依据：题 007 的 7 个子目标
+    #    只给结论无推导（其中一条臆造）却被主求解直接采用 ⇒ 答错。
+    # 默认 True = 修好后的行为；=0 一键回退旧行为做 A/B（两开关均已登记注册表）。
+    subgoal_conclusion_contract: bool = True   # A+C：结论契约（结构化结论 + 推导标记）
+    subgoal_objective_judge: bool = True       # B：结论客观判定 + 判不出留痕
     #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限，**默认 6 = 与旧行为
     #     逐字一致**（原为三处硬编码 6，现收敛到 `agent/solver._pool_room` 单一来源）。
     #     ⚠ 本值**同时被当作本次生成数量**（`_generate_initial(count=remaining)`）
@@ -1081,6 +1093,9 @@ class ReasoningAgent:
             #   （另 5 键 `enable_subgoal_multi_agent` / `use_leansearch` /
             #     `dag_replan_gate` / `enable_skeleton_review` / `enable_question_type`
             #     原本已在白名单，未重复添加。）
+            # 2026-10-06：子目标交付重写（结论契约 / 客观判定）—— 必须在此白名单，
+            # 否则 CLI/kwargs 传入会被静默丢弃（本项目已因漏加白名单踩过多次）。
+            "subgoal_conclusion_contract", "subgoal_objective_judge",
             "k11_mask_statement",     # K11 注入点守卫（消费方 sub_goal_solver）
             "candidate_pool_limit",   # 候选池上限（0 = 不限）
             "sub_goal_oracle_check",  # 子目标逐步 oracle 校验（默认关）

@@ -39,6 +39,53 @@ def test_deterministic_check_answer():
     assert runk["verdict"] == "unknown", runk
 
 
+def test_solution_check_normalizes_boxed_answer():
+    """2026-10-07（fix-audit-gate）：带 `\\boxed{}` 外壳的答案必须先剥壳再核验。
+
+    诊断（smoke10 实测 7/10 题命中）：`_safe_parse('\\boxed{-4}')` → None ⇒
+    check_answer 在 method="parse" 即返回 unknown，Level0 根本没进判据。
+    """
+    from agent.deterministic import DeterministicChecker
+    c = DeterministicChecker()
+    r_ok = c.check_answer(None, "求解方程 x^2-5x+6=0", r"\boxed{2}")
+    assert r_ok["verdict"] == "pass", r_ok
+    r_bad = c.check_answer(None, "求解方程 x^2-5x+6=0", r"\boxed{5}")
+    assert r_bad["verdict"] == "fail", r_bad
+
+
+def test_functional_equation_substitution():
+    """2026-10-07 新增判据：函数方程回代（拦错误函数、放行正确函数）。
+
+    真实题（smoke10 official112-006）：`A(p)A(q)+A(-pq)=A(p+q)+2pq+1`；
+    候选 `A(x)=2x+1 / -x+1 / -x^2+1` 满足，`A(x)=3x / x+1` 不满足。
+    """
+    from agent.deterministic import DeterministicChecker
+    prob = (r"Find all functions $A:\mathbb{R}\rightarrow\mathbb{R}$ such that "
+            r"$A(p)A(q)+A(-pq)=A(p+q)+2pq+1$ holds for all real numbers "
+            r"$p$ and $q$.")
+    c = DeterministicChecker()
+    ok = c.check_answer(
+        None, prob, r"\boxed{A(x)=2x+1, \ A(x)=-x+1, \ A(x)=-x^{2}+1}")
+    assert ok["verdict"] == "pass", ok
+    assert ok["method"] == "functional_substitution", ok
+    bad = c.check_answer(None, prob, r"\boxed{A(x)=3x}")
+    assert bad["verdict"] == "fail", bad
+    assert bad["method"] == "functional_substitution", bad
+
+
+def test_solution_check_off_reverts_old_behavior():
+    """开关关闭 → 完全回退改动前（raw parse：boxed 答案仍 unknown）。"""
+    import os
+    from agent.deterministic import DeterministicChecker
+    os.environ["DETERMINISTIC_SOLUTION_CHECK"] = "0"
+    try:
+        c = DeterministicChecker()
+        r = c.check_answer(None, "求解方程 x^2-5x+6=0", r"\boxed{5}")
+        assert r["verdict"] == "unknown" and r["method"] == "parse", r
+    finally:
+        os.environ.pop("DETERMINISTIC_SOLUTION_CHECK", None)
+
+
 def test_verify_by_substitution():
     from agent.deterministic import DeterministicChecker
     c = DeterministicChecker()

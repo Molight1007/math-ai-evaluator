@@ -215,5 +215,78 @@ class GateFinalAnswerTest(unittest.TestCase):
             self.assertTrue(g.gate_final_answer(ctx, "standard", "2", "推理"))
 
 
+def _solution_cfg(**kw):
+    """解答题判别重写相关的配置（含 2026-10-07 新增的两个开关）。"""
+    base = dict(
+        audit_confirm_understanding=False, use_rubric=False, use_challenge=False,
+        audit_rubric_reject_conf=0.85, max_workers=2, verifier_voting_times=1,
+        use_scoring=False, use_bug_report_feedback=False,
+        audit_gate_skip_non_proof=True,        # 旧"解答题早退"开关仍开
+        deterministic_solution_check=True,      # 但判别重写已开 ⇒ 不应再早退
+        audit_gate_rubric_nonproof=False)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+class SolutionProblemGateTest(unittest.TestCase):
+    """2026-10-07：解答题不再"结构性无输出"（闸门真跑判据、能拦错误答案）。"""
+
+    def test_nonproof_not_early_exit_when_solution_check_on(self) -> None:
+        g = make_gate(_solution_cfg())
+        ctx = make_ctx(problem="求解方程 x^2-5x+6=0")
+        ctx.question_type = "解答题"
+        ctx.final_response = r"\boxed{5}"          # 错误答案 → 应被客观否决
+        res = g.run(ctx, stage="final")
+        self.assertFalse(res.get("ok"))
+        self.assertFalse(any(e.get("skipped") == "non_proof_early_exit"
+                             for e in ctx.audit_gate))
+        finals = [e for e in ctx.audit_gate if e.get("step") == "final_gate"]
+        self.assertTrue(finals)
+        self.assertEqual(finals[-1].get("deterministic_method"), "substitution")
+
+    def test_nonproof_early_exit_when_solution_check_off(self) -> None:
+        """solution_check 关 → 恢复旧的"解答题早退"（回退路径）。"""
+        g = make_gate(_solution_cfg(deterministic_solution_check=False))
+        ctx = make_ctx(problem="求解方程 x^2-5x+6=0")
+        ctx.question_type = "解答题"
+        ctx.final_response = r"\boxed{5}"
+        res = g.run(ctx, stage="final")
+        self.assertEqual(res.get("skipped"), "non_proof")
+        self.assertTrue(any(e.get("skipped") == "non_proof_early_exit"
+                            for e in ctx.audit_gate))
+
+    def test_rubric_nonproof_gated_in_audit_candidates(self) -> None:
+        """`audit_gate_rubric_nonproof` 只作用于 `audit_candidates`（候选级）。
+
+        "rubric 仅对证明题运行"的限制只在该方法；默认关（=旧行为）；开启后
+        解答题候选也走 Level2 rubric。`gate_final_answer` 的 rubric 本就无题型门，
+        故本开关不影响它（保持不回退）。
+        """
+        # 关（默认）：解答题候选 → 不调用 rubric
+        g = make_gate(_solution_cfg(use_rubric=True,
+                                    audit_gate_rubric_nonproof=False))
+        ctx = make_ctx(problem="求解方程 x^2-5x+6=0")
+        ctx.question_type = "解答题"
+        with mock.patch.object(g._verifier_inst, "_vote_one_rubric") as rb, \
+                mock.patch("agent.audit_gate.DeterministicChecker") as D:
+            D.return_value.check_answer.return_value = {
+                "verdict": "unknown", "evidence": "x", "method": "parse_only"}
+            g.audit_candidates(ctx, "deep", [cand("1", cid=1)])
+            rb.assert_not_called()
+        # 开：解答题候选 → 调用 rubric
+        g2 = make_gate(_solution_cfg(use_rubric=True,
+                                     audit_gate_rubric_nonproof=True))
+        ctx2 = make_ctx(problem="求解方程 x^2-5x+6=0")
+        ctx2.question_type = "解答题"
+        with mock.patch.object(
+                g2._verifier_inst, "_vote_one_rubric",
+                return_value={"verdict": "A", "confidence": 0.9}) as rb2, \
+                mock.patch("agent.audit_gate.DeterministicChecker") as D2:
+            D2.return_value.check_answer.return_value = {
+                "verdict": "unknown", "evidence": "x", "method": "parse_only"}
+            g2.audit_candidates(ctx2, "deep", [cand("1", cid=1)])
+            rb2.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

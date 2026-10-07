@@ -106,6 +106,82 @@ def _math_trim(text: str) -> str:
     return t.strip()
 
 
+# ======================================================================
+# 2026-10-07 解答题判别力重写（fix-audit-gate）
+# ----------------------------------------------------------------------
+# 诊断（smoke10 = results/_cloud/results/results/run_2026-10-06_smoke10_1006_2347.jsonl，
+# 10 题实测；8 道解答题 000-007 + 2 道选择题 087/088）：
+#   · audit_gate 共 38 条 candidate_audit：verdict 全 = unknown、applicable 全 = false；
+#   · **第一真因（可修的 bug）**：答案仍带 `\boxed{...}` 外壳
+#     → `_safe_parse('\boxed{-4}')` 返回 None → `_check_answer_core` 在
+#     method="parse" 就 return unknown。7/10 题命中（000/001/002/003/005/006/007
+#     全是被 boxed 的答案）。即 **Level0 根本没进入任何判据**，不是"判不了"。
+#   · **第二真因（判据过窄）**：剥壳后，原 `_check_answer_core` 只认
+#     `_extract_constant_equation` 返回的"最后一条一侧为常量的单变量等式"；
+#     而 smoke10 的解答题是竞赛题（计数 000/004、函数方程 006、极值 001/002、
+#     集合完备性 003/005、F2 约束 007）⇒ 无此结构 ⇒ 全 unknown（method="parse_only"）。
+# 重写（全部由开关 `deterministic_solution_check` 控制，默认 True = 修好后行为）：
+#   ① 解析前归一答案外壳（`_normalize_answer`）；
+#   ② 常量等式回代由"只取最后一条"改为"全量等式合取判定"
+#      （任一条 fail ⇒ fail；至少一条 pass 且无 fail ⇒ pass）；
+#   ③ 新增**函数方程回代**判据（`_verify_functional_equations`）：题目给函数方程、
+#      答案给函数定义时，把定义符号代入方程做恒等判定 —— 能拦错误函数、放行正确函数。
+# 仍无法覆盖（诚实记录，不伪造判别力）：计数（需按题建图 + DP/枚举）、
+#   极值/完备性（需证明上下界）、F2 约束传播（需按题解析关系并传播）。这些属
+#   "客观局部不可判定"，一律返回 unknown。
+# ======================================================================
+
+
+def _normalize_answer(text: str) -> str:
+    """解析前归一答案：剥外表壳（``\\boxed{}``/``$``/``\\(\\)``/``\\[\\]``）+ 折叠常见 LaTeX。
+
+    ★ 这是"解答题 Level0 结构性无输出"的第一真因修复。实测 `_safe_parse('\\boxed{-4}')`
+    → None ⇒ `check_answer` 在 ``method="parse"`` 即返回 unknown，7/10 题命中。
+    """
+    s = (text or "").strip()
+    if not s:
+        return ""
+    try:
+        from .answer_oracle import AnswerOracle as _AO
+        s = _AO.strip_wrappers(s) or s
+    except Exception:  # noqa: BLE001  提交包/导入异常时不动原文
+        pass
+    s = s.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac")
+    s = re.sub(r"\\left|\\right|\\!|\\,|\\;|\\ ", "", s)
+    s = re.sub(r"\\times|\\cdot", "*", s)
+    s = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"sqrt(\1)", s)
+    s = re.sub(r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", s)
+    s = re.sub(r"\^\s*\{([^{}]*)\}", r"^(\1)", s)
+    s = s.replace("\\{", "{").replace("\\}", "}")
+    return s.replace("$", "").strip()
+
+
+def _latex_prep(text: str) -> str:
+    """函数方程解析专用的 LaTeX 折叠（更激进：把 `^{}` 变 `**()`、去花括号）。
+
+    与 `_normalize_answer` 的分工：那条用于"单表达式"解析（保留 `^` 交给 `_safe_parse`
+    的预处理），这条用于把**方程两侧**交给 `sympy.parsing.sympy_parser.parse_expr`。
+    """
+    t = (text or "").strip().replace("$", "")
+    t = t.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac")
+    t = re.sub(r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", t)
+    t = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"sqrt(\1)", t)
+    t = re.sub(r"\\times|\\cdot", "*", t)
+    t = re.sub(r"\\left|\\right", "", t)
+    t = re.sub(r"\\!|\\,|\\;|\\ ", "", t)
+    t = re.sub(r"\^\s*\{([^{}]*)\}", r"**(\1)", t)
+    return t.replace("{", "").replace("}", "")
+
+
+# 解析函数方程时需排除的已知数学函数名（避免把 sin/cos 之类误当未知函数符号）
+_FUNC_SYMBOL_BLACKLIST = frozenset({
+    "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan",
+    "sinh", "cosh", "tanh", "exp", "log", "ln", "lg", "sqrt", "abs", "min",
+    "max", "gcd", "lcm", "floor", "ceil", "round", "det", "mod", "arg",
+    "dim", "deg", "root", "frac", "atan", "asin", "acos",
+})
+
+
 class DeterministicChecker:
     """确定性验证通道：纯本地计算，不消耗 LLM 预算、不触发限流。"""
 
@@ -365,37 +441,274 @@ class DeterministicChecker:
 
     def _check_answer_core(self, problem: str, answer: str,
                            domain: str | None = None) -> dict:
-        """check_answer 的实际检查逻辑（在受超时护栏保护的 daemon 线程内执行）。"""
+        """check_answer 的实际检查逻辑（在受超时护栏保护的 daemon 线程内执行）。
+
+        2026-10-07 重写（见文件头诊断）：
+        - 开关 ON（默认）：先归一答案外壳（`\\boxed{}` 等）再解析；常量等式回代改为
+          **全量等式合取判定**；解析/回代皆无法判定时追加**函数方程回代**判据。
+        - 开关 OFF：与改动前逐字一致（raw parse、只取最后一条等式、无函数方程判据）。
+        """
         if not _HAS_SYMPY:
             return {"verdict": "unknown", "confidence": 0.0,
                     "evidence": "sympy 不可用", "method": "none"}
         if not answer or not answer.strip():
             return {"verdict": "unknown", "confidence": 0.0,
                     "evidence": "答案为空", "method": "none"}
-        answer = answer.strip()
+        raw_answer = answer.strip()
+        on = _sw_bool("deterministic_solution_check")
+        answer = _normalize_answer(raw_answer) if on else raw_answer
         evidence_parts = []
         # 1) 答案可解析性 + 数值回溯
         parsed = _safe_parse(answer)
         if parsed is None:
-            return {"verdict": "unknown", "confidence": 0.0,
-                    "evidence": f"答案无法解析为表达式: {answer[:80]}",
-                    "method": "parse"}
-        val = self._num(parsed)
-        if val is not None:
-            evidence_parts.append(f"数值≈{val:.6g}")
+            # 开关 OFF：与改动前一致，就地返回 unknown。
+            # 开关 ON：不早退 —— 答案可能是多解/函数定义等形式（非单一表达式），
+            #   下面第 3 步的函数方程回代会自己从原文抽函数定义，必须给它机会。
+            if not on:
+                return {"verdict": "unknown", "confidence": 0.0,
+                        "evidence": f"答案无法解析为表达式: {raw_answer[:80]}",
+                        "method": "parse"}
+            evidence_parts.append(
+                f"答案非单一表达式（无法直接解析）: {raw_answer[:60]}")
+        else:
+            val = self._num(parsed)
+            if val is not None:
+                evidence_parts.append(f"数值≈{val:.6g}")
         # 2) 题目含「一侧为常量」的等式 → 代入回验
-        eq = self._extract_constant_equation(problem)
-        if eq is not None:
+        if on:
+            eqs = self._extract_all_constant_equations(problem)
+        else:
+            _one = self._extract_constant_equation(problem)
+            eqs = [_one] if _one else []
+        eq_pass, eq_fail = None, None
+        for eq in eqs:
             check = self._verify_answer_in_equation(eq, answer)
-            if check.get("verdict") != "unknown":
-                check["confidence"] = check.get("confidence", 1.0)
-                return check
-            evidence_parts.append(check.get("evidence", ""))
-        # 3) 无法进一步验证 → unknown（附可解析证据）
+            v = check.get("verdict")
+            if v == "fail":
+                eq_fail = check
+                break
+            if v == "pass" and eq_pass is None:
+                eq_pass = check
+        if eq_fail is not None:
+            eq_fail["confidence"] = eq_fail.get("confidence", 1.0)
+            eq_fail["method"] = "substitution"
+            return eq_fail
+        if eq_pass is not None:
+            eq_pass["confidence"] = eq_pass.get("confidence", 1.0)
+            eq_pass["method"] = "substitution"
+            return eq_pass
+        if eqs:
+            evidence_parts.append("已提取 %d 条常量等式但均无法判定" % len(eqs))
+        # 3) 函数方程回代（解答题子类：题目给函数方程、答案给函数定义）
+        if on:
+            fe = self._verify_functional_equations(problem, answer)
+            if fe.get("verdict") != "unknown":
+                return fe
+            if fe.get("evidence"):
+                evidence_parts.append(fe["evidence"])
+        # 4) 无法进一步验证 → unknown（附可解析证据）
         evidence = "；".join(p for p in evidence_parts if p)
         return {"verdict": "unknown", "confidence": 0.0,
                 "evidence": evidence or "答案可解析但无等式可代入",
                 "method": "parse_only"}
+
+    def _extract_all_constant_equations(self, problem: str) -> list:
+        """收集题目中**全部**「一侧为纯常量、另一侧恰含一个自由符号」的等式。
+
+        原 `_extract_constant_equation` 只返回**最后一条**；对"联立/多约束"类解答题，
+        最后一条未必能核验答案。这里返回全量，由 `_check_answer_core` 做合取判定
+        （任一条 fail ⇒ fail；至少一条 pass 且无 fail ⇒ pass）。
+        """
+        if not problem or not _HAS_SYMPY:
+            return []
+        out, seen = [], set()
+        try:
+            for seg in re.split(r"[，。；;\n]", problem):
+                if seg.count("=") != 1:
+                    continue
+                left_s, right_s = seg.split("=", 1)
+                left = _safe_parse(_math_trim(left_s))
+                right = _safe_parse(_math_trim(right_s))
+                if left is None or right is None:
+                    continue
+                lf, rf = list(left.free_symbols), list(right.free_symbols)
+                key = None
+                if not lf and len(rf) == 1:
+                    key = _math_trim(seg)
+                elif not rf and len(lf) == 1:
+                    key = _math_trim(seg)
+                if key and key not in seen:
+                    seen.add(key)
+                    out.append(key)
+        except Exception:  # noqa: BLE001
+            return out
+        return out
+
+    # ------------------------------------------------------------------
+    # 2026-10-07 新增：函数方程回代（解答题可局部客观判定的子类）
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _detect_function_symbols(problem: str) -> set:
+        """从题目中检出"作为函数使用"的单字母符号（出现 ≥2 次 `X(` 形态）。"""
+        counts: dict = {}
+        try:
+            for m in re.finditer(r"(?<![A-Za-z0-9\\])([A-Za-z])\s*\(", problem or ""):
+                name = m.group(1)
+                if name.lower() in _FUNC_SYMBOL_BLACKLIST:
+                    continue
+                counts[name] = counts.get(name, 0) + 1
+        except Exception:  # noqa: BLE001
+            return set()
+        return {s for s, n in counts.items() if n >= 2}
+
+    @staticmethod
+    def _extract_functional_equation(problem: str, fsym: str) -> str | None:
+        """从题目里提取一条"两侧都含该函数应用"的单个 `=` 等式。"""
+        try:
+            segs = re.findall(r"\$\$(.+?)\$\$", problem, re.S)
+            segs += re.findall(r"\$(.+?)\$", problem, re.S)
+            segs += re.split(r"[。\n]", problem)
+            for seg in segs:
+                if seg.count("=") != 1:
+                    continue
+                l, r = seg.split("=", 1)
+                ls, rs = l.replace(" ", ""), r.replace(" ", "")
+                if (fsym + "(") in ls and (fsym + "(") in rs:
+                    return seg.strip()
+            return None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _parse_with_function(self, text: str, fsym: str):
+        """把含 `fsym(...)` 的 LaTeX 片段解析为 SymPy 表达式（失败返回 None）。"""
+        try:
+            from sympy.parsing.sympy_parser import (
+                parse_expr, standard_transformations,
+                implicit_multiplication_application, convert_xor)
+            local = {fsym: sp.Function(fsym)}
+            trans = standard_transformations + (
+                convert_xor, implicit_multiplication_application)
+            return parse_expr(_latex_prep(text), local_dict=local,
+                              transformations=trans, evaluate=False)
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
+    def _extract_function_definitions(answer: str, fsym: str) -> list:
+        """从答案里提取函数定义 `fsym(变量)=表达式`（返回 [(变量, 表达式串), ...]）。"""
+        s = _normalize_answer(answer)
+        pat = re.compile(rf"{re.escape(fsym)}\s*\(\s*([A-Za-z])\s*\)\s*=\s*")
+        defs = []
+        try:
+            for m in pat.finditer(s):
+                var = m.group(1)
+                start = m.end()
+                nxt = pat.search(s, start)
+                end = nxt.start() if nxt else len(s)
+                body = s[start:end].strip().rstrip(".,;\\ ")
+                if body:
+                    defs.append((var, body))
+        except Exception:  # noqa: BLE001
+            return defs
+        return defs
+
+    def _check_one_function(self, eq, var: str, body: str, fsym: str):
+        """把候选函数 `fsym(var)=body` 代入方程做恒等判定。
+
+        Returns:
+            True = 满足；False = 明确不满足；None = 判不了（宁可 unknown 绝不误杀）。
+        """
+        try:
+            from sympy.parsing.sympy_parser import (
+                parse_expr, standard_transformations,
+                implicit_multiplication_application, convert_xor)
+            trans = standard_transformations + (
+                convert_xor, implicit_multiplication_application)
+            cand = parse_expr(_latex_prep(body), transformations=trans,
+                              evaluate=False)
+            v = sp.Symbol(var)
+            substituted = eq.replace(
+                lambda e: isinstance(e, sp.Function) and e.func.__name__ == fsym,
+                lambda e: cand.subs(v, e.args[0]))
+            # 仍有未替换的函数应用 ⇒ 判不了
+            if substituted.atoms(sp.Function):
+                return None
+            val = sp.simplify(substituted)
+            if val == 0:
+                return True
+            # 残式仍含其它不确定项 ⇒ 判不了
+            if val.atoms(sp.Function):
+                return None
+            # 数值抽样复核：化简未归零但**数值处处为 0** ⇒ 视为化简不足，判不了
+            if self._numerically_zero(val):
+                return None
+            return False
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _numerically_zero(self, expr, samples: int = 12, tol: float = 1e-6) -> bool:
+        """对表达式随机取有理数点，判断是否处处 ≈ 0（防 `simplify` 漏化简导致误杀）。"""
+        try:
+            syms = sorted(expr.free_symbols, key=str)
+            if not syms:
+                n = self._num(expr)
+                return n is not None and abs(n) <= tol
+            for _ in range(samples):
+                subs = {s: self._rng.uniform(-3.0, 3.0) for s in syms}
+                n = self._num(expr.subs(subs))
+                if n is None:
+                    continue
+                if abs(n) > tol:
+                    return False
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _verify_functional_equations(self, problem: str, answer: str) -> dict:
+        """函数方程回代：题目给 `F(...)=...`、答案给 `F(x)=expr` → 符号代入恒等判定。
+
+        错误候选函数代入化简后会留下非零残式（且不含函数符号）；正确候选化简为 0。
+        宁 unknown 不误杀：解析不出、残式仍含函数符号、或化简不足 → unknown。
+        """
+        if not _HAS_SYMPY or not problem or not answer:
+            return {"verdict": "unknown", "evidence": ""}
+        try:
+            for fsym in sorted(self._detect_function_symbols(problem)):
+                eq_text = self._extract_functional_equation(problem, fsym)
+                if not eq_text:
+                    continue
+                defs = self._extract_function_definitions(answer, fsym)
+                if not defs:
+                    continue
+                lhs_s, rhs_s = eq_text.split("=", 1)
+                lhs = self._parse_with_function(lhs_s, fsym)
+                rhs = self._parse_with_function(rhs_s, fsym)
+                if lhs is None or rhs is None:
+                    continue
+                eq = lhs - rhs
+                n_ok = 0
+                for var, body in defs:
+                    r = self._check_one_function(eq, var, body, fsym)
+                    if r is None:
+                        n_ok = -1
+                        break
+                    if not r:
+                        return {
+                            "verdict": "fail", "confidence": 1.0,
+                            "evidence": f"函数方程回代失败: {fsym}({var})={body} "
+                                        f"不满足 {_math_trim(eq_text)[:80]}",
+                            "method": "functional_substitution"}
+                    n_ok += 1
+                if n_ok > 0:
+                    return {
+                        "verdict": "pass", "confidence": 0.8,
+                        "evidence": f"函数方程回代通过: {n_ok} 个候选函数均满足 "
+                                    f"{_math_trim(eq_text)[:80]}",
+                        "method": "functional_substitution"}
+            return {"verdict": "unknown", "evidence": ""}
+        except Exception as e:  # noqa: BLE001
+            return {"verdict": "unknown",
+                    "evidence": f"函数方程回代异常: {str(e)[:80]}"}
 
     # ------------------------------------------------------------------
     # 内部：等式提取与代入回验

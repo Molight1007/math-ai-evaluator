@@ -382,6 +382,17 @@ _SPEC = (
      None, "bool",
      "SUB_GOAL_ORACLE_CHECK — 子目标逐步 oracle 校验（默认关；"
      "此前字段全仓缺失 ⇒ 该门控结构性不可达，2026-10-04 补登记）", None),
+    ("subgoal_conclusion_contract",
+     lambda cfg, tier, _f="subgoal_conclusion_contract", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "SUBGOAL_CONCLUSION_CONTRACT — 子目标结论契约：强制每步产出"
+     "`本步结论: 值=/等式=/判定=` + 依据 + 验算段（默认 True = 修好后行为；"
+     "依据 smoke10：73 子目标 59 个 expected_output 为空 / 64 个 <120 字）", None),
+    ("subgoal_objective_judge",
+     lambda cfg, tier, _f="subgoal_objective_judge", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "SUBGOAL_OBJECTIVE_JUDGE — 子目标结论客观判定（SymPy 判等式 / 多候选多数），"
+     "判不出时显式留痕原因（默认 True；依据：原实现 n_judged = 0/73）", None),
     ("diversity_resample_enabled",
      lambda cfg, tier, _f="diversity_resample_enabled", _d=True: getattr(cfg, _f, _d),
      None, "bool",

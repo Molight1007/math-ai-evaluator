@@ -96,7 +96,15 @@ class AuditGate(BaseAgent):
         #   Level2 rubric 只对证明题运行，Level0 确定性检查对解答题极少判 fail），
         #   召回 3%、误杀 0% ⇒ **纯空转**，却仍耗 0.37h 并向 diag 注入 234 条噪音。
         #   早退同时达成"省时"与"去噪"两件事，且**不改变任何判定结果**（原本也全是 unknown）。
-        if stage == "final" and getattr(self.config, "audit_gate_skip_non_proof", True):
+        # ★★ 2026-10-07 修正（fix-audit-gate）：早退的**前提（"解答题结构性无输出"）已不成立**。
+        #   诊断发现"无输出"的真因是 **Level0 解析前未剥 `\boxed{}` 外壳**（7/10 题在
+        #   method="parse" 即返回 unknown，根本没进判据）+ 判据过窄（只认"最后一条常量等式"）。
+        #   两者已由 `DeterministicChecker` 重写（开关 `deterministic_solution_check`）修复，
+        #   现对解答题确有输出（含函数方程回代等判据）⇒ 此时再早退就是**把刚修好的
+        #   判别力重新关掉**。故：**仅当 solution_check 关闭时**才保留早退（=旧行为回退路径）。
+        if (stage == "final"
+                and getattr(self.config, "audit_gate_skip_non_proof", True)
+                and not getattr(self.config, "deterministic_solution_check", True)):
             _qt = str(getattr(ctx, "question_type", "") or "")
             _dom = str(getattr(ctx, "domain", "") or "")
             if not ((_qt == "证明题") or ("证明" in _dom)):
@@ -104,12 +112,12 @@ class AuditGate(BaseAgent):
                     self._record_ctx(ctx, {
                         "step": "final_gate", "skipped": "non_proof_early_exit",
                         "verdict": "unknown", "applicable": False,
-                        "note": "解答题：Level2 rubric 不适用、Level0 确定性检查"
-                                "极少判 fail ⇒ 本闸门对该题型结构性无输出，早退"})
+                        "note": "解答题：确定性判别重写已关（deterministic_solution_check=0）"
+                                "且 Level2 rubric 不适用 ⇒ 本闸门对该题型结构性无输出，早退"})
                 except Exception:  # noqa: BLE001
                     pass
                 self.record(ctx, "audit_gate",
-                            "非证明题早退（结构性无输出，原为全 unknown 空转）")
+                            "非证明题早退（solution_check 关闭 + 结构性无输出）")
                 return {"ok": True, "skipped": "non_proof"}
         ok = self.gate_final_answer(
             ctx, getattr(ctx, "tier", "standard") or "standard",
@@ -195,7 +203,12 @@ class AuditGate(BaseAgent):
         domain = getattr(ctx, "domain", "") or ""
         qtype = getattr(ctx, "question_type", "") or ""
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
-        use_rubric = bool(getattr(self.config, "use_rubric", False))
+        # 2026-10-07：rubric 是否对本题型可用 —— 证明题恒可（旧行为）；解答题仅当
+        #   `audit_gate_rubric_nonproof=1` 时可用（默认关，见 switch_registry 说明）。
+        use_rubric = bool(getattr(self.config, "use_rubric", False)) and (
+            is_proof or bool(getattr(self.config, "audit_gate_rubric_nonproof", False)))
+        # 解答题确定性判别重写是否开（开则"结构性无输出"的旧结论不成立）
+        sol_check = bool(getattr(self.config, "deterministic_solution_check", True))
 
         n_fail = 0
         rejected: list[tuple] = []
@@ -248,6 +261,11 @@ class AuditGate(BaseAgent):
                 det = DeterministicChecker().check_answer(
                     ctx, ctx.problem or "", str(ans), domain or "")
                 entry["deterministic"] = det.get("verdict")
+                # 2026-10-07 留痕：记录本候选走的确定性判据通道
+                #   （parse / parse_only / substitution / functional_substitution …）
+                entry["deterministic_method"] = det.get("method")
+                entry["deterministic_evidence"] = str(
+                    det.get("evidence", ""))[:160]
             except Exception as e:  # noqa: BLE001
                 det = {"verdict": "unknown", "evidence": f"异常: {str(e)[:80]}"}
                 entry["deterministic"] = "unknown"
@@ -255,8 +273,10 @@ class AuditGate(BaseAgent):
                 n_fail += 1
                 entry["verdict"] = "incorrect"
                 rejected.append((cand, det))
-            # Level 2：证明题 rubric 结构化判分（LLM，高置信 B 才采纳）
-            elif is_proof and use_rubric and not ctx.is_time_critical():
+            # Level 2：rubric 结构化判分（LLM，高置信 B 才采纳）。2026-10-07：
+            #   条件由 `is_proof and use_rubric` 放宽为 `use_rubric`（后者已在上面把
+            #   题型门纳入：解答题需显式开 `audit_gate_rubric_nonproof`）。
+            elif use_rubric and not ctx.is_time_critical():
                 try:
                     rub = self._verifier_inst._vote_one_rubric(
                         ctx, ctx.problem or "", str(ans))
@@ -282,13 +302,25 @@ class AuditGate(BaseAgent):
             #   实测 003/013（均为解答题）：6/6 候选全 unknown ⇒ **结构性无输出**。
             #   这里**不改变 verdict 取值**（避免破坏下游按 verdict 统计的消费方），
             #   只补 `applicable` 与 `note` 两个说明性字段。
+            # ★★ 2026-10-07：`applicable` 语义更新。旧定义 = "本闸门对该题型是否有判据"
+            #   （故解答题=False）。现解答题已有确定性判据（归一 + 全量等式 + 函数方程），
+            #   故 `sol_check=1` 时解答题也标 applicable=True；并**如实记录本轮用了哪条
+            #   判据、结论是什么**（`entry["deterministic_method"]`），便于区分
+            #   "跑了但判不了" 与 "根本没跑"。
             if entry.get("verdict") == "unknown":
-                entry["applicable"] = bool(is_proof)
-                entry["note"] = (
-                    "证明题：Level2 rubric 已运行但未达否决阈值"
-                    if is_proof else
-                    "解答题：Level2 rubric 不适用（仅对证明题运行），"
-                    "Level0 确定性检查未否决 ⇒ 本闸门对该题型结构性无输出")
+                entry["applicable"] = bool(is_proof or sol_check)
+                entry["deterministic_method"] = str(
+                    entry.get("deterministic_method") or "")
+                if is_proof:
+                    entry["note"] = "证明题：Level2 rubric 已运行但未达否决阈值"
+                elif sol_check:
+                    entry["note"] = (
+                        "解答题：确定性判据已运行（归一/等式回代/函数方程回代）"
+                        "但未达否决阈值 ⇒ 本候选无客观否决")
+                else:
+                    entry["note"] = (
+                        "解答题：Level2 rubric 不适用（仅对证明题运行），"
+                        "且确定性判别重写已关 ⇒ 本闸门对该题型结构性无输出")
             self._record_ctx(ctx, entry)
 
         # 全部被否 → 回退保留（宁 unknown 不误杀，绝不整批清空）
@@ -360,13 +392,21 @@ class AuditGate(BaseAgent):
         qtype = getattr(ctx, "question_type", "") or ""
         is_proof = (domain in ("证明", "证明题") or qtype == "证明题")
         use_challenge = bool(getattr(self.config, "use_challenge", False))
+        # ⚠ 2026-10-07 注意：`gate_final_answer` 的 rubric **本就无题型门**
+        #   （原实现即 `if use_rubric ...`，对解答题也跑）；"仅对证明题运行"的限制
+        #   只存在于 `audit_candidates`（见该处）。此处**保持不加新限制**（避免回归），
+        #   故 `audit_gate_rubric_nonproof` 不影响本方法。
         use_rubric = bool(getattr(self.config, "use_rubric", False))
+        sol_check = bool(getattr(self.config, "deterministic_solution_check", True))
 
-        # Level 0：程序硬核验（0 LLM、可复现、客观）
+        # Level 0：程序硬核验（0 LLM、可复现、客观）。2026-10-07：check_answer 内部
+        #   已按 `deterministic_solution_check` 归一答案外壳 + 追加解答题判据。
         try:
             det = DeterministicChecker().check_answer(
                 ctx, ctx.problem or "", str(answer), domain or "")
             entry["deterministic"] = det.get("verdict")
+            entry["deterministic_method"] = det.get("method")
+            entry["deterministic_evidence"] = str(det.get("evidence", ""))[:200]
             if det.get("verdict") == "fail":
                 entry["verdict"] = "reject"
                 entry["reason"] = str(det.get("evidence", ""))[:200]
@@ -420,5 +460,12 @@ class AuditGate(BaseAgent):
         if is_proof and use_rubric and not ctx.is_time_critical():
             # 证明题：无程序否决、rubric 未高置信拒绝 → 放行（投票共识已把关）
             entry["note"] = "证明题：无客观否决，交由投票共识"
+        elif sol_check:
+            # 2026-10-07：解答题——如实记录确定性判据是否真的跑过、结论是什么，
+            #   区分"跑了但未否决"（有判别力）与旧的"结构性无输出"。
+            entry["applicable"] = True
+            dm = str(entry.get("deterministic_method") or "none")
+            entry["note"] = (
+                f"解答题：确定性判据已运行（method={dm}）但未客观否决 ⇒ 放行")
         self._record_ctx(ctx, entry)
         return True

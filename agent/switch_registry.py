@@ -131,6 +131,21 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "SUB_GOAL_ORACLE_CHECK", "bool", False,
         "子目标逐步 oracle 校验（AnswerOracle sanity check，返回非空则重试该步；"
         "默认关 —— 2026-09-03 老师口径：oracle 是同源自评、价值低耗时高）"),
+    # ---- agent/sub_goal_solver.py（子目标交付重写 2026-10-06）----
+    "subgoal_conclusion_contract": (
+        "SUBGOAL_CONCLUSION_CONTRACT", "bool", True,
+        "子目标**结论契约**（默认 True = 修好后行为）：step 提示词强制每步产出"
+        "`本步结论: 值=/等式=/判定=` + `本步依据:` + 验算段，"
+        "并把结构化结论/推导长度/「仅断言」标记写进 trace。"
+        "依据（smoke10 2026-10-06，两轮实测一致）：73 个子目标里 64 个交付 <120 字、"
+        "59 个 expected_output 为空、客观判定 0/73、题 007 子目标只给结论无推导却被"
+        "主求解采信 ⇒ 答错。=0 回退旧行为（只给自由文本结论）做 A/B"),
+    "subgoal_objective_judge": (
+        "SUBGOAL_OBJECTIVE_JUDGE", "bool", True,
+        "子目标结论**客观判定**（默认 True = 修好后行为）：对每个子目标结论做 0-LLM "
+        "客观判定（SymPy 判等式真伪 / 多候选符号多数），判不出时**显式留痕说明原因**"
+        "（不再静默计 -1）。依据：原实现只在多 agent 路径且候选全可解析时才判，"
+        "实测 `n_judged = 0/73`。=0 回退旧行为"),
     # ---- agent/final_selector.py 候选池（研究期口径）----
     "candidate_pool_limit": (
         "CANDIDATE_POOL_LIMIT", "num", 6.0,
