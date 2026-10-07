@@ -22,6 +22,21 @@ def _src(rel):
                    errors="replace").read()
 
 
+def _orch_src():
+    """orchestrator.py + 已抽出的 `agent/orchestrator__*.py` 模块的**并集**。
+
+    2026-10-07 阶段C4：`Orchestrator.run` 的阶段段（2.7/3.2/3.3 求解族、
+    4.5 Oracle 验证族等）已**逐字搬**到 `agent/orchestrator__*.py`。
+    源码级守卫改为读并集 —— 断言的字面量与守卫意图**均不变**（只是被查
+    代码换了文件，非放宽判据）。与 tests/test_verify_only.py::_orch_src 同口径。
+    """
+    import glob
+    txt = _src("agent/orchestrator.py")
+    for p in sorted(glob.glob(os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+        txt += "\n" + io.open(p, encoding="utf-8", errors="replace").read()
+    return txt
+
+
 # ============================ Z3：语义等价缓存 ============================
 def test_verify_key_same_inputs_same_key():
     assert (LeanGate._verify_key("P", "R", "A", False)
@@ -69,20 +84,27 @@ def test_gate_final_answer_consults_cache():
 
 # ============================ Audit-3：口径统一 ============================
 def test_no_gen_time_up_on_verification_side():
-    """4.5 Oracle 与 5)段全0票重解不得再用生成侧软截止。"""
-    src = _src("agent/orchestrator.py")
+    """4.5 Oracle 与 5)段全0票重解不得再用生成侧软截止。
+
+    2026-10-07 阶段C4：4.5 Oracle 段已**整段**搬到 `agent/orchestrator__verify.py`
+    （结构性去 8 空格缩进）⇒ 读「主文件 + 抽出模块」并集，并忽略空白比较
+    （去缩进只是排版变化）。断言的字面量（token 序列）与守卫意图**均不变**，
+    仍要求两行精确相邻 —— **非放宽判据**。
+    """
+    src = _orch_src()
+    flat = re.sub(r"\s+", "", src)          # 忽略空白（仅消去排版/缩进差异）
     # 两处已换成 is_time_critical
-    assert ('and not ctx.is_time_critical()\n'
-            '                    and self._enhance_window_ok(ctx, "oracle")') in src, \
+    assert re.sub(r"\s+", "", 'and not ctx.is_time_critical()\n'
+                              '                    and self._enhance_window_ok(ctx, "oracle")') in flat, \
         "4.5 Oracle 未换 is_time_critical"
-    assert ("if (tier == 'deep' and not ctx.state.emergency\n"
-            "                        and not ctx.is_time_critical()):") in src, \
+    assert re.sub(r"\s+", "", "if (tier == 'deep' and not ctx.state.emergency\n"
+                              "                        and not ctx.is_time_critical()):") in flat, \
         "5)段全0票重解未换 is_time_critical"
     # 且这两处不得再出现生成侧软截止
-    assert ('and not ctx.gen_time_up()\n'
-            '                    and self._enhance_window_ok(ctx, "oracle")') not in src
-    assert ("and not ctx.gen_time_up()):\n"
-            "                    revised_ok = self._deep_revise_loop") not in src
+    assert re.sub(r"\s+", "", 'and not ctx.gen_time_up()\n'
+                              '                    and self._enhance_window_ok(ctx, "oracle")') not in flat
+    assert re.sub(r"\s+", "", "and not ctx.gen_time_up()):\n"
+                              "                    revised_ok = self._deep_revise_loop") not in flat
 
 
 # ============================ Z6：同答案不重复 revise ============================

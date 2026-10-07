@@ -160,6 +160,9 @@ from .orchestrator__solve import complete_truncated  # noqa: F401
 # 2026-10-07 阶段C4c：3.3_improve 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__solve import self_improve_step  # noqa: F401
+# 2026-10-07 阶段C4d：4.5_oracle 段已抽到 agent/orchestrator__verify.py，
+# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from .orchestrator__verify import oracle_review_stage  # noqa: F401
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -1772,22 +1775,7 @@ class Orchestrator(BaseAgent):
             })
 
             self._stage_start(ctx, "4.5_oracle")
-            # 4.5) deep 档：AnswerOracle 客观复核 best_cluster（区别于投票同源自评）
-            # 2026-09-06 超时修复（验证暴露残留洞）：oracle 复核单次可达 300s+，
-            # 原只在内部查 is_time_critical（deadline-60s）→ algebra-003 修复后
-            # verify 提前完成反而给 oracle 打开 365s 烧穿窗口（elapsed 1402s）。
-            # oracle 是"4_verify 之后的复核增强"，到生成侧软截止即弃——
-            # verify 已投过票，放弃复核不损失主验证，只少一层 deep 深查。
-            # ★ 2026-09-17（Audit-3）：口径统一为 `is_time_critical()`（真实剩余时间）。
-            # `gen_time_up()` 是**生成**侧软截止（deadline − verify_reserve）；4.5 Oracle
-            # 属"4_verify 之后的复核"，用生成时钟闸它是口径错配，与已修好的 5.5 不一致。
-            # 真正的耗时护栏是本行的 `_enhance_window_ok`（要求剩余 ≥ 360+tail+30），
-            # 故换时钟不会重新打开烧穿窗口。
-            if (tier == 'deep'
-                    and getattr(ctx, '_best_cluster', None) is not None
-                    and not ctx.is_time_critical()
-                    and self._enhance_window_ok(ctx, "oracle")):
-                self._oracle_review_best(ctx, ver_result, tier_votes)
+            oracle_review_stage(self, ctx, tier, ver_result, tier_votes)
 
             self._stage_start(ctx, "4.6_adv")
             # 4.6) 对抗式验证（#16）：正向通过后主动证伪，抓漏检。
