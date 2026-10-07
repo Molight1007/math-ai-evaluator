@@ -132,11 +132,24 @@ class TestNamedParams:
         assert e["used"] == 2, "最长连击应为 2（后两个），不是 unknown 总数 3"
         assert e["capped"] is True
 
-    def test_gate_rework_uses_gate_tried(self):
-        """deep 档重做上限 = 3（`DEEP_MAX_REWORK` 默认值），standard = 2。"""
+    def test_gate_rework_reads_deep_max_rework(self):
+        """deep 档重做上限**读 `DEEP_MAX_REWORK`**（原实现硬编码 3 ⇒ 撞顶判断失真）。
+
+        口径 = orchestrator 消费处：`DEEP_MAX_REWORK < 0`（默认 -1）= 无上限 ⇒ cap None；
+        `>= 0` ⇒ 该值。standard 档恒 2（无 env 开关）。
+        ⚠ 原断言 `(cap, used, capped) == (3, 2, False)` 锁定的是**比赛期旧默认 3**；
+        2026-10-01 研究期默认已放开为 -1（见 orchestrator.py:2503），故同步更正。
+        """
         ctx = _ctx(tier="deep", _gate_tried=["a", "b"])
-        e = collect_param_usage(ctx, _cfg())["items"]["gate_max_rework"]
+        # 未设 ⇒ 无上限，cap 必须为 None，不得再冒充 3
+        e0 = collect_param_usage(ctx, _cfg())["items"]["gate_max_rework"]
+        assert e0["cap"] is None, "DEEP_MAX_REWORK 默认 -1 = 无上限，不得硬编码 3"
+        assert e0["used"] == 2
+        # 显式设 N ⇒ 报告必须显示 N，且能正确判撞顶
+        e = collect_param_usage(ctx, _cfg(deep_max_rework=3))["items"]["gate_max_rework"]
         assert (e["cap"], e["used"], e["capped"]) == (3, 2, False)
+        e2 = collect_param_usage(ctx, _cfg(deep_max_rework=2))["items"]["gate_max_rework"]
+        assert (e2["cap"], e2["capped"]) == (2, True)
 
     def test_gate_rework_counts_one_note(self):
         """`_gate_tried` 为空时回退到 final_gate 事件数（注释里写明是下界口径）。"""

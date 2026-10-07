@@ -103,6 +103,24 @@ def _cap_by_tier(cfg, flat, table, tier):
     return _cap(cfg, flat)
 
 
+def _cap_gate_rework(cfg, tier):
+    """6.5 审核重做的候选数上限，口径与 `orchestrator.py:2513` 消费处**逐字对齐**：
+
+      · standard 档恒为 **2**（该档无 env 开关，orchestrator 亦硬编码 2）；
+      · deep 档读开关 `deep_max_rework`（env `DEEP_MAX_REWORK`），
+        **<0 = 无上限 ⇒ None**（默认 -1；比赛期曾为 3）。
+
+    此前本项**硬编码返回 3、从不读该开关** ⇒ 设 `DEEP_MAX_REWORK=N` 时报告仍显示 3、
+    「是否撞顶」判断失真（问题总账 §2.6 / 原审查技术债）。
+    """
+    if tier == "standard":
+        return 2
+    cap = _int(_cfg_get(cfg, "deep_max_rework", -1))
+    if cap is None or cap < 0:
+        return None
+    return cap
+
+
 # ======================================================================
 # 实测值（used）提取器 —— 每个都返回 (值, 取值来源字符串)
 # ======================================================================
@@ -546,9 +564,10 @@ _SPEC = (
      _u_unknown_streak, "连击",
      "闸门连续 unknown 达 N 次即止损（0=关闭）。capped=True 表示止损真触发", True),
     ("gate_max_rework",
-     lambda cfg, tier: (2 if tier == "standard" else 3),
+     _cap_gate_rework,
      _u_gate_tried, "次",
-     "6.5 审核重做的候选数上限：standard=2 / deep=3（DEEP_MAX_REWORK 覆盖 deep）", True),
+     "6.5 审核重做的候选数上限：standard=2 / deep=DEEP_MAX_REWORK"
+     "（<0 = 无上限，默认 -1；与 orchestrator 消费口径一致）", True),
 
     # ---- ③ 无条件重做（用户点名）--------------------------------------
     ("max_revise_rounds",
@@ -635,6 +654,34 @@ _SPEC = (
      None, "bool",
      "AUDIT_GATE_RUBRIC_NONPROOF — 解答题是否也跑 Level2 rubric"
      "（默认 False：LLM 同源自评、价值低耗时高；=1 开启）", None),
+
+    # ==== 2026-10-07 开关注册制补齐（fix-switch-debt：6 个账外 gate 型 env）=======
+    # 与 `agent/switch_registry.py::SWITCHES` 同名登记；开关型 used/capped=None，
+    # 目的是让启动统计能把这些开关的生效值记录下来（注册制第③件）。
+    ("emergency_direct_max_tokens",
+     lambda cfg, tier, _f="emergency_direct_max_tokens", _d=8192: getattr(cfg, _f, _d),
+     None, "token",
+     "EMERGENCY_DIRECT_MAX_TOKENS — 紧急直答 max_tokens 上限", None),
+    ("emergency_answer_max_tokens",
+     lambda cfg, tier, _f="emergency_answer_max_tokens", _d=8192: getattr(cfg, _f, _d),
+     None, "token",
+     "EMERGENCY_ANSWER_MAX_TOKENS — 终答紧急兜底 max_tokens 上限", None),
+    ("final_answer_min_sec",
+     lambda cfg, tier, _f="final_answer_min_sec", _d=45.0: getattr(cfg, _f, _d),
+     None, "秒",
+     "FINAL_ANSWER_MIN_SEC — 终答紧急直答前置最小剩余秒数", None),
+    ("rework_reserve_sec",
+     lambda cfg, tier, _f="rework_reserve_sec", _d=300.0: getattr(cfg, _f, _d),
+     None, "秒",
+     "REWORK_RESERVE_SEC — 6.5 重做预留秒数（防跨硬墙）", None),
+    ("deep_max_rework",
+     lambda cfg, tier, _f="deep_max_rework", _d=-1: getattr(cfg, _f, _d),
+     None, "次",
+     "DEEP_MAX_REWORK — 6.5 重做候选上限（deep；-1=无上限）", None),
+    ("objective_itemwise_plan",
+     lambda cfg, tier, _f="objective_itemwise_plan", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略（=0 关闭）", None),
 )
 
 

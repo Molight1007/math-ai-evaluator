@@ -8,7 +8,7 @@
 **改了不生效、生效查不到、报告还原不出来**。
 
 本模块提供三件事：
-  1. `SWITCHES`：29 个开关的**集中登记**（字段名 / 环境变量 / 默认值 / 语义 / 说明）；
+  1. `SWITCHES`：**全部开关的集中登记**（字段名 / 环境变量 / 默认值 / 语义 / 说明）；
   2. `get_bool() / get_num() / get_str()`：**统一读取器**，调用点不再直接碰 `os.environ`；
   3. `snapshot()`：当前**生效值快照**，挂进 `diag` ⇒ 报告可还原。
 
@@ -213,20 +213,22 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # ---- agent/dag_reviewer.py（求解前 DAG 强制评审门）----
     "dag_replan_gate": (
         "DAG_REPLAN_GATE", "bool", False,
-        "求解前 DAG 强制评审门（2026-10-04 默认 True = **复测**：旧负面结论"
-        "「拦得住修不好」是在时间墙 + 重生成未写回 bug 下得出的，两条均已修复；"
-        "=0 取回旧基线做 A/B）"),
+        "求解前 DAG 强制评审门（**默认 False**；机制已就绪但**未翻默认值** —— 项目已为"
+        "此设专臂 `deploy/run_112.py::arm2`，翻默认会与对照臂重合；复测请走 `--arm arm2`。"
+        "旧负面结论「拦得住修不好」是在时间墙 + 重生成未写回 bug 下得出的，两条均已修复："
+        "置 True 复测、置 False 取回旧基线做 A/B）"),
     # ---- agent/skeleton_reviewer.py（骨架编排层评审循环）----
     "enable_skeleton_review": (
         "ENABLE_SKELETON_REVIEW", "bool", False,
-        "骨架编排层评审循环（2026-10-04 默认 True = **复测**：旧结论"
-        "「71% 走满 2 轮从未收敛」的根因是**根节点参与评审**（必然 replan）"
-        "+ 重生成未写回，两条均已修复；=0 取回旧基线）"),
+        "骨架编排层评审循环（**默认 False**；机制已就绪但**未翻默认值** —— 复测请走 "
+        "`--arm arm2`。旧结论「71% 走满 2 轮从未收敛」的根因是**根节点参与评审**"
+        "（必然 replan）+ 重生成未写回，两条均已修复：置 True 复测、置 False 取回旧基线）"),
     # ---- agent/sub_goal_solver.py（求解后 DAG 复盘重规划，2026-10-04 补登记）----
     "enable_dag_replan": (
         "ENABLE_DAG_REPLAN", "bool", False,
-        "求解**后**（候选已入池）再评审 DAG 并重写（2026-10-04 默认 True = 复测；"
-        "旧结论「2/3 白跑」同属时间墙下产物；=0 取回旧基线）"),
+        "求解**后**（候选已入池）再评审 DAG 并重写（**默认 False**；机制已就绪但"
+        "**未翻默认值** —— 复测请走 `--arm arm2`。旧结论「2/3 白跑」同属时间墙下产物："
+        "置 True 复测、置 False 取回旧基线）"),
     # ---- agent/blueprint_planner.py（OR 节点展开策略，2026-10-04 补登记）----
     "blueprint_or_expand_all": (
         "BLUEPRINT_OR_EXPAND_ALL", "bool", False,
@@ -379,6 +381,38 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "依据。**默认 False（保守）**：rubric 系 LLM 同源自评（价值低、耗时高），且候选级"
         "投票链本已可选跑 rubric；开启前应做 A/B。=1 则解答题也走 Level2（仍沿用高置信 B "
         "才否决的阈值）"),
+    # ---- 2026-10-07 开关注册制补齐（fix-switch-debt：6 个账外 gate 型 env）----
+    # 背景（问题总账 §2.6 / 原代码审查 A 级第 2 条）：下列 6 个 env 此前仍以裸
+    # `os.environ.get` / `os.getenv` 读取（读取处见各条注释），既不在本注册表、也不在
+    # `AgentConfig` / 白名单 ⇒ **改了不生效、生效查不到**。本批**只接线，不改默认值、
+    # 不改行为** —— 每条的默认值**逐字照抄现存 env 读取处的字面默认**。
+    # ⚠ 「读取侧」大多不在本次改动范围内（见交付清单）：读取处若仍是 `os.environ.get`
+    #   或模块级常量，env 能生效（优先级不变）但 config 覆盖读不到，需改为实时读注册表。
+    "emergency_direct_max_tokens": (
+        "EMERGENCY_DIRECT_MAX_TOKENS", "num", 8192,
+        "紧急直答分支的单次 max_tokens 上限。读取处 agent/orchestrator.py:89"
+        "（模块级常量 `_EMERGENCY_DIRECT_MAX_TOKENS`，需改为实时读）"),
+    "emergency_answer_max_tokens": (
+        "EMERGENCY_ANSWER_MAX_TOKENS", "num", 8192,
+        "终答紧急兜底分支的单次 max_tokens 上限。读取处 agent/formatter.py:36"
+        "（模块级常量 `_EMERGENCY_ANSWER_MAX_TOKENS`，需改为实时读）"),
+    "final_answer_min_sec": (
+        "FINAL_ANSWER_MIN_SEC", "num", 45.0,
+        "终答紧急直答触发前要求的最小剩余秒数（低于则跳过、交上层兜底）。"
+        "读取处 agent/formatter.py:29（模块级常量 `_FINAL_ANSWER_MIN_SEC`，需改为实时读）"),
+    "rework_reserve_sec": (
+        "REWORK_RESERVE_SEC", "num", 300.0,
+        "6.5 终审重做循环为「一次重做 + 复验」预留的秒数（防跨硬墙）。"
+        "读取处 agent/orchestrator.py:2497"),
+    "deep_max_rework": (
+        "DEEP_MAX_REWORK", "num", -1,
+        "6.5 审核重做的候选数上限（deep 档）。**-1 = 无上限**（研究期默认；比赛期曾为 3）。"
+        "standard 档恒为 2，不受本开关影响。"
+        "读取处 agent/orchestrator.py:2508；param_usage.gate_max_rework 亦消费本开关"),
+    "objective_itemwise_plan": (
+        "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
+        "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"
+        "读取处 agent/sub_goal_solver.py:1376"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}

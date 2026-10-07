@@ -638,6 +638,16 @@ class AgentConfig:
     self_improve_objective_skip: bool = True  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
     theorem_hint: bool = True  # THEOREM_HINT — 定理检索注入（=0 关闭）
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
+    # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
+    # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
+    # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。
+    # 读取处仍需改为实时读注册表，见 agent/switch_registry.py 各条注释与交付清单。
+    emergency_direct_max_tokens: int = 8192   # EMERGENCY_DIRECT_MAX_TOKENS — 紧急直答 max_tokens
+    emergency_answer_max_tokens: int = 8192   # EMERGENCY_ANSWER_MAX_TOKENS — 终答紧急兜底 max_tokens
+    final_answer_min_sec: float = 45.0        # FINAL_ANSWER_MIN_SEC — 终答紧急直答前置最小剩余秒数
+    rework_reserve_sec: float = 300.0         # REWORK_RESERVE_SEC — 6.5 重做预留秒数
+    deep_max_rework: int = -1                 # DEEP_MAX_REWORK — 6.5 重做候选上限（deep；-1=无上限）
+    objective_itemwise_plan: bool = True      # OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略
           # 子目标分解主路径（统一档位下每题执行）
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
@@ -1175,6 +1185,21 @@ class ReasoningAgent:
             "accept_gate_pass_threshold",
             "accept_gate_reject_defect_threshold",
             "stage_timer_reassign_revise",    # revise 耗时归属修正（默认 True）
+            # ★ 2026-10-07 开关注册制补齐（fix-switch-debt）：
+            #   ① 6 个账外 gate 型 env 的配置字段（默认值见 switch_registry 各条）；
+            "emergency_direct_max_tokens", "emergency_answer_max_tokens",
+            "final_answer_min_sec", "rework_reserve_sec",
+            "deep_max_rework", "objective_itemwise_plan",
+            #   ② 9 条此前**漏加白名单**的键 ⇒ 相关开关的 CLI/kwargs **回退路径在
+            #      代码层面不存在**（传参被 `__init__` 静默丢弃；本项目已因漏加
+            #      白名单踩过多次，见上方多处注释）。补齐后可经 CLI/kwargs 生效。
+            #      （另 `falsify_max_per_q` / `phase_budget_enabled` 两条原已在白名单，
+            #        未重复添加。）
+            "accept_confidence", "audit_gate_skip_non_proof",
+            "enable_answer_falsifier", "enable_deterministic",
+            "enable_subgoal_main_path", "inject_mathlib_to_solver",
+            "objective_tactic_enabled",
+            "symbolic_max_tokens", "symbolic_solve_max_tokens",
         ):
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
