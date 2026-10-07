@@ -34,18 +34,38 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ORCH = os.path.join(ROOT, "agent", "orchestrator.py")
 
+# 2026-10-07 阶段C3b：`Orchestrator.run` 的 5.5_low_conf 段已**逐字搬**到
+# agent/orchestrator__low_conf.py（调用点改为一行委托）。本测试的 5.5 位置型
+# 守卫改为读该模块的函数体 —— 段文本与搬迁前一致，断言与守卫意图不变
+# （只是被查代码换了文件，非放宽判据）。
+_STAGE_MODULE = {
+    'self._stage_start(ctx, "5.5_low_conf")':
+        ("orchestrator__low_conf.py", "def low_confidence_recheck"),
+}
+
 
 class ReviseGuardTest(unittest.TestCase):
 
     def _src(self):
         return io.open(ORCH, encoding="utf-8").read()
 
+    def _extracted(self, module_rel: str, func_header: str) -> str:
+        p = os.path.join(ROOT, "agent", module_rel)
+        txt = io.open(p, encoding="utf-8").read()
+        i = txt.find(func_header)
+        self.assertGreater(i, 0, "找不到抽出函数：" + func_header)
+        return txt[i:]
+
     def _block(self, marker: str) -> str:
         """取「本阶段」的源码：从 marker 到**下一个 `_stage_start`** 为止。
 
         ⚠ 不能用固定长度切片：会跨到相邻阶段（5_revise_or_fallback 里合法地
         用了 `gen_time_up()` 来闸 deep 档修订），导致误报。
+        已抽出的阶段（见 `_STAGE_MODULE`）直接从其模块读函数体（逐字同源）。
         """
+        spec = _STAGE_MODULE.get(marker)
+        if spec is not None:
+            return self._extracted(*spec)
         src = self._src()
         i = src.find(marker)
         self.assertGreater(i, 0, "找不到标记：" + marker)
