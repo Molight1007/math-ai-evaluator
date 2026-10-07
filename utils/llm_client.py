@@ -48,11 +48,13 @@ _DEFAULT_TIMEOUT_llm_client = int(os.getenv("LLM_TIMEOUT", "120"))  # 秒
 #   ② 超时类故障**默认不重试**（`LLM_RETRY_ON_TIMEOUT=1` 可恢复旧行为）——
 #      "拿同样的请求再赌一次"，实测 5/5 全败，纯亏 timeout 秒。
 # 单次故障成本：365s → 120s。
-_RETRY_ON_TIMEOUT = _sw_bool("llm_retry_on_timeout")
+# ★ 2026-10-07：该开关改为**调用时实时读取** `_sw_bool("llm_retry_on_timeout")`
+#   （见 `chat` 内 `retry_on_timeout`）—— 原先在此处 import 期求值成模块常量，
+#   会把 `ReasoningAgent.__init__` 之前的注册表值固化，导致 config/CLI 覆盖失效。
 _CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
 _MAX_RETRIES = 1      # 2026-09-03：2→1。持续网络问题时 3 次重试纯浪费；
                        # 瞬时抖动 1 次重试足够，配合调用方 is_time_critical 兜底
-                       # （⚠ 仅对非超时故障生效，见 `_RETRY_ON_TIMEOUT`）
+                       # （⚠ 仅对非超时故障生效，见 `llm_retry_on_timeout` 开关）
 _RETRY_BACKOFF = 2.0
 # 2026-09-11 限流专项退避（依据 Bug清单_团队提交de90cedc_0911.md §5）：
 # 服务端 `-20048 请求过于频繁` 实测 176 次，且 5 个 revise 候选并发发起 →
@@ -265,6 +267,8 @@ class LLMClient:
             LLMError: 所有重试耗尽后仍然失败
         """
         url = f"{self.base_url}/chat/completions"
+        # 调用时实时读取 ⇒ config/CLI 覆盖生效（原先 import 期求值成模块常量）
+        retry_on_timeout = _sw_bool("llm_retry_on_timeout")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
@@ -357,7 +361,7 @@ class LLMClient:
                 # （`except Timeout` 在前会先命中它），而**连接**超时走的是 30s 的
                 # `_CONNECT_TIMEOUT`、失败很快，重试仍有正收益（探测服务端抖动）。
                 # 只有**读**超时（`self.timeout`，即 120s 那种）才值得放弃重试。
-                if (not _RETRY_ON_TIMEOUT
+                if (not retry_on_timeout
                         and not isinstance(e, requests.exceptions.ConnectTimeout)):
                     break
             except requests.exceptions.ConnectionError as e:

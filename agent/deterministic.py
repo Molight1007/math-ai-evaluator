@@ -53,7 +53,9 @@ _SUBSTITUTION_TOL = 1e-4
 # 460s/116s；而单题硬时限仅 1200s，且 3.6 / 4_verify / 6.5 三处各跑一次 check_answer。
 # 写法对齐 utils/math_eval._subst_with_timeout（join(_SYM_TIMEOUT_SEC)）与
 # symbolic_solve.solve_with_tool（join(_SOLVE_TIMEOUT_SEC)）：daemon 线程 + join 超时。
-_DET_TIMEOUT_SEC = _sw_num("deterministic_timeout_sec")
+# ★ 2026-10-07：超时秒数改为**调用时实时读取** `_sw_num("deterministic_timeout_sec")`
+#   （见 `check_answer` 内 `det_timeout`）—— 原先在此处 import 期求值成模块常量，
+#   会把 `ReasoningAgent.__init__` 之前的注册表值固化，导致 config/CLI 覆盖失效。
 _DET_HUNG_MAX = 8      # 累计超时上限，超过后整体降级（防无界建线程）
 _DET_HUNG = 0          # 累计超时次数；成功一次衰减 1，防跨题永久降级
 
@@ -410,6 +412,8 @@ class DeterministicChecker:
             return {"verdict": "unknown", "confidence": 0.0,
                     "evidence": "确定性检查已降级（历史超时过多）",
                     "method": "timeout_guard"}
+        # 调用时实时读取（非 import 期常量）⇒ config/CLI 覆盖生效
+        det_timeout = _sw_num("deterministic_timeout_sec")
         box: dict = {}
 
         def _run() -> None:
@@ -420,13 +424,13 @@ class DeterministicChecker:
 
         th = threading.Thread(target=_run, name="det_check", daemon=True)
         th.start()
-        th.join(_DET_TIMEOUT_SEC)
+        th.join(det_timeout)
         if th.is_alive():                      # 卡死 → 放弃该线程（daemon，不阻塞退出）
             _DET_HUNG += 1
             logger.warning("确定性检查超时(>%.1fs)，返回 unknown（不改判）: answer=%s",
-                           _DET_TIMEOUT_SEC, (answer or "")[:80])
+                           det_timeout, (answer or "")[:80])
             return {"verdict": "unknown", "confidence": 0.0,
-                    "evidence": f"确定性检查超时(>{_DET_TIMEOUT_SEC:.1f}s)",
+                    "evidence": f"确定性检查超时(>{det_timeout:.1f}s)",
                     "method": "timeout"}
         if _DET_HUNG:                          # 成功时让累计计数衰减（防跨题永久降级）
             _DET_HUNG -= 1

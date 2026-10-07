@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -134,9 +135,9 @@ class TestTimeoutIsNotRetried(unittest.TestCase):
         self.assertIn("after 1 attempt", str(cm.exception))
 
     def test_retry_on_timeout_can_be_reenabled(self) -> None:
-        import utils.llm_client as lc
+        """2026-10-07：开关改为调用时实时读取 ⇒ 用 env 覆盖（原 patch 模块常量已失效）。"""
         sleeps = []
-        with patch.object(lc, "_RETRY_ON_TIMEOUT", True), \
+        with patch.dict(os.environ, {"LLM_RETRY_ON_TIMEOUT": "1"}), \
              patch("utils.llm_client.requests.post",
                    side_effect=requests.exceptions.Timeout("t")) as post, \
              patch("utils.llm_client.time.sleep", side_effect=sleeps.append), \

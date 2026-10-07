@@ -260,19 +260,30 @@ def test_s1_text_wrapper_stripped():
         r"\(\mathbb{Q}(\sqrt[4]{5},\,i),\ 8,\ \text{是}\)") is True
 
 
-def test_s2_default_on_and_safe():
-    """S2（顿号）默认开；且**不得**把"只答一项"判成对（099 的误判方向）。"""
+def test_s2_default_on_and_safe(monkeypatch):
+    """S2（顿号）默认开；且**不得**把"只答一项"判成对（099 的误判方向）。
+
+    2026-10-07：开关从模块级 import 期常量改为**调用时实时读取**
+    （`run_eval._split_multi` → `_sw_bool("eval_split_cn")`）⇒ 默认值以
+    `switch_registry` 为准；此处同时验证**覆盖真的生效**（原缺陷即覆盖失效）。
+    """
     import run_eval as E
-    assert E._EVAL_SPLIT_CN is True
+    assert E._split_multi("a、b") == ["a", "b"], "S2 默认开 ⇒ 应按顿号拆"
+    monkeypatch.setenv("EVAL_SPLIT_CN", "0")
+    assert E._split_multi("a、b") == ["a、b"], "关闭后不得按顿号拆（覆盖须生效）"
     assert E.answers_match(
         r"\boxed{有限差分法}",
         "有限差分法、有限元法（或有限体积法）") is False, \
         "模型只答一项却被判对 ⇒ S2 引入误判"
 
 
-def test_s3_default_off():
+def test_s3_default_off(monkeypatch):
+    """S3（α-等价）默认关；且**覆盖真的生效**（2026-10-07 接线修复）。"""
     import run_eval as E
-    assert E._EVAL_ALPHA_EQUIV is False
+    pred, gold = r"\boxed{e^{i\xi}}", r"e^{i\omega}"
+    assert E.answers_match(pred, gold) is False, "S3 默认关 ⇒ α-等价不生效"
+    monkeypatch.setenv("EVAL_ALPHA_EQUIV", "1")
+    assert E.answers_match(pred, gold) is True, "打开后 α-等价须生效（覆盖须生效）"
 
 
 def test_s3_guard_rejects_non_expression():
