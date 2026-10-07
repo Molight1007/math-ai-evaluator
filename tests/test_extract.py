@@ -264,5 +264,91 @@ class PoolAnswerGateTest(unittest.TestCase):
         self.assertFalse(ok)
 
 
+class SingleCharAnswerGateTest(unittest.TestCase):
+    """A（2026-10-07）：单字符答案闸门残留。
+
+    `is_valid_final_answer` 已删 `len(s) < 2` 闸门（单字符是合法且完整的答案），
+    formatter 亦明述同口径；但 `utils/extract.py` 的 `smart_fallback_answer` 仍用
+    `len(ans) > 1` 与 `len(line) > 2` 两道闸门 ⇒ 实测 `smart_fallback_answer("A")`
+    与 `("3")` 返回空串（选项字母 / 个位数答案被丢）。本类锁定修复后的行为。
+    """
+
+    def test_bare_single_char_survives(self) -> None:
+        from utils.extract import extract_final_answer, smart_fallback_answer
+        for ch in ("A", "B", "C", "D", "7", "3"):
+            self.assertEqual(extract_final_answer(ch), ch)
+            self.assertEqual(smart_fallback_answer(ch), ch,
+                             f"单字符答案 {ch!r} 不应被 smart_fallback_answer 丢弃")
+
+    def test_single_char_after_reasoning_line(self) -> None:
+        from utils.extract import smart_fallback_answer
+        # 末行裸单字符（无"答案"等关键词触发策略 1）⇒ 必须走策略 2 返回该单字符
+        self.assertEqual(smart_fallback_answer("过程略\nA"), "A")
+        self.assertEqual(smart_fallback_answer("推理\n7"), "7")
+
+    def test_noise_single_char_still_rejected(self) -> None:
+        """放宽闸门不得放进"非答案的单字"（中文单字经 `_looks_like_answer` 仍判否）。"""
+        from utils.extract import smart_fallback_answer
+        self.assertEqual(smart_fallback_answer("解"), "")
+        self.assertEqual(smart_fallback_answer("下"), "")
+
+
+class PoolGateNaturalLanguageTest(unittest.TestCase):
+    """B（2026-10-07）：自然语言 gold 误杀修复 —— 双向证据。
+
+    · 默认口径（`question_type=None`）：相对 v2 **仅去掉"必含数值"白名单**
+      ⇒ 修复 037 / 104 / 105，且对现存候选语料**零新增误收**。
+    · 容忍口径（显式传自然语言题型）：再放宽句末标点/长度 ⇒ 修复 108 / 095。
+    · 两口径下 4 条"规划/设定句"**都必须仍被拦**。
+    """
+
+    GOLDS = {
+        "037": "taking the empty card",
+        "104": "移动平均法、时间序列分解法",
+        "105": "标准差",
+        "108": "异方差性不会导致参数估计量的偏误，但会使传统方差估计失效，即低估或高估真实方差，导致OLS估计量不再是有效估计。",
+        "095": ("Lempel–Ziv 短语分解为  \n\\[\n(0,a),\\ (1,b),\\ (2,a),\\ (1,c),\\ (5,d),\\ (0,e).\n\\]\n"
+                "编码得到的最终比特串为  \n\\[\n000000\\,001001\\,010000\\,001010\\,101011\\,000100.\n\\]"),
+    }
+    BLOCKED = [
+        "子问题4：计算满足条件的路径总数",
+        "{(x,y) | 0 ≤ x ≤ 19, 0 ≤ y ≤ 2}，共 20 × 3 = 60 个元素",
+        "证明这个最小值就是所求的 $T$，并验证其最优性",
+        "- 子问题4：求和并验证结果",
+    ]
+
+    def test_default_fixes_short_natural_language_golds(self) -> None:
+        # 默认口径：037 / 104 / 105（无句末标点、不过长）不再被误杀
+        for k in ("037", "104", "105"):
+            self.assertTrue(looks_like_pool_answer(self.GOLDS[k]), k)
+
+    def test_tolerant_fixes_sentence_and_long_golds(self) -> None:
+        # 容忍口径：108（以 。结尾）/ 095（>120 字）也放行；5 条全部通过
+        for k, g in self.GOLDS.items():
+            self.assertTrue(looks_like_pool_answer(g, "解答题"), k)
+
+    def test_blocked_items_stay_blocked_both_modes(self) -> None:
+        for s in self.BLOCKED:
+            self.assertFalse(looks_like_pool_answer(s), ("默认", s))
+            self.assertFalse(looks_like_pool_answer(s, "解答题"), ("容忍", s))
+
+    def test_option_and_verdict_answers_unaffected(self) -> None:
+        # 已修的两类（多字母选项 / 判断题判定词）不得回退
+        for s in ("BD", "AB", "B, D", "正确", "错误"):
+            self.assertTrue(looks_like_pool_answer(s), s)
+
+    def test_tolerant_does_not_reopen_hard_noise(self) -> None:
+        # 容忍口径下，工具残留 / 推理句 / 多句叙述 仍被硬黑名单拦住
+        for s in ("</tool_call>", "【修正过程】", "正确的Boris策略：",
+                  "让我搜索这个问题的标准解法", "现在考虑整体结构。由于每列恰好访问2次，且水平移动39次。"):
+            self.assertFalse(looks_like_pool_answer(s, "解答题"), s)
+
+    def test_normalize_pool_answer_accepts_question_type(self) -> None:
+        # 参数透传：容忍口径下 108 整句被判可用（不被换成空/被拒）
+        val, ok = normalize_pool_answer(self.GOLDS["108"], "解答题")
+        self.assertTrue(ok)
+        self.assertIn("异方差性", val)
+
+
 if __name__ == "__main__":
     unittest.main()

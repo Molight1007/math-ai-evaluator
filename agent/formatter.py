@@ -26,14 +26,50 @@ logger = logging.getLogger("MathPilot")
 # 2026-09-13 晚：紧急直答（最终兜底）所需的最小剩余时间（秒）。
 # 这是"无论超没超时都要产出答案"的最后一环 —— 留 45s 让它有机会跑完一次
 # 短直答（prefill 答案前置 + 小 max_tokens，实测正常 1–3s）。
-_FINAL_ANSWER_MIN_SEC = float(os.getenv("FINAL_ANSWER_MIN_SEC", "45"))
-# 紧急直答的输出上限（token）。旧值 65536 = 允许它写一整篇论文，
-# 与"只要一行答案"的 prefill 语义矛盾，且在 120s 读超时下极易被截断。
-# 直答只需一行：512 足够，且能显著提高"一定拿到答案"的成功率。
-# 2026-10-02 DeepSeek 适配：env 默认 512 ⇒ 8192。原值基于「直答只需一行 + prefill
-# 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断（reasoning 先吃满
-# 预算、正文为空）。仍可用 EMERGENCY_ANSWER_MAX_TOKENS 覆盖。
-_EMERGENCY_ANSWER_MAX_TOKENS = int(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS", "8192"))
+#
+# ★★ 2026-10-07 修复（B 类裸 env 登记 · C）：原为**模块级 import 期求值**
+#   `_FINAL_ANSWER_MIN_SEC = float(os.getenv(...))`，本函数下方同类常量亦如此。
+#   两个隐患：① 报告要还原"当时用的默认值"得靠 diag 快照，而 import 期求值后
+#   快照**看不到**它；② 仓库里存在「先 import 模块、再 os.environ.update」的写法
+#   （tools/run_phase0_eval.py / debug_one_trace.py / run_small_ds.py）⇒ import 期
+#   求值会让后设的环境变量**静默失效**。改为**调用时实时读**，默认值不变（45 / 8192）。
+_DEFAULT_FINAL_ANSWER_MIN_SEC = 45.0
+_DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS = 8192
+
+
+def _final_answer_min_sec() -> float:
+    """调用时实时读「紧急直答最小剩余时间」（秒）。
+
+    读取优先级：switch_registry（env > config > default）> 直接读 env > 默认 45。
+    该字段**尚未登记**进 switch_registry（登记属共享文件，由主理人统一处理），
+    故当前走 env 分支；登记后自动切换到注册表口径（默认值保持 45）。
+    """
+    try:
+        from .switch_registry import SWITCHES, get_num as _sw_num
+        if "final_answer_min_sec" in SWITCHES:
+            return float(_sw_num("final_answer_min_sec"))
+    except Exception:  # noqa: BLE001  未登记 / 导入失败 → 回退直读 env
+        pass
+    try:
+        return float(os.getenv("FINAL_ANSWER_MIN_SEC",
+                               str(_DEFAULT_FINAL_ANSWER_MIN_SEC)))
+    except (TypeError, ValueError):
+        return _DEFAULT_FINAL_ANSWER_MIN_SEC
+
+
+def _emergency_answer_max_tokens() -> int:
+    """调用时实时读「紧急直答输出上限（token）」。默认值保持 8192（2026-10-02 DeepSeek 适配）。"""
+    try:
+        from .switch_registry import SWITCHES, get_num as _sw_num
+        if "emergency_answer_max_tokens" in SWITCHES:
+            return int(_sw_num("emergency_answer_max_tokens"))
+    except Exception:  # noqa: BLE001  未登记 / 导入失败 → 回退直读 env
+        pass
+    try:
+        return int(float(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS",
+                                   str(_DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS))))
+    except (TypeError, ValueError):
+        return _DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS
 
 # 拒绝回答/不完整答案的模式（2026-09-02 加"子目标求解失败"占位符：
 # 占位符直接当最终答案 = 50% 错题（009/053/004/022 等），必须触发换候选兜底）
@@ -1452,10 +1488,12 @@ class FormatterAgent(BaseAgent):
             #     进程组、整题计 C，代价比交白卷更大）；
             #   · 生成侧软截止（gen_time_up）**不再拦截** —— 它是为"验证"预留的余量，
             #     而执行到这里时验证阶段早已结束，没有可牺牲的下游了。
-            if ctx.is_timed_out() or ctx.time_remaining() < _FINAL_ANSWER_MIN_SEC:
+            # ★ 2026-10-07（C）：改为**调用时实时读**（原先 import 期常量）。
+            _min_sec = _final_answer_min_sec()
+            if ctx.is_timed_out() or ctx.time_remaining() < _min_sec:
                 self.record(ctx, "finalize",
                             f"紧急直答：余量不足（{ctx.time_remaining():.0f}s < "
-                            f"{_FINAL_ANSWER_MIN_SEC:.0f}s），跳过（交上层最终兜底）")
+                            f"{_min_sec:.0f}s），跳过（交上层最终兜底）")
                 return ""
             resp = self.client.chat(
                 messages=prefill_messages(
@@ -1463,7 +1501,7 @@ class FormatterAgent(BaseAgent):
                      {"role": "user", "content": ctx.problem}],
                     "【最终答案】: ",
                 ),
-                temperature=0.0, max_tokens=_EMERGENCY_ANSWER_MAX_TOKENS,
+                temperature=0.0, max_tokens=_emergency_answer_max_tokens(),
             )
             text = _normalize_chat_response(resp)
             if not text:

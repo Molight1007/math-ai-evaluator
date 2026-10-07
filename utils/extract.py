@@ -295,8 +295,13 @@ def _extract_final_answer_impl(text: str) -> str:
         return ans
 
     # 策略 3：从尾部跳过元语句向前找有效答案行（核心修复）
+    # ★★ 2026-10-07（单字符闸门残留 · A）：原判据 `len(last_valid) > 1` 与本文件
+    #   已修口径**不一致** —— `is_valid_final_answer` 已删 `len(s)<2` 闸门
+    #   （单字符是合法且完整的答案），策略 1 也用 `>= 1`，formatter 亦明述同口径。
+    #   实测：策略 6 兜底仍能捞回裸单字符，故此处**未产生实际误杀**；但为消除
+    #   口径分叉（选项字母 A/B/C/D、个位数答案的潜在误杀面），统一改为 `>= 1`。
     last_valid = _extract_last_valid_answer(text)
-    if last_valid and len(last_valid) > 1 and not _is_incomplete_answer(last_valid):
+    if last_valid and len(last_valid) >= 1 and not _is_incomplete_answer(last_valid):
         return last_valid
 
     # 策略 4：扫描全文找 LaTeX $...$ / $$...$$ / \(...\) 取最后一个
@@ -491,9 +496,11 @@ def _salvage_value_from_line(line: str) -> str:
 #       的选项答案外，还有 101/111 的判断题 `正确`/`错误`。本次修掉其中**两类
 #       无争议形态**（多字母/带分隔符的选项、判断题判定词）；其余 5 条为
 #       填空题/论述题的**自然语言 gold**（037 `taking the empty card`、
-#       095/108 长文本、104 `移动平均法、时间序列分解法`、105 `标准差`），
-#       需"题型感知"改造（只有求值题才要求含数值），**本次不动**以免重新放开
-#       漏网面（详见 `_looks_like_plan_or_setup` 处说明与交付说明）。
+#       095/108 长文本、104 `移动平均法、时间序列分解法`、105 `标准差`）。
+#       ★ 2026-10-07（B）：这 5 条已由**下游 v3 自然语言容忍层**修复 ——
+#         默认口径去掉"必含数值"白名单（修回 037/104/105），显式传
+#         `question_type` 时再放宽句末标点/长度（修回 108/095）。
+#         详见下方「入池判据 v3」段（含"题型无法自动区分"的关键实测）。
 #
 # v2 判据 = 先补**两条确定性修正**（修误杀，不扩大误杀面），再修漏网，最后复用 v1：
 #   ① 选项答案：单/多字母 + 可选逗号/顿号/斜杠分隔（`BD` / `B, D` / `A,C`）⇒ 答案。
@@ -544,11 +551,137 @@ def _looks_like_plan_or_setup(s: str) -> bool:
     return False
 
 
-def looks_like_pool_answer(s: str) -> bool:
-    """候选**入池**判据 v2（见上方背景）。返回 True = 像一个可入池的最终答案。
+# ---------------------------------------------------------------------------
+# 入池判据 v3（2026-10-07 新增）：**自然语言答案容忍层**（修 B：5/112 gold 误杀）
+# ---------------------------------------------------------------------------
+# 背景：v2 对 official112 全量 gold 扫描后仍误杀 5 条**自然语言 gold** ——
+#   037 `taking the empty card`、095 LZ 长文本、104 `移动平均法、时间序列分解法`、
+#   105 `标准差`、108 论述句。根因：v1/v2 的**白名单**要求答案含"可判分实质"
+#   （数字 / LaTeX / `\boxed` / 等号 / 选项），而这几条 gold 是自然语言描述。
+#
+# ★ 关键实测（决定本条的口径）：
+#   · `classify_question_type` 与 `tools/filter_testset.py::infer_type` 把这 5 条
+#     **全部判为 `解答题`**（且 filter 会**保留**它们，107/112）⇒ 它们与题
+#     000/002/007（gold 为数值、其被拦候选是"规划句"）**同题型**
+#     ⇒ **"题型感知"无法自动区分**，只能做成"调用方可选参数"。
+#   · 故改为**黑名单替代白名单**：默认不再要求"含数值"，只要求"不像推理句"。
+#   · 泄漏量化（现存 538 条唯一候选 + 112 条 gold 全扫；`_scan_*.py` 实测）：
+#       - 默认口径（去掉"必含数值"+ 结构兜底）⇒ 新增入池 **0**（原 4 条候选
+#         `</tool_call>` / `【修正过程】` / `【错误分析】` / `正确的Boris策略：`
+#         被结构兜底全兜住）；修复 037/104/105。
+#       - 容忍口径（再放宽"句末标点 / 长度"）⇒ 新增 **44 条**（多为中文推理句）
+#         ⇒ **不可默认放开**，故置于 `question_type` 参数之下；修复 108/095。
+# ---------------------------------------------------------------------------
+_POOL_TOOL_TAG_RE = re.compile(
+    r"</?tool_calls?>|</?function\b|<parameter=|</parameter>", re.IGNORECASE)
+# 段落标题壳（`【修正过程】` / `【错误分析】` / `[结论]`）—— 只有标签、没有内容
+_POOL_SECTION_ONLY_RE = re.compile(
+    r"^\s*[（(【\[]\s*[^（()）\[\]】]{0,16}"
+    r"(?:过程|分析|检查|矛盾|修正|结论|说明|步骤|思路|推导|证明|计算|答案|结果)"
+    r"\s*[）)】\]]\s*$")
+# 尾部冒号标签（`正确的Boris策略：`）—— 标题而非内容
+_POOL_TRAIL_LABEL_RE = re.compile(r"[:：]\s*$")
+# 英文推理起始（`If there are…` / `We can…` / `Consider…`）—— 推理句不是答案
+_POOL_EN_REASONING_RE = re.compile(
+    r"^(?:if|we|let|consider|assume|suppose|since|because|now|then|first|next|"
+    r"note|observe|here|thus|hence|after|before|however|therefore)\b", re.IGNORECASE)
+# 中文推理起始（锚串首）—— 刻意**不含** `标准`/`即`/`但`/`覆盖` 等会误伤真答案的
+# 裸词（实测 `标准差` 会被裸 `^标准` 误杀 ⇒ 精确到 `标准(结果|答案|…)`）。
+_POOL_CN_REASONING_RE = re.compile(
+    r"^(?:实际上|经过|继续|目前|在答案中|通常|现在|假设|关键|由|因此|所以|同时|"
+    r"然后|缺少|正确的分析|这与我|这个(?:问题|题|推理|分析)|我们|考虑|首先|接下来|"
+    r"由此|综上|注意到|由于|已知|结论(?:无效|是|为)?[:：]|对于本题|对于这种|对于固定|"
+    r"这种在|覆盖格子|若第|最后一步|最终的正确|以上|上述|一切|综上所|总而言之)")
+_POOL_SENT_TERM = "。！？!?"
+
+
+def _looks_like_hard_noise(t: str) -> bool:
+    """**硬黑名单**：容忍口径下的兜底拦截层（只收"确定不是答案"的形态）。
+
+    维度：工具调用残留 / 段落标题壳 / 尾部冒号标签 / 步骤标题 / 元话语 /
+    英文·中文推理起始 / **多句叙述**（≥2 个句末标点）。
+    刻意不碰"可能为真答案"的形态（避免扩大误杀）；实测可把容忍口径的新增收
+    从 147 压到 44（详见上方 v3 背景）。
+    """
+    if not t:
+        return True
+    if _POOL_TOOL_TAG_RE.search(t):
+        return True
+    if _POOL_SECTION_ONLY_RE.match(t):
+        return True
+    if _POOL_TRAIL_LABEL_RE.search(t):
+        return True
+    if _STEP_HEADER_RE.match(t):
+        return True
+    if _META_ANSWER_RE.search(t):
+        return True
+    if _POOL_EN_REASONING_RE.search(t) or _POOL_CN_REASONING_RE.search(t):
+        return True
+    if sum(t.count(c) for c in _POOL_SENT_TERM) >= 2:
+        return True
+    try:
+        if _looks_like_reasoning_fragment(t):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+# 自然语言答案**合法**的题型（这些题型的 gold 可能是自然语言，不要求含数值）。
+# ⚠ 仅当调用方**显式传入** `question_type` 时才启用（默认 None ⇒ 严口径，零行为变化）；
+#   `选择题` 不在内（其答案形态是选项字母，由 ① 直接放行）。
+_NL_ANSWER_QUESTION_TYPES = frozenset({
+    "解答题", "证明题", "填空题", "判断题", "论述题", "简答题",
+})
+
+
+def _nl_answer_tolerant(question_type) -> bool:
+    """调用方传入的题型是否允许"自然语言答案"（进而放宽白名单 + 句末标点 + 长度）。"""
+    return str(question_type or "").strip() in _NL_ANSWER_QUESTION_TYPES
+
+
+def _looks_like_answer_v3(t: str, tolerant: bool) -> bool:
+    """v3 判据：**白名单 → 黑名单**。
+
+    · 结构兜底（宽严共用）：工具残留 / 标题壳 / 尾部标签 ⇒ 一律拦；
+    · `tolerant=False`（默认）：= v2 的 `_looks_like_answer` **去掉"必含数值"白名单**，
+      其余（长度 ≤120 / 非步骤标题 / 无元话语 / 不以句末标点结尾）逐条保留 ⇒
+      实测零新增误收，修复 037/104/105；
+    · `tolerant=True`：只要求"不是推理句"（`_looks_like_hard_noise`），
+      连长度/句末标点也放宽 ⇒ 修复 108/095（代价见模块注释）。
+    """
+    if _POOL_TOOL_TAG_RE.search(t):
+        return False
+    if _POOL_SECTION_ONLY_RE.match(t):
+        return False
+    if _POOL_TRAIL_LABEL_RE.search(t):
+        return False
+    if tolerant:
+        return not _looks_like_hard_noise(t)
+    if len(t) > 120:
+        return False
+    if _STEP_HEADER_RE.match(t):
+        return False
+    if _META_ANSWER_RE.search(t):
+        return False
+    if t[-1] in "。？！.；;":
+        return False
+    return True
+
+
+def looks_like_pool_answer(s: str, question_type=None) -> bool:
+    """候选**入池**判据 v2 + v3 自然语言容忍层。True = 像一个可入池的最终答案。
 
     ⚠ 与 `_looks_like_answer` 的关系：**只做增量修正**（多字母选项 / boxed 形态 /
-    规划描述句），其余仍交回 v1 ⇒ 对既有行为是"补漏 + 修误杀"，不是换一套判据。
+    规划描述句 / 自然语言答案），其余仍交回 v1/v2 口径 ⇒ 是"补漏 + 修误杀"。
+
+    ★ 2026-10-07（B）：新增可选 `question_type`。
+      · 默认 `None` ⇒ 相对 v2 **仅去掉"必含数值"白名单**（白名单 → 硬黑名单），
+        实测对现存 538 条候选**零新增误收**，并把 5 条 gold 中的 037/104/105 修回；
+      · 传入自然语言容忍题型（`解答题/证明题/填空题/判断题/论述题/简答题`）⇒ 进一步
+        放宽"句末标点 / 长度"，把 108/095 也修回（调用方按题面选择；见交付说明）。
+      · 传 `选择题` / 未知题型 ⇒ 走默认口径。
+    既修误杀，又把"重新放开漏网面"的风险**收敛到调用方可控的显式参数**。
     """
     t = " ".join(str(s or "").split())
     if not t:
@@ -565,24 +698,25 @@ def looks_like_pool_answer(s: str) -> bool:
     # ④ 规划/设定描述句 ⇒ 不是答案（修 000/002/007 漏网）
     if _looks_like_plan_or_setup(t):
         return False
-    # ⑤ 其余交回 v1
-    return _looks_like_answer(t)
+    # ⑤ v3 自然语言容忍层（白名单 → 黑名单）
+    return _looks_like_answer_v3(t, _nl_answer_tolerant(question_type))
 
 
-def normalize_pool_answer(answer) -> tuple:
-    """候选入池前的"规范化 + 校验"**纯函数内核**（v2 门槛的单一来源）。
+def normalize_pool_answer(answer, question_type=None) -> tuple:
+    """候选入池前的"规范化 + 校验"**纯函数内核**（入池判据的单一来源）。
 
     返回 `(规范化后的 answer, 是否可用)`。调用方（solver / sub_goal_solver /
     collaborative_solver）各自决定留痕与入池策略，判据本身只此一处，防口径漂移。
+    `question_type` 见 `looks_like_pool_answer`（默认 None ⇒ 严口径）。
 
     先抢救、再判定（沿用 v1 的修正）：句子形态但含明确最终值时，**把 answer 换成
     那个值**（如 `'所以最小 d 是 48。'` → `'48'`），而不是丢候选、也不是留整句。
     """
     a = str(answer or "").strip()
-    if looks_like_pool_answer(a):
+    if looks_like_pool_answer(a, question_type):
         return a, True
     _sal = _salvage_value_from_line(a)
-    if _sal and looks_like_pool_answer(_sal):
+    if _sal and looks_like_pool_answer(_sal, question_type):
         return _sal, True
     return a, False
 
@@ -609,8 +743,12 @@ def smart_fallback_answer(text: str) -> str:
         return ""
 
     # 先试 extract_final_answer，有时它内部的多级策略能命中
+    # ★★ 2026-10-07（单字符闸门残留 · A）：原判据 `len(ans) > 1` 与 `is_valid_final_answer`
+    #   已修口径冲突。实测 `smart_fallback_answer("推理\n7")` 因本行把单字符 `7` 拒掉
+    #   ⇒ 再往下策略 1（要求 `\d{2,}` 等）与策略 2（原要求 `len>2`）也捞不回 ⇒ 返回空。
+    #   改为 `>= 1`（`ans != text.strip()` 仍保留，避免把整段原文当答案返回）。
     ans = extract_final_answer(text)
-    if ans and len(ans) > 1 and not _is_incomplete_answer(ans) and ans != text.strip():
+    if ans and len(ans) >= 1 and not _is_incomplete_answer(ans) and ans != text.strip():
         return ans
 
     lines = text.split('\n')
@@ -634,9 +772,14 @@ def smart_fallback_answer(text: str) -> str:
 
     # 策略 2：从后往前找第一个有实质内容的非空行
     # ★ 2026-10-06 同样收紧（原实现无条件收下任意一行）。
+    # ★★ 2026-10-07（单字符闸门残留 · A）：原 `len(line) > 2` 把**单字符/双字符答案行**
+    #   （选项字母 `A`、个位数 `7`、`AB`）整行跳过 —— 实测 `smart_fallback_answer("A")`
+    #   与 `("3")` 均返回空串（答案被丢）。改为 `>= 1`：单字符经下方
+    #   `_looks_like_answer` 闸门（仅放行数字 / 单字母 A-E / 含 LaTeX 等实质内容），
+    #   中文单字仍被 `_looks_like_answer` 的"必含可判分实质"判否 ⇒ 不会放进噪声。
     for i in range(len(lines) - 1, -1, -1):
         line = lines[i].strip()
-        if line and len(line) > 2 and not _is_meta_line(line):
+        if line and len(line) >= 1 and not _is_meta_line(line):
             cand = clean_answer(line)[:500]
             if _looks_like_answer(cand):
                 return cand

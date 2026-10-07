@@ -86,7 +86,26 @@ _DEGRADED_ANSWER_RE = _re.compile(
 # 2026-10-02 DeepSeek 适配：env 默认 1024 ⇒ 8192。原值基于「直答只需一行 + prefill
 # 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断（reasoning 先吃满
 # 预算、正文为空）。仍可用 EMERGENCY_DIRECT_MAX_TOKENS 覆盖。
-_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv("EMERGENCY_DIRECT_MAX_TOKENS", "8192"))
+#
+# ★ 2026-10-07 修（问题总账 §2.6 / §2.3「B 类裸 env 未登记 + import 期求值」）：
+#   原为模块级常量 `_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv(...))` ——
+#   ① import 期求值 ⇒ 若"先 import 后改 env"（仓库里 `tools/run_phase0_eval.py`
+#      等正是这种写法）会**静默失效**；② 常量不入注册表 ⇒ diag 的 switch_snapshot
+#      看不到、报告还原不出来。
+#   现改为**调用时**经注册表读取（`emergency_direct_max_tokens`，字段已于
+#   2026-10-07 由 fix-switch-debt 登记进 switch_registry，默认 8192；读取优先级
+#   env > config > 默认）。注册未落时回退到"调用时读 env"（与旧常量行为一致，
+#   仅修掉 import 期冻结）。
+def _emergency_direct_max_tokens() -> int:
+    """紧急直答分支的 `max_tokens` 上限（调用时实时读取，见上方说明）。"""
+    try:
+        _env_default = int(os.getenv("EMERGENCY_DIRECT_MAX_TOKENS", "8192"))
+    except (TypeError, ValueError):
+        _env_default = 8192
+    try:
+        return int(_sw_num_or("emergency_direct_max_tokens", float(_env_default)))
+    except Exception:  # noqa: BLE001
+        return _env_default
 
 from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_response
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
@@ -96,7 +115,14 @@ from .sub_goal_solver import SubGoalSolverAgent
 #   复核清单与 verifier 深复核原文需同一道清洗口径，两处各写一份必然分叉
 #   （仓库既有教训）。verifier 不 import orchestrator ⇒ 无循环导入。
 from .verifier import VerifierAgent, _clip_review_prose
-from .formatter import FormatterAgent
+# ★ 2026-10-07（问题总账 §2.6「择优逻辑口径分叉」）：终答兜底择优**复用** formatter
+#   的统一排序键 `_rank_key`（票数→独立复现数→置信度→答案形态→答案更短），
+#   以及配套的 `_attach_support`（把"独立复现数"挂到候选上）。**只读引用，不改
+#   formatter.py**。formatter 不 import orchestrator ⇒ 无循环导入。
+from .formatter import (
+    FormatterAgent,
+    _rank_key as _formatter_rank_key,
+    _attach_support as _formatter_attach_support)
 from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
 from .audit_gate import AuditGate
@@ -1284,6 +1310,21 @@ class Orchestrator(BaseAgent):
         ⇒ 一半以上的题被砍断子目标链（链没跑完 = 缺项 = 错，不只是慢）。
         ⚠ 本开关**只管"分配型"阶段帽**；LLM 超时重试 / lean_timeout /
           符号求解线程超时 / 各类死循环硬上限**全部保留**（那是"别挂住"，不是配额）。
+
+        ── ★ 2026-10-07 实测结论（问题总账 §2.6「phase_budget_enabled 疑为结构性死开关」）──
+        · **非结构性死开关**：本函数是**活路径**——`config.phase_budget_enabled=True`
+          时 `_phase_budget(stage="2.7_subgoal_main")` 返回 600.0、阶段帽真实收紧
+          （离线实测：False→inf/收紧 0s；True→600.0/收紧 85800s）。`_CAPS` 表在
+          False 时确实整表 no-op（这正是"默认关=不限"的**设计意图**，非缺陷）。
+        · **但当前评测入口无法打开它**：① 默认 False；② `run_eval.py` **无对应
+          CLI flag**（旧判断"不在 CLI 覆盖白名单"已过期 —— 该键现已在
+          `user_agent.py` 白名单，可经 kwargs/`agent_overrides` 设置）；
+          ③ 读取走 `getattr(config, ...)`，而 env `PHASE_BUDGET_ENABLED` **不经
+          config**（实测 env=1 时 `AgentConfig().phase_budget_enabled` 仍为 False）
+          ⇒ 单靠 env 无效。
+        ⇒ 结论：**代码层活、评测入口层死**；若要真正可调，需在 `run_eval.py` 加
+          CLI flag 或把读取改走注册表（后者属行为改动，本次按"唯一行为改动仅 C/E"
+          的约束**未改**，仅留此标注）。
         """
         if not getattr(self.config, "phase_budget_enabled", False):
             return float("inf")
@@ -1352,10 +1393,20 @@ class Orchestrator(BaseAgent):
         _saved = (ctx.deadline, getattr(ctx, "_gen_deadline", 0.0))
         _end = _t0 + max(1.0, float(cap))
         try:
+            _tightened = False
             if ctx.deadline and ctx.deadline > 10**8:
                 ctx.deadline = min(ctx.deadline, _end)
+                _tightened = True
             if getattr(ctx, "_gen_deadline", 0.0) and ctx._gen_deadline > 10**8:
                 ctx._gen_deadline = min(ctx._gen_deadline, _end)
+                _tightened = True
+            # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原两个 `if`
+            #   在 deadline 未设（或为 0/非远期哨兵）时**静默不收紧**，事后只见
+            #   "阶段帽没生效"却查不出原因（本项目反复吃的"未触发 vs 被吞"）。补一条。
+            if not _tightened:
+                self.record(ctx, "phase_budget",
+                            f"阶段预算未收紧（cap={cap:.0f}s 跳过）：deadline 与 "
+                            f"_gen_deadline 均未设或非远期哨兵")
         except Exception:  # noqa: BLE001
             pass
         return _t0, _saved
@@ -1676,6 +1727,13 @@ class Orchestrator(BaseAgent):
                 tier, self.config.max_total_calls)
             if ctx.budget is not None:
                 ctx.budget.set_max_calls(max_calls)
+            else:
+                # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原
+                #   `if ctx.budget is not None:` 无 else ⇒ 无 budget 时调用预算**静默
+                #   不设**，而下方 record 仍会打印 max_calls，造成"看起来设了其实没设"。
+                self.record(ctx, "paper_pacer",
+                            f"调用预算未设置（ctx.budget 为空，跳过 set_max_calls，"
+                            f"计划值 {max_calls}）")
             # ⚠ `paper_pacer` 是遗留 event 标签（PaperPacer 已于 2026-09-29 删除），
             #   内容（档位/调用预算）仍有效，2026-10-02 起仅作标签保留，勿据此判断全卷配速存在。
             self.record(ctx, "paper_pacer",
@@ -1880,6 +1938,19 @@ class Orchestrator(BaseAgent):
                     if n_completed > 0:
                         self.record(ctx, "control",
                                     f"截断续写完成 {n_completed} 个候选")
+                else:
+                    # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原
+                    #   `if max_comp > 0:` 无 else ⇒ max_completions 配 0 时**静默跳过
+                    #   整个 3.2**，阶段耗时为 0 却看不出"是配置 0 还是没触发"。
+                    self.record(ctx, "control",
+                                f"3.2 截断续写跳过：档位 {tier} max_completions="
+                                f"{max_comp}（<=0 ⇒ 本阶段不执行）")
+            else:
+                self.record(ctx, "control",
+                            "3.2 截断续写跳过："
+                            + ("无候选" if not getattr(ctx, "candidates", None) else
+                               ("emergency 状态" if ctx.state.emergency else
+                                "verify_only 状态")))
 
             self._stage_start(ctx, "3.3_improve")
             # 3.3) Step 2 无条件自改进（IMO2025 论文流水线）：
@@ -2018,8 +2089,16 @@ class Orchestrator(BaseAgent):
                         # 同一条 ③ 里，模型无从判断哪条才是"逻辑错了"。
                         try:
                             ctx.lean_reject_feedback = list(lean_fb)
-                        except Exception:  # noqa: BLE001
-                            pass
+                        except Exception as _e_lrf:  # noqa: BLE001
+                            # ★ 2026-10-07 观测补齐（问题总账 §2.6「纯空吞异常」A 类）：
+                            #   原为裸 `pass`，一旦这条"单独留存的 Lean 反馈"赋值失败，
+                            #   revise 提示词里**再也区分不出**「形式化/逻辑缺陷」与
+                            #   「AuditGate 数值/格式缺陷」（本条存在的唯一目的），
+                            #   且日志 0 痕迹 ⇒ 事后无法判断"没触发"还是"被吞"。
+                            self.record(ctx, "lean_gate",
+                                        f"Lean 候选级淘汰反馈单独留存失败"
+                                        f"（{type(_e_lrf).__name__}: {str(_e_lrf)[:120]}）"
+                                        f"→ revise 将丢失 Lean 专属反馈")
                         self.record(ctx, "lean_gate",
                                     f"Lean 硬验证淘汰 {len(lean_fb)} 候选，"
                                     f"revise 将注入 Lean 反馈")
@@ -2064,6 +2143,32 @@ class Orchestrator(BaseAgent):
             is_proof = (getattr(ctx, 'question_type', '') == '证明题'
                         or getattr(ctx, 'domain', '') in ('证明', '证明题'))
             tier_votes = self.config.tier_voting_times.get(tier, 1)
+            # ★ 2026-10-07 修「假开关 --voting_times」（问题总账 §2.6）：
+            #   主路径此前**只**读 `tier_voting_times`，并把结果**显式**传给
+            #   `verifier.run(voting_times=tier_votes)`；而 `verifier.run` 仅在
+            #   `voting_times is None` 时才回退 `config.verifier_voting_times`
+            #   ⇒ `run_eval.py --voting_times N`（→ `verifier_voting_times`）
+            #   对主路径**完全无效**（旧注释所称"可调"只对非主路径成立）。
+            #   现让主路径取「档位票数」与「用户配置」的**较大者**：
+            #     · 默认配置下 `verifier_voting_times`(2) ≤ `tier_voting_times[deep]`(3)
+            #       ⇒ **默认行为零变化**；
+            #     · 用户 CLI 调大（如 `--voting_times 5`）⇒ 真正生效。
+            #   与 `verifier._vote_profile` 既有的「以下限方式合并」同口径。
+            #   ⚠ 仅当该 tier 在 `tier_voting_times` 里有显式条目时才合并，避免影响
+            #     无条目档位的默认 1 票；调**小**不生效（档位计划票数是下限）。
+            _tier_vote_map = getattr(self.config, "tier_voting_times", None) or {}
+            if tier in _tier_vote_map:
+                try:
+                    _user_votes = int(getattr(
+                        self.config, "verifier_voting_times", 0) or 0)
+                except (TypeError, ValueError):
+                    _user_votes = 0
+                if _user_votes > int(tier_votes):
+                    self.record(ctx, "verifier",
+                                f"投票票数提升：用户配置 verifier_voting_times="
+                                f"{_user_votes} > 档位 {tier_votes} → 采用 {_user_votes}"
+                                f"（--voting_times 对主路径生效）")
+                    tier_votes = _user_votes
 
             # P1 v3（2026-09-11）：验证硬信号 → 强制重解（official112 头号靶点）。
             # 演进记录（三次实测定位）：
@@ -2138,8 +2243,16 @@ class Orchestrator(BaseAgent):
                     if _p1_after == _p1_before:
                         try:
                             ctx._revise_no_progress_answer = _p1_after
-                        except Exception:  # noqa: BLE001
-                            pass
+                        except Exception as _e_np:  # noqa: BLE001
+                            # ★ 2026-10-07 观测补齐（问题总账 §2.6「纯空吞异常」A 类）：
+                            #   原为裸 `pass`。本标记是"无用功截断"的**唯一依据**——
+                            #   置位失败 ⇒ 4.6/5/5.5 三个同源 revise 会对**同一个答案**
+                            #   反复重解（历史实测单题 revise 轮数打到 6、白烧算力），
+                            #   且无任何痕迹可归因。
+                            self.record(ctx, "revise",
+                                        f"「重解无进展」标记置位失败"
+                                        f"（{type(_e_np).__name__}: {str(_e_np)[:120]}）"
+                                        f"→ 同源 revise 可能对同答案重复重解")
                 else:
                     # 2026-09-12 可观测性补强（Bug 4 跟进）：P1"0 触发"必须能区分
                     # 是「**没有硬信号**」还是「**有时间但因档位/emergency/门槛被拦**」。
@@ -2207,8 +2320,14 @@ class Orchestrator(BaseAgent):
                     self.record(ctx, "control",
                                 "候选池 %d 个全部呈非答案形态（未清空，保持 M2 原则，"
                                 "2026-09-18）" % len(_before36))
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as _e_f36:  # noqa: BLE001
+                # ★ 2026-10-07 观测补齐（问题总账 §2.6「纯空吞异常」A 类）：原为裸 `pass`。
+                #   本块负责「过滤非答案形态候选（Markdown 标题/过程叙述）」，是 096 实测
+                #   「污染票型→错答案」的对策。整块静默失败 ⇒ 脏候选**照进投票**且无痕迹，
+                #   与"过滤后本就干净"不可区分。
+                self.record(ctx, "control",
+                            f"非答案形态候选过滤失败（{type(_e_f36).__name__}: "
+                            f"{str(_e_f36)[:120]}）→ 脏候选可能进入投票")
             ver_result = self.verifier.run(
                 ctx, problem=ctx.problem, candidates=ctx.candidates,
                 use_clustering=True,
@@ -2492,11 +2611,17 @@ class Orchestrator(BaseAgent):
                     # 该题**计 C 且分母不变**。
                     # 修复：为"一次重做 + 闸门复验"预留 `_rework_reserve`（默认 300s），
                     # 让循环体内的 solver.run 必定能在硬墙前跑完。
+                    # ★ 2026-10-07 注册制补齐（问题总账 §2.3「B 类裸 env 未登记」）：
+                    #   原为裸 `os.environ.get("REWORK_RESERVE_SEC", "300")` ⇒ 不入
+                    #   注册表（diag 看不到）、"先 import 后改 env" 有静默失效风险。
+                    #   现走注册表 `rework_reserve_sec`（优先级 env > config > 默认）；
+                    #   注册未落时回退"调用时读 env"（与旧行为一致）。
                     try:
-                        _rework_reserve = float(
-                            os.environ.get("REWORK_RESERVE_SEC", "300"))
+                        _rr_env = float(os.environ.get("REWORK_RESERVE_SEC", "300"))
                     except (TypeError, ValueError):
-                        _rework_reserve = 300.0
+                        _rr_env = 300.0
+                    _rework_reserve = float(
+                        _sw_num_or("rework_reserve_sec", _rr_env))
                     _rework_deadline = min(
                         _hard_end,
                         ctx.start_time + _tier_budget) - max(0.0, _rework_reserve)
@@ -2504,10 +2629,16 @@ class Orchestrator(BaseAgent):
                     # （审计 A 级第 3 条）。原注释自述动机是「6.5 成为新的时间黑洞」
                     # 的省时考虑；研究期求正确率上限，不再以时间为由限制终审重做。
                     # `DEEP_MAX_REWORK=N`（N>=0）仍可显式设上限，便于 A/B。
+                    # ★ 2026-10-07 同上：改走注册表 `deep_max_rework`（默认 -1）。
                     try:
-                        _deep_cap = int(os.environ.get("DEEP_MAX_REWORK", "-1"))
+                        _dmr_env = int(os.environ.get("DEEP_MAX_REWORK", "-1"))
                     except (TypeError, ValueError):
-                        _deep_cap = -1
+                        _dmr_env = -1
+                    try:
+                        _deep_cap = int(
+                            _sw_num_or("deep_max_rework", float(_dmr_env)))
+                    except (TypeError, ValueError):
+                        _deep_cap = _dmr_env
                     # 2026-09-14：fast 档已删除 ⇒ 原 `tier in ("fast","standard")`
                     # 简化为 `tier == "standard"`。
                     _max_rework = (2 if tier == "standard"
@@ -2543,6 +2674,20 @@ class Orchestrator(BaseAgent):
                     #   （即本项目「只改一处=没改」的老病灶）。顶部检测对全部路径等效生效。
                     _prev_rework_ans = None
                     _no_progress_rounds = 0
+                    # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：
+                    #   while 条件不成立时循环**一次都不进**、下游只见"6.5 没重做"
+                    #   却分不清是「闸门本已通过」还是「被时间/轮数闸挡在门外」。
+                    #   此处仅**记录**原因，不改动 while 的任何条件（控制流不变）。
+                    if not g_ok:
+                        if _t3.time() >= _rework_deadline - 5:
+                            self.record(
+                                ctx, _gk,
+                                f"6.5 重做循环跳过：剩余 "
+                                f"{_rework_deadline - _t3.time():.0f}s < 5s（时间不足一轮重做）")
+                        elif _max_rework is not None and _tried >= _max_rework:
+                            self.record(
+                                ctx, _gk,
+                                f"6.5 重做循环跳过：已达重做轮数上限 {_max_rework}")
                     while (not g_ok
                            and _t3.time() < _rework_deadline - 5
                            and (_max_rework is None or _tried < _max_rework)):
@@ -2762,8 +2907,15 @@ class Orchestrator(BaseAgent):
                                     ctx, _pre_rework_final, "gate_rollback")):
                             try:
                                 ctx._gate_rollback = True
-                            except Exception:  # noqa: BLE001
-                                pass
+                            except Exception as _e_gr:  # noqa: BLE001
+                                # ★ 2026-10-07 观测补齐（问题总账 §2.6「纯空吞异常」A 类）：
+                                #   原为裸 `pass`。回滚标记是下游（诊断/报告）识别
+                                #   "终答被回滚到重做前答案"的唯一信号；置位失败 ⇒
+                                #   终答值已回滚但标记为假，事后归因自相矛盾且无痕迹。
+                                self.record(ctx, _gk,
+                                            f"gate_rollback 标记置位失败"
+                                            f"（{type(_e_gr).__name__}: {str(_e_gr)[:120]}）"
+                                            f"→ 终答已回滚但缺少下游标记")
                             self.record(ctx, _gk,
                                         "候选尽数未过客观审核 → 回滚到重做前的答案"
                                         f"（{str(_pre_rework_final)[:60]}），"
@@ -2991,6 +3143,13 @@ class Orchestrator(BaseAgent):
         """
         max_rounds = getattr(self.config, 'deep_revise_rounds', 1)
         if max_rounds <= 0 or ctx.state.emergency:
+            # ★ 2026-10-07 分支静默跳过埋点（问题总账 §2.6「隐形门控」）：原为裸
+            #   `return False` ⇒ revise 回环被这道闸挡下时**0 痕迹**（与"回环跑了但
+            #   没拿到正确票"不可区分）。此处仅记录原因，返回值与行为不变。
+            self.record(ctx, "revise",
+                        "revise 回环跳过："
+                        + ("deep_revise_rounds<=0" if max_rounds <= 0
+                           else "emergency 状态"))
             return False
         # 2026-09-02 老师需求：revise 全局轮数上限 5（revise_round 跨主路径累计）
         # ★ 2026-09-17（Audit-1）：全局轮数上限改由 `max_revise_rounds` 提供
@@ -3773,16 +3932,27 @@ class Orchestrator(BaseAgent):
                 return _top_ans
         # 2) 从 candidates 找有非拒绝答案的
         if ctx.candidates:
-            sorted_c = sorted(ctx.candidates, key=lambda c: len(c.reasoning or ""), reverse=True)
+            # ★ 2026-10-07（问题总账 §2.6「择优逻辑口径分叉」）：原按 `len(reasoning)`
+            #   降序（长推理优先），与 formatter 已统一的 `_rank_key`（票数→独立复现数
+            #   →置信度→答案形态→答案更短）**同语义、两处判据不同** ⇒ 本兜底路径可能
+            #   选出与主链不一致的答案。现统一复用 `_rank_key`（只读引用 formatter）。
+            #   `_attach_support` 先把"独立复现数"挂到候选上（与 formatter 同口径）；
+            #   失败不阻断（未挂时 `_rank_key` 兜底 `_support_n=1`，退化为票数/置信度口径）。
+            try:
+                _formatter_attach_support(ctx.candidates)
+            except Exception:  # noqa: BLE001
+                pass
+            sorted_c = sorted(ctx.candidates, key=_formatter_rank_key, reverse=True)
             for c in sorted_c:
                 if c.answer and c.answer.strip() and not _re.search(r"无法求解|无法解决|不能解决", c.answer):
                     if isinstance(getattr(ctx, "_pick_diag", None), dict):
-                        ctx._pick_diag["branch"] = "candidate_longest_reasoning"
+                        ctx._pick_diag["branch"] = "candidate_rank_key"
                         ctx._pick_diag["picked"] = c.answer[:40]
                     return c.answer
         # 3) 最后防线：取最详细推理的尾部
         if ctx.candidates:
-            best = max(ctx.candidates, key=lambda c: len(c.reasoning or ""))
+            # ★ 2026-10-07 同上：排序键也统一到 `_rank_key`（原为 len(reasoning)）。
+            best = max(ctx.candidates, key=_formatter_rank_key)
             if best.reasoning and len(best.reasoning) > 50:
                 if isinstance(getattr(ctx, "_pick_diag", None), dict):
                     ctx._pick_diag["branch"] = "reasoning_tail"
@@ -4342,7 +4512,7 @@ class Orchestrator(BaseAgent):
                     "【最终答案】: ",
                 ),
                 temperature=0.0,
-                max_tokens=_EMERGENCY_DIRECT_MAX_TOKENS,
+                max_tokens=_emergency_direct_max_tokens(),
             )
             text = _normalize_chat_response(resp)
             if text:
@@ -4381,7 +4551,7 @@ class Orchestrator(BaseAgent):
                         ],
                         "【最终答案】: ",
                     ),
-                    temperature=0.0, max_tokens=_EMERGENCY_DIRECT_MAX_TOKENS,
+                    temperature=0.0, max_tokens=_emergency_direct_max_tokens(),
                 )
                 text = _normalize_chat_response(resp2)
                 if text:
