@@ -427,6 +427,20 @@ _SPEC = (
      None, "bool",
      "REQUIRE_ANSWER_IN_POOL — 候选入池前要求真含最终答案"
      "（默认 True；实测 59% 候选是推理句/元话语，2026-10-06 上游缺口修复）", None),
+    # ★ 2026-10-07（问题 2.4 第二轮 / 2.9）开关注册制四件套（入池门槛 v2 + check 协议守卫）
+    ("pool_gate_v2",
+     lambda cfg, tier, _f="pool_gate_v2", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "POOL_GATE_V2 — 候选入池门槛 v2（默认 True）：判据升级为 "
+     "`looks_like_pool_answer`（补题 000/002/007 规划/设定句漏网、修题 087/088 "
+     "多字母选项与题 101/111 判断题误杀）+ 穷举 6 处写入入口（证明通道/生成失败"
+     "抢救/自改进覆盖/截断续写/子目标候选/三 Agent 协作）。=0 回退上一轮口径做 A/B", None),
+    ("check_protocol_guard",
+     lambda cfg, tier, _f="check_protocol_guard", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "CHECK_PROTOCOL_GUARD — `<check>` 协议守卫（默认 True）：中文句子塞进 `<check>` "
+     "⇒ 不可解析 ⇒ 子目标客观判定 0/73。打开后违规定性 + 留痕（trace/sg/diag）"
+     "+ 一次定向重问；=0 回退旧行为（静默跳过）做 A/B", None),
     ("verifier_vote_reasoning",
      lambda cfg, tier, _f="verifier_vote_reasoning", _d="disagree": getattr(cfg, _f, _d),
      None, "str",

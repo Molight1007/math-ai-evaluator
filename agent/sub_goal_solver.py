@@ -216,6 +216,101 @@ def _k11_mask_on() -> bool:
         return True
 
 
+def _pool_gate_v2_on() -> bool:
+    """候选入池门槛 v2 开关（`pool_gate_v2`，默认 True；与 `agent/solver.py` 同源）。
+
+    针对问题 2.4：**子目标候选此前完全不过入池门槛** —— 它是一条独立的写入
+    `ctx.candidates` 的路径（"只改主路径 = 没改"）。打开后子目标合并/兜底的
+    `final_answer` 同样过 `utils.extract.looks_like_pool_answer`，
+    不合格则**不入池并留痕**。=0 回退旧行为做 A/B。
+    """
+    try:
+        return bool(_sw_bool("pool_gate_v2"))
+    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
+        return True
+
+
+def _check_protocol_guard_on() -> bool:
+    """`<check>` **协议守卫**开关（`check_protocol_guard`，默认 True）。
+
+    针对问题 2.9：实测题 000 大量子目标把**中文句子**塞进 `<check>`（如
+    `<check>图 G 是弱连通的</check>`）⇒ 客观判定**一条都出不来**
+    （`is_parseable=False`，`n_judged = 0/73` 的直接原因之一）。打开后：
+      ① 判定"该 `<check>` 内容是否为**可核验对象**"（纯数学等式）；
+      ② 违反 ⇒ **留痕**（trace + sg 字段）并**触发一次定向重问**；
+      ③ 重问仍不合规 ⇒ 保留并留痕（绝不静默落 undecided）。
+    =0 回退旧行为（只静默跳过、不留痕、不重问）做 A/B。
+    """
+    try:
+        return bool(_sw_bool("check_protocol_guard"))
+    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
+        return True
+
+
+# ---------------------------------------------------------------------------
+# `<check>` 协议校验（2026-10-07，问题 2.9）
+# ---------------------------------------------------------------------------
+# 协议（`prompts/sub_goal.py::SUBGOAL_STEP_SYSTEM` 第 6 条）要求 `<check>` **只装
+# 一个纯数学等式**：仅含数字/变量/运算符（`+ - * / ^ ( )`），恰含一个 `=`，无中文。
+# 违反协议（装中文句子/文字/非等式）时**不是"没给出断言"，而是"给了不可核验的东西"**
+# ⇒ 必须与"未给断言"区分：前者留痕 + 定向重问，后者正常走 undecided。
+_CHECK_INNER_RE = re.compile(r"<check>(.*?)</check>", re.DOTALL)
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+# ⚠ 2026-10-07 实测修正：初版字符类漏了 `|` ⇒ 把 `|D_8| = 8`（二面体群阶，实测出现
+#   8 次）误判为"违反协议"（假阳）。这里补上数学常用符号（`|` 绝对值/阶、`,` 元组、
+#   `{}[]` 集合/区间、`!` 阶乘、`'` 导数、`%`、`~`、`\` LaTeX 命令、`<>`）。仍要求
+#   "恰含一个 `=`"且不含中文 ⇒ 只拦真正的破坏形态（`<check>图 G 是弱连通的</check>`）。
+_CHECK_BODY_ALLOWED_RE = re.compile(r"^[0-9a-zA-Z_+\-*/^().=\s|,{}\[\]<>!%'~\\]+$")
+
+
+def _is_verifiable_check_body(body: str) -> bool:
+    """`<check>` 的 inner 是否是**可核验对象**（一个纯数学等式）。
+
+    ⚠ 本函数只判**语法形态**（"是不是一个纯数学等式"），**不判语义可验性**：
+    像 `x = 5` / `s = 265/247` 这类"赋值式"语法上合规（协议第 6 条虽提示不要用，
+    但实测模型大量使用），语义"不可验"由 `_sympy_judge` 返回 unknown 放行处理
+    —— 若在此也判违规，会对大量正常步骤触发无谓重问（成本风险 > 收益）。
+    故本守卫专注拦截**协议真正的破坏形态**：`<check>` 里装中文/文字/非等式
+    （实测 `'图 G 是弱连通的'` 就是这一类）。
+    """
+    b = " ".join(str(body or "").split())
+    if not b:
+        return False
+    if _CJK_RE.search(b):          # 含中文 ⇒ 句子，不是可核验等式
+        return False
+    if b.count("=") != 1:          # 必须恰含一个 =
+        return False
+    L, R = (p.strip() for p in b.split("="))
+    if not L or not R:             # 两侧都要有内容
+        return False
+    if not _CHECK_BODY_ALLOWED_RE.match(b):   # 只允许数学字符
+        return False
+    return True
+
+
+def _check_protocol_violations(text) -> list:
+    """返回**违反 `<check>` 协议**的 inner 文本列表（空 = 无 `<check>` 或全部合规）。
+
+    与 `_extract_check_asserts` 的区别：后者"宁缺毋滥"——不合规的 `<check>`
+    **静默 skip**（于是违反协议不可见）；本函数把**同一批 skip 掉的**显式收出来，
+    供留痕与定向重问。
+    """
+    if not text or "<check>" not in str(text):
+        return []
+    out = []
+    for m in _CHECK_INNER_RE.finditer(str(text)):
+        body = m.group(1).strip()
+        if not _is_verifiable_check_body(body):
+            out.append(body or "(空)")
+    # 去重保序
+    seen, uniq = set(), []
+    for b in out:
+        if b not in seen:
+            seen.add(b)
+            uniq.append(b)
+    return uniq[:6]
+
+
 # ★ 2026-09-17（P-9）：穷尽性检查的**固定段落**清单。
 # ⚠ 与 `orchestrator._parse_exhaust_result` 的口径必须一致 ——
 #   由 tests/test_exhaust_sections_consistency.py 断言，防止两处漂移。
@@ -886,8 +981,6 @@ class SubGoalSolverAgent(BaseAgent):
             f"最终答案: {final_answer}"
         )
 
-        # 构造 Candidate
-        full_reasoning = self._build_full_reasoning(subgoals, problem_analysis, final_answer)
         # 2026-09-02 老师需求：候选池统一封顶（与 solver.run 同口径）。
         # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）
         # ★ 2026-10-04 修（D7）：原硬编码 `>= 6` 与 `agent/orchestrator.py:1962-1969`
@@ -904,6 +997,30 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "subgoal",
                         f"候选池已达上限 {_pool_lim}，跳过子目标候选入池")
             return
+        # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口⑤）：**子目标候选此前不过入池门槛**
+        #   —— 它是独立于 solver 的一条 append（"只改主路径 = 没改"）。实测背景：
+        #   题 002 的 `'证明这个最小值就是所求的 $T$，并验证其最优性'`、
+        #   题 000 的 `'子问题4：计算满足条件的路径总数'` 这类"任务描述句"曾是
+        #   池内候选（且 002 那条还成了唯一幸存候选被采用）。此处与 solver 同口径，
+        #   不合格则**不入池并留痕**（`_merge_results` 的 `final_answer` 与
+        #   `_fallback_from_last_subgoal` 的自然语言结论都可能命中）。
+        if _pool_gate_v2_on():
+            try:
+                from utils.extract import normalize_pool_answer as _npa
+                _fans, _fok = _npa(final_answer)
+            except Exception:  # noqa: BLE001  校验不可用时放行，不阻断
+                _fans, _fok = final_answer, True
+            if not _fok:
+                self.record(
+                    ctx, "candidate_invalid",
+                    "子目标候选 **不含最终答案 → 不入池**"
+                    "（final_answer 前 60 字：%r）" % (str(final_answer)[:60],))
+                return
+            final_answer = _fans
+        # 构造 Candidate（`full_reasoning` 在门槛**之后**构建 ⇒ 与最终入池的
+        #   `final_answer` 保持一致；避免抢救替换值后 reasoning 仍写原句）。
+        full_reasoning = self._build_full_reasoning(
+            subgoals, problem_analysis, final_answer)
         candidate = Candidate(
             id=next_candidate_id(ctx.candidates),
             answer=final_answer,
@@ -2151,6 +2268,56 @@ class SubGoalSolverAgent(BaseAgent):
 
         step_result = self._call_step(ctx, user_msg, sg=sg)
 
+        # ★★ 2026-10-07（问题 2.9）：**`<check>` 协议校验 + 定向重问**。
+        #   实测（smoke10 题 000）：大量子目标把**中文句子**塞进 `<check>`
+        #   （`<check>图 G 是弱连通的</check>`）⇒ `is_parseable=False` ⇒
+        #   客观判定**一条都出不来**（`n_judged = 0/73` 的直接原因之一）。
+        #   处理（先读既有契约 `SUBGOAL_CONCLUSION_CONTRACT` 再强化，不另起一套）：
+        #     ① 违规定性：`<check>` 内含非可核验对象（中文/文字/非单等式）；
+        #     ② **留痕**：trace 记 `check_protocol`（违反内容 + 子目标号），
+        #        并把违反项写进 sg，随 `_build_trace_item` 进 diag（可见，不静默）；
+        #     ③ **一次定向重问**：把违规内容 + 正确写法（`本步结论: 判定 = 真`
+        #        或纯数学等式）作为反馈重发；重问后合规即采用新结果。
+        #     ⚠ 不做"重问 N 次"——单步成本高（本项目多次实测：生成侧吃光预算
+        #       → 验证阶段饿死）；一次不成就保留并留痕，交由下游处置。
+        if (_check_protocol_guard_on() and step_result
+                and not step_result.startswith("[子目标")):
+            _viol = _check_protocol_violations(step_result)
+            if _viol:
+                self.record(
+                    ctx, "check_protocol",
+                    "子目标#%s 违反 <check> 协议：%d 处 <check> 内含非可核验对象"
+                    "（应为纯数学等式；装句子 = 该步不可验证）。违反内容示例：%r"
+                    % (sg.get("id"), len(_viol), _viol[0][:60]))
+                try:
+                    sg["check_protocol_violations"] = _viol[:3]
+                except Exception:  # noqa: BLE001
+                    pass
+                if not ctx.gen_time_up():
+                    _fix_msg = user_msg + (
+                        "\n\n[协议违规：`<check>` 内容不是可核验对象]\n"
+                        "你写的 `<check>%s</check>` 里是**文字描述**，系统无法核验。\n"
+                        "`<check>` 只允许装**一个纯数学等式**（仅数字/变量/运算符 "
+                        "+ - * / ^ ( )，恰含一个 `=`，不得含中文或文字）。\n"
+                        "修正方式：\n"
+                        "  · 自然语言命题（如「图 G 是弱连通的」）改写为"
+                        "【本步结果】首行 `本步结论: 判定 = 真`；\n"
+                        "  · `<check>` 只保留真正的数值/代数等式，"
+                        "没有可核验等式就**不要写 `<check>`**。\n"
+                        "请修正后重新给出【本步结果】。"
+                        % (_viol[0][:80],))
+                    _retry = self._call_step(ctx, _fix_msg, sg=sg)
+                    if (_retry and not _retry.startswith("[子目标")
+                            and not _check_protocol_violations(_retry)):
+                        self.record(ctx, "check_protocol",
+                                    "子目标#%s 定向重问后 <check> 协议合规"
+                                    % sg.get("id"))
+                        step_result = _retry
+                    else:
+                        self.record(ctx, "check_protocol",
+                                    "子目标#%s 定向重问后仍违规/无改善 → 保留原结果"
+                                    "并留痕（不再重问）" % sg.get("id"))
+
         # 每步 oracle 校验：仅对计算类子目标（预期数值/表达式结果）做客观检查
         # 2026-09-03 老师：子目标是**简化求解**的，不是复杂化的。实测 deep 档
         # 每步 110s（主求解 60s + oracle 10-70s + 重试 60s）→ 8 步吃掉 882s，
@@ -2635,6 +2802,15 @@ class SubGoalSolverAgent(BaseAgent):
                     "多候选可解析但**无严格多数**（意见分歧，无客观依据选边）")
         # ④ 判不出 → 留痕说明原因
         kind = contract.get("kind") or ""
+        # ★ 2026-10-07（问题 2.9）：**违反 `<check>` 协议要显式可见**，不能静默
+        #   落成与"未给断言"同款的 undecided —— 二者根因与处置完全不同
+        #   （前者=格式违约，后者=模型确实没给可核验对象）。
+        _viol = _check_protocol_violations(result_text)
+        if _viol:
+            return (-1, "undecided",
+                    "违反 <check> 协议：<check> 内含非可核验对象（%r…），"
+                    "无法客观判定（应改写为「本步结论: 判定 = 真」或纯数学等式）"
+                    % (_viol[0][:40],))
         if not contract.get("ok"):
             return (-1, "undecided",
                     "未达成结论契约：" + (contract.get("reason") or "无结构化结论"))
@@ -3882,6 +4058,9 @@ class SubGoalSolverAgent(BaseAgent):
             # ---- 2026-10-06 客观判定（B）----
             "objective_verdict": sg.get("objective_verdict", ""),
             "objective_reason": sg.get("objective_reason", ""),
+            # ---- 2026-10-07 `<check>` 协议违规（问题 2.9，可见化）----
+            "check_protocol_violations": list(
+                sg.get("check_protocol_violations") or []),
         }
         if reused:
             item["reused"] = True

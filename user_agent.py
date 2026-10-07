@@ -313,6 +313,19 @@ class AgentConfig:
     #   置 True：不含答案的候选**不入池**并留痕（宁可池子少一个，不放"假候选"）。
     #   置 False：回退旧行为（全部入池）做 A/B。
     require_answer_in_pool: bool = True
+    # ★ 2026-10-07 新增（问题 2.4 第二轮）：候选**入池门槛 v2** —— 上一轮门槛只覆盖
+    #   `_generate_initial`/`_generate_revise` 主路径，实测仍有漏网（题 002
+    #   `'证明这个最小值就是所求的 $T$，并验证其最优性'` 入池且成唯一幸存候选、被
+    #   final_select③ 直接采用；题 000/007 的 `子问题4：…` 类描述句入池）与误杀
+    #   （题 087 `BD`/题 088 `AB` 各被拒 4/5 次）。置 True（默认，修好后行为）：
+    #   ①判据升级为 `looks_like_pool_answer`（补漏网 / 修误杀）；②穷举全部 6 处写入
+    #   `ctx.candidates` 的入口。置 False 完全回退上一轮口径做 A/B（详见注册表）。
+    pool_gate_v2: bool = True
+    # ★ 2026-10-07 新增（问题 2.9）：`<check>` **协议守卫** —— 实测题 000 大量把中文
+    #   句子塞进 `<check>`（`<check>图 G 是弱连通的</check>`）⇒ 不可解析 ⇒ 子目标客观
+    #   判定一条都出不来（`n_judged = 0/73` 直接原因之一）。置 True（默认，修好后行为）：
+    #   违规定性 + 留痕（可见）+ 一次定向重问。置 False 回退旧行为（静默跳过）做 A/B。
+    check_protocol_guard: bool = True
     # ★ 2026-10-06 新增：Lean/Audit 门把候选**全部拒掉**时的处置。
     #   默认 False = 只显式留痕（不静默保留，但也不清空）；
     #   置 True = 清空候选池，触发下游兜底/重生成链。
@@ -1017,6 +1030,9 @@ class ReasoningAgent:
             "use_rubric", "use_challenge",  # 2026-09-06 sq 移植（A/B 开关）
             "max_revise_rounds", "max_workers",
             "require_answer_in_pool",
+            # ★ 2026-10-07（问题 2.4 / 2.9）：入池门槛 v2 + `<check>` 协议守卫。
+            #   必须在此白名单，否则 CLI/kwargs 传入会被静默丢弃（本项目多次踩坑）。
+            "pool_gate_v2", "check_protocol_guard",
             "strict_all_rejected",
             "diversity_resample_enabled", "diversity_resample_count",
             "use_proof_channel", "use_lemma_accumulation",

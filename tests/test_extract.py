@@ -12,6 +12,8 @@ from utils.extract import (
     extract_final_answer,
     normalize_answer,
     rescue_final_answer,
+    looks_like_pool_answer,
+    normalize_pool_answer,
 )
 
 
@@ -215,3 +217,52 @@ class CalcMarkerStripTest(unittest.TestCase):
     def test_normal_number_untouched(self) -> None:
         _, extract = self._imports()
         self.assertEqual(extract("25502500"), "25502500")
+
+
+class PoolAnswerGateTest(unittest.TestCase):
+    """问题 2.4 第二轮：候选入池门槛 v2 判据（`looks_like_pool_answer`）。
+
+    依据（smoke10 2026-10-06 实测）：
+      - **漏网**（v1 判 True 却入池成污染）：题 000 `'子问题4：计算满足条件的路径总数'`
+        与 `'{(x,y)|…}，共 20 × 3 = 60 个元素'`、题 002 `'证明这个最小值就是所求的
+        $T$，并验证其最优性'`、题 007 `'- 子问题4：求和并验证结果'`（4 条）。
+      - **误杀**（v1 判 False 却拒掉真答案）：题 087 gold `B, D` 写作 `BD`、题 088
+        `AB` 各被拒 4/5 次；题 101/111 判断题 gold `正确`/`错误`。
+    """
+
+    def test_plan_and_setup_sentences_blocked(self) -> None:
+        """4 条实测漏网句必须判 False（不入池）。"""
+        for s in [
+            "子问题4：计算满足条件的路径总数",
+            "{(x,y) | 0 ≤ x ≤ 19, 0 ≤ y ≤ 2}，共 20 × 3 = 60 个元素",
+            "证明这个最小值就是所求的 $T$，并验证其最优性",
+            "- 子问题4：求和并验证结果",
+            "步骤2：计算总和并验证",
+        ]:
+            self.assertFalse(looks_like_pool_answer(s), s)
+
+    def test_legit_answers_pass(self) -> None:
+        """真答案必须判 True（含 v1 误杀的多字母选项 / 判断题判定词）。"""
+        for s in [
+            "\\boxed{42}",
+            "265/247",
+            "$x = 3$",
+            "BD",            # 题 087 gold 为 `B, D`
+            "正确",           # 题 101 gold
+            "错误",           # 题 111 gold
+        ]:
+            self.assertTrue(looks_like_pool_answer(s), s)
+
+    def test_normalize_pool_answer_salvages_boxed(self) -> None:
+        """叙述句里若含 `\\boxed{}`/句末「是/为/= 值」⇒ 抢救出值而非整句入池。"""
+        val, ok = normalize_pool_answer("所以最终答案是 \\boxed{1/2}")
+        self.assertTrue(ok)
+        self.assertIn("1/2", val)
+
+    def test_normalize_pool_answer_rejects_plan(self) -> None:
+        val, ok = normalize_pool_answer("子问题4：计算满足条件的路径总数")
+        self.assertFalse(ok)
+
+
+if __name__ == "__main__":
+    unittest.main()

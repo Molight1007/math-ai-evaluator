@@ -468,6 +468,125 @@ def _salvage_value_from_line(line: str) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# 候选**入池判据 v2**（2026-10-07 新增；`pool_gate_v2` 开关消费）
+# ---------------------------------------------------------------------------
+# 背景（smoke10 2026-10-06，`run_2026-10-06_smoke10_...jsonl` 实测）：
+#   上一轮的入池门槛用 `_looks_like_answer`，实测**两头都错**：
+#   · **漏网**（拦住的是垃圾判成答案）：4 条"规划/设定句"入池并被选为终答，
+#       题 002 `'证明这个最小值就是所求的 $T$，并验证其最优性'`（成了唯一幸存
+#         候选、被 final_select③ 直接采用、`predicted` = 该句、置信度 0.00）；
+#       题 000 `'子问题4：计算满足条件的路径总数'`（自改进"保留原版"落盘）、
+#         `'{(x,y) | 0 ≤ x ≤ 19, 0 ≤ y ≤ 2}，共 20 × 3 = 60 个元素'`（revise 入池）；
+#       题 007 `'- 子问题4：求和并验证结果'`。
+#       根因：`_looks_like_answer` 只拦 `步骤N`（`_STEP_HEADER_RE`），不拦
+#         `子问题N/子目标N`；且只要含数字/`$`/`=` 就放行，于是"描述性句子"漏网。
+#   · **误杀**（真答案判成垃圾）：题 087 的正确答案 `BD`、题 088 的 `AB`
+#       （多字母选项答案）被判 False 而**拒绝入池** —— trace 实证
+#       087「候选#1..#4 不含最终答案 → 不入池（answer 前 40 字：'BD'）」共 4 次、
+#       088 同型共 5 次（gold 分别为 `B, D` / `AB`）。`_looks_like_answer` 的
+#       选项判据 `^[A-E]$` 只认**单字母**，多选答案必然误杀。
+#       另经 official112 全量 gold 扫描（`looks_like_pool_answer(gold)`）：
+#       上一轮判据对 **8/112** 条 gold 判 False（判误杀面 ≈ 7.1%）——除 087/088
+#       的选项答案外，还有 101/111 的判断题 `正确`/`错误`。本次修掉其中**两类
+#       无争议形态**（多字母/带分隔符的选项、判断题判定词）；其余 5 条为
+#       填空题/论述题的**自然语言 gold**（037 `taking the empty card`、
+#       095/108 长文本、104 `移动平均法、时间序列分解法`、105 `标准差`），
+#       需"题型感知"改造（只有求值题才要求含数值），**本次不动**以免重新放开
+#       漏网面（详见 `_looks_like_plan_or_setup` 处说明与交付说明）。
+#
+# v2 判据 = 先补**两条确定性修正**（修误杀，不扩大误杀面），再修漏网，最后复用 v1：
+#   ① 选项答案：单/多字母 + 可选逗号/顿号/斜杠分隔（`BD` / `B, D` / `A,C`）⇒ 答案。
+#      ⚠ 2026-10-07 复验修正：初版**要求分隔符** ⇒ 连写的 `BD`（题 087 模型实际输出、
+#      实测被 v1 拒 4 次）仍被误杀。改为分隔符可选、上限 4 字母（`BD`/`AB`/`ABD`）。
+#      代价：`CAB`/`BED` 这类 ≤4 的 A-E 字母串会被放行为答案（误收）；权衡下远优于
+#      误杀真答案（多收一个候选由下游 final_selector/verifier 兜住，误杀则直接丢正确答案）。
+#   ② 判断题判定词（`正确`/`错误`/`对`/`错`/`真`/`假`/`是`/`否`）⇒ 答案；
+#   ③ `\boxed{...}` 显式形态 ⇒ 直接视为答案（模型显式定界，不拦）；
+#   ④ 规划/设定描述句 ⇒ 不是答案（修漏网），见 `_looks_like_plan_or_setup`；
+#   ⑤ 其余交回 `_looks_like_answer`（口径不变）。
+_OPTION_ANSWER_RE = re.compile(r"^[A-E](?:\s*[,，、/]?\s*[A-E]){0,3}$")
+_VERDICT_ANSWER_RE = re.compile(r"^(?:正确|错误|对|错|真|假|是|否)$")
+# 规划/步骤**标题**（`子问题4：…` / `- 子目标3: …` / `第 3 步` / `Step 13:`…）——
+# v1 只认 `步骤N`，此处补齐题干里最常见的 `子问题/子目标/子任务` 变体。
+_PLAN_HEADER_RE = re.compile(
+    r"^\s*[-*•·]?\s*[（(【\[]?\s*\**\s*"
+    r"(?:子问题|子目标|子任务|任务|步骤|第\s*\d+\s*步|step|phase)\s*\d*\s*[：:、.]",
+    re.IGNORECASE)
+# 祈使/任务动词开头（`证明…` / `计算…` / `求所有…`）⇒ 描述"要做什么"，不是"结果是多少"。
+_TASK_VERB_HEAD_RE = re.compile(
+    r"^\s*[（(【\[]?\s*\**\s*"
+    r"(?:证明|求证|验证|求出?|计算|推导|化简|说明|讨论|分析|构造|判断|确定|列举|列出|给出)"
+    r"\s*[：:，,、]?")
+# 描述性从句：`，共 20 × 3 = 60 个元素`（设定/计数说明）
+_DESC_COUNT_CLAUSE_RE = re.compile(r"[，,]\s*共\s*\d")
+# 描述性从句：`…，并验证其最优性`（把两个任务用顿号并列，仍是任务描述）
+_DESC_CONJ_VERB_RE = re.compile(r"[，,]\s*并\s*(?:验证|证明|求出?|计算|说明|讨论|构造)")
+
+
+def _looks_like_plan_or_setup(s: str) -> bool:
+    """该文本是否是**规划/设定描述句**（任务描述、步骤标题、计数说明）而非答案。
+
+    这是 v2 相对 v1 的**漏网修正层**：只收"确定不是答案"的形态（标题/祈使句/
+    描述性从句），不碰任何可能为真答案的形态 —— 避免扩大误杀。
+    """
+    t = " ".join(str(s or "").split())
+    if not t:
+        return True
+    if _PLAN_HEADER_RE.match(t):
+        return True
+    if _TASK_VERB_HEAD_RE.match(t):
+        return True
+    if _DESC_COUNT_CLAUSE_RE.search(t):
+        return True
+    if _DESC_CONJ_VERB_RE.search(t):
+        return True
+    return False
+
+
+def looks_like_pool_answer(s: str) -> bool:
+    """候选**入池**判据 v2（见上方背景）。返回 True = 像一个可入池的最终答案。
+
+    ⚠ 与 `_looks_like_answer` 的关系：**只做增量修正**（多字母选项 / boxed 形态 /
+    规划描述句），其余仍交回 v1 ⇒ 对既有行为是"补漏 + 修误杀"，不是换一套判据。
+    """
+    t = " ".join(str(s or "").split())
+    if not t:
+        return False
+    # ① 选项答案（修 087/088 误杀：BD / B, D / A,C…）
+    if _OPTION_ANSWER_RE.match(t):
+        return True
+    # ② 判断题判定词（修 101/111 误杀：正确 / 错误…）
+    if _VERDICT_ANSWER_RE.match(t):
+        return True
+    # ③ 显式 boxed ⇒ 模型自己定界了答案，不拦（防误杀）
+    if re.search(r"\\boxed\s*\{", t):
+        return True
+    # ④ 规划/设定描述句 ⇒ 不是答案（修 000/002/007 漏网）
+    if _looks_like_plan_or_setup(t):
+        return False
+    # ⑤ 其余交回 v1
+    return _looks_like_answer(t)
+
+
+def normalize_pool_answer(answer) -> tuple:
+    """候选入池前的"规范化 + 校验"**纯函数内核**（v2 门槛的单一来源）。
+
+    返回 `(规范化后的 answer, 是否可用)`。调用方（solver / sub_goal_solver /
+    collaborative_solver）各自决定留痕与入池策略，判据本身只此一处，防口径漂移。
+
+    先抢救、再判定（沿用 v1 的修正）：句子形态但含明确最终值时，**把 answer 换成
+    那个值**（如 `'所以最小 d 是 48。'` → `'48'`），而不是丢候选、也不是留整句。
+    """
+    a = str(answer or "").strip()
+    if looks_like_pool_answer(a):
+        return a, True
+    _sal = _salvage_value_from_line(a)
+    if _sal and looks_like_pool_answer(_sal):
+        return _sal, True
+    return a, False
+
+
 def smart_fallback_answer(text: str) -> str:
     """
     当 extract_final_answer 返回空或不理想时的智能回退。

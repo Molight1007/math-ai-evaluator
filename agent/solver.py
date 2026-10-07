@@ -178,6 +178,47 @@ def _pool_room(cfg, ctx) -> int:
     return _lim - len(getattr(ctx, "candidates", None) or [])
 
 
+def _pool_gate_v2_on() -> bool:
+    """候选**入池门槛 v2** 开关（`pool_gate_v2`，默认 True）。
+
+    ★ 2026-10-07 新增（问题 2.4 第二轮修复）。True = 修好后行为：
+      · 判据换成 `utils.extract.looks_like_pool_answer`（补 4 条规划/设定句漏网、
+        修 087/088 多字母选项误杀、修 101/111 判断题误杀）；
+      · **穷举全部写入 `ctx.candidates` 的入口**（不再只覆盖 `_generate_initial`
+        一处）。
+    =0 → 完全回退上一轮口径（仅 `_generate_initial`、`_generate_revise` 主路径过
+      旧判据 `_looks_like_answer`）做 A/B。
+
+    ── 全仓"候选写入 `ctx.candidates`"入口清单（共 11 处，逐一核对）──────────
+    【新增门槛（本次）】
+      ① solver.py  `_generate_initial` 证明通道 append        （原缺 → 已补）
+      ② solver.py  `_generate_initial` 生成失败抢救 append    （原缺 → 已补）
+      ③ solver.py  `_improve_candidates_once` **改写 cand.answer**
+                    （自改进覆盖，原缺 → 已补；不合格则保留原答案）
+      ④ solver.py  `complete_truncated_candidates` 替换为续写候选
+                    （原缺 → 已补；不合格则保留原候选）
+      ⑤ sub_goal_solver.py `run()` 子目标候选 append          （原缺 → 已补）
+      ⑥ collaborative_solver.py `run()` 协作候选 append       （原缺 → 已补）
+    【本已覆盖（上一轮已有，判据升级为 v2）】
+      ⑦ solver.py  `_generate_initial` 主成功 append
+      ⑧ solver.py  `_generate_revise`   主成功 append
+      （`add_candidates` 委托 `_generate_initial`，同一入口，无需单列）
+    【刻意不过门槛（有理由，非遗漏）】
+      ⑨ solver.py  `_generate_revise` 失败占位 `Candidate(answer="", reasoning=
+                    "[重解失败]…")` —— 显式失败标记，非"假答案"
+      ⑩ solver.py  `_improve_candidates_once` 保留原版 `_orig` —— 已入池候选的
+                    深拷贝，其 answer 入池时已过门槛
+      ⑪ orchestrator.py / formatter.py 的 `ctx.candidates = <子集>`
+                    （lean_kept / audit_kept / _clean / _keep / 腾位）—— **过滤/
+                    裁剪既有候选**，不引入新答案，天然不含"新非答案"
+      （`collaborative_solver.py` 因不在其他施工员占用范围内，一并纳入本次修复。）
+    """
+    try:
+        return bool(_sw_bool("pool_gate_v2"))
+    except Exception:  # noqa: BLE001  注册表不可用时取默认（=开）
+        return True
+
+
 def _is_refusal(text: str) -> bool:
     """检测模型输出是否为拒绝回答"""
     if not text or not text.strip():
@@ -330,6 +371,27 @@ class SolverAgent(BaseAgent):
             from utils.extract import _looks_like_answer, _salvage_value_from_line
         except Exception:  # noqa: BLE001  校验不可用时放行，不阻断
             return a, True
+        # ★★ 2026-10-07（问题 2.4 v2）：判据升级为 `looks_like_pool_answer`
+        #   （补漏网 + 修误杀，见 `utils/extract.py` 顶部背景与实测数字）。
+        #   开关 `pool_gate_v2`（默认 True）：置 0 完全回退上一轮口径
+        #   （只用 `_looks_like_answer`）做 A/B。
+        if _pool_gate_v2_on():
+            try:
+                from utils.extract import normalize_pool_answer
+            except Exception:  # noqa: BLE001
+                normalize_pool_answer = None
+            if normalize_pool_answer is not None:
+                _norm, _ok = normalize_pool_answer(a)
+                if _ok:
+                    if _norm != a:
+                        self.record(ctx, "answer_salvaged",
+                                    "候选#%s **从句子中抢救出答案** %r"
+                                    "（原句前 40 字：%r）" % (cid, _norm, a[:40]))
+                    return _norm, True
+                self.record(ctx, "candidate_invalid",
+                            "候选#%s **不含最终答案 → 不入池**（answer 前 40 字：%r）"
+                            % (cid, a[:40]))
+                return a, False
         if _looks_like_answer(a):
             return a, True
         _sal = _salvage_value_from_line(a)
@@ -1119,10 +1181,21 @@ class SolverAgent(BaseAgent):
         if is_proof and getattr(self.config, 'use_proof_channel', False):
             proof_cand = self._generate_proof(ctx)
             if proof_cand:
-                ctx.candidates.append(proof_cand)
-                self.record(ctx, "generate", f"证明题专用通道生成候选 #{proof_cand.id}")
-                return
-            self.record(ctx, "generate", "证明题专用通道未产出有效候选，回退通用求解")
+                # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口①）：**证明通道此前不过门槛**
+                #   —— 它是独立于主路径的一条 append，上一轮只改了主路径（"只改一处
+                #   = 没改"）。此处与主路径同口径，不合格则**不入池、继续走通用求解**。
+                _pans, _pok = self._normalize_and_check_answer(
+                    ctx, proof_cand.id, proof_cand.answer)
+                if _pok:
+                    proof_cand.answer = _pans
+                    ctx.candidates.append(proof_cand)
+                    self.record(ctx, "generate",
+                                f"证明题专用通道生成候选 #{proof_cand.id}")
+                    return
+                self.record(ctx, "generate",
+                            "证明题专用通道候选不含最终答案 → 弃用，回退通用求解")
+            else:
+                self.record(ctx, "generate", "证明题专用通道未产出有效候选，回退通用求解")
 
         # lemma 上下文注入
         lemma_ctx = self._collect_lemma_context(ctx)
@@ -1427,10 +1500,23 @@ class SolverAgent(BaseAgent):
                         _salvaged = ""
                 _salvaged = (_salvaged or "").strip()
                 if _salvaged and not _is_refusal(_salvaged) and len(_salvaged) <= 300:
-                    ctx.candidates.append(Candidate(
-                        id=cid, answer=_salvaged, reasoning=str(resp)))
-                    logger.warning(
-                        "Candidate %d 生成失败但抢救到答案: %s", cid, _salvaged[:60])
+                    # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口②）：**"生成失败抢救"
+                    #   这条 append 此前不过门槛** —— 抢救函数（extract / rescue /
+                    #   smart_fallback）本身就可能吐回推理句/元话语，于是"抢救"反倒
+                    #   成了非答案入池的后门。此处同口径复核：不合格则不入池，
+                    #   保持池干净、把控制权交给下游兜底链。
+                    _sans, _sok = self._normalize_and_check_answer(
+                        ctx, cid, _salvaged)
+                    if _sok:
+                        ctx.candidates.append(Candidate(
+                            id=cid, answer=_sans, reasoning=str(resp)))
+                        logger.warning(
+                            "Candidate %d 生成失败但抢救到答案: %s",
+                            cid, _sans[:60])
+                    else:
+                        logger.warning(
+                            "Candidate %d 生成失败，抢救结果仍非答案 → 不入池"
+                            "（交由下游兜底）", cid)
                 else:
                     logger.warning(
                         "Candidate %d generation failed/skipped（无可用答案，"
@@ -1917,6 +2003,23 @@ class SolverAgent(BaseAgent):
                 answer = rescue_final_answer(resp)[0]
             if not answer:
                 answer = smart_fallback_answer(resp)
+            # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口③）：**自改进是"改写既有候选
+            #   answer 字段"的写入点，此前完全不过门槛** —— 实测题 003/007 的池内
+            #   id=0（answer = `'实际上，这个问题是已知的竞赛题…'` /
+            #   `'实际上，对于这种问题，通常有一个不变量…'`，reasoning 以
+            #   「【第一步：诊断】」开头 = 自改进产物）正是**被覆盖进池**的非答案，
+            #   且题 007 该候选还进了投票。此处：改进版不是答案 ⇒ **不覆盖原答案**
+            #   （保留既有、通常更好的答案），只更新 reasoning 与改进标记。
+            if _pool_gate_v2_on():
+                _ians, _iok = self._normalize_and_check_answer(
+                    ctx, getattr(cand, "id", "?"), answer)
+                if _iok:
+                    answer = _ians
+                else:
+                    self.record(ctx, "self_improve",
+                                f"Step2 改进版#{getattr(cand, 'id', '?')} 不含最终答案"
+                                f" → **保留原答案不覆盖**（防非答案覆盖入池）")
+                    answer = ""
             # B 方案（2026-09-11，本地实验）：**覆盖前先把原版保留为独立候选**。
             # 依据：smoke6_v3 实证 098 原候选答 B（正确），3.3 自改进后被改成 D
             # （错误）——「无条件替换」会把好答案直接改坏，且没有任何回退机制。
@@ -1930,6 +2033,9 @@ class SolverAgent(BaseAgent):
                         [int(getattr(c, "id", 0) or 0) for c in ctx.candidates] or [0])
                     _orig.self_improved = True      # 防对同一份再改进
                     _orig.source = (getattr(cand, "source", "") or "") + "+pre_improve"
+                    # （2.4 v2 入口清单）此处 append **刻意不再过门槛**：`_orig` 是
+                    #   "**已入池候选**的深拷贝"（其 answer 在入池时已过门槛），
+                    #   再判一次只会白丢这份"回退副本"，属冗余而非漏网。
                     ctx.candidates.append(_orig)
                     self.record(ctx, "self_improve",
                                 f"Step2 保留原版候选#{_orig.id}"
@@ -2061,10 +2167,20 @@ class SolverAgent(BaseAgent):
             if not ctx.gen_time_up():
                 new_c = self.complete_answer(ctx, c)
                 if new_c is not c and new_c.answer and len(new_c.answer) > 1:
-                    new_list.append(new_c)
-                    completed += 1
-                    self.record(ctx, "complete", f"候选 #{c.id} 截断续写成功")
-                    continue
+                    # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口⑤）：**截断续写产物
+                    #   此前不过门槛** —— 续写/答案前置重问走的是
+                    #   `extract/rescue/smart_fallback` 三条抢救函数，同样可能吐回
+                    #   推理句。不合格 ⇒ **保留原候选 c**（它入池时已过门槛），
+                    #   不用"续写出的非答案"替换。
+                    _cans, _cok = self._normalize_and_check_answer(ctx, c.id, new_c.answer)
+                    if _cok:
+                        new_c.answer = _cans
+                        new_list.append(new_c)
+                        completed += 1
+                        self.record(ctx, "complete", f"候选 #{c.id} 截断续写成功")
+                        continue
+                    self.record(ctx, "complete",
+                                f"候选 #{c.id} 续写结果不是最终答案 → 保留原候选")
             new_list.append(c)
         ctx.candidates = new_list
         return completed

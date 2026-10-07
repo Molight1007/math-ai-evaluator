@@ -262,6 +262,16 @@ class MockClient:
         self.calls.append(messages)
         if self.response is not None:
             return self.response
+        # ★ 2026-10-07（问题 2.4 候选入池门槛 v2）：规划类调用仍返回 DAG JSON，
+        #   但**单步求解 / 合并**是两条独立调用，原实现对它们也返回 DAG JSON ——
+        #   该内容不含最终答案，新门槛会**正确地**拒绝子目标候选 ⇒
+        #   `test_subgoal_run_with_blueprint` 的 `assertTrue(ctx.candidates)` 失败。
+        #   按真实流水线分别返回合规内容（step 给结论契约、merge 给纯答案）。
+        blob = "\n".join(str(m.get("content", "")) for m in (messages or []))
+        if "【当前子目标" in blob:
+            return "【本步结果】\n本步结论: 值 = 1\n本步依据: 本步推导"
+        if "合并为最终答案" in blob:
+            return "1"
         return "```json\n" + DAG_JSON + "\n```"
 
 

@@ -37,23 +37,39 @@ def make_agent(client=None) -> SubGoalSolverAgent:
     return SubGoalSolverAgent(client=client or MockClient(), config=config)
 
 
+_PLAN_JSON = (
+    "```json\n"
+    '{"problem_analysis": {"domain": "代数", "core_objective": "求解"},'
+    '"subgoals": ['
+    '{"id": 1, "title": "化简", "description": "先化简", '
+    '"type": "compute", "depends_on": [], "expected_output": "化简结果"}'
+    '], "merge_strategy": "合并"}'
+    "\n```"
+)
+
+
 class MockClient:
-    """返回固定子目标规划 JSON 的 mock 客户端。"""
+    """按**调用类型**返回：规划 JSON / 本步结果 / 合并最终答案。
+
+    ★ 2026-10-07（问题 2.4 候选入池门槛 v2）：原 mock 对**所有**调用都返回同一段
+    规划 JSON —— 它不含最终答案，新门槛（`pool_gate_v2`，默认开）会**正确地**
+    拒绝该子目标候选 ⇒ 这 3 个"run() 追加候选"用例失败。此处按真实流水线给
+    三类调用分别返回合规内容（step 段给结论契约、merge 段给纯答案），
+    断言与语义均保持不变。
+    """
 
     def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
         return self.call(messages=messages, temperature=temperature,
                          max_tokens=max_tokens, **kw)
 
     def call(self, messages=None, temperature=0.0, max_tokens=256, **kw):
-        return (
-            "```json\n"
-            '{"problem_analysis": {"domain": "代数", "core_objective": "求解"},'
-            '"subgoals": ['
-            '{"id": 1, "title": "化简", "description": "先化简", '
-            '"type": "compute", "depends_on": [], "expected_output": "化简结果"}'
-            '], "merge_strategy": "合并"}'
-            "\n```"
-        )
+        blob = "\n".join(str(m.get("content", "")) for m in (messages or []))
+        if "输出子目标规划" in blob:            # ① 规划调用
+            return _PLAN_JSON
+        if "【当前子目标" in blob:               # ② 单步求解调用
+            return "【本步结果】\n本步结论: 值 = 1\n本步依据: 本步推导"
+        # ③ 合并/兜底调用：走 prefill（`【最终答案】`），拼接后首行即答案
+        return "1"
 
 
 def make_ctx(problem="求极限 lim_{x→0} (sin x)/x") -> TaskContext:
@@ -861,6 +877,44 @@ class SubgoalMultiAgentTest(unittest.TestCase):
         self.assertEqual(self._solver(subgoal_agents_n=0)._multi_agent_n(_ctx()), 1)
         self.assertEqual(self._solver(subgoal_agents_n=-5)._multi_agent_n(_ctx()), 1)
         self.assertEqual(self._solver(subgoal_agents_n=999)._multi_agent_n(_ctx()), 8)
+
+
+class CheckProtocolGuardTest(unittest.TestCase):
+    """问题 2.9：`<check>` **协议守卫**（判据 + 违反提取）。
+
+    依据（smoke10 2026-10-06 实测）：题 000 大量把**中文句子**塞进 `<check>`
+    （`<check>图 G 是弱连通的</check>` 出现 6 次、`<check>若 a(x)=a(y) 则 x=y</check>`
+    6 次）⇒ `is_parseable=False` ⇒ 全部 10 题 `n_judged = 0/73`。守卫须：
+      ① 中文/非等式 ⇒ 判"违反"；② 合法纯等式（含 `|D_8| = 8` 这类阶记号，实测 8 次）
+         不得假阳（初版字符类漏 `|` 已修正）。
+    """
+
+    def test_verifiable_bodies_pass(self):
+        from agent.sub_goal_solver import _is_verifiable_check_body as f
+        # 全部取自 smoke10 实测合法 `<check>` 内容 + 幂等回归（`|D_8| = 8`）
+        for b in ["2^60 * 3^40 = 2^60 * 3^40", "T(m) = -4", "a^2 = a",
+                  "c^2 = c + 1", "A(0)^2 = A(0) + 1", "L = D_out - A",
+                  "floor(2025/2) = 1012", "1 = 1", "bc = -b", "|D_8| = 8",
+                  "(a, b) = (1, 2)", "n! = 120"]:
+            self.assertTrue(f(b), b)
+
+    def test_cjk_and_non_equality_flagged(self):
+        from agent.sub_goal_solver import _is_verifiable_check_body as f
+        for b in ["图 G 是弱连通的", "若 a(x)=a(y) 则 x=y", "EXHAUSTIVE: no",
+                  "", "x = 5 = 6", "所求即最小值"]:
+            self.assertFalse(f(b), b)
+
+    def test_violations_extracted_only_illegal(self):
+        from agent.sub_goal_solver import _check_protocol_violations as cv
+        txt = ("结论。\n<check>图 G 是弱连通的</check>\n<check>T(m) = -4</check>\n"
+               "<check>若 a(x)=a(y) 则 x=y</check>")
+        self.assertEqual(cv(txt), ["图 G 是弱连通的", "若 a(x)=a(y) 则 x=y"])
+
+    def test_no_check_returns_empty(self):
+        from agent.sub_goal_solver import _check_protocol_violations as cv
+        self.assertEqual(cv("没有断言"), [])
+        self.assertEqual(cv(""), [])
+        self.assertEqual(cv(None), [])
 
 
 if __name__ == "__main__":
