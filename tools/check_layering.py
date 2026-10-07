@@ -47,9 +47,8 @@ TOOLS_AGENT_ALLOW = {
     "tools/lean_local/lean_translator.py":
         "真继承 BaseAgent + 依赖 agent.blueprint_planner 业务类",
     "tools/lean_local/lean_gate.py":
-        "运行期静态调用 BaseAgent.add_used_theorems / note_compile_valid（功能性依赖）",
-    "tools/lean_local/lean_bridge.py":
-        "读 lean_mcp_* 开关走 agent.switch_registry（该模块物理在 agent/，待下沉 contracts/ 后删本条）",
+        "运行期静态调用 BaseAgent.add_used_theorems / note_compile_valid（功能性依赖；"
+        "开关已改走 contracts.switch_registry）",
     # —— tools/lean_local/tests/：集成测试本就跨层（方案 §2.5 显式豁免）——
     "tools/lean_local/tests/test_lean_bridge.py": "集成测试（跨层验证 LeanBridge）",
     "tools/lean_local/tests/test_lean_gate.py": "集成测试",

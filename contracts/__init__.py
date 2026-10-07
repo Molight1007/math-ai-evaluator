@@ -13,4 +13,7 @@ from __future__ import annotations
 内容：
 - ``contracts.types``：纯数据类（``Finding`` / ``BugReport`` / ``Budget``）
 - ``contracts.protocols``：``TaskContext`` 的 Protocol（只声明 tools/ 真正用到的接口）
+- ``contracts.switch_registry``：开关注册表（零依赖的核心语义 + 读取器）。
+  由 ``agent/switch_registry.py``（**纯 re-export shim**）与全仓 ``from agent.switch_registry import ...``
+  透明转发 ⇒ 下游零改动、状态只有一份。
 """

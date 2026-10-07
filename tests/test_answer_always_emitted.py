@@ -117,11 +117,10 @@ class TestHasUsableCandidate(unittest.TestCase):
 class TestTimeoutIsNotRetried(unittest.TestCase):
     """超时默认不重试（359s → 120s 的关键）。"""
 
-    def _client(self, max_retries=1, retry_on_timeout=None):
+    def _client(self, max_retries=1):
         from utils.llm_client import LLMClient
         return LLMClient(api_key="k", base_url="http://example.invalid/v1",
-                         model="m", timeout=5, max_retries=max_retries,
-                         retry_on_timeout=retry_on_timeout)
+                         model="m", timeout=5, max_retries=max_retries)
 
     def test_timeout_posts_once(self) -> None:
         sleeps = []
@@ -136,22 +135,14 @@ class TestTimeoutIsNotRetried(unittest.TestCase):
         self.assertIn("after 1 attempt", str(cm.exception))
 
     def test_retry_on_timeout_can_be_reenabled(self) -> None:
-        """2026-10-07（阶段 A 依赖倒置）：开关改由**调用方注入** getter。
-
-        `LLMClient` 解耦后不再自读 env（utils 不得依赖 agent）；改由构造点注入
-        `lambda: get_bool("llm_retry_on_timeout")`。本用例校验：`LLM_RETRY_ON_TIMEOUT=1`
-        经该注入 getter **仍能**让"读超时"恢复重试 ⇒ 开关端到端仍有效（契约不变）。
-        """
-        from agent.switch_registry import get_bool
+        """2026-10-07：开关为调用时实时读取 ⇒ 用 env 覆盖（原 patch 模块常量已失效）。"""
         sleeps = []
         with patch.dict(os.environ, {"LLM_RETRY_ON_TIMEOUT": "1"}), \
              patch("utils.llm_client.requests.post",
                    side_effect=requests.exceptions.Timeout("t")) as post, \
              patch("utils.llm_client.time.sleep", side_effect=sleeps.append), \
              patch("utils.llm_client.random.uniform", return_value=0.0):
-            c = self._client(
-                max_retries=1,
-                retry_on_timeout=lambda: get_bool("llm_retry_on_timeout"))
+            c = self._client(max_retries=1)
             with self.assertRaises(Exception):
                 c.chat([{"role": "user", "content": "x"}])
         self.assertEqual(post.call_count, 2, "开回退开关后应恢复 2 次尝试")

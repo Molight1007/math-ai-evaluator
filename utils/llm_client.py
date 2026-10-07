@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-# ★ 2026-10-07 架构解耦（阶段 A）：本模块**不再 import agent.switch_registry**。
-#   原先此处为
-#       try: from agent.switch_registry import (get_bool as _sw_bool, ...)
-#       except ImportError: from switch_registry import (...)
-#   ⇒ `utils/` 依赖 `agent/`，违反分层规则（utils 不得导入 agent），且是
-#   `agent → utils → agent` 包级环的一环（import 本文件会级联拉起整个 agent 包）。
-#   改为**依赖倒置（由调用方注入）**：本模块需要的两项开关
-#   —— `llm_timeout` / `llm_retry_on_timeout` —— 变成 `LLMClient.__init__` 的
-#   **显式参数**，由上层构造点（`run_eval.py` 等）从注册表读值后传入。
-#   本模块只接收参数、不读任何开关 ⇒ `utils/` 零 agent 依赖。
+# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
+# ★ 2026-10-07 架构解耦（阶段 A）：注册表实现已**下沉到零依赖的 `contracts/`**
+#   ⇒ 本模块直接 import `contracts.switch_registry`（**不再**是 `agent.switch_registry`），
+#   `utils/` 由此不再依赖 `agent/`（分层规则禁止 utils→agent/tools；contracts 不在禁令内）。
+#   读取点仍在本文件内（与改前一致）⇒ 行为零变更。
+from contracts.switch_registry import (
+    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 """
 轻量级 OpenAI 兼容 LLM 客户端
 ==============================
@@ -23,8 +21,8 @@ from __future__ import annotations
 3. 默认: http://localhost:8000/v1, gpt-3.5-turbo
 
 修改影响:
-- 本模块**不读任何开关**（阶段 A 解耦）；`timeout` / `retry_on_timeout` 由**构造点**
-  注入 ⇒ 改签名时需同步检查构造点：`run_eval.py`（主路径）、`tools/debug_one_trace.py`。
+- 本模块**不依赖 agent/**（阶段 A 解耦）：开关改经 `contracts.switch_registry` 读。
+- 修改 LLMClient.__init__ 签名时需同步检查: run_eval.py / tools/debug_one_trace.py / tests
 - 修改 chat() 返回值格式时需同步检查: agent/base.py (BaseAgent.llm() 调用者)
 - 被 agent/ 目录下所有 BaseAgent 子类通过 BaseAgent.llm() 间接引用
 """
@@ -47,9 +45,9 @@ logger = logging.getLogger("MathPilot.LLMClient")
 #      等正是这种写法）会**静默失效**；② 常量**不入注册表** ⇒ diag 的 switch_snapshot
 #      看不到、报告还原不出来，且 config/CLI 覆盖读不到。
 #   现改为**调用时**经注册表读（开关 `llm_timeout`，默认 120，读取优先级 env > config > 默认）。
-#   2026-10-07 阶段 A（依赖倒置）：读的动作**上移到构造点** —— 上层从注册表读后经
-#   `timeout=` 显式传入；本文件仅保留同名字面量兜底（未显式传入 timeout 时用它）。
-_LLM_TIMEOUT_FALLBACK = 120  # 秒；仅在调用方未注入 timeout 时兜底
+#   2026-10-07 阶段 A/B2：注册表已下沉 `contracts/`，本处直接 import 它；
+#   `_LLM_TIMEOUT_FALLBACK` 仍是「注册读取失败时的字面兜底」。
+_LLM_TIMEOUT_FALLBACK = 120  # 秒；仅在注册表不可用时兜底
 # 2026-09-13 晚（4 题实测复盘）：超时后**重试**才是真正的成本黑洞。
 # 实测 4 题里 `failed after 2 attempts` 出现 5 次、5/5 全败，而单次故障 =
 # 180s × 2 + 退避 ≈ **365s** —— 010/016 两题各被两轮 365s 烧光整题预算，
@@ -59,11 +57,9 @@ _LLM_TIMEOUT_FALLBACK = 120  # 秒；仅在调用方未注入 timeout 时兜底
 #   ② 超时类故障**默认不重试**（`LLM_RETRY_ON_TIMEOUT=1` 可恢复旧行为）——
 #      "拿同样的请求再赌一次"，实测 5/5 全败，纯亏 timeout 秒。
 # 单次故障成本：365s → 120s。
-# ★ 2026-10-07：该开关改为**由调用方注入**（`LLMClient.__init__(retry_on_timeout=...)`）。
-#   为保持原「**调用时**实时读取」语义（构造点早于 `bind_config`，若在构造时固化 bool
-#   会读不到 config 覆盖），本参数**允许传一个无参可调用**（每次 `chat()` 求值）；
-#   传 bool 则视为固定值；不传则用下方字面兜底。见 `_resolve_retry_on_timeout`。
-_RETRY_ON_TIMEOUT_FALLBACK = False  # 仅在调用方未注入 retry_on_timeout 时兜底
+# ★ 2026-10-07：该开关为**调用时实时读取** `_sw_bool("llm_retry_on_timeout")`
+#   （见 `chat` 内 `retry_on_timeout`）—— 若在 import 期求值成模块常量，
+#   会把 `ReasoningAgent.__init__` 之前的注册表值固化，导致 config/CLI 覆盖失效。
 _CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
 _MAX_RETRIES = 1      # 2026-09-03：2→1。持续网络问题时 3 次重试纯浪费；
                        # 瞬时抖动 1 次重试足够，配合调用方 is_time_critical 兜底
@@ -226,24 +222,6 @@ class LLMError(Exception):
     pass
 
 
-def _resolve_retry_on_timeout(v) -> bool:
-    """把注入的 `retry_on_timeout` 解析为 bool。
-
-    - ``None`` ⇒ 本地字面兜底 ``_RETRY_ON_TIMEOUT_FALLBACK``（False）；
-    - 可调用 ⇒ **每次调用时求值**（保持原"调用时读注册表"语义，config 覆盖在
-      bind_config 之后仍生效）；getter 抛异常也回落兜底；
-    - 其它 ⇒ 按 truthiness（调用方直接传 bool 时用）。
-    """
-    if v is None:
-        return _RETRY_ON_TIMEOUT_FALLBACK
-    if callable(v):
-        try:
-            return bool(v())
-        except Exception:  # noqa: BLE001  开关读取失败不阻断主流程
-            return _RETRY_ON_TIMEOUT_FALLBACK
-    return bool(v)
-
-
 class LLMClient:
     """OpenAI Chat Completions 兼容客户端"""
 
@@ -254,23 +232,22 @@ class LLMClient:
         model: Optional[str] = None,
         timeout: Optional[int] = None,
         max_retries: int = _MAX_RETRIES,
-        retry_on_timeout=None,
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "not-needed")
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1"))
         # 规范化 URL：去尾部 /，确保以 /v1 结尾
         self.base_url = self.base_url.rstrip("/")
         self.model = model or os.getenv("LLM_MODEL", "gpt-3.5-turbo")
-        # ★ 2026-10-07 阶段 A（依赖倒置）：读超时由**调用方**从注册表读后经 `timeout=`
-        #   注入（`llm_timeout` 开关，env > config > 默认）。未注入时用字面兜底 120s。
-        #   与改前时机一致：均在本构造点取值。
+        # ★ 2026-10-07（阶段 A 解耦后仍成立）：超时**调用时**经注册表实时读（`llm_timeout`，
+        #   默认 120，优先级 env > config > 默认）。显式传入的 timeout 仍最高优先。
+        #   注册表来自 `contracts.switch_registry`（零依赖）⇒ 不再为读它而依赖 agent。
         if timeout is None:
-            timeout = _LLM_TIMEOUT_FALLBACK
+            try:
+                timeout = int(_sw_num("llm_timeout"))
+            except Exception:  # noqa: BLE001  注册表不可用时字面兜底
+                timeout = _LLM_TIMEOUT_FALLBACK
         self.timeout = timeout
         self.max_retries = max_retries
-        # retry_on_timeout：由调用方注入（bool 或**无参可调用**以保持"调用时读"语义）；
-        # 不传则字面兜底 False。见 `_resolve_retry_on_timeout`。
-        self._retry_on_timeout = retry_on_timeout
 
     # ── 主接口：与 BaseAgent.llm() 签名兼容 ──
     def chat(
@@ -307,8 +284,8 @@ class LLMClient:
             LLMError: 所有重试耗尽后仍然失败
         """
         url = f"{self.base_url}/chat/completions"
-        # 阶段 A：开关由调用方注入（getter 则在此调用时求值）⇒ config/CLI 覆盖仍生效
-        retry_on_timeout = _resolve_retry_on_timeout(self._retry_on_timeout)
+        # 调用时实时读取 ⇒ config/CLI 覆盖生效（原先 import 期求值成模块常量）
+        retry_on_timeout = _sw_bool("llm_retry_on_timeout")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
