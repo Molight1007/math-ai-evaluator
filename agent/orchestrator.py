@@ -2424,6 +2424,22 @@ class Orchestrator(BaseAgent):
             #   ⚠ 取舍：若闸门**换过候选**，那个新候选不会被后处理（数值化等）。
             #     这是刻意选择 —— 宁可少一层锦上添花的归一化，也不让"未验证的串"被提交。
             ctx.final_response = self._final_answer_postprocess(ctx)
+            # ★ 2026-10-07（问题 2.1 第三条路径补漏，fix-select-consistency 提供入口）：
+            #   后处理会**改写答案内容**且不经过 `adopt_single` ⇒ `_pick_diag.picked`
+            #   会与真正提交的 `ctx.final_response` 不同源。前两条路径（`adopt_single`
+            #   = 6.5 换候选、`formatter.finalize`）它已覆盖，此处补第三条。
+            #   无条件调用：`sync_pick_diag_to_final` 内部按开关 `final_answer_single_source`
+            #   自行决定是否生效（OFF ⇒ 空操作），且任何异常自吞 ⇒ 无条件调用最简且不破坏行为。
+            #   依据（team-lead 转述）：`run_eval.py:1153` 用 `final_response` 决定
+            #   `predicted` 与被评分值，它是真值；本路径 smoke10 触发 0 次（防御性补漏）。
+            try:
+                try:
+                    from .final_selector import sync_pick_diag_to_final
+                except ImportError:  # noqa: BLE001  平台扁平导入
+                    from final_selector import sync_pick_diag_to_final
+                sync_pick_diag_to_final(ctx, "postprocess")
+            except Exception:  # noqa: BLE001  纯埋点同步，绝不阻断主流程
+                pass
 
             self._stage_start(ctx, "6.5_audit_gate")
             # 2026-10-01：原 6.5 处「`calc_inconsistent`（计算冲突）优先于 Lean
