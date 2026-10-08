@@ -141,6 +141,49 @@ class FormatterAgent(BaseAgent):
     name = "Formatter"
 
     def run(self, ctx: TaskContext) -> TaskContext:
+        answer, confidence = self._select_answer(ctx)
+
+        # ★ 2026-09-17（P1-D）：**多答案题并集**（仅在题面明确要求「所有 / 全部」时启用）。
+        _uni = self._maybe_union_enumerated(ctx, answer)
+        if _uni:
+            try:
+                ctx._pick_diag = {
+                    "branch": "enum_union",
+                    "picked": _uni[:80],
+                    "base": (answer or "")[:40],
+                }
+            except Exception:  # noqa: BLE001
+                pass
+            self.record(ctx, "format",
+                        "多答案并集（P1-D）：%s → %s" % ((answer or "")[:30], _uni[:60]))
+            answer = _uni
+
+        self._record_divergent_clusters(ctx)
+
+        answer, confidence = self._repair_and_fallback(ctx, answer, confidence)
+
+        # 答案质量终检 + 自动修复
+        answer = self._diagnose_and_repair(answer, ctx)
+
+        # 2026-09-02 老师需求：最终答案截断必解决。
+        # 003 题答案 g(x)=-2x^{ 就是生成截断直接提交 → expr_wrong。
+        # 修复：检出截断 → 用 LLM 续写补全（最多 2 次），仍失败才原样返回。
+        answer = self._repair_truncated(ctx, answer)
+
+        answer = self._try_emergency(ctx, answer)
+
+        self._write_final_response(ctx, answer)
+
+        self._sync_pick_diag(ctx)
+
+        self.record(
+            ctx, "finalize",
+            f"最终答案: {ctx.final_response[:200]} (置信度: {confidence:.2f})",
+            confidence=round(confidence, 4),
+        )
+        return ctx
+
+    def _select_answer(self, ctx: TaskContext) -> tuple:
         # 2026-09-02 bug 修复：0 票兜底路径（orchestrator 5) 段）预设的答案
         # （direct_solve 直答结果）优先——该路径候选全 0 票不可信，重选候选
         # 反而会把直答的好答案换掉。预设答案仍需过拒绝/占位/截断检查。
@@ -208,22 +251,9 @@ class FormatterAgent(BaseAgent):
                 }
             except Exception:  # noqa: BLE001
                 pass
+        return answer, confidence
 
-        # ★ 2026-09-17（P1-D）：**多答案题并集**（仅在题面明确要求「所有 / 全部」时启用）。
-        _uni = self._maybe_union_enumerated(ctx, answer)
-        if _uni:
-            try:
-                ctx._pick_diag = {
-                    "branch": "enum_union",
-                    "picked": _uni[:80],
-                    "base": (answer or "")[:40],
-                }
-            except Exception:  # noqa: BLE001
-                pass
-            self.record(ctx, "format",
-                        "多答案并集（P1-D）：%s → %s" % ((answer or "")[:30], _uni[:60]))
-            answer = _uni
-
+    def _record_divergent_clusters(self, ctx: TaskContext) -> None:
         # ★ 2026-09-17（P1-C）：把**分歧候选**（各不同答案簇的代表）记入 `_pick_diag`。
         # 用户决策「候选不必要强制不一致，但有不一致的思路一定要保留」——
         # 此处**只保留可见性**：不制造多样性、不改选答逻辑。
@@ -250,6 +280,7 @@ class FormatterAgent(BaseAgent):
         except Exception:  # noqa: BLE001
             pass
 
+    def _repair_and_fallback(self, ctx: TaskContext, answer: str, confidence: float) -> tuple:
         # 答案过长检测：如果答案超过300字符，尝试从推理尾部重新提取
         if answer and len(answer) > 300:
             for c in (ctx.candidates or []):
@@ -273,15 +304,9 @@ class FormatterAgent(BaseAgent):
                 self.record(ctx, "finalize",
                            "最佳候选答案为拒绝/不完整，改用候选兜底答案")
                 confidence = 0.0
+        return answer, confidence
 
-        # 答案质量终检 + 自动修复
-        answer = self._diagnose_and_repair(answer, ctx)
-
-        # 2026-09-02 老师需求：最终答案截断必解决。
-        # 003 题答案 g(x)=-2x^{ 就是生成截断直接提交 → expr_wrong。
-        # 修复：检出截断 → 用 LLM 续写补全（最多 2 次），仍失败才原样返回。
-        answer = self._repair_truncated(ctx, answer)
-
+    def _try_emergency(self, ctx: TaskContext, answer: str) -> str:
         # 2026-09-02 占位符兜底：子目标求解失败的占位符（50% 错题根源）
         # 续写无意义 → 走紧急直答重新求一次最终答案
         # 2026-09-13 晚扩面（用户硬要求「无论超没超时都要把答案生成出来」）：
@@ -314,7 +339,9 @@ class FormatterAgent(BaseAgent):
             else:
                 self.record(ctx, "finalize",
                             "答案不可用（空/占位符）且紧急直答未得，交上层最终兜底")
+        return answer
 
+    def _write_final_response(self, ctx: TaskContext, answer: str) -> None:
         # ★ 2026-09-18（审核发现）：**这是 `ctx.final_response` 的第 4 个直写点**。
         # 另外 3 个（零票兜底直答 / 6.5 重做 / 6.5 换候选）已改用
         # `Orchestrator._set_final_response`（带非答案闸门），本行此前是漏网的。
@@ -329,6 +356,8 @@ class FormatterAgent(BaseAgent):
             self.record(ctx, "finalize",
                         "最终答案被判为非答案形态 → 不覆盖 ctx.final_response，"
                         "交上层最终兜底：%s" % str(_fr_txt)[:80])
+
+    def _sync_pick_diag(self, ctx: TaskContext) -> None:
         # ★★ 2026-09-21 修复（云端 n=38 逐题复核）：把 `_pick_diag["picked"]`
         #   同步为**实际落盘值**。
         #
@@ -380,12 +409,6 @@ class FormatterAgent(BaseAgent):
                 record_pick_cluster(ctx)
         except Exception:  # noqa: BLE001
             pass
-        self.record(
-            ctx, "finalize",
-            f"最终答案: {ctx.final_response[:200]} (置信度: {confidence:.2f})",
-            confidence=round(confidence, 4),
-        )
-        return ctx
 
     def _maybe_union_enumerated(self, ctx: TaskContext, current: str):
         """2026-09-17（P1-D）：多答案题的**候选并集**。
@@ -567,6 +590,41 @@ class FormatterAgent(BaseAgent):
         _fs = self._maybe_final_select(ctx)
         if _fs is not None:
             return _fs
+
+        self._pick_best_prepare(ctx)
+
+        _r = self._pick_best_itemwise(ctx)
+        if _r is not None:
+            return _r
+
+        _r = self._pick_best_objective(ctx)
+        if _r is not None:
+            return _r
+
+        _r = self._pick_best_enum(ctx)
+        if _r is not None:
+            return _r
+
+        _r = self._pick_best_cluster(ctx)
+        if _r is not None:
+            return _r
+
+        # 1) 传统 verdict 置信度
+        if ctx.verdicts:
+            valid = [v for v in ctx.verdicts if v.total_votes > 0]
+            if valid:
+                return max(valid, key=lambda v: v.confidence)
+            return max(ctx.verdicts, key=lambda v: v.confidence)
+
+        # 2) 候选兜底
+        if ctx.candidates:
+            for c in ctx.candidates:
+                if c.answer:
+                    return c
+            return ctx.candidates[0]
+        return None
+
+    def _pick_best_prepare(self, ctx: TaskContext) -> None:
         # ★★ 2026-09-30（截图 #9）：**择优前先算「独立复现数」**。
         #   用户口径：「候选数量与逻辑通顺度都要是指标」。
         #   本步骤把"池里有几个不同候选写出了同一结论"挂到每个候选的 `_support_n`，
@@ -603,6 +661,8 @@ class FormatterAgent(BaseAgent):
                     ctx.candidates = _keep
             except Exception:  # noqa: BLE001
                 pass
+
+    def _pick_best_itemwise(self, ctx: TaskContext):
         # 2026-09-13：选择题答案多数投票（OBJECTIVE_MAJORITY_VOTE=1 时）。
         # 必须放在 best_cluster 分支**之前**：best_cluster 是 verifier 聚类，
         # 且簇内再按"推理长度"选（下见 #0），对客观题（答案形态稳定、候选
@@ -641,6 +701,9 @@ class FormatterAgent(BaseAgent):
                                 (_iw[0].answer or "")[:40], len(_iw),
                                 len(getattr(ctx, "candidates", None) or [])))
                 return _iw[0]
+        return None
+
+    def _pick_best_objective(self, ctx: TaskContext):
         # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "1"` 已改走注册制
         #   `_sw_bool("objective_majority_vote")`（实时读，默认 False）。
         #   与 orchestrator.py 同名开关判据（`_sw_bool("objective_majority_vote")`）保持同源。
@@ -722,6 +785,9 @@ class FormatterAgent(BaseAgent):
                 for _c in (ctx.candidates or []):
                     if (getattr(_c, "answer", "") or "").strip() == _top_ans:
                         return _c
+        return None
+
+    def _pick_best_enum(self, ctx: TaskContext):
         # ---- 2026-09-14 枚举优先（题面要求『所有』时）----
         # 实测 003：merge 已正确产出 `\boxed{0,2026}`，但 verdicts **三条全部失效**
         # （LLM 超时 —— 超时阈值被收到 120s 且 max_retries=1），答案选取随之退化，
@@ -788,6 +854,9 @@ class FormatterAgent(BaseAgent):
                     return _top_enum
         except Exception:  # noqa: BLE001
             pass
+        return None
+
+    def _pick_best_cluster(self, ctx: TaskContext):
         # 0) 聚类数据（来自 verifier）→ 找最佳簇中第一个候选
         best_cluster = getattr(ctx, '_best_cluster', None)
         if best_cluster:
@@ -829,20 +898,6 @@ class FormatterAgent(BaseAgent):
                             pass
                 matching.sort(key=_rank_key, reverse=True)
                 return matching[0]
-
-        # 1) 传统 verdict 置信度
-        if ctx.verdicts:
-            valid = [v for v in ctx.verdicts if v.total_votes > 0]
-            if valid:
-                return max(valid, key=lambda v: v.confidence)
-            return max(ctx.verdicts, key=lambda v: v.confidence)
-
-        # 2) 候选兜底
-        if ctx.candidates:
-            for c in ctx.candidates:
-                if c.answer:
-                    return c
-            return ctx.candidates[0]
         return None
 
     @staticmethod
