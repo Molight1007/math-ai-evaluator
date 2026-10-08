@@ -46,12 +46,14 @@ _INJECTION_SITES = {
     "agent/solver__revise.py": [
         ("_generate_revise 修订路径", "revise 是**独立于 _generate_initial 的生成路径**"),
     ],
-    "agent/sub_goal_solver.py": [
+    # 2026-10-08 拆分批3：`_prepare_merge_prompt` 的「子目标合并成最终答案」注入点已
+    # **逐字搬**至 `agent/sub_goal_solver__merge.py`。⇒ 仅把该注入点的**读取入口**改到
+    # 新文件；锚点字符串与断言/比较逻辑一字未改（注入点总数不变，非放宽判据）。
+    "agent/sub_goal_solver__merge.py": [
         ("子目标合并成最终答案", "把子目标答案总结成最终答案"),
     ],
     # 2026-10-08 拆分批3：`_prepare_step_prompt` 的「单步子目标求解」注入点已**逐字搬**至
-    # `agent/sub_goal_solver__solve.py`。⇒ 仅把该注入点的**读取入口**改到新文件；
-    # 锚点字符串与断言/比较逻辑一字未改（注入点总数不变，非放宽判据）。
+    # `agent/sub_goal_solver__solve.py`。⇒ 同上，仅改读取入口（非放宽判据）。
     "agent/sub_goal_solver__solve.py": [
         ("单步子目标求解", "子目标求解是**用户点名的解题重点环节**"),
     ],
@@ -145,14 +147,35 @@ def test_block_is_empty_when_no_hits():
     assert (getattr(ctx, "theorem_hint_block", "") or "").strip() == ""
 
 
-def test_disabled_switch_is_read_with_default_true():
-    """开关缺省值必须是 True（默认启用），否则新功能默认静默失效。"""
+def _mod_src_union(mod):
+    """模块源码；`sub_goal_solver` 另并入 `agent/sub_goal_solver__*.py` 的**并集**。
+
+    2026-10-08 拆分批3：子目标求解器的职责簇已逐步**逐字搬**到
+    `agent/sub_goal_solver__*.py`，定理注入的开关守卫随之分散到各新模块。
+    ⇒ 仅把**读取入口**改为「主文件 + 抽出模块」并集；被查字符串与断言逻辑
+    一字未改（非放宽判据）。同口径见 tests/test_orchestrator_static.py 的
+    `_orch_union_src` 与 tests/test_exhaust_result_parse.py 的并集读法。
+    """
+    import glob
     import inspect
 
+    from agent import sub_goal_solver
+
+    src = inspect.getsource(mod)
+    if mod is sub_goal_solver:
+        for p in sorted(glob.glob(os.path.join(
+                _SRC, "agent", "sub_goal_solver__*.py"))):
+            with open(p, encoding="utf-8") as fh:
+                src += "\n" + fh.read()
+    return src
+
+
+def test_disabled_switch_is_read_with_default_true():
+    """开关缺省值必须是 True（默认启用），否则新功能默认静默失效。"""
     from agent import blueprint_planner, solver, sub_goal_solver
 
     for mod in (solver, sub_goal_solver, blueprint_planner):
-        src = inspect.getsource(mod)
+        src = _mod_src_union(mod)
         assert "getattr(self.config, 'enable_theorem_hint', True)" in src, (
             f"{mod.__name__}: 开关缺省值被改成了非 True，"
             "会导致未显式传参时定理注入静默失效"
