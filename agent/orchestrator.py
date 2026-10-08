@@ -1349,76 +1349,9 @@ class Orchestrator(BaseAgent):
             #      `cli/theorem_probe.py` 对预标注表做（非运行时）；
             #      **效用**由 有/无定理 的 A/B（开关 enable_theorem_hint）回答。
             #      ★ 全程 try 包裹且超时可跳过 —— 检索失败绝不阻断主流程。
-            self._stage_start(ctx, "1.2_theorem_hint")
-            theorem_hint_stage(self, ctx)
-
-            # 2) 2026-09-29：**快车道旁路已删除**（用户决策）。
-            # 原 `_fast_path()` 用正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后
-            # 直接 SymPy 直解并 `return`，命中即**跳过全部 19 阶段**（含 Lean 验证、
-            # 候选池、投票、审核闸门）——与"研究阶段跑全部方法"直接冲突，且正则过宽、
-            # 无法关闭（审计报告 DEF-A3；云端实测 12/112 题命中）。
-            # 现统一走下面的完整链路，不再有任何旁路。
-
-            tier = prep_tier_budget(self, ctx)
-
-            self._stage_start(ctx, "2.6_pre_audit")
-            pre_audit_stage(self, ctx, tier)
-
-            # 2026-09-29：**2.65_calc_prewarm 阶段已删除**（用户决策：
-            # 「预计算没必要，且不合逻辑，删了。之后对于计算部分我们会再想办法」）。
-            # 原设计在首个生成阶段前先让 LLM 预列算式并用 SymPy 算好、塞进 prompt，
-            # 但用户判定其"不合逻辑"（把计算从推理链里剥离，掩盖了模型真实的
-            # 计算能力）。计算部分待后续重新设计。
-            # 阶段名 "2.65_calc_prewarm" 已从收尾 stage 列表中同步移除。
-
-            self._stage_start(ctx, "2.7_subgoal_main")
-            subgoal_main_path(self, ctx, tier)
-
-            self._stage_start(ctx, "3_solve")
-            # 3_solve 求解段已抽到 agent/orchestrator__solve.py::solve_stage，
-            # 以「哨兵 + 解包」委托：段内唯一 run 级 return（_fallback_direct）
-            # 经哨兵透传，其余路径返回 _SOLVE_CONTINUE。
-            _r = solve_stage(self, ctx, tier)
+            _r = self._run_main_stages(ctx)
             if _r is not _SOLVE_CONTINUE:
                 return _r
-
-            self._stage_start(ctx, "3.2_complete")
-            complete_truncated(self, ctx, tier)
-
-            self._stage_start(ctx, "3.3_improve")
-            self_improve_step(self, ctx)
-
-            self._stage_start(ctx, "3.4_collab")
-            collaborative_deep_improve(self, ctx, tier)
-
-            # 2026-09-29：**3.5_subgoal_sup 阶段已删除**（用户决策）。
-            # 原逻辑「仅非 deep 档 + 候选不足时补跑子目标分解」在统一档位后
-            # 条件恒假（`tier != 'deep'` 永假），且其语义与 2.7 子目标主路径
-            # 完全重叠（2.7 已对所有题先跑一遍并把 `_subgoal_main_done` 置位）。
-            # 该阶段已于 2026-09-29 删除；阶段名保留于审计清单（stage_audit）作历史记录。
-
-            self._stage_start(ctx, "3.6_audit_filter")
-            audit_filter_candidates(self, ctx, tier)
-
-            self._stage_start(ctx, "4_verify")
-            ver_result, tier_votes = verify_stage(self, ctx, tier)
-
-            self._stage_start(ctx, "4.5_oracle")
-            oracle_review_stage(self, ctx, tier, ver_result, tier_votes)
-
-            self._stage_start(ctx, "4.6_adv")
-            adversarial_stage(self, ctx, tier, ver_result, tier_votes)
-
-            self._stage_start(ctx, "5_revise_or_fallback")
-            revise_or_fallback_stage(self, ctx, tier, ver_result, tier_votes)
-
-            self._stage_start(ctx, "5.5_low_conf")
-            low_confidence_recheck(self, ctx, ver_result, tier_votes)
-
-            self._stage_start(ctx, "6_format")
-            format_stage(self, ctx)
-            self._stage_start(ctx, "6.5_audit_gate")
-            final_answer_gate(self, ctx, tier)
 
             # ★ 2026-10-02 hook 07：6.5 审核闸门后落盘（07_lean）—— Lean 门禁 / DAG 校验痕迹。
             _artifact_put(ctx, "07_lean", {
@@ -1430,76 +1363,161 @@ class Orchestrator(BaseAgent):
                 "final_response_after_gate": getattr(ctx, "final_response", ""),
             })
 
-            # 阶段耗时收尾（2026-09-03）：统一 stop 全部阶段（start 在阶段开始）
-            # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty` / `0_paper_pacer`（阶段均已删）；
-            #   此前报告仍含这些阶段名（留痕，阶段名是契约）。
-            for _stg in ("1.2_theorem_hint",
-                         "2.6_pre_audit",
-                         "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
-                         "3.4_collab",
-                         "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
-                         "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
-                self._stage_stop(ctx, _stg)
-
-            # 构建返回
-            candidates_out = [
-                {"id": c.id, "answer": c.answer,
-                 "reasoning": c.reasoning, "revised": c.revised}
-                for c in ctx.candidates
-            ]
-            verdicts_out = [
-                {"id": v.id, "answer": v.answer,
-                 "confidence": v.confidence,
-                 "correct_votes": v.correct_votes,
-                 "total_votes": v.total_votes,
-                 "feedback": v.feedback}
-                for v in (ctx.verdicts or [])
-            ]
-            cluster_out = None
-            bc = getattr(ctx, '_best_cluster', None)
-            if bc:
-                cluster_out = {
-                    "answer_norm": bc.answer_norm,
-                    "size": bc.size,
-                    "confidence": bc.confidence,
-                    "candidate_ids": bc.candidate_ids,
-                }
-            # 最终答案后处理（P2 强制数值化 + P5 客观题自检）——统一出口挂载，
-            # 每项带独立开关与埋点，便于单次评测逐项审查（2026-09-11 用户指示）
-            # ★ 2026-10-04（D25）：**已上移到 6.5 闸门之前**（见 `6_format` 之后那段），
-            #   此处刻意**不再调用** —— 否则会二次执行，并重新落回
-            #   "闸门验 A、实际提交 B"。早退路径（超时兜底 / `_fallback_direct`）
-            #   仍在各自出口自行调用，不受影响。
-
-            # ★ 2026-10-02 hook 08：run() 正常返回前落盘终答（08_final）。
-            _artifact_put(ctx, "08_final", {
-                "final_response": ctx.final_response or "",
-                "n_candidates": len(getattr(ctx, "candidates", None) or []),
-                "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
-            })
-
-            return safe_json_serialize({
-                "final_response": ctx.final_response or "",
-                "trace": ctx.trace,
-                "candidates": candidates_out,
-                "verdicts": verdicts_out,
-                "cluster": cluster_out,
-                # AI 实际检索/引用过的 Mathlib 定理（#1/#2 证据链）
-                "used_theorems": list(ctx.used_theorems or []),
-                # 检索/命中/编译通过统计（回应"调用频繁但定理不多"）
-                "mathlib_usage_stats": {
-                    **(ctx.mathlib_usage_stats or {}),
-                    "distinct_theorems": len(ctx.used_theorems or []),
-                    # ★ 2026-09-23：「引用即采用」采用率（回答"定理有没有真用上"）
-                    "adoption": self._mathlib_adoption(ctx),
-                },
-                # ---- 逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）----
-                # 统一由 _collect_diag 构建（全 getattr 兜底：提前 return / 异常路径也覆盖）
-                "diag": self._collect_diag(ctx),
-            })
+            return self._run_finalize(ctx)
         except Exception as e:  # noqa: BLE001
             logger.error("Orchestrator run failed: %s", e)
             return self._fallback(ctx, problem, e)
+
+    def _run_main_stages(self, ctx: TaskContext) -> dict:
+        """主阶段序列 1.2_theorem_hint → 6.5_audit_gate（含 3_solve 哨兵早退）。
+
+        纯搬迁自 ``run``（2026-10-08 批8 原地拆分），**阶段名顺序与 record 步序逐字不变**。
+        返回 ``_SOLVE_CONTINUE`` 表示「继续往下走」；其余值（含 3_solve 的早退产物）由调用方透传。
+        """
+        self._stage_start(ctx, "1.2_theorem_hint")
+        theorem_hint_stage(self, ctx)
+
+        # 2) 2026-09-29：**快车道旁路已删除**（用户决策）。
+        # 原 `_fast_path()` 用正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后
+        # 直接 SymPy 直解并 `return`，命中即**跳过全部 19 阶段**（含 Lean 验证、
+        # 候选池、投票、审核闸门）——与"研究阶段跑全部方法"直接冲突，且正则过宽、
+        # 无法关闭（审计报告 DEF-A3；云端实测 12/112 题命中）。
+        # 现统一走下面的完整链路，不再有任何旁路。
+
+        tier = prep_tier_budget(self, ctx)
+
+        self._stage_start(ctx, "2.6_pre_audit")
+        pre_audit_stage(self, ctx, tier)
+
+        # 2026-09-29：**2.65_calc_prewarm 阶段已删除**（用户决策：
+        # 「预计算没必要，且不合逻辑，删了。之后对于计算部分我们会再想办法」）。
+        # 原设计在首个生成阶段前先让 LLM 预列算式并用 SymPy 算好、塞进 prompt，
+        # 但用户判定其"不合逻辑"（把计算从推理链里剥离，掩盖了模型真实的
+        # 计算能力）。计算部分待后续重新设计。
+        # 阶段名 "2.65_calc_prewarm" 已从收尾 stage 列表中同步移除。
+
+        self._stage_start(ctx, "2.7_subgoal_main")
+        subgoal_main_path(self, ctx, tier)
+
+        self._stage_start(ctx, "3_solve")
+        # 3_solve 求解段已抽到 agent/orchestrator__solve.py::solve_stage，
+        # 以「哨兵 + 解包」委托：段内唯一 run 级 return（_fallback_direct）
+        # 经哨兵透传，其余路径返回 _SOLVE_CONTINUE。
+        _r = solve_stage(self, ctx, tier)
+        if _r is not _SOLVE_CONTINUE:
+            return _r
+
+        self._stage_start(ctx, "3.2_complete")
+        complete_truncated(self, ctx, tier)
+
+        self._stage_start(ctx, "3.3_improve")
+        self_improve_step(self, ctx)
+
+        self._stage_start(ctx, "3.4_collab")
+        collaborative_deep_improve(self, ctx, tier)
+
+        # 2026-09-29：**3.5_subgoal_sup 阶段已删除**（用户决策）。
+        # 原逻辑「仅非 deep 档 + 候选不足时补跑子目标分解」在统一档位后
+        # 条件恒假（`tier != 'deep'` 永假），且其语义与 2.7 子目标主路径
+        # 完全重叠（2.7 已对所有题先跑一遍并把 `_subgoal_main_done` 置位）。
+        # 该阶段已于 2026-09-29 删除；阶段名保留于审计清单（stage_audit）作历史记录。
+
+        self._stage_start(ctx, "3.6_audit_filter")
+        audit_filter_candidates(self, ctx, tier)
+
+        self._stage_start(ctx, "4_verify")
+        ver_result, tier_votes = verify_stage(self, ctx, tier)
+
+        self._stage_start(ctx, "4.5_oracle")
+        oracle_review_stage(self, ctx, tier, ver_result, tier_votes)
+
+        self._stage_start(ctx, "4.6_adv")
+        adversarial_stage(self, ctx, tier, ver_result, tier_votes)
+
+        self._stage_start(ctx, "5_revise_or_fallback")
+        revise_or_fallback_stage(self, ctx, tier, ver_result, tier_votes)
+
+        self._stage_start(ctx, "5.5_low_conf")
+        low_confidence_recheck(self, ctx, ver_result, tier_votes)
+
+        self._stage_start(ctx, "6_format")
+        format_stage(self, ctx)
+        self._stage_start(ctx, "6.5_audit_gate")
+        final_answer_gate(self, ctx, tier)
+        return _SOLVE_CONTINUE
+
+    def _run_finalize(self, ctx: TaskContext) -> dict:
+        """收尾：统一 stage_stop + 输出装配（候选/裁决/簇）+ hook08 + 终返回字典。
+
+        纯搬迁自 ``run`` 尾部（2026-10-08 批8 原地拆分），语句逐字不变。
+        """
+        # 阶段耗时收尾（2026-09-03）：统一 stop 全部阶段（start 在阶段开始）
+        # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty` / `0_paper_pacer`（阶段均已删）；
+        #   此前报告仍含这些阶段名（留痕，阶段名是契约）。
+        for _stg in ("1.2_theorem_hint",
+                     "2.6_pre_audit",
+                     "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
+                     "3.4_collab",
+                     "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
+                     "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
+            self._stage_stop(ctx, _stg)
+
+        # 构建返回
+        candidates_out = [
+            {"id": c.id, "answer": c.answer,
+             "reasoning": c.reasoning, "revised": c.revised}
+            for c in ctx.candidates
+        ]
+        verdicts_out = [
+            {"id": v.id, "answer": v.answer,
+             "confidence": v.confidence,
+             "correct_votes": v.correct_votes,
+             "total_votes": v.total_votes,
+             "feedback": v.feedback}
+            for v in (ctx.verdicts or [])
+        ]
+        cluster_out = None
+        bc = getattr(ctx, '_best_cluster', None)
+        if bc:
+            cluster_out = {
+                "answer_norm": bc.answer_norm,
+                "size": bc.size,
+                "confidence": bc.confidence,
+                "candidate_ids": bc.candidate_ids,
+            }
+        # 最终答案后处理（P2 强制数值化 + P5 客观题自检）——统一出口挂载，
+        # 每项带独立开关与埋点，便于单次评测逐项审查（2026-09-11 用户指示）
+        # ★ 2026-10-04（D25）：**已上移到 6.5 闸门之前**（见 `6_format` 之后那段），
+        #   此处刻意**不再调用** —— 否则会二次执行，并重新落回
+        #   "闸门验 A、实际提交 B"。早退路径（超时兜底 / `_fallback_direct`）
+        #   仍在各自出口自行调用，不受影响。
+
+        # ★ 2026-10-02 hook 08：run() 正常返回前落盘终答（08_final）。
+        _artifact_put(ctx, "08_final", {
+            "final_response": ctx.final_response or "",
+            "n_candidates": len(getattr(ctx, "candidates", None) or []),
+            "n_verdicts": len(getattr(ctx, "verdicts", None) or []),
+        })
+
+        return safe_json_serialize({
+            "final_response": ctx.final_response or "",
+            "trace": ctx.trace,
+            "candidates": candidates_out,
+            "verdicts": verdicts_out,
+            "cluster": cluster_out,
+            # AI 实际检索/引用过的 Mathlib 定理（#1/#2 证据链）
+            "used_theorems": list(ctx.used_theorems or []),
+            # 检索/命中/编译通过统计（回应"调用频繁但定理不多"）
+            "mathlib_usage_stats": {
+                **(ctx.mathlib_usage_stats or {}),
+                "distinct_theorems": len(ctx.used_theorems or []),
+                # ★ 2026-09-23：「引用即采用」采用率（回答"定理有没有真用上"）
+                "adoption": self._mathlib_adoption(ctx),
+            },
+            # ---- 逐步归因诊断（2026-09-02 用户要求：错题要能定位到环节）----
+            # 统一由 _collect_diag 构建（全 getattr 兜底：提前 return / 异常路径也覆盖）
+            "diag": self._collect_diag(ctx),
+        })
 
     # ----------------------------------------------------------
     # 2026-09-29：快车道（_fast_path / _try_sympy_solve）已按用户要求**整体删除**。
@@ -1684,6 +1702,51 @@ class Orchestrator(BaseAgent):
                                 % int(getattr(ctx, "revise_round", 0) or 0))
                     return False
                 _seen.add(_pass_key)
+        feedback = self._build_revise_feedback(ctx, ver_result, force)
+        # Step 4：复核验证器反馈（可驳回误报），避免被错误反馈误导修正。
+        # 仅当反馈非空且预算允许时做（deep 档 +1 次调用，回环前只做一次）。
+        _reviewed_empty = False
+        if (not ctx.is_time_critical()
+                and len(feedback) > 10):
+            _rv = self._review_bug_feedback(ctx, feedback)
+            if _rv:
+                # ★★ 2026-10-06 修（**复核把深复核推理整段摘要掉，两处修复互相抵消**）：
+                #   上游 `verifier.py:1819-1821` 已把「深复核推理」保留进 feedback ——
+                #   尾段 6000 字符推理 + 判定段，以
+                #   `【复核依据（判错报告原文摘录）】` 为标题，整体上限 8000
+                #   （`_clip_review_prose` + `[:8000]`，见 verifier.py:1817-1821）。
+                #   但此处原为 `feedback = _rv` **整段覆盖** ⇒ 刚被保留的 2.5–6 万
+                #   字符推理又被摘要成短清单 ⇒ 实测 q1–q6 最终 `diag.revise_feedback`
+                #   最长仅 2.4–3.0k，且**不含 `【复核依据（判错报告原文摘录）】` 段**
+                #   ⇒ 深复核推理**始终没到模型手上**。
+                #   现改为**附加**（`_merge_review_into_feedback`）：复核只做
+                #   "是否属实"的判定与标注，其产物以 `【复核意见…】` 段并入，
+                #   **不替换/不摘要掉**原有推理。
+                feedback = _merge_review_into_feedback(
+                    feedback, _rv,
+                    getattr(self.config, 'feedback_review_append', True))
+            else:
+                _reviewed_empty = True
+        # 注入各客观审核环节（3.6 AuditGate / 4.6 对抗 / 4.5 Oracle）淘汰反馈，
+        # 驱动定向修正（audit_reject_feedback 为通用 revise 反馈通道）
+        audit_fb = getattr(ctx, "audit_reject_feedback", None)
+        if audit_fb:
+            feedback = feedback + "\n" + "\n".join(audit_fb)
+        # ★ 2026-09-17：复核判定"无实质缺陷"且无审核反馈 ⇒ **没有可修正的目标**，
+        # 继续只会盲目重解（信息量为零，却要付一轮"生成 + 验证"）。直接结束回环。
+        if _reviewed_empty and not audit_fb:
+            self.record(ctx, "revise",
+                        "复核无实质缺陷且无审核反馈 → 结束 revise"
+                        "（避免零信息空转，2026-09-17）")
+            return False
+        return self._revise_rounds(ctx, max_rounds, feedback, force, tier_votes)
+
+    def _build_revise_feedback(self, ctx: TaskContext, ver_result: dict,
+                               force: bool) -> str:
+        """构造 revise 反馈：force 走结构化诊断报告，否则取 ver_result.feedback。
+
+        纯搬迁自 ``_deep_revise_loop_inner``（2026-10-08 批8 原地拆分），语句逐字不变。
+        """
         if force:
             # P1 应急重解：构造**结构化错误诊断报告**（2026-09-11 用户指正：
             # "不能光检测错误，要把错误情况总结后返回给大模型，否则等于没检查"）。
@@ -1743,42 +1806,14 @@ class Orchestrator(BaseAgent):
             feedback = ver_result.get("feedback", "")
             if not feedback:
                 feedback = "所有候选均未获验证通过，请重新审题并纠正推理错误。"
-        # Step 4：复核验证器反馈（可驳回误报），避免被错误反馈误导修正。
-        # 仅当反馈非空且预算允许时做（deep 档 +1 次调用，回环前只做一次）。
-        _reviewed_empty = False
-        if (not ctx.is_time_critical()
-                and len(feedback) > 10):
-            _rv = self._review_bug_feedback(ctx, feedback)
-            if _rv:
-                # ★★ 2026-10-06 修（**复核把深复核推理整段摘要掉，两处修复互相抵消**）：
-                #   上游 `verifier.py:1819-1821` 已把「深复核推理」保留进 feedback ——
-                #   尾段 6000 字符推理 + 判定段，以
-                #   `【复核依据（判错报告原文摘录）】` 为标题，整体上限 8000
-                #   （`_clip_review_prose` + `[:8000]`，见 verifier.py:1817-1821）。
-                #   但此处原为 `feedback = _rv` **整段覆盖** ⇒ 刚被保留的 2.5–6 万
-                #   字符推理又被摘要成短清单 ⇒ 实测 q1–q6 最终 `diag.revise_feedback`
-                #   最长仅 2.4–3.0k，且**不含 `【复核依据（判错报告原文摘录）】` 段**
-                #   ⇒ 深复核推理**始终没到模型手上**。
-                #   现改为**附加**（`_merge_review_into_feedback`）：复核只做
-                #   "是否属实"的判定与标注，其产物以 `【复核意见…】` 段并入，
-                #   **不替换/不摘要掉**原有推理。
-                feedback = _merge_review_into_feedback(
-                    feedback, _rv,
-                    getattr(self.config, 'feedback_review_append', True))
-            else:
-                _reviewed_empty = True
-        # 注入各客观审核环节（3.6 AuditGate / 4.6 对抗 / 4.5 Oracle）淘汰反馈，
-        # 驱动定向修正（audit_reject_feedback 为通用 revise 反馈通道）
-        audit_fb = getattr(ctx, "audit_reject_feedback", None)
-        if audit_fb:
-            feedback = feedback + "\n" + "\n".join(audit_fb)
-        # ★ 2026-09-17：复核判定"无实质缺陷"且无审核反馈 ⇒ **没有可修正的目标**，
-        # 继续只会盲目重解（信息量为零，却要付一轮"生成 + 验证"）。直接结束回环。
-        if _reviewed_empty and not audit_fb:
-            self.record(ctx, "revise",
-                        "复核无实质缺陷且无审核反馈 → 结束 revise"
-                        "（避免零信息空转，2026-09-17）")
-            return False
+        return feedback
+
+    def _revise_rounds(self, ctx: TaskContext, max_rounds: int,
+                       feedback: str, force: bool, tier_votes: int) -> bool:
+        """revise 主循环（最多 max_rounds 轮）：重解 → 复验 → 门控判定。
+
+        纯搬迁自 ``_deep_revise_loop_inner``（2026-10-08 批8 原地拆分），语句逐字不变。
+        """
         for r in range(max_rounds):
             # 2026-09-06：升级 gen_time_up——revise 回环 = solver.run 生成 +
             # verifier 验证，单轮可烧 200-400s，须按生成侧软截止更早收手。
