@@ -45,6 +45,10 @@ import time
 from typing import Optional
 
 # 2026-10-07：候选入池门槛 v2 开关改为自 base 引用（去重，单一来源）。
+# ⚠ 2026-10-08 批1第三增量：`_pool_gate_v2_on` 的直接消费方已迁到
+#   `agent/sub_goal_solver__pool.py::apply_pool_gate`（函数内
+#   `from .sub_goal_solver import _pool_gate_v2_on` 惰性引用）⇒ **本导入须保留**
+#   （单一来源 = 本模块，勿按"未使用"清理 —— 与 `_artifact_append` 同口径）。
 from .base import (
     BaseAgent, TaskContext, Candidate, next_candidate_id, _pool_gate_v2_on)
 
@@ -54,6 +58,7 @@ from .sub_goal_solver__exhaust import append_exhaust_subgoal  # noqa: F401
 from .sub_goal_solver__plan import (  # noqa: F401
     strip_and_mask_plan, finalize_plan_stats, build_plan_summary)
 from .sub_goal_solver__loop import solve_subgoals  # noqa: F401
+from .sub_goal_solver__pool import apply_pool_gate  # noqa: F401
 
 try:
     from prompts.sub_goal import (
@@ -619,42 +624,9 @@ class SubGoalSolverAgent(BaseAgent):
             f"最终答案: {final_answer}"
         )
 
-        # 2026-09-02 老师需求：候选池统一封顶（与 solver.run 同口径）。
-        # 2026-09-04：cap 8→6（deep 候选 4→3 配套，验证成本 -25%）
-        # ★ 2026-10-04 修（D7）：原硬编码 `>= 6` 与 `agent/orchestrator.py:1962-1969`
-        #   自称「候选池封顶已按研究期标尺删除、不再截断候选」**直接矛盾**，
-        #   且后果不只是少一个候选 —— 池满时**整条子目标候选来源被跳过**
-        #   （`return` 直接出函数）。现统一读 `candidate_pool_limit`（0 = 不限）。
-        _pool_lim = 0
-        try:
-            _pv = float(getattr(self.config, "candidate_pool_limit", 0.0) or 0.0)
-            _pool_lim = int(_pv) if _pv > 0 else 0
-        except (TypeError, ValueError):
-            _pool_lim = 0
-        if _pool_lim > 0 and len(getattr(ctx, 'candidates', None) or []) >= _pool_lim:
-            self.record(ctx, "subgoal",
-                        f"候选池已达上限 {_pool_lim}，跳过子目标候选入池")
+        final_answer, _skip_pool = apply_pool_gate(self, ctx, final_answer)
+        if _skip_pool:
             return
-        # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口⑤）：**子目标候选此前不过入池门槛**
-        #   —— 它是独立于 solver 的一条 append（"只改主路径 = 没改"）。实测背景：
-        #   题 002 的 `'证明这个最小值就是所求的 $T$，并验证其最优性'`、
-        #   题 000 的 `'子问题4：计算满足条件的路径总数'` 这类"任务描述句"曾是
-        #   池内候选（且 002 那条还成了唯一幸存候选被采用）。此处与 solver 同口径，
-        #   不合格则**不入池并留痕**（`_merge_results` 的 `final_answer` 与
-        #   `_fallback_from_last_subgoal` 的自然语言结论都可能命中）。
-        if _pool_gate_v2_on():
-            try:
-                from utils.extract import normalize_pool_answer as _npa
-                _fans, _fok = _npa(final_answer)
-            except Exception:  # noqa: BLE001  校验不可用时放行，不阻断
-                _fans, _fok = final_answer, True
-            if not _fok:
-                self.record(
-                    ctx, "candidate_invalid",
-                    "子目标候选 **不含最终答案 → 不入池**"
-                    "（final_answer 前 60 字：%r）" % (str(final_answer)[:60],))
-                return
-            final_answer = _fans
         # 构造 Candidate（`full_reasoning` 在门槛**之后**构建 ⇒ 与最终入池的
         #   `final_answer` 保持一致；避免抢救替换值后 reasoning 仍写原句）。
         full_reasoning = self._build_full_reasoning(
