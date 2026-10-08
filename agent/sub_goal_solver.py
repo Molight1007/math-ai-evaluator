@@ -1534,26 +1534,12 @@ class SubGoalSolverAgent(BaseAgent):
         - 预算耗尽 / 评审降级且无 reject 明细 → 放行原 DAG（质量门不阻断）。
         返回最终 DAG（已写回 ctx.blueprint）。
         """
-        from .dag_reviewer import DagReviewerAgent
-        if dag is None:
-            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
-            self.record(ctx, "dag_replan",
-                        "求解前 DAG 评审门已跳过：入参 dag 为 None")
+        (_status, dag, rounds, reviewer, planner) = (
+            self._dag_replan_gate_prepare(ctx, dag, max_rounds))
+        if _status == "none":
             return None
-        if isinstance(dag, dict):
-            from .blueprint_planner import BlueprintDAG
-            try:
-                dag = BlueprintDAG.from_dict(dag)
-            except Exception as exc:  # noqa: BLE001
-                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
-                return None
-        if not dag.nodes:
+        if _status == "dag":
             return dag
-        rounds = int(getattr(self.config, "dag_replan_max_rounds",
-                             max_rounds) or max_rounds)
-        rounds = max(1, rounds)
-        reviewer = DagReviewerAgent(self.client, self.config)
-        planner = None  # 惰性导入（仅需 replan 时才建）
         for round_idx in range(rounds):
             if ctx.gen_time_up():
                 self.record(ctx, "dag_replan",
@@ -1667,6 +1653,37 @@ class SubGoalSolverAgent(BaseAgent):
                         f"求解前评审门达硬上限 {rounds} 轮，采用末轮蓝图进入求解")
         ctx.blueprint = dag.to_dict()
         return dag
+
+    def _dag_replan_gate_prepare(self, ctx, dag, max_rounds):
+        """求解前 DAG 评审门**前置段**（2026-10-08 批2：从 `_dag_replan_gate`
+        原地拆出）。归一化 dag 并构造 reviewer/planner。
+
+        返回 `(status, dag, rounds, reviewer, planner)`：status ∈ {none,dag,go}；
+        `none`⇒调用侧 `return None`；`dag`⇒`return dag`；`go`⇒继续主循环。
+        **dag 回传**（段内 `dag = BlueprintDAG.from_dict(dag)` 重绑定了参数）。
+        段体**逐字搬**（3 行 return 为哨兵改写）。
+        """
+        from .dag_reviewer import DagReviewerAgent
+        if dag is None:
+            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
+            self.record(ctx, "dag_replan",
+                        "求解前 DAG 评审门已跳过：入参 dag 为 None")
+            return ("none", None, None, None, None)
+        if isinstance(dag, dict):
+            from .blueprint_planner import BlueprintDAG
+            try:
+                dag = BlueprintDAG.from_dict(dag)
+            except Exception as exc:  # noqa: BLE001
+                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
+                return ("none", None, None, None, None)
+        if not dag.nodes:
+            return ("dag", dag, None, None, None)
+        rounds = int(getattr(self.config, "dag_replan_max_rounds",
+                             max_rounds) or max_rounds)
+        rounds = max(1, rounds)
+        reviewer = DagReviewerAgent(self.client, self.config)
+        planner = None  # 惰性导入（仅需 replan 时才建）
+        return ("go", dag, rounds, reviewer, planner)
 
     # ---------- 求解前门 Lean 逻辑层检测（2026-09-08 门升级，见 _dag_replan_gate）---
     def _lean_dag_logic_check(self, ctx: TaskContext, dag,
