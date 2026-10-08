@@ -3462,6 +3462,71 @@ class SubGoalSolverAgent(BaseAgent):
         发现的矛盾强制注入 merge 提示词要求逐条裁决——不让子目标间矛盾
         静默流入最终合并（alg-060 型显式/隐含矛盾）。
         """
+        user_msg, _merge_system = self._prepare_merge_prompt(
+            ctx, subgoals, plan_summary, results_map, merge_strategy)
+
+        for attempt in range(2):
+            # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
+            resp = self.llm(
+                ctx,
+                prefill_messages(
+                    [
+                        {"role": "system", "content": _merge_system},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "【最终答案】",
+                ),
+                0.2, 32768,
+            )
+            if resp:
+                resp = stitch("【最终答案】", resp)
+            if resp is None:
+                if attempt == 0:
+                    self.record(ctx, "subgoal_merge",
+                                "合并 LLM 调用失败，带反馈重试一次")
+                    user_msg = user_msg + (
+                        "\n\n[上一轮合并未返回有效文本] 请完整输出"
+                        "【矛盾检查】【结论合并】【最终答案】。")
+                    continue
+                return self._fallback_from_last_subgoal(subgoals)
+
+            # 优先提取「最终答案」
+            answer = extract_final_answer(resp)
+            if answer:
+                # 2026-09-08：merge 空转（占位词 / [计算] X = X 平凡回填）→
+                # 不允许带着空转结论入候选，带反馈重试一次
+                if self._looks_placeholder(answer):
+                    if attempt == 0:
+                        self.record(
+                            ctx, "subgoal_merge",
+                            f"合并输出为空转/占位（{answer[:60]}），带反馈重试")
+                        user_msg = user_msg + (
+                            f"\n\n[上一轮合并输出为空转：{answer[:120]}]\n"
+                            "你没有真正合并各子目标结果。请：①逐条做矛盾检查；"
+                            "②基于各子目标结果与蓝图结论真实推导；"
+                            "③基于各子目标结果与蓝图结论真实推导，"
+                            "在【最终答案】给出结论。")
+                        continue
+                    return self._fallback_from_last_subgoal(subgoals)
+                return answer
+            if attempt == 0:
+                self.record(ctx, "subgoal_merge",
+                            "合并未提取到【最终答案】，带反馈重试一次")
+                user_msg = user_msg + (
+                    "\n\n[上一轮未找到【最终答案】段] 请在末尾用【最终答案】"
+                    "明确给出结论（一个数值/表达式/集合），不要只给过程。")
+                continue
+            return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals)
+        return self._fallback_from_last_subgoal(subgoals)
+
+    def _prepare_merge_prompt(self, ctx: TaskContext, subgoals: list[dict],
+                               plan_summary: str, results_map: dict[int, str],
+                               merge_strategy: str) -> tuple:
+        """合并提示词准备段（2026-10-08 批1：从 `_merge_results` 原地拆出）。
+        装配 all_results / blueprint_conclusion(K11掩码) / 客观题注入 / user_msg /
+        交叉核对 conflict_note / 可信度标记 / _merge_system；返回二元组。
+        段体**逐字搬**，record 步序不变。
+        """
         all_results = self._format_all_results(results_map, subgoals)
         # 蓝图最终结论（root 节点 statement）：取 ctx.blueprint，兼容 dict/list 两种形态
         # 2026-09-17（P-20）：同上，蓝图根节点结论里若含 \boxed /「最终答案」先剥离
@@ -3602,60 +3667,7 @@ class SubGoalSolverAgent(BaseAgent):
             _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
             if _th:
                 _merge_system = _merge_system + "\n\n" + _th
-
-        for attempt in range(2):
-            # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
-            resp = self.llm(
-                ctx,
-                prefill_messages(
-                    [
-                        {"role": "system", "content": _merge_system},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "【最终答案】",
-                ),
-                0.2, 32768,
-            )
-            if resp:
-                resp = stitch("【最终答案】", resp)
-            if resp is None:
-                if attempt == 0:
-                    self.record(ctx, "subgoal_merge",
-                                "合并 LLM 调用失败，带反馈重试一次")
-                    user_msg = user_msg + (
-                        "\n\n[上一轮合并未返回有效文本] 请完整输出"
-                        "【矛盾检查】【结论合并】【最终答案】。")
-                    continue
-                return self._fallback_from_last_subgoal(subgoals)
-
-            # 优先提取「最终答案」
-            answer = extract_final_answer(resp)
-            if answer:
-                # 2026-09-08：merge 空转（占位词 / [计算] X = X 平凡回填）→
-                # 不允许带着空转结论入候选，带反馈重试一次
-                if self._looks_placeholder(answer):
-                    if attempt == 0:
-                        self.record(
-                            ctx, "subgoal_merge",
-                            f"合并输出为空转/占位（{answer[:60]}），带反馈重试")
-                        user_msg = user_msg + (
-                            f"\n\n[上一轮合并输出为空转：{answer[:120]}]\n"
-                            "你没有真正合并各子目标结果。请：①逐条做矛盾检查；"
-                            "②基于各子目标结果与蓝图结论真实推导；"
-                            "③基于各子目标结果与蓝图结论真实推导，"
-                            "在【最终答案】给出结论。")
-                        continue
-                    return self._fallback_from_last_subgoal(subgoals)
-                return answer
-            if attempt == 0:
-                self.record(ctx, "subgoal_merge",
-                            "合并未提取到【最终答案】，带反馈重试一次")
-                user_msg = user_msg + (
-                    "\n\n[上一轮未找到【最终答案】段] 请在末尾用【最终答案】"
-                    "明确给出结论（一个数值/表达式/集合），不要只给过程。")
-                continue
-            return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals)
-        return self._fallback_from_last_subgoal(subgoals)
+        return user_msg, _merge_system
 
     @staticmethod
     def _blueprint_conclusion(ctx: TaskContext) -> str:
