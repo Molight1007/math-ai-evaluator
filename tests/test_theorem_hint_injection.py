@@ -31,9 +31,15 @@ if _SRC not in sys.path:
 # 只保留**面向用户题目求解**的路径（工具回填类小重问不需要定理）。
 _INJECTION_SITES = {
     "agent/solver.py": [
-        ("_generate_initial 主路径", "solver 主路径注入定理清单"),
         ("_generate_revise 修订路径", "revise 是**独立于 _generate_initial 的生成路径**"),
         ("_generate_proof 证明通道", "证明题是定理检索**最该受益**的题型"),
+    ],
+    # 2026-10-08 拆分：`_generate_initial` 的定理清单注入段已**逐字搬**至
+    # `agent/solver__prompt.py::_inject_initial_context`（详见该模块 docstring）。
+    # ⇒ 此处仅把该注入点的**读取入口**改到新文件；**锚点字符串与断言/比较逻辑一字未改**
+    #   （注入点总数不变，非放宽判据）。
+    "agent/solver__prompt.py": [
+        ("_generate_initial 主路径", "solver 主路径注入定理清单"),
     ],
     "agent/sub_goal_solver.py": [
         ("单步子目标求解", "子目标求解是**用户点名的解题重点环节**"),

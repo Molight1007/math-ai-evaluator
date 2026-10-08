@@ -35,16 +35,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .base import (
     BaseAgent, TaskContext, Candidate,
     detect_hallucination, detect_truncated,
-    detect_template_leak,
     next_candidate_id,           # 2026-09-17：候选 id 单一来源（防腾位后 id 冲突）
     pick_best_candidates,        # 2026-09-17：腾位按票数选优（单一来源）
     _pool_gate_v2_on,            # 2026-10-07：候选入池门槛 v2 开关（单一来源，见 base.py）
 )
+# 2026-10-08：`get_domain_hint` / `build_blueprint_user_message` 随段 4–7 迁至
+# `agent/solver__prompt.py`，此处不再需要。
 from prompts.policy import (
     SELF_IMPROVE_USER,
     get_policy_system,
-    get_domain_hint,
-    build_blueprint_user_message,
 )
 from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
@@ -59,6 +58,13 @@ from utils.extract import (
     is_valid_final_answer,
 )
 from utils.prefill import prefill_messages, stitch
+
+# 2026-10-08 拆分：`_generate_initial` 的提示词装配与并行采样已抽到独立模块
+# （逐字搬 / 整段同迁），本文件只保留 `_generate_initial` 主控与一行委托调用。
+from .solver__prompt import (          # noqa: E402
+    _build_initial_prompt, _inject_initial_context,
+)
+from .solver__sample import _run_initial_sampling  # noqa: E402
 
 logger = logging.getLogger("MathPilot")
 
@@ -669,156 +675,12 @@ class SolverAgent(BaseAgent):
             else:
                 self.record(ctx, "generate", "证明题专用通道未产出有效候选，回退通用求解")
 
-        # lemma 上下文注入
-        lemma_ctx = self._collect_lemma_context(ctx)
-
-        if self.config.use_blueprint:
-            system_prompt = get_policy_system(use_blueprint=True)
-            domain_hint = get_domain_hint(ctx.domain) if ctx.domain else ""
-            user_content = build_blueprint_user_message(ctx.problem, domain_hint)
-        else:
-            system_prompt = get_policy_system(use_blueprint=False)
-            user_content = ctx.problem
-            if ctx.domain:
-                user_content = get_domain_hint(ctx.domain) + "\n" + ctx.problem
-
-        # 注入 lemma 上下文
-        if lemma_ctx:
-            system_prompt = lemma_ctx + system_prompt
-
-        # ★ 2026-10-02（阶段一：子目标结论 → 主求解）：把 2.7 / 3_solve(P&E) 阶段
-        # 已求得的子目标结论作为**中间数据**注入主求解提示词，让主答案建立在子目标
-        # 之上（用户设计原话：「主求解一定要在子目标的基础上」）。
-        # 位置：题目之后、答案格式引导之前 —— 紧贴题目，作为"已知数据"被读；不放
-        #   提示词最末尾（避免模型进入续写模式，历史教训）也不早于题目（需贴题干语义）。
-        # 空安全：无子目标结论时零噪音、零行为变化（helper 内部兜底）。
-        # 只拼一次（与 error_lessons 同口径），retry / 多候选不重复注入。
-        user_content = self._apply_subgoal_findings(ctx, user_content)
-
-        # ICMA 对齐（v2.4.0）：末尾追加章节输出引导。系统 prompt 已要求四章节
-        # 结构化输出并禁止思考过程，这里仅强调【最终答案】章节必须明确，不引导自由 CoT。
-        #
-        # 2026-08-30（#51 答案定型）：基线 45 题实测——**仅 7/45（15.6%）的推理里
-        # 出现 \boxed{}**，5 题抽出的答案超过 60 字符（明显抽到了推理文本），
-        # 且 `reference_matched` 精确匹配 45/45 全 False。本地宽松 LLM 判分能"看懂"，
-        # 平台判分看不懂——这是「本地 46.7% vs 平台 20%」落差里可控性最高的一块。
-        # 模型本身具备给出简洁答案的能力（#21 材料结论：模型可到 90 分），
-        # 缺的是**强制定界**，故在提示词侧要求 \boxed{}，而非让抽取器去猜。
-        _ANSWER_GUIDE = (
-            "\n\n请严格按系统提示的四章节格式输出完整解答，"
-            "确保【最终答案】章节给出明确、简洁的最终结论。"
-        )
-        if getattr(self.config, 'enable_answer_boxed', True):
-            _ANSWER_GUIDE += (
-                "\n【最终答案】章节中，最终结论必须且只能用 \\boxed{...} 包裹，"
-                "并在其后另起一行给出不含任何公式标记的最简形式"
-                "（例如：\\boxed{42}；最简形式：42）。"
-                "\\boxed{} 内只放答案本身，不要放推导过程、单位说明或多余文字。"
-            )
-        user_content = user_content + _ANSWER_GUIDE
-
-        # ★ 2026-09-29（截图 #3+#4）：Mathlib 定理检索结果注入。
-        #
-        # 背景（用户重点关切）：1.2_theorem_hint 阶段用 leansearch 到 Mathlib 检索
-        # "本题该用的定理"，但在此之前 `ctx.theorem_hint_block` 只是**算出来放着**，
-        # 从未拼进任何提示词 ⇒ 检索对大模型的实际影响恒为 0，A/B 必然测出"无差异"，
-        # 用户要回答的「定理对大模型的推理效果如何」在结构上就无法被回答。
-        # 本注入是该功能**产生作用**的唯一通道，没有它整条链只是空转埋点。
-        #
-        # 位置：题目之后、答案格式之后，但**早于** error_lessons / objective。
-        #   · 不放最末尾：避免模型把定理清单当成"待续写的前文"；
-        #   · 不早于题目：定理必须紧贴题目语义才可读。
-        # 长度：检索侧已限制 top_k(5) × max_queries(2)，实测块长约 200–400 字符，
-        #   相对题干本身不构成噪音；无命中时 block 为空串 ⇒ **零成本零噪音**。
-        # 开关：`enable_theorem_hint`（与检索侧同一开关，关掉即整条链关闭）。
-        if getattr(self.config, 'enable_theorem_hint', True):
-            _th_block = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
-            if _th_block:
-                user_content = user_content + "\n\n" + _th_block
-                self.record(ctx, "theorem_hint",
-                            "solver 主路径注入定理清单 %d 字符（%d 条）"
-                            % (len(_th_block), len(getattr(ctx, 'theorem_hints', []) or [])))
-                try:
-                    if isinstance(getattr(ctx, "metadata", None), dict):
-                        ctx.metadata["theorem_hint_injected"] = {
-                            "len": len(_th_block),
-                            "n": len(getattr(ctx, 'theorem_hints', []) or []),
-                        }
-                except Exception:  # noqa: BLE001
-                    pass
-
-        # 2026-09-06 易错点记忆注入（A 档轻量经验，prompts/error_lessons.py）：
-        # 命中题型/关键词才注入自查清单（无命中返回空串=零噪音）。
-        # 放 user 侧题目之后、_make_one 并行之前——只拼一次，retry 不加倍。
-        if getattr(self.config, 'enable_error_lessons', True):
-            lessons_block = error_lessons_block(ctx)
-            if lessons_block:
-                user_content = user_content + "\n\n" + lessons_block
-                self.record(ctx, "error_lesson",
-                            f"注入历史易错自查清单 {error_lesson_ids(ctx)}")
-
-
-        # 题型差异化策略注入（v2.6）：
-        #   选择题→选项逆推验证；判断题→不确定时合理猜测；
-        #   证明题→逐步反复校验；解答题→附带答案结果检测；填空题→只输出结果。
-        #
-        # 2026-08-30（#45）：老师要求移除按题型分流、让 AI 按自身流程作答
-        # （IMO 基本全为证明题，题型分支实测反而拉低证明题正确率）。
-        # 此处改为 `enable_question_type_hint` 控制，**默认关闭**；需要 A/B
-        # 对比或回归旧行为时置 True 即可，无需改代码。
-        # 注：选择题的选项格式化属"输入信息补全"而非策略分流，故始终保留。
-        # 2026-09-12 客观题特化（用户要求"保证能检测到题型并采取特化解题技巧"）：
-        #   · 客观题（选择 / 判断 / 填空）与证明题的解题流程互斥，给它们注入
-        #     特化纪律不触碰上面"证明题不分流"的既有结论；
-        #   · 实测依据（official112 基线）：15 道客观题仅对 4 道——093/103 漏读
-        #     E 项而缺项、101/111 判断方向反、102/106/110 概念题凭印象作答；
-        #   · 开关 `objective_tactic_enabled`（默认 True）可一键回退旧行为，
-        #     `enable_question_type_hint`（默认 False）仍可全题型强制开启。
-        if getattr(ctx, 'question_type', ''):
-            from .question_type import objective_injection
-            _is_obj = ctx.question_type in ("选择题", "判断题", "填空题")
-            _hint_on = bool(
-                getattr(self.config, 'enable_question_type_hint', False)
-                or (_is_obj and getattr(self.config, 'objective_tactic_enabled', True))
-            )
-            _inj = objective_injection(ctx.problem, ctx.question_type, _hint_on)
-            if _inj:
-                user_content = user_content + _inj
-            # 埋点：客观题路由证据（题型 / 是否注入特化纪律 / 注入文本长度）。
-            # 目的：让"是否真的走了特化策略"可被事后核验，而不是靠日志反推。
-            try:
-                if isinstance(getattr(ctx, "metadata", None), dict):
-                    ctx.metadata["objective_route"] = {
-                        "type": ctx.question_type,
-                        "hint_injected": bool(_inj),
-                        "injection_len": len(_inj),
-                    }
-                if _is_obj:
-                    logger.info("[客观题路由] 题型=%s 注入=%d字符",
-                                ctx.question_type, len(_inj))
-            except Exception:  # noqa: BLE001
-                pass
-
-        # ★ 2026-09-15 补：**答案形态要求此前只注入子目标 / 蓝图路径，solver 主路径缺失**。
-        # 本项目教训「只改一处路径 = 没改」：solver 是一条**独立的生成路径**，
-        # 而上面注入的 `objective_injection` 只覆盖客观题（选择/判断/填空），
-        # 于是解答题的形态要求（求所有→必须枚举 / 具体值→禁条件式 / 极值→严格性 /
-        # 2026-09-15 新增的「哪些→完备性」）在**纯 solver 路径下根本没注入**。
-        # 实测对应错题：099（"…离散化方法**有哪些**"，正解为多个，只答了一个）。
-        # ⚠ 位置刻意放在 objective 注入之后、_ANSWER_GUIDE 之前：既不在提示词最末尾
-        #   （避免模型进入续写模式），也不与客观题特化冲突（该函数对选择题/证明题返回空串）。
-        try:
-            from .question_type import answer_form_requirement as _afr_sv
-            _afr_txt = _afr_sv(ctx.problem, getattr(ctx, 'question_type', '') or '')
-            if _afr_txt:
-                user_content = user_content + _afr_txt
-                if isinstance(getattr(ctx, "metadata", None), dict):
-                    ctx.metadata["answer_form_injected_solver"] = len(_afr_txt)
-                self.record(ctx, "answer_form",
-                            "solver 主路径注入答案形态要求 %d 字符" % len(_afr_txt))
-        except Exception:  # noqa: BLE001
-            pass
-
+        # 2026-10-08 拆分（段 4–7）：lemma/蓝图/子目标结论/答案格式装配 →
+        # `agent/solver__prompt.py::_build_initial_prompt`（逐字搬）。
+        system_prompt, user_content = _build_initial_prompt(self, ctx)
+        # 2026-10-08 拆分（段 8–11）：定理/易错点/客观题特化/答案形态注入 →
+        # `agent/solver__prompt.py::_inject_initial_context`（逐字搬）。
+        user_content = _inject_initial_context(self, ctx, user_content)
         # ★ 2026-09-17（M4）：id 基线改为 `max(已有 id)+1`。
         # 原用 `len(ctx.candidates)`，而腾位会让 len 变小 ⇒ 新 id 与旧 id 重叠
         # （实测 013 出现**两个 id=3**、025 出现 id=7）。下游按 id 匹配的地方
@@ -830,210 +692,10 @@ class SolverAgent(BaseAgent):
                             if tier_tbl else [0.1, 0.3, 0.5])
         _STRATIFIED_TEMPS = temperatures
 
-        def _make_one(i: int):
-            cid = base_cid + i
-            # 温度分层：按索引轮转取值（count>=3 时生效；deep 档 4 温度 0.1/0.3/0.5/0.7）
-            base_temp = _STRATIFIED_TEMPS[i % len(_STRATIFIED_TEMPS)] if count >= 3 else self.config.policy_temperature
-            # 候选 2+ 追加微扰动提示，引导不同解题思路
-            _perturb_hints = [
-                "",  # 候选 0: 无扰动（直接求解）
-                "\n请特别注意计算过程中的每一步细节，确保数值精确。",  # 候选 1: 精度
-                "\n如果可以，尝试用另一种方法重新审视这个问题。",  # 候选 2: 换方法
-                "\n请先列出解题关键思路与可能用到的定理/公式，再逐步求解。",  # 候选 3: 计划先行
-            ]
-
-            # v2.4.1 主路径：prefill 压缩求解（诊断实测 37s 返回，答案前置不受截断影响）。
-            # 本环境完整 CoT >200s 不返回（780s 仍读超时），prefill 是唯一保证
-            # 300s 单题预算内出答案的路径。最多重试 2 次（原始 + 1 次重试）。
-            resp = None
-            template_leak_retry = False  # 标记是否为模板泄露后的重试
-            for retry in range(2):
-                # 2026-09-13 循环时间检查（防卡死）：单题上限已从 1200s 放开到
-                # 3600s，必须在循环边界查时间，否则"单次 LLM 200-300s × 多次重试"
-                # 会悄悄穿掉整题预算（实测 3_solve 曾超预算 1.7×）。
-                # 只对"重试"生效（retry>0），保证首轮一定被尝试。
-                if retry > 0 and ctx.gen_time_up():
-                    self.record(ctx, "solver",
-                                f"候选 {cid} 生成重试因时间到点提前停止")
-                    break
-                current_temp = base_temp
-                current_system = system_prompt
-                # 模板泄露重试时使用简化prompt（不覆盖）
-                if template_leak_retry:
-                    current_user = f"请直接解答以下数学问题，只输出解答过程和最终答案：\n\n{ctx.problem}"
-                    current_system = _REINFORCED_SYSTEM
-                    current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
-                    template_leak_retry = False
-                else:
-                    current_user = user_content + (_perturb_hints[i % len(_perturb_hints)] if retry == 0 else "")
-                    if retry > 0:
-                        current_system = _REINFORCED_SYSTEM
-                        current_temp = max(self.config.policy_temperature, 0.7) + 0.1 * retry
-
-                # 主求解 = prefill（无完整 CoT 尝试；prefill 模式下模型输出克制，
-                # max_tokens 上限 16384 已远超实测用量 ~2K token）
-                resp = self._compressed_solve(
-                    ctx, current_system, current_user,
-                    temperature=current_temp,
-                    # 9/4：平台不限 token，去 16384 帽（截断=腰斩丢分），收敛到 policy_max_tokens
-                    max_tokens=self._adaptive_max_tokens(
-                        ctx, self.config.policy_max_tokens),
-                )
-                # 空响应 -> 重试
-                if resp is None or not resp.strip():
-                    if retry < 1:
-                        logger.warning("Candidate %d empty response (retry %d/1)", cid, retry + 1)
-                        time.sleep(1)
-                    continue
-                # 模板泄露检测 → 重试
-                if detect_template_leak(resp):
-                    if retry < 1:
-                        logger.warning("Candidate %d template leak (retry %d/1)", cid, retry + 1)
-                        template_leak_retry = True
-                        time.sleep(0.5)
-                        continue
-                # 幻觉检测
-                hallu = detect_hallucination(resp)
-                if hallu:
-                    logger.warning("Candidate %d hallucination detected: %s", cid,
-                                   ", ".join(f"{h[0]}({h[1]:.0%})" for h in hallu))
-                    # 42 兜底 → 尝试重试
-                    if any("42" in h[0] for h in hallu) and retry < 1:
-                        logger.warning("Candidate %d 42-dodge, retry", cid)
-                        time.sleep(1)
-                        continue
-                # 截断检测 → 记录但不拒绝（后续由 orchestrator 续写）
-                if detect_truncated(resp):
-                    logger.info("Candidate %d truncated; will attempt completion", cid)
-                # 拒绝回答 -> 重试
-                if _is_refusal(resp):
-                    if retry < 1:
-                        logger.warning("Candidate %d refused to answer (retry %d/1)", cid, retry + 1)
-                        time.sleep(1)
-                    continue
-                # 有效回答
-                return cid, resp, False
-            # 全部重试失败，返回最后一次响应
-            return cid, resp, True
-
-        # 并行生成候选（用线程池提高吞吐，限制最大并发防止 API 过载）
-        # P0-4 修复：并行度 6→2，降低并发 API 超时/限流风险
-        results = []
-        max_workers = min(count, 2)
-        # 2026-09-13 修复（实测"单题预算被跨墙 421s"的根因）：
-        # 原实现**一次性把 count(6) 个候选全部 submit**，而线程池只有 2 个 worker
-        # ⇒ 6 / 2 × 单次最坏 360s（`LLMClient` 180s × 重试 1）= **最坏 1080s**；
-        # 且 `as_completed` 循环内**没有任何时间检查**、已提交任务**无法取消**
-        # ⇒ 生成侧软截止 `gen_time_up()` 在这一整段**完全失效**。
-        # 实测后果：004 实耗 1171s 而其 `soft_budget` 只有 750s（**超 421s**）、
-        # 010 超 182s、016 超 87s —— 每题都越过自己的软预算。
-        # 改为**分批提交 + 批间检查**：每批 `max_workers` 个，批间查生成侧截止，
-        # 到点即停止提交剩余候选；**已产出的候选照常进入后续验证**（既有语义不变）。
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            _pending = list(range(count))
-            while _pending:
-                if results and ctx.gen_time_up():
-                    self.record(ctx, "solver",
-                                f"生成侧时间到，跳过剩余 {len(_pending)} 个候选"
-                                f"（已完成 {len(results)}/{count}）")
-                    break
-                _batch, _pending = _pending[:max_workers], _pending[max_workers:]
-                _futs = [pool.submit(_make_one, i) for i in _batch]
-                for _f in as_completed(_futs):
-                    results.append(_f.result())
-        results.sort(key=lambda x: x[0])
-
-        for cid, resp, is_fallback in results:
-            if resp is None or (is_fallback and _is_refusal(resp)):
-                # 2026-09-13 晚（用户硬要求「无论超没超时都要把答案生成出来」）：
-                # 原实现在此 append 一个
-                #   Candidate(id=cid, answer="",
-                #             reasoning="[生成失败] 调用受限或模型拒绝回答")
-                # 的**占位候选**，造成两个后果（4 题实测里 010/016 全中）：
-                #   ① `ctx.candidates` 因此**非空** ⇒ orchestrator 的
-                #      「Solver 未产出候选 → 触发兜底直接求解」（orchestrator.py:1158）
-                #      永不触发；`_emergency_direct_solve` 那一整条路被绕开；
-                #   ② formatter 的 `_REFUSAL_RE` 旧版不含这几个词 ⇒ 占位文本被当作
-                #      合法答案直接提交，`predicted` 就是这串占位符。
-                # 现改为：先尽力从残缺响应里抢救一个真实答案；抢救不到就**不 append**，
-                # 让 `ctx.candidates` 保持空，把控制权交给下游兜底链
-                # （orchestrator `_fallback_direct` → formatter `_emergency_answer`
-                #  → user_agent 最终兜底）。
-                _salvaged = ""
-                if resp is not None and str(resp).strip():
-                    _txt = str(resp)
-                    try:
-                        _salvaged = extract_final_answer(_txt) or ""
-                        if not _salvaged and rescue_final_answer is not None:
-                            _salvaged = rescue_final_answer(_txt)[0] or ""
-                        if not _salvaged and smart_fallback_answer is not None:
-                            _salvaged = smart_fallback_answer(_txt) or ""
-                    except Exception:  # noqa: BLE001
-                        _salvaged = ""
-                _salvaged = (_salvaged or "").strip()
-                if _salvaged and not _is_refusal(_salvaged) and len(_salvaged) <= 300:
-                    # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口②）：**"生成失败抢救"
-                    #   这条 append 此前不过门槛** —— 抢救函数（extract / rescue /
-                    #   smart_fallback）本身就可能吐回推理句/元话语，于是"抢救"反倒
-                    #   成了非答案入池的后门。此处同口径复核：不合格则不入池，
-                    #   保持池干净、把控制权交给下游兜底链。
-                    _sans, _sok = self._normalize_and_check_answer(
-                        ctx, cid, _salvaged)
-                    if _sok:
-                        ctx.candidates.append(Candidate(
-                            id=cid, answer=_sans, reasoning=str(resp)))
-                        logger.warning(
-                            "Candidate %d 生成失败但抢救到答案: %s",
-                            cid, _sans[:60])
-                    else:
-                        logger.warning(
-                            "Candidate %d 生成失败，抢救结果仍非答案 → 不入池"
-                            "（交由下游兜底）", cid)
-                else:
-                    logger.warning(
-                        "Candidate %d generation failed/skipped（无可用答案，"
-                        "交由下游兜底）", cid)
-                continue
-            answer = extract_final_answer(resp)
-            # 如果提取不到答案 / 答案过长（>300字符大概率是推理文本），
-            # 先试 rescue 兜底（嵌套 boxed / 中段强模式结论），再取尾部
-            if not answer or len(answer) > 300 and resp.strip():
-                rescued = rescue_final_answer(resp)[0]
-                if rescued:
-                    answer = rescued
-                else:
-                    fallback = smart_fallback_answer(resp)
-                    if fallback and (not answer or len(fallback) < len(answer)):
-                        answer = fallback
-            # 2026-08-30（#51）：上述兜底仍拿到"疑似推理文本"时，做一次**定向重问**，
-            # 而不是把长文本当答案交给判分器。
-            # 依据：基线 45 题有 5 题抽出的答案 >60 字符（含整段计算步骤与结论句），
-            # 本地宽松判分能看懂、平台判分看不懂。模型具备给出简洁答案的能力，
-            # 缺的是一次明确要求——成本仅一次短调用，收益是消除平台侧的格式性丢分。
-            if (getattr(self.config, 'enable_answer_reask', True)
-                    and not ctx.gen_time_up()):
-                answer = self._reask_final_answer(ctx, resp, answer)
-            # ★ 表达式范式（默认形态，9/12 用户要求）：模型只建模（设符号+给算式），
-            # 数值代入与运算由本地完成 → 答案取工具值。
-            resp, answer = self._maybe_expression_eval(ctx, resp, answer)
-            # 2026-09-10 L2：独立符号建模复核（默认关；每题最多一次）
-            resp, answer = self._maybe_symbolic_crosscheck(ctx, resp, answer)
-            # 2026-09-12 符号化方程求解通道（默认关）：模型只交方程（组）+ 目标，
-            # 数值一律由本地 SymPy 回代求出（模型不参与计算），异议时回传工具结果。
-            resp, answer = self._maybe_symbolic_solve(ctx, resp, answer)
-            # ★★ 2026-10-06：**入池门槛**（规范化 + 判定）——
-            #   不含最终答案的候选不入池；句子形态但含明确最终值的**抢救出值再入池**
-            #   （实测 59% 的候选是推理句/元话语；它们污染投票/检错/修正）。
-            answer, _ans_ok = self._normalize_and_check_answer(ctx, cid, answer)
-            if _ans_ok:
-                ctx.candidates.append(Candidate(
-                    id=cid,
-                    answer=answer,
-                    reasoning=resp,
-                    revised=False,
-                ))
-            logger.debug("Candidate %d generated (len=%d)", cid, len(resp))
-
+        # 2026-10-08 拆分（段 13–16）：`_make_one` 并行采样 + 候选落盘 →
+        # `agent/solver__sample.py::_run_initial_sampling`（整段同迁）。
+        _run_initial_sampling(
+            self, ctx, count, base_cid, _STRATIFIED_TEMPS, system_prompt, user_content)
         self.record(
             ctx, "solve",
             f"生成 {len(ctx.candidates)} 个候选解答 "
