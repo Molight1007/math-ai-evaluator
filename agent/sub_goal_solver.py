@@ -1877,77 +1877,8 @@ class SubGoalSolverAgent(BaseAgent):
         # **必须放在提示词中部（最终指令之前），不能追加在末尾**——
         # 2026-08-29 A/B 实测：追加在末尾会改变提示词收尾结构，使模型
         # 进入"续写模式"，答案泄漏 `[续写]` 占位符（algebra-075 因此从对变错）。
-        lemma_context = ""
-        if self._use_lemma(ctx):
-            lemmas = list(getattr(ctx, "lemma_repo", []) or [])
-            if lemmas:
-                lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
-                lemma_context = (
-                    f"\n【已建立的结论（可直接引用，无需重新推导）】\n"
-                    f"{lemma_block}\n")
-
-        # ② 原子目标级 leansearch 独立检索（LeanSearch v2 论文）已随
-        # 2026-09-06 去 Lean 化移除——平台无外网/无 Lean，检索恒空转。
-
-        # 2026-09-12 客观题特化（三处同源注入之②：子目标逐步求解）——这是子目标
-        # 链里**真正产出内容**的一步，客观题答案可能直接来自本步结果。
-        _obj_inj = ""
-        try:
-            from .question_type import objective_injection as _oi
-            _obj_inj = _oi(
-                ctx.problem or "", getattr(ctx, "question_type", "") or "",
-                bool(getattr(self.config, "objective_tactic_enabled", True)))
-        except Exception:  # noqa: BLE001
-            _obj_inj = ""
-        # ★ 2026-09-14（#103「丢 E」真根因修复）：剥离题面的
-        #   「Remember to put your final answer within \boxed{}.」指令。
-        #   实测该句**112/112 题都有**（题库统一附加），它会随题面进入**每个
-        #   中间子目标**的 prompt ⇒ ① 选项判定子目标全都输出 `\boxed{A}`；
-        #   ② **最后一个选项**直接吐**最终答案**（#103「判定选项 E」→
-        #   `\boxed{ABCD}`）⇒ 聚合层认不出它是 E 的判定 ⇒ 静默丢项。
-        #   该指令只对**最终汇总**步骤有效（merge 仍用原题、保留 boxed 要求），
-        #   故此处对子目标 prompt 使用剥离版题面。
-        try:
-            from .question_type import strip_answer_format_directive as _safd
-            _prob_for_step = _safd(ctx.problem or "")
-        except Exception:  # noqa: BLE001
-            _prob_for_step = ctx.problem or ""
-        # ★ 2026-10-04（K11 注入点守卫）：本模板 **逐字** 注入的字段必须全部过掩码。
-        #   背景：蓝图节点 `statement` 经 `blueprint_planner.to_subgoal_plan`（:302-303）
-        #   被原样写成子目标 `title` / `description`，再由本模板送进每步求解提示词
-        #   （见 prompts/sub_goal.py:229-231）⇒ 蓝图若写「证明最小值为 4030，故答案为
-        #   4030」就等于**指令模型输出 4030**（K11，已数据确认的唯一过半根因 41.4%）。
-        #   原守卫只覆盖 merge_strategy / problem_analysis（生产点），此处为最后一道关口。
-        #   只改局部变量，**不动 sg 本体**（其它消费者与 trace 不受影响）。
-        _desc = str(sg.get("description") or "")
-        _title = str(sg.get("title") or "")
-        if _k11_mask_on():
-            _desc, _n_desc = _mask_asserted_values(_desc)
-            _title, _n_title = _mask_asserted_values(_title)
-            _n_mask = _n_desc + _n_title
-            if _n_mask:
-                self.record(ctx, "blueprint_lock_guard",
-                            f"子目标注入字段（title/description）内嵌 {_n_mask} 处断言数值"
-                            " → 已屏蔽为占位符（K11 注入点守卫）")
-        user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
-            problem=_prob_for_step + _obj_inj,
-            subgoal_plan_summary=plan_summary,
-            previous_results=prev_results,
-            lemma_context=lemma_context,
-            subgoal_id=sg["id"],
-            subgoal_title=_title,
-            subgoal_type=sg["type"],
-            subgoal_description=_desc,
-            subgoal_expected_output=sg["expected_output"],
-        )
-        # v2.11：0-LLM 校验反馈（S1-lite）追加在提示词末尾；只有校验真没过才带
-        # （空串 = 通过）。不追加在开头/中部，避免改变模板收尾结构（2026-08-29
-        # 教训：提示词收尾被破坏会让模型进入续写模式、泄漏占位符）。
-        if extra_hint:
-            user_msg = user_msg + (
-                f"\n\n[本步结果校验反馈] {extra_hint}\n"
-                f"请修正后重新给出【本步结果】。"
-            )
+        user_msg = self._prepare_step_prompt(
+            ctx, sg, plan_summary, prev_results, extra_hint)
 
         step_result = self._call_step(ctx, user_msg, sg=sg)
 
@@ -2023,6 +1954,88 @@ class SubGoalSolverAgent(BaseAgent):
                 if retry_result and not retry_result.startswith("[子目标"):
                     return retry_result
         return step_result
+
+    def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
+                              plan_summary: str, prev_results: str,
+                              extra_hint: str) -> str:
+        """单步提示词准备段（2026-10-08 批2：从 `_solve_subgoal` 原地拆出）。
+
+        装配已建立结论（lemma_context）/ 客观题特化注入 / 剥离 boxed 指令的题面 /
+        title·description 的 K11 断言数值掩码 / `SUBGOAL_STEP_USER_TEMPLATE`
+        → 返回 `user_msg`。段体**逐字搬**，record 步序不变。
+        """
+        lemma_context = ""
+        if self._use_lemma(ctx):
+            lemmas = list(getattr(ctx, "lemma_repo", []) or [])
+            if lemmas:
+                lemma_block = "\n".join(f"- {l}" for l in lemmas[-8:])
+                lemma_context = (
+                    f"\n【已建立的结论（可直接引用，无需重新推导）】\n"
+                    f"{lemma_block}\n")
+
+        # ② 原子目标级 leansearch 独立检索（LeanSearch v2 论文）已随
+        # 2026-09-06 去 Lean 化移除——平台无外网/无 Lean，检索恒空转。
+
+        # 2026-09-12 客观题特化（三处同源注入之②：子目标逐步求解）——这是子目标
+        # 链里**真正产出内容**的一步，客观题答案可能直接来自本步结果。
+        _obj_inj = ""
+        try:
+            from .question_type import objective_injection as _oi
+            _obj_inj = _oi(
+                ctx.problem or "", getattr(ctx, "question_type", "") or "",
+                bool(getattr(self.config, "objective_tactic_enabled", True)))
+        except Exception:  # noqa: BLE001
+            _obj_inj = ""
+        # ★ 2026-09-14（#103「丢 E」真根因修复）：剥离题面的
+        #   「Remember to put your final answer within \boxed{}.」指令。
+        #   实测该句**112/112 题都有**（题库统一附加），它会随题面进入**每个
+        #   中间子目标**的 prompt ⇒ ① 选项判定子目标全都输出 `\boxed{A}`；
+        #   ② **最后一个选项**直接吐**最终答案**（#103「判定选项 E」→
+        #   `\boxed{ABCD}`）⇒ 聚合层认不出它是 E 的判定 ⇒ 静默丢项。
+        #   该指令只对**最终汇总**步骤有效（merge 仍用原题、保留 boxed 要求），
+        #   故此处对子目标 prompt 使用剥离版题面。
+        try:
+            from .question_type import strip_answer_format_directive as _safd
+            _prob_for_step = _safd(ctx.problem or "")
+        except Exception:  # noqa: BLE001
+            _prob_for_step = ctx.problem or ""
+        # ★ 2026-10-04（K11 注入点守卫）：本模板 **逐字** 注入的字段必须全部过掩码。
+        #   背景：蓝图节点 `statement` 经 `blueprint_planner.to_subgoal_plan`（:302-303）
+        #   被原样写成子目标 `title` / `description`，再由本模板送进每步求解提示词
+        #   （见 prompts/sub_goal.py:229-231）⇒ 蓝图若写「证明最小值为 4030，故答案为
+        #   4030」就等于**指令模型输出 4030**（K11，已数据确认的唯一过半根因 41.4%）。
+        #   原守卫只覆盖 merge_strategy / problem_analysis（生产点），此处为最后一道关口。
+        #   只改局部变量，**不动 sg 本体**（其它消费者与 trace 不受影响）。
+        _desc = str(sg.get("description") or "")
+        _title = str(sg.get("title") or "")
+        if _k11_mask_on():
+            _desc, _n_desc = _mask_asserted_values(_desc)
+            _title, _n_title = _mask_asserted_values(_title)
+            _n_mask = _n_desc + _n_title
+            if _n_mask:
+                self.record(ctx, "blueprint_lock_guard",
+                            f"子目标注入字段（title/description）内嵌 {_n_mask} 处断言数值"
+                            " → 已屏蔽为占位符（K11 注入点守卫）")
+        user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
+            problem=_prob_for_step + _obj_inj,
+            subgoal_plan_summary=plan_summary,
+            previous_results=prev_results,
+            lemma_context=lemma_context,
+            subgoal_id=sg["id"],
+            subgoal_title=_title,
+            subgoal_type=sg["type"],
+            subgoal_description=_desc,
+            subgoal_expected_output=sg["expected_output"],
+        )
+        # v2.11：0-LLM 校验反馈（S1-lite）追加在提示词末尾；只有校验真没过才带
+        # （空串 = 通过）。不追加在开头/中部，避免改变模板收尾结构（2026-08-29
+        # 教训：提示词收尾被破坏会让模型进入续写模式、泄漏占位符）。
+        if extra_hint:
+            user_msg = user_msg + (
+                f"\n\n[本步结果校验反馈] {extra_hint}\n"
+                f"请修正后重新给出【本步结果】。"
+            )
+        return user_msg
 
     def _use_lemma(self, ctx: TaskContext) -> bool:
         """按领域路由 lemma 累积（与 SolverAgent 同规则，2026-08-29）。
