@@ -1526,145 +1526,11 @@ class LeanBridge:
             # 4) 阶段二：编译验证（不允许 sorry —— 答案必须被 tactic 证出）
             if time.monotonic() > deadline:
                 return _mk("unknown", reason="deadline_before_compile", code=lean_code)
-            project_dir = self._lean_project_dir
-            use_mathlib = self._mathlib_ready()
-            code_to_compile = (_prepend_mathlib_import(lean_code)
-                               if use_mathlib else lean_code)
-            if project_dir:
-                lean_file = "ansverify_%d_%d.lean" % (
-                    os.getpid(), int(time.monotonic() * 1e6))
-                comp = self._compile(code_to_compile, project_dir,
-                                     lean_filename=lean_file, allow_sorry=False)
-                _trash_lean_file(project_dir, lean_file)
-            else:
-                with tempfile.TemporaryDirectory(prefix="lean_ansverify_") as work_dir:
-                    comp = self._compile(code_to_compile, work_dir,
-                                         allow_sorry=False)
+            comp = self._verify_answer_compile(lean_code)
 
             if comp and comp.get("ok"):
-                # 2026-09-03 防自证（老师指令）：编译通过 ≠ 真验证。
-                # 自证形态：LLM 写 'example : (50005000:ℚ) = 50005000 := rfl'——
-                # 代码与题目无关，验 X=X 恒等式（022 v4 实测 answer_valid 但
-                # 50005000 ≠ 真值 25502500）。交叉核对：验证代码必须引用
-                # **题目关键数字**（>=3 位数且排除通用小整数），无交叉 = 自证嫌疑 → 拒绝。
-                # v17 补丁：题目无大数字时退而用"答案数字"核对——答案里的
-                # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
-                _cc = _cross_check_problem_numbers(problem, lean_code)
-                # ★★ 2026-10-07：`_cc_reason` 记录**为什么** `_cc` 被置 False。
-                #   此前三个失败成因（数字/符号未交叉 / 闭式自证 / 恒等式自证）**复用
-                #   同一条失败分支、产出同一句 desc 与同一 reason**，外部无法区分
-                #   （effect_capture #10「恒等式骗过验证」因此**无独立留痕、无法判定**）。
-                #   现分设独立 reason，供 diag / cloud_health_report / 效果脚本单独观测。
-                _cc_reason = "cross_check_failed"
-                # ★★ 2026-09-22：**闭式自证拦截**（补上循环判据的缺口，见上方 helper 注释）。
-                #   题面含参数 + 验证代码是 ground 闭式 ⇒ 只证明了 `X = X` 型恒等式，
-                #   不可能形式化题目 ⇒ 直接判自证，不再看数字是否"出现在代码里"。
-                if (_cc is not False and _problem_is_parametric(problem)
-                        and _is_ground_statement(lean_code)):
-                    _cc = False
-                    _cc_reason = "ground_self_proof"
-                # ★★ 2026-10-06 新增（**恒等式必须判自证** —— 实测铁证）：
-                #   题 002 的 `example : (√5-1)/2 = (√5-1)/2 := by norm_num` 是**恒等式**，
-                #   编译必然通过、与答案对错无关，却被判 `answer_valid` ⇒ 假执行。
-                #   根因：下面的 `common2 = (ans_nums & code_nums2) - {...}` 区分不了
-                #   「验证命题」与「恒等式」—— 恒等式里当然含答案的数字（写了两遍）。
-                #   既有 `_is_ground_statement` 只在**题面含参数**时触发，覆盖不到本题。
-                if _cc is not False and _is_identity_statement(lean_code):
-                    _cc = False
-                    _cc_reason = "identity_self_proof"   # ★ B 项：独立留痕
-                if _cc is None:
-                    # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
-                    ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
-                    code_nums2 = set(re.findall(r"\b(\d{1,})\b", lean_code or ""))
-                    common2 = (ans_nums & code_nums2) - {"0", "1", "2"}
-                    if common2:
-                        _cc = True               # 答案里有区分度的数字已进代码
-                    elif ans_nums - {"0", "1", "2"}:
-                        _cc = False              # 答案有数字却没进代码 ⇒ 自证
-                    else:
-                        # 答案数字无区分度（如答案本身就是 0）——原实现在此**直接放行**
-                        # （`not ans_nums - {"0","1","2"}` 恒为 True），实测被 010 这类
-                        # 题利用：LLM 写 `example : (0:ℚ) = 0 := by norm_num` 即通过。
-                        # 2026-09-13 修复：改用**题面变量符号**核对（真验证必引题目变量）。
-                        _cc = _cross_check_problem_symbols(problem, lean_code)
-                if not _cc:
-                    # ★★ 2026-10-07（**语义分离**）：本分支的全部成因都是「验证代码
-                    #   没锚定题目条件 ⇒ **形式化不充分**」，**不是**「命题为假」。
-                    #   实测 official112-004 的代码 `(2025:ℕ)/2 = 1012` 编译通过
-                    #   （`compiled=true`）却因闭式自证拦截落到 `proof_invalid` —— 把
-                    #   「无法核验」误判成「证明失败」。故结论码改由开关决定：
-                    #   默认 → `unknown`（**无法核验**，非答案错）；设
-                    #   `LEAN_CROSSCHECK_AS_UNKNOWN=0` 回退旧 `proof_invalid`。
-                    _cc_verdict = _crosscheck_failure_verdict()
-                    report = BugReport(
-                        verdict=_cc_verdict,
-                        findings=[Finding(
-                            location="answer_verify", kind="Critical",
-                            severity=5,
-                            # ★★ 2026-10-06 修（**"把非答案问题当成答案错误"**）：
-                            #   实测这条 advice 在题 000/001 里各占 **12/15 条**、
-                            #   而带定位的结构化 bug report 只占 0~1 条 ⇒ **噪声压过信号**，
-                            #   且模型被引向"重写验证代码"，把答案越改越偏
-                            #   （题 000：20 → 20971520，标准 20460）。
-                            #   本检查本身**是对的**（防 LLM 写恒真式骗过 Lean 认证），
-                            #   所以**保留拒绝判定**；但必须讲清楚：
-                            #   它说的是**验证产物**没锚定题目数字，**不等于答案错**。
-                            desc="【这不是答案错误】Lean 验证代码未引用题目的关键数字/条件"
-                                 "（只验了自身恒等式），因此本候选**无法被 Lean 认证** —— "
-                                 "但**不能据此判定答案错**。请**保持答案不变**，"
-                                 "只把题目条件与答案一起形式化"
-                                 "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
-                    setattr(report, "lean_code", lean_code)
-                    # 独立留痕：区分「数字未交叉」/「闭式自证」/「恒等式自证」三类成因
-                    setattr(report, "verdict_reason", _cc_reason)
-                    setattr(report, "cross_check", False)
-                    setattr(report, "compiled", True)
-                    setattr(report, "suggestion",
-                            "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
-                    logger.warning(
-                        "[LeanBridge] 答案验证形式化不充分（%s），判 %s"
-                        "（代码已编译通过 ⇒ 无法核验 ≠ 答案错）",
-                        _cc_reason, _cc_verdict)
-                    return report
-                # 2026-09-13 新增：**系统命题验算**（命题由系统构造，非 LLM 自由发挥）。
-                # 动机：Lean 只能验证"命题可证"，无法验证"命题 = 题目"；LLM 写恒真式
-                # 即被判 answer_valid（实测 010：错答案 0 被放行）。此处从推理里提取
-                # 带工具标记的算式，由系统构造「(算式) = (答案数值)」并编译：
-                #   · 编译失败 ⇒ 答案与自身计算矛盾 ⇒ 直接判 proof_invalid（强信号）
-                #   · 通过 / 无法构造 ⇒ 不影响原有判定（纯增量，不降低既有能力）
-                try:
-                    _sys = self._verify_answer_by_system(reasoning, answer)
-                except Exception:  # noqa: BLE001
-                    _sys = None
-                if _sys is False:
-                    _r = BugReport(
-                        verdict="proof_invalid",
-                        findings=[Finding(
-                            location="answer_verify", kind="Critical", severity=5,
-                            desc="最终答案与推理中的**计算结果矛盾**：系统已用 Lean "
-                                 "复算你给出的算式，结果与最终答案不一致。"
-                                 "请重新核对计算并修正答案。")])
-                    setattr(_r, "lean_code", lean_code)
-                    setattr(_r, "verdict_reason", "sys_verify_conflict")
-                    setattr(_r, "cross_check", True)
-                    setattr(_r, "sys_verify", False)
-                    setattr(_r, "compiled", True)
-                    setattr(_r, "suggestion",
-                            "重算该算式，确保最终答案与之逐字一致")
-                    logger.warning(
-                        "[LeanBridge] 系统命题验算不通过：答案与算式矛盾 → 拒绝")
-                    return _r
-                report = BugReport(verdict="answer_valid", findings=[])
-                # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
-                # ★ 2026-09-17：同时附加**守卫判定依据**，使"为什么判 valid"可事后核查
-                #   —— 实测 003 的 `sys_verify` 恒为 None（calc 工具已关 ⇒ 推理里没有
-                #   `<calc>` 标记 ⇒ 该守卫结构性不生效），这一事实此前完全不可见。
-                setattr(report, "lean_code", lean_code)
-                setattr(report, "verdict_reason", "compiled_and_guards_passed")
-                setattr(report, "cross_check", True)
-                setattr(report, "sys_verify", _sys)
-                setattr(report, "compiled", True)
-                return report
+                return self._verify_answer_compiled_ok(
+                    problem, reasoning, answer, lean_code)
 
             # 5) 阶段三：错误分析（把最终答案并入 reasoning 上下文，定位更准）
             if time.monotonic() > deadline:
@@ -1721,6 +1587,159 @@ class LeanBridge:
             logger.warning("[LeanBridge] verify_answer 异常（降级 unknown）: %s", exc)
             return _mk("unknown", reason="exception_" + type(exc).__name__,
                        code=locals().get("lean_code") or "")
+
+    def _verify_answer_compile(self, lean_code: str) -> Optional[dict]:
+        """答案验证「阶段二」：把验证代码送 Lean 编译（工程目录优先，否则临时目录）。
+
+        纯搬迁自 ``verify_answer`` 原编译段（2026-10-08 批4 原地拆分），行为逐字不变。
+        """
+        project_dir = self._lean_project_dir
+        use_mathlib = self._mathlib_ready()
+        code_to_compile = (_prepend_mathlib_import(lean_code)
+                           if use_mathlib else lean_code)
+        if project_dir:
+            lean_file = "ansverify_%d_%d.lean" % (
+                os.getpid(), int(time.monotonic() * 1e6))
+            comp = self._compile(code_to_compile, project_dir,
+                                 lean_filename=lean_file, allow_sorry=False)
+            _trash_lean_file(project_dir, lean_file)
+        else:
+            with tempfile.TemporaryDirectory(prefix="lean_ansverify_") as work_dir:
+                comp = self._compile(code_to_compile, work_dir,
+                                     allow_sorry=False)
+        return comp
+
+    def _verify_answer_compiled_ok(self, problem: str, reasoning: str,
+                                   answer: str, lean_code: str) -> BugReport:
+        """编译通过后的守卫判定：数字交叉核对 → 系统命题验算 → answer_valid。
+
+        纯搬迁自 ``verify_answer`` 原「编译通过」分支（2026-10-08 批4 原地拆分）。
+        行为逐字不变，**含 3 处早退**：cross_check_failed（unknown/proof_invalid 由开关定）、
+        sys_verify 冲突（proof_invalid）、守卫全过（answer_valid）。
+        """
+        # 2026-09-03 防自证（老师指令）：编译通过 ≠ 真验证。
+        # 自证形态：LLM 写 'example : (50005000:ℚ) = 50005000 := rfl'——
+        # 代码与题目无关，验 X=X 恒等式（022 v4 实测 answer_valid 但
+        # 50005000 ≠ 真值 25502500）。交叉核对：验证代码必须引用
+        # **题目关键数字**（>=3 位数且排除通用小整数），无交叉 = 自证嫌疑 → 拒绝。
+        # v17 补丁：题目无大数字时退而用"答案数字"核对——答案里的
+        # 数字必须进验证代码（拦 '\[ Q(x)' 残缺答案自证）。
+        _cc = _cross_check_problem_numbers(problem, lean_code)
+        # ★★ 2026-10-07：`_cc_reason` 记录**为什么** `_cc` 被置 False。
+        #   此前三个失败成因（数字/符号未交叉 / 闭式自证 / 恒等式自证）**复用
+        #   同一条失败分支、产出同一句 desc 与同一 reason**，外部无法区分
+        #   （effect_capture #10「恒等式骗过验证」因此**无独立留痕、无法判定**）。
+        #   现分设独立 reason，供 diag / cloud_health_report / 效果脚本单独观测。
+        _cc_reason = "cross_check_failed"
+        # ★★ 2026-09-22：**闭式自证拦截**（补上循环判据的缺口，见上方 helper 注释）。
+        #   题面含参数 + 验证代码是 ground 闭式 ⇒ 只证明了 `X = X` 型恒等式，
+        #   不可能形式化题目 ⇒ 直接判自证，不再看数字是否"出现在代码里"。
+        if (_cc is not False and _problem_is_parametric(problem)
+                and _is_ground_statement(lean_code)):
+            _cc = False
+            _cc_reason = "ground_self_proof"
+        # ★★ 2026-10-06 新增（**恒等式必须判自证** —— 实测铁证）：
+        #   题 002 的 `example : (√5-1)/2 = (√5-1)/2 := by norm_num` 是**恒等式**，
+        #   编译必然通过、与答案对错无关，却被判 `answer_valid` ⇒ 假执行。
+        #   根因：下面的 `common2 = (ans_nums & code_nums2) - {...}` 区分不了
+        #   「验证命题」与「恒等式」—— 恒等式里当然含答案的数字（写了两遍）。
+        #   既有 `_is_ground_statement` 只在**题面含参数**时触发，覆盖不到本题。
+        if _cc is not False and _is_identity_statement(lean_code):
+            _cc = False
+            _cc_reason = "identity_self_proof"   # ★ B 项：独立留痕
+        if _cc is None:
+            # 题目无 >=3 位数字：① 答案侧数字核对 → ② 仍无区分度则用题面变量核对
+            ans_nums = set(re.findall(r"\b(\d{1,})\b", answer or ""))
+            code_nums2 = set(re.findall(r"\b(\d{1,})\b", lean_code or ""))
+            common2 = (ans_nums & code_nums2) - {"0", "1", "2"}
+            if common2:
+                _cc = True               # 答案里有区分度的数字已进代码
+            elif ans_nums - {"0", "1", "2"}:
+                _cc = False              # 答案有数字却没进代码 ⇒ 自证
+            else:
+                # 答案数字无区分度（如答案本身就是 0）——原实现在此**直接放行**
+                # （`not ans_nums - {"0","1","2"}` 恒为 True），实测被 010 这类
+                # 题利用：LLM 写 `example : (0:ℚ) = 0 := by norm_num` 即通过。
+                # 2026-09-13 修复：改用**题面变量符号**核对（真验证必引题目变量）。
+                _cc = _cross_check_problem_symbols(problem, lean_code)
+        if not _cc:
+            # ★★ 2026-10-07（**语义分离**）：本分支的全部成因都是「验证代码
+            #   没锚定题目条件 ⇒ **形式化不充分**」，**不是**「命题为假」。
+            #   实测 official112-004 的代码 `(2025:ℕ)/2 = 1012` 编译通过
+            #   （`compiled=true`）却因闭式自证拦截落到 `proof_invalid` —— 把
+            #   「无法核验」误判成「证明失败」。故结论码改由开关决定：
+            #   默认 → `unknown`（**无法核验**，非答案错）；设
+            #   `LEAN_CROSSCHECK_AS_UNKNOWN=0` 回退旧 `proof_invalid`。
+            _cc_verdict = _crosscheck_failure_verdict()
+            report = BugReport(
+                verdict=_cc_verdict,
+                findings=[Finding(
+                    location="answer_verify", kind="Critical",
+                    severity=5,
+                    # ★★ 2026-10-06 修（**"把非答案问题当成答案错误"**）：
+                    #   实测这条 advice 在题 000/001 里各占 **12/15 条**、
+                    #   而带定位的结构化 bug report 只占 0~1 条 ⇒ **噪声压过信号**，
+                    #   且模型被引向"重写验证代码"，把答案越改越偏
+                    #   （题 000：20 → 20971520，标准 20460）。
+                    #   本检查本身**是对的**（防 LLM 写恒真式骗过 Lean 认证），
+                    #   所以**保留拒绝判定**；但必须讲清楚：
+                    #   它说的是**验证产物**没锚定题目数字，**不等于答案错**。
+                    desc="【这不是答案错误】Lean 验证代码未引用题目的关键数字/条件"
+                         "（只验了自身恒等式），因此本候选**无法被 Lean 认证** —— "
+                         "但**不能据此判定答案错**。请**保持答案不变**，"
+                         "只把题目条件与答案一起形式化"
+                         "（如 example : 题目约束 → 结论 = 答案），逐字锚定题目数值。")])
+            setattr(report, "lean_code", lean_code)
+            # 独立留痕：区分「数字未交叉」/「闭式自证」/「恒等式自证」三类成因
+            setattr(report, "verdict_reason", _cc_reason)
+            setattr(report, "cross_check", False)
+            setattr(report, "compiled", True)
+            setattr(report, "suggestion",
+                    "验证代码必须包含题目中的关键数值与条件，禁止只写 X=X 恒等式")
+            logger.warning(
+                "[LeanBridge] 答案验证形式化不充分（%s），判 %s"
+                "（代码已编译通过 ⇒ 无法核验 ≠ 答案错）",
+                _cc_reason, _cc_verdict)
+            return report
+        # 2026-09-13 新增：**系统命题验算**（命题由系统构造，非 LLM 自由发挥）。
+        # 动机：Lean 只能验证"命题可证"，无法验证"命题 = 题目"；LLM 写恒真式
+        # 即被判 answer_valid（实测 010：错答案 0 被放行）。此处从推理里提取
+        # 带工具标记的算式，由系统构造「(算式) = (答案数值)」并编译：
+        #   · 编译失败 ⇒ 答案与自身计算矛盾 ⇒ 直接判 proof_invalid（强信号）
+        #   · 通过 / 无法构造 ⇒ 不影响原有判定（纯增量，不降低既有能力）
+        try:
+            _sys = self._verify_answer_by_system(reasoning, answer)
+        except Exception:  # noqa: BLE001
+            _sys = None
+        if _sys is False:
+            _r = BugReport(
+                verdict="proof_invalid",
+                findings=[Finding(
+                    location="answer_verify", kind="Critical", severity=5,
+                    desc="最终答案与推理中的**计算结果矛盾**：系统已用 Lean "
+                         "复算你给出的算式，结果与最终答案不一致。"
+                         "请重新核对计算并修正答案。")])
+            setattr(_r, "lean_code", lean_code)
+            setattr(_r, "verdict_reason", "sys_verify_conflict")
+            setattr(_r, "cross_check", True)
+            setattr(_r, "sys_verify", False)
+            setattr(_r, "compiled", True)
+            setattr(_r, "suggestion",
+                    "重算该算式，确保最终答案与之逐字一致")
+            logger.warning(
+                "[LeanBridge] 系统命题验算不通过：答案与算式矛盾 → 拒绝")
+            return _r
+        report = BugReport(verdict="answer_valid", findings=[])
+        # 附加 lean_code 供上层埋点提取 import/example（BugReport 无此字段）
+        # ★ 2026-09-17：同时附加**守卫判定依据**，使"为什么判 valid"可事后核查
+        #   —— 实测 003 的 `sys_verify` 恒为 None（calc 工具已关 ⇒ 推理里没有
+        #   `<calc>` 标记 ⇒ 该守卫结构性不生效），这一事实此前完全不可见。
+        setattr(report, "lean_code", lean_code)
+        setattr(report, "verdict_reason", "compiled_and_guards_passed")
+        setattr(report, "cross_check", True)
+        setattr(report, "sys_verify", _sys)
+        setattr(report, "compiled", True)
+        return report
 
     # ------------------------------------------------------------------
     # 前置形式化验证：题目 → Lean 定理声明 → 声明模式编译
