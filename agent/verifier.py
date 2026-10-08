@@ -466,6 +466,13 @@ class VerifierAgent(BaseAgent):
                                 chars=len(_conv or ""))
             except Exception as _e:  # noqa: BLE001
                 logger.debug("深复核收敛调用失败（不影响主流程）: %s", _e)
+        return self._deep_review_finalize(ctx, raw, verdict, _conv_text)
+
+    def _deep_review_finalize(self, ctx, raw: str, verdict, _conv_text: str) -> str:
+        """复核收尾：样本落盘 + diag 埋点 + 返回文本组装（收敛段命中时拼尾部）。
+
+        纯搬迁自 ``_deep_final_review`` 尾部（2026-10-08 批7 原地拆分），语句逐字不变。
+        """
         # ★★ 2026-09-16 诊断落盘（用户要求）：把每次复核输出的**头部样本**存成
         #   jsonl。为什么必须落盘：`diag.deep_review` 只存 `chars`，
         #   于是"输出 4 万字符却解析不到 VERDICT"这件事**只能靠猜**。
@@ -1454,73 +1461,12 @@ class VerifierAgent(BaseAgent):
         """
         # 特殊处理证明题
         if is_proof and len(candidates) == 1:
-            # 逐步骤验证
-            proof_text = self._candidate_text(candidates[0])
-            step_result = self._verify_proof_step(ctx, problem, proof_text)
-            overall_correct = (step_result.get("overall") == "proof_valid"
-                               if step_result else False)
-            v = Verdict(correct=overall_correct, raw=json.dumps(step_result or {}))
-            cluster = AnswerCluster("proof")
-            # 2026-09-12 定型前审核修复：候选是 `Candidate` dataclass（无 `.get`），
-            # 原写法 `candidates[0].get("id", 0)` 在证明题单候选通道会抛
-            # AttributeError（被外层吞掉 → 该通道静默失效）。
-            cluster.candidate_ids = [getattr(candidates[0], "id", 0)]
-            cluster.vote_correct = 1 if overall_correct else 0
-            cluster.vote_total = 1
-            # 2026-09-12 定型前审核修复：`step_verdicts` 键存在但为**空列表**时，
-            # 原来的 `[0]` 会 IndexError（同样被外层吞掉 → 静默失效）。
-            _sv = (step_result or {}).get("step_verdicts") or [{}]
-            feedback = (_sv[0].get("note", "")
-                        if step_result and not overall_correct else "")
-            return {
-                "cluster_data": [cluster],
-                "feedback": feedback,
-                "verdicts": [[v]],
-                "best_cluster": cluster,
-            }
+            return self._run_proof_single(ctx, problem, candidates)
 
-        # 常规：每个候选投票（voting_times 参数化：难题深度通道 deep 档 3 票）
-        # v2.8：ctx.state.voting_times 优先（RunState 运行时覆盖），config 兜底
-        if voting_times is None:
-            voting_times = (getattr(ctx.state, 'voting_times', None)
-                            or getattr(self.config, 'verifier_voting_times', 1))
-        all_verdicts: list[list[Verdict]] = []
-        # ★ 2026-09-16：按候选分歧自适应票数与温度（见 _vote_profile）。
-        #   **必须把档位票数传进去**——否则 deep 档的 3 票会被压回 1 票（自审发现的回归）。
-        _d_votes, _d_temp, _d_reason = self._vote_profile(
-            ctx, candidates, base_votes=voting_times)
-        voting_times = _d_votes
-        for i, cand in enumerate(candidates):
-            if use_rubric:
-                # rubric 结构化判分路径（含确定性旁证：fail 硬否决 / pass 独立票）
-                vds = self._vote_rubric(ctx, problem, cand,
-                                        use_deterministic=use_deterministic,
-                                        temperature=_d_temp)
-            else:
-                vds = self._vote(ctx, problem, cand, total_votes=voting_times,
-                                 use_scoring=use_scoring, temperature=_d_temp,
-                                 full_reasoning=_d_reason)
-            # 反例挑战（P2，sq 语义）：仅"该候选无任何正确票"且非数值答案时触发，
-            # LLM 生成命题 → 程序数值验证 → hard_fail 硬否决（客观证伪）。
-            # 2026-09-11：若该候选**全是弃权票**（判分链路故障、无任何判定信息），
-            # 不再触发挑战——限流风暴中这会逐候选追加 LLM 调用、自激放大（详见
-            # Bug清单 §5 的 176 次限流秒级连发）。有真实判定信息时才值得挑战。
-            _has_real_vote = any(not getattr(v, "abstain", False) for v in vds)
-            if (use_challenge and vds and _has_real_vote
-                    and not any(v.correct for v in vds)):
-                ans = (cand.get("answer", "") if isinstance(cand, dict)
-                       else getattr(cand, "answer", ""))
-                chal = self._challenge_counterexample(
-                    ctx, problem, self._candidate_text(cand), str(ans))
-                if chal.get("hard_fail"):
-                    for v in vds:
-                        v.correct = False
-                        v.confidence = 0.0
-                    vds.append(Verdict(correct=False, raw="counterexample_fail",
-                                       feedback=f"反例挑战否决: {chal.get('evidence', '')[:120]}"))
-                self.record(ctx, "challenge",
-                            f"候选#{i} 反例挑战: {chal['evidence'][:100]}")
-            all_verdicts.append(vds)
+        all_verdicts: list[list[Verdict]] = self._run_collect_votes(
+            ctx, problem, candidates, voting_times,
+            use_rubric=use_rubric, use_scoring=use_scoring,
+            use_deterministic=use_deterministic, use_challenge=use_challenge)
 
         # v2.8 确定性硬否决：SymPy 代入回验/反例对候选做客观旁证，
         # fail → 该候选全部票判错（淘汰）；unknown/pass → 仅挂证据不改判决。
@@ -1597,6 +1543,24 @@ class VerifierAgent(BaseAgent):
             #   ⇒ **完全不需要这行**：`vote_correct` 清零后 confidence 自动变 0.0。
             _deep_reject = True
 
+        feedback, error_types = self._run_build_feedback(
+            ctx, problem, candidates, best_cluster, all_verdicts,
+            _deep_reject, _deep_raw)
+
+        return {
+            "cluster_data": cluster_data,
+            "feedback": feedback,
+            "verdicts": all_verdicts,
+            "best_cluster": best_cluster,
+            "error_types": error_types,
+        }
+
+    def _run_build_feedback(self, ctx, problem, candidates, best_cluster,
+                            all_verdicts, _deep_reject: bool, _deep_raw: str) -> tuple:
+        """拼装自纠错 feedback 与全题错因分布 error_types。
+
+        纯搬迁自 ``run`` 的反馈段（2026-10-08 批7 原地拆分），语句逐字不变。
+        """
         # Reflexion 修复：恢复失败反馈提取。仅在 best_cluster 低置信度/全错时
         # 提取（受预算约束），让 revise 回环拿到真实错误定位，而非空串导致的
         # "请重新审题"泛泛提示。
@@ -1653,13 +1617,88 @@ class VerifierAgent(BaseAgent):
         # 它是模型判断"我这类错在这题犯了多少次"的最直接依据。
         if _et_line:
             feedback = ("【全题错因分布（各票判定）】%s\n" % _et_line) + feedback
+        return feedback, error_types
 
+    def _run_collect_votes(self, ctx, problem, candidates, voting_times,
+                           use_rubric: bool, use_scoring: bool,
+                           use_deterministic: bool, use_challenge: bool) -> list:
+        """逐候选投票（rubric/scoring 路径 + 反例挑战），返回 all_verdicts。
+
+        纯搬迁自 ``run`` 的投票段（2026-10-08 批7 原地拆分），语句逐字不变。
+        """
+        # 常规：每个候选投票（voting_times 参数化：难题深度通道 deep 档 3 票）
+        # v2.8：ctx.state.voting_times 优先（RunState 运行时覆盖），config 兜底
+        if voting_times is None:
+            voting_times = (getattr(ctx.state, 'voting_times', None)
+                            or getattr(self.config, 'verifier_voting_times', 1))
+        all_verdicts: list[list[Verdict]] = []
+        # ★ 2026-09-16：按候选分歧自适应票数与温度（见 _vote_profile）。
+        #   **必须把档位票数传进去**——否则 deep 档的 3 票会被压回 1 票（自审发现的回归）。
+        _d_votes, _d_temp, _d_reason = self._vote_profile(
+            ctx, candidates, base_votes=voting_times)
+        voting_times = _d_votes
+        for i, cand in enumerate(candidates):
+            if use_rubric:
+                # rubric 结构化判分路径（含确定性旁证：fail 硬否决 / pass 独立票）
+                vds = self._vote_rubric(ctx, problem, cand,
+                                        use_deterministic=use_deterministic,
+                                        temperature=_d_temp)
+            else:
+                vds = self._vote(ctx, problem, cand, total_votes=voting_times,
+                                 use_scoring=use_scoring, temperature=_d_temp,
+                                 full_reasoning=_d_reason)
+            # 反例挑战（P2，sq 语义）：仅"该候选无任何正确票"且非数值答案时触发，
+            # LLM 生成命题 → 程序数值验证 → hard_fail 硬否决（客观证伪）。
+            # 2026-09-11：若该候选**全是弃权票**（判分链路故障、无任何判定信息），
+            # 不再触发挑战——限流风暴中这会逐候选追加 LLM 调用、自激放大（详见
+            # Bug清单 §5 的 176 次限流秒级连发）。有真实判定信息时才值得挑战。
+            _has_real_vote = any(not getattr(v, "abstain", False) for v in vds)
+            if (use_challenge and vds and _has_real_vote
+                    and not any(v.correct for v in vds)):
+                ans = (cand.get("answer", "") if isinstance(cand, dict)
+                       else getattr(cand, "answer", ""))
+                chal = self._challenge_counterexample(
+                    ctx, problem, self._candidate_text(cand), str(ans))
+                if chal.get("hard_fail"):
+                    for v in vds:
+                        v.correct = False
+                        v.confidence = 0.0
+                    vds.append(Verdict(correct=False, raw="counterexample_fail",
+                                       feedback=f"反例挑战否决: {chal.get('evidence', '')[:120]}"))
+                self.record(ctx, "challenge",
+                            f"候选#{i} 反例挑战: {chal['evidence'][:100]}")
+            all_verdicts.append(vds)
+        return all_verdicts
+
+    def _run_proof_single(self, ctx, problem, candidates) -> dict:
+        """证明题单候选快速通道：逐步骤验证 → 单簇结果字典。
+
+        纯搬迁自 ``run`` 的 ``if is_proof and len(candidates) == 1:`` 分支
+        （2026-10-08 批7 原地拆分），语句逐字不变（缩进 12→8）。
+        """
+        # 逐步骤验证
+        proof_text = self._candidate_text(candidates[0])
+        step_result = self._verify_proof_step(ctx, problem, proof_text)
+        overall_correct = (step_result.get("overall") == "proof_valid"
+                           if step_result else False)
+        v = Verdict(correct=overall_correct, raw=json.dumps(step_result or {}))
+        cluster = AnswerCluster("proof")
+        # 2026-09-12 定型前审核修复：候选是 `Candidate` dataclass（无 `.get`），
+        # 原写法 `candidates[0].get("id", 0)` 在证明题单候选通道会抛
+        # AttributeError（被外层吞掉 → 该通道静默失效）。
+        cluster.candidate_ids = [getattr(candidates[0], "id", 0)]
+        cluster.vote_correct = 1 if overall_correct else 0
+        cluster.vote_total = 1
+        # 2026-09-12 定型前审核修复：`step_verdicts` 键存在但为**空列表**时，
+        # 原来的 `[0]` 会 IndexError（同样被外层吞掉 → 静默失效）。
+        _sv = (step_result or {}).get("step_verdicts") or [{}]
+        feedback = (_sv[0].get("note", "")
+                    if step_result and not overall_correct else "")
         return {
-            "cluster_data": cluster_data,
+            "cluster_data": [cluster],
             "feedback": feedback,
-            "verdicts": all_verdicts,
-            "best_cluster": best_cluster,
-            "error_types": error_types,
+            "verdicts": [[v]],
+            "best_cluster": cluster,
         }
 
     # ==================================================================
