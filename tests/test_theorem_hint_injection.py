@@ -47,8 +47,13 @@ _INJECTION_SITES = {
         ("_generate_revise 修订路径", "revise 是**独立于 _generate_initial 的生成路径**"),
     ],
     "agent/sub_goal_solver.py": [
-        ("单步子目标求解", "子目标求解是**用户点名的解题重点环节**"),
         ("子目标合并成最终答案", "把子目标答案总结成最终答案"),
+    ],
+    # 2026-10-08 拆分批3：`_prepare_step_prompt` 的「单步子目标求解」注入点已**逐字搬**至
+    # `agent/sub_goal_solver__solve.py`。⇒ 仅把该注入点的**读取入口**改到新文件；
+    # 锚点字符串与断言/比较逻辑一字未改（注入点总数不变，非放宽判据）。
+    "agent/sub_goal_solver__solve.py": [
+        ("单步子目标求解", "子目标求解是**用户点名的解题重点环节**"),
     ],
     "agent/blueprint_planner.py": [
         ("蓝图首次生成", "蓝图规划决定\"需要推理出哪些中间结论\""),
