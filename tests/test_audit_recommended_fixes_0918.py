@@ -8,6 +8,7 @@
 """
 import io
 import os
+import re
 
 from agent.base import Candidate, TaskContext
 from agent.formatter import _looks_like_non_answer
@@ -111,4 +112,9 @@ def test_text_branch_still_returns_text():
     会先把文本通道里的 `<tool_call>` 执行并回填。
     """
     src = _src("agent/base.py")
-    assert "                if last_text and last_text.strip():\n                    return _done(last_text)" in src
+    # 2026-10-08：`llm_with_tools` 原地拆分后，本返回路径移入 `_run_tool_loop`
+    #   （仍在 agent/base.py），缩进随方法层级由 16/20 变为 12/16 ⇒ 锚点改为
+    #   **缩进无关**：断言的**两行结构与语义完全不变**（非放宽判据）。
+    assert re.search(
+        r"if last_text and last_text\.strip\(\):\n\s+return _done\(last_text\)",
+        src), "文本分支返回语义被改（未原样返回模型文本）"
