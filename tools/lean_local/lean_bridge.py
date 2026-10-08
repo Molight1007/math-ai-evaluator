@@ -838,86 +838,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             items = resp.get("items") or []
             errors = [i for i in items if i.get("severity") == "error"]
             if errors:
-                base = os.path.basename(lean_file)
-                err_text = "\n".join(
-                    "%s:%s:%s: error: %s" % (
-                        base, i.get("line") or 0, i.get("column") or 0,
-                        (i.get("message") or "")[:300])
-                    for i in errors[:25])
-                # 定位增强：首个错误行取 goal state（elaboration 后秒回），
-                # 喂给 _analyze_error 提升错因质量（003/009/053 型中段错）
-                gl = errors[0].get("line")
-                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
-                # 依据：本段结果只 append 到 err_text（:1519-1520），而 err_text
-                # 仅用于 :1570-1571 的 {"ok":False,...} 返回；本段位于 if errors:
-                # （:1502）内部 ⇒ ok=False 已定，它只影响 _analyze_error 的错因
-                # 文本质量，**不改变候选是否被淘汰**。省一次 goal 调用（timeout=45s）。
-                if gl and _sw_bool("lean_mcp_goal_loc"):
-                    try:
-                        gresp = _px.request(
-                            lean_file, timeout=45.0, goal_line=int(gl),
-                            goal_column=int(errors[0].get("column") or 1))
-                        goal = gresp.get("goal")
-                        if goal:
-                            err_text += ("\n--- [lean-lsp-mcp] 首个错误行目标状态 ---\n"
-                                         + str(goal)[:800])
-                    except Exception as exc:  # noqa: BLE001
-                        logger.debug("[LeanBridge] goal 定位失败（忽略）: %s", exc)
-                # ★ B4（2026-09-11）：编译失败时用 multi_attempt 自动试多策略。
-                # 价值：把"Lean 判你错"升级为"Lean 给出可行改法"——直接补上
-                # "检测到了但模型不会改"的缺口。失败不影响主流程（静默跳过）。
-                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
-                # 依据：本段结果只 append 到 err_text（:1540-1541），同 :1502 内
-                # 部 ⇒ ok=False 已定，只影响错因文本质量，**不改变候选淘汰**。
-                # 省一次 multi_attempt（timeout=90s，是三者中最贵的一项）。
-                if _sw_bool("lean_mcp_multi_attempt"):
-                    try:
-                        _ln0 = int(errors[0].get("line") or 1)
-                        _col0 = int(errors[0].get("column") or 1)
-                        _ma = _px.multi_attempt(
-                            lean_file, _ln0,
-                            ["norm_num", "ring", "linarith", "omega",
-                             "simp", "aesop", "positivity"],
-                            column=_col0, timeout=90.0)
-                        _mraw = str(_ma.get("raw") or "")
-                        _ok_lines = [l.strip() for l in _mraw.splitlines()
-                                     if ("no goals" in l.lower()
-                                         or "success" in l.lower())]
-                        if _ok_lines:
-                            err_text += ("\n--- [lean-lsp-mcp] multi_attempt 可用策略 ---\n"
-                                         + "\n".join(_ok_lines[:5]))
-                            logger.info("[LeanBridge] ★ multi_attempt 找到可用策略 %d 条",
-                                        len(_ok_lines))
-                    except Exception as _me:  # noqa: BLE001
-                        logger.debug("[LeanBridge] multi_attempt 跳过: %s", _me)
-                # ★ B6（2026-09-11）：对「未知标识符 / invalidField」用 hover 查该符号的
-                # 真实信息并回填 —— 直击 preverify 之「臆造 API」主因（如 Finset.Nodup）。
-                # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
-                # 依据：本段结果只 append 到 err_text（:1562-1565），同 :1502 内
-                # 部 ⇒ ok=False 已定，只影响 _analyze_error 的错因文本质量，
-                # **不改变候选淘汰**。省一次 hover（timeout=45s）。
-                if _sw_bool("lean_mcp_hover_check"):
-                    try:
-                        _hln = int(errors[0].get("line") or 1)
-                        _hcol = int(errors[0].get("column") or 1)
-                        _hmsgs = " ".join(str(e.get("message") or "")
-                                          for e in errors[:3])
-                        _hm = re.search(
-                            r"(?:unknown (?:identifier|constant)|Invalid field)"
-                            r"\s*'?([A-Za-z_][\w'.]*)", _hmsgs)
-                        if _hm:
-                            _hr = _px.hover(lean_file, _hln, _hcol,
-                                                   timeout=45.0)
-                            _hraw = str(_hr.get("raw") or "")[:400]
-                            if _hraw:
-                                err_text += (
-                                    "\n--- [lean-lsp-mcp] hover 查证"
-                                    "（该符号的真实信息，据此纠正 API 名/类型）---\n"
-                                    f"符号 {_hm.group(1)}: {_hraw}")
-                                logger.info("[LeanBridge] ★ hover 查证: %s",
-                                            _hm.group(1))
-                    except Exception as _he:  # noqa: BLE001
-                        logger.debug("[LeanBridge] hover 跳过: %s", _he)
+                err_text = _mcp_build_error_text(_px, lean_file, errors)
                 return {"ok": False,
                         "error": _truncate_error_output(err_text)}
             if not allow_sorry:
@@ -980,6 +901,95 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
                            str(exc)[:160])
             _mcp_mark_drop(_px)        # 出错实例丢弃（超时后响应迟到会污染下一请求）
             return None
+
+
+def _mcp_build_error_text(_px, lean_file: str, errors: list) -> str:
+    """构造 Lean 报错文本，并在开关开启时追加 goal / multi_attempt / hover 增强。
+
+    纯搬迁自 ``_compile_via_mcp_locked`` 的 ``if errors:`` 分支（2026-10-08 批5 原地拆分），
+    语句逐字不变；调用方仍在本模块 ⇒ ``mock.patch`` 命名空间语义不变。
+    """
+    base = os.path.basename(lean_file)
+    err_text = "\n".join(
+        "%s:%s:%s: error: %s" % (
+            base, i.get("line") or 0, i.get("column") or 0,
+            (i.get("message") or "")[:300])
+        for i in errors[:25])
+    # 定位增强：首个错误行取 goal state（elaboration 后秒回），
+    # 喂给 _analyze_error 提升错因质量（003/009/053 型中段错）
+    gl = errors[0].get("line")
+    # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+    # 依据：本段结果只 append 到 err_text（:1519-1520），而 err_text
+    # 仅用于 :1570-1571 的 {"ok":False,...} 返回；本段位于 if errors:
+    # （:1502）内部 ⇒ ok=False 已定，它只影响 _analyze_error 的错因
+    # 文本质量，**不改变候选是否被淘汰**。省一次 goal 调用（timeout=45s）。
+    if gl and _sw_bool("lean_mcp_goal_loc"):
+        try:
+            gresp = _px.request(
+                lean_file, timeout=45.0, goal_line=int(gl),
+                goal_column=int(errors[0].get("column") or 1))
+            goal = gresp.get("goal")
+            if goal:
+                err_text += ("\n--- [lean-lsp-mcp] 首个错误行目标状态 ---\n"
+                             + str(goal)[:800])
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[LeanBridge] goal 定位失败（忽略）: %s", exc)
+    # ★ B4（2026-09-11）：编译失败时用 multi_attempt 自动试多策略。
+    # 价值：把"Lean 判你错"升级为"Lean 给出可行改法"——直接补上
+    # "检测到了但模型不会改"的缺口。失败不影响主流程（静默跳过）。
+    # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+    # 依据：本段结果只 append 到 err_text（:1540-1541），同 :1502 内
+    # 部 ⇒ ok=False 已定，只影响错因文本质量，**不改变候选淘汰**。
+    # 省一次 multi_attempt（timeout=90s，是三者中最贵的一项）。
+    if _sw_bool("lean_mcp_multi_attempt"):
+        try:
+            _ln0 = int(errors[0].get("line") or 1)
+            _col0 = int(errors[0].get("column") or 1)
+            _ma = _px.multi_attempt(
+                lean_file, _ln0,
+                ["norm_num", "ring", "linarith", "omega",
+                 "simp", "aesop", "positivity"],
+                column=_col0, timeout=90.0)
+            _mraw = str(_ma.get("raw") or "")
+            _ok_lines = [l.strip() for l in _mraw.splitlines()
+                         if ("no goals" in l.lower()
+                             or "success" in l.lower())]
+            if _ok_lines:
+                err_text += ("\n--- [lean-lsp-mcp] multi_attempt 可用策略 ---\n"
+                             + "\n".join(_ok_lines[:5]))
+                logger.info("[LeanBridge] ★ multi_attempt 找到可用策略 %d 条",
+                            len(_ok_lines))
+        except Exception as _me:  # noqa: BLE001
+            logger.debug("[LeanBridge] multi_attempt 跳过: %s", _me)
+    # ★ B6（2026-09-11）：对「未知标识符 / invalidField」用 hover 查该符号的
+    # 真实信息并回填 —— 直击 preverify 之「臆造 API」主因（如 Finset.Nodup）。
+    # 2026-09-13 默认关闭（"1"→"0"，仍可显式设 1 开回）。
+    # 依据：本段结果只 append 到 err_text（:1562-1565），同 :1502 内
+    # 部 ⇒ ok=False 已定，只影响 _analyze_error 的错因文本质量，
+    # **不改变候选淘汰**。省一次 hover（timeout=45s）。
+    if _sw_bool("lean_mcp_hover_check"):
+        try:
+            _hln = int(errors[0].get("line") or 1)
+            _hcol = int(errors[0].get("column") or 1)
+            _hmsgs = " ".join(str(e.get("message") or "")
+                              for e in errors[:3])
+            _hm = re.search(
+                r"(?:unknown (?:identifier|constant)|Invalid field)"
+                r"\s*'?([A-Za-z_][\w'.]*)", _hmsgs)
+            if _hm:
+                _hr = _px.hover(lean_file, _hln, _hcol,
+                                       timeout=45.0)
+                _hraw = str(_hr.get("raw") or "")[:400]
+                if _hraw:
+                    err_text += (
+                        "\n--- [lean-lsp-mcp] hover 查证"
+                        "（该符号的真实信息，据此纠正 API 名/类型）---\n"
+                        f"符号 {_hm.group(1)}: {_hraw}")
+                    logger.info("[LeanBridge] ★ hover 查证: %s",
+                                _hm.group(1))
+        except Exception as _he:  # noqa: BLE001
+            logger.debug("[LeanBridge] hover 跳过: %s", _he)
+    return err_text
 
 
 def _compile_lean(
