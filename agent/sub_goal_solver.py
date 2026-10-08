@@ -733,49 +733,11 @@ class SubGoalSolverAgent(BaseAgent):
         `_dag_replan_gate` 第 1591 行回写口径一致），并把评审/重规划结果写入
         `ctx.dag_review_report`（见 `_note_dag_replan`）。
         """
-        from .dag_reviewer import DagReviewerAgent
-        from .blueprint_planner import BlueprintDAG
-        reviewer = DagReviewerAgent(self.client, self.config)
-        # 1) 评审当前 DAG：兼容 BlueprintDAG 与 dict 两种入参
-        if dag is None and ctx.blueprint:
-            dag = ctx.blueprint
-        if dag is None:
-            self._note_dag_replan(ctx, triggered=False, reason="无 DAG，跳过评审")
+        prep = self._review_dag_prepare(ctx, dag, max_replan_rounds)
+        if prep is None:
             return False
-        if isinstance(dag, dict):
-            try:
-                dag = BlueprintDAG.from_dict(dag)
-            except Exception as exc:  # noqa: BLE001
-                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
-                self._note_dag_replan(ctx, triggered=False, success=False,
-                                      reason=f"DAG 解析失败: {exc}")
-                return False
-        if not dag.nodes:
-            self._note_dag_replan(ctx, triggered=False, reason="DAG 无节点，跳过评审")
-            return False
-        results_map = {sg["id"]: sg.get("result", "")
-                       for sg in getattr(ctx, "subgoal_trace", []) or []}
-        report = reviewer.review(ctx, dag, results_map=results_map)
-        if not report.should_replan():
-            # 2026-09-17：未触发也要留痕，否则 diag 无法区分"评审通过"与"压根没评审"。
-            self._note_dag_replan(ctx, triggered=False, success=True,
-                                  rejected_ids=report.rejected_nodes(),
-                                  reason="DAG 评审通过，未触发重规划")
-            return False
-        # 2) 应修复：聚合 hint + rejected 节点（"错误的地方 + 原因"）
-        from .blueprint_planner import (
-            BlueprintPlannerAgent, BlueprintDAG)
-        planner = BlueprintPlannerAgent(self.client, self.config)
-        rejected_ids = report.rejected_nodes()
-        hints = report.merge_from_hints()
-        feedback_lines = hints.split("\n") if hints else []
-        if not feedback_lines:
-            feedback_lines.append(
-                "请提供粒度更细、子目标间无循环、可独立证明的 DAG")
-        # 3) 硬上限 + budget 闸
-        replan_rounds = int(getattr(self.config, "dag_replan_max_rounds",
-                                    max_replan_rounds) or max_replan_rounds)
-        replan_rounds = max(1, replan_rounds)
+        (dag, reviewer, planner, rejected_ids,
+         feedback_lines, replan_rounds) = prep
         for round_idx in range(replan_rounds):
             # 2026-09-13 循环时间闸（单题上限 1200→3600s 放开后的必备兜底）：
             # 本循环每轮 = 评审 + 子树/整树重生成（2-3 次 LLM，以生成为主），
@@ -889,6 +851,64 @@ class SubGoalSolverAgent(BaseAgent):
                 rejected_ids=rejected_ids,
                 reason=f"评审始终不通过，达到重生成硬上限 {replan_rounds} 轮")
         return True
+
+    def _review_dag_prepare(self, ctx, dag=None, max_replan_rounds: int = 2):
+        """DAG 评审/重规划**前置段**（2026-10-08 批2：从 `_review_and_maybe_replan`
+        原地拆出）。
+
+        构造 DagReviewer/Planner，归一化 DAG，跑评审；不通过 / 无 DAG / 解析失败
+        ⇒ `return None`（调用侧据此 `return False`）。
+        通过则返回 `(dag, reviewer, planner, rejected_ids, feedback_lines,
+        replan_rounds)` —— **`dag` 必须回传**：段内 `dag = BlueprintDAG.from_dict(dag)`
+        重绑定了参数，若不回传则调用侧拿到的仍是 dict（回归实证会 `dict has no
+        attribute '_lca'`）。
+        段体**逐字搬**（4 处 `return False`→`return None` 为哨兵改写）。
+        """
+        from .dag_reviewer import DagReviewerAgent
+        from .blueprint_planner import BlueprintDAG
+        reviewer = DagReviewerAgent(self.client, self.config)
+        # 1) 评审当前 DAG：兼容 BlueprintDAG 与 dict 两种入参
+        if dag is None and ctx.blueprint:
+            dag = ctx.blueprint
+        if dag is None:
+            self._note_dag_replan(ctx, triggered=False, reason="无 DAG，跳过评审")
+            return None
+        if isinstance(dag, dict):
+            try:
+                dag = BlueprintDAG.from_dict(dag)
+            except Exception as exc:  # noqa: BLE001
+                self.record(ctx, "dag_replan", f"DAG 解析失败: {exc}")
+                self._note_dag_replan(ctx, triggered=False, success=False,
+                                      reason=f"DAG 解析失败: {exc}")
+                return None
+        if not dag.nodes:
+            self._note_dag_replan(ctx, triggered=False, reason="DAG 无节点，跳过评审")
+            return None
+        results_map = {sg["id"]: sg.get("result", "")
+                       for sg in getattr(ctx, "subgoal_trace", []) or []}
+        report = reviewer.review(ctx, dag, results_map=results_map)
+        if not report.should_replan():
+            # 2026-09-17：未触发也要留痕，否则 diag 无法区分"评审通过"与"压根没评审"。
+            self._note_dag_replan(ctx, triggered=False, success=True,
+                                  rejected_ids=report.rejected_nodes(),
+                                  reason="DAG 评审通过，未触发重规划")
+            return None
+        # 2) 应修复：聚合 hint + rejected 节点（"错误的地方 + 原因"）
+        from .blueprint_planner import (
+            BlueprintPlannerAgent, BlueprintDAG)
+        planner = BlueprintPlannerAgent(self.client, self.config)
+        rejected_ids = report.rejected_nodes()
+        hints = report.merge_from_hints()
+        feedback_lines = hints.split("\n") if hints else []
+        if not feedback_lines:
+            feedback_lines.append(
+                "请提供粒度更细、子目标间无循环、可独立证明的 DAG")
+        # 3) 硬上限 + budget 闸
+        replan_rounds = int(getattr(self.config, "dag_replan_max_rounds",
+                                    max_replan_rounds) or max_replan_rounds)
+        replan_rounds = max(1, replan_rounds)
+        return (dag, reviewer, planner, rejected_ids, feedback_lines,
+                replan_rounds)
 
     @staticmethod
     def _is_value_choice(opts: list) -> bool:
