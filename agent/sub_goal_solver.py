@@ -48,6 +48,8 @@ from .base import (
 # 2026-10-08 批1：run 的两段已抽到同包模块（逐字搬）。
 from .sub_goal_solver__stage import wire_subgoal_stage_budget  # noqa: F401
 from .sub_goal_solver__exhaust import append_exhaust_subgoal  # noqa: F401
+from .sub_goal_solver__plan import (  # noqa: F401
+    strip_and_mask_plan, finalize_plan_stats, build_plan_summary)
 
 try:
     from prompts.sub_goal import (
@@ -570,62 +572,16 @@ class SubGoalSolverAgent(BaseAgent):
         if not subgoals:
             self.record(ctx, "subgoal", "子目标规划为空 → 跳过求解与合并（Z8 2026-09-17）")
             return ctx
-        # 2026-09-17（P-20）：剥掉规划结论里的「答案形态」，防其被当作指令
-        merge_strategy = _strip_answer_forms(plan_data.get("merge_strategy", ""))
-        # ★ 2026-09-22（用户口径）：**蓝图不得锁死答案**。
-        #   P-20 只剥形态标记，自然语句里的断言数值仍会注入下游并锚死终答。
-        #   此处再做一层：把「被断言的数值」换成占位符（不删句）。
-        merge_strategy, _n_lock = _mask_asserted_values(merge_strategy)
-        if _n_lock:
-            self.record(ctx, "blueprint_lock_guard",
-                        f"蓝图 merge_strategy 内嵌 {_n_lock} 处断言数值 → 已屏蔽为占位符"
-                        "（蓝图只构建信息、不产出答案；2026-09-22 用户口径）")
-        problem_analysis = plan_data.get("problem_analysis", {})
-        # 同一守卫覆盖 problem_analysis 的字符串字段（core_objective 等常被写进答案）
-        if isinstance(problem_analysis, dict):
-            try:
-                _pa_new, _pa_mask = {}, 0
-                for _k, _v in problem_analysis.items():
-                    if isinstance(_v, str):
-                        _nv, _m = _mask_asserted_values(_v)
-                        _pa_new[_k] = _nv
-                        _pa_mask += _m
-                    else:
-                        _pa_new[_k] = _v
-                if _pa_mask:
-                    self.record(ctx, "blueprint_lock_guard",
-                                f"蓝图 problem_analysis 内嵌 {_pa_mask} 处断言数值 → 已屏蔽")
-                    problem_analysis = _pa_new
-            except Exception:  # noqa: BLE001
-                pass
+        merge_strategy, problem_analysis = strip_and_mask_plan(self, ctx, plan_data)
         # ---- 2026-09-14 穷尽性搜索机制（B0 遗留课题）----
         # 2026-10-08 批1：本段逐字搬到 agent/sub_goal_solver__exhaust.py::
         # append_exhaust_subgoal，调用点改一行委托（merge_strategy 由之返回）。
         merge_strategy = append_exhaust_subgoal(self, ctx, subgoals, merge_strategy)
 
-        _sg_stats = self._subgoal_stats(subgoals)
-        ctx.subgoal_stats = _sg_stats   # S4-lite：落 ctx 供 _collect_diag 进结果文件（A/B 对照）
-        self.record(ctx, "subgoal", f"子目标规划完成: {len(subgoals)} 个子目标",
-                    subgoal_titles=[sg["title"] for sg in subgoals],
-                    merge_strategy=merge_strategy,
-                    subgoal_stats=_sg_stats)
+        finalize_plan_stats(self, ctx, subgoals, merge_strategy)
 
         # 阶段二：逐步求解每个子目标
-        subgoal_plan_summary = self._format_plan_summary(subgoals, merge_strategy)
-        # ★ 2026-10-04（K11 注入点守卫，额外加固）：`_format_plan_summary` 会把
-        #   各子目标的 **title + description 原样** 写进摘要（约 :3480-3483），
-        #   而该摘要随后被逐字注入 **step / merge / crosscheck 三个提示词**
-        #   （`SUBGOAL_STEP_USER_TEMPLATE` 的 {subgoal_plan_summary}、merge 同名字段、
-        #   crosscheck 摘要）。⇒ 仅掩码单条 `subgoal_description` 不足以封堵——
-        #   同一断言值会经本摘要二次进入同一提示词。故在**摘要生成处**（其唯一
-        #   用途就是提示词注入）统一掩码一次，覆盖三个消费者。只改本地变量，
-        #   不动 subgoals / merge_strategy 本体。
-        if _k11_mask_on():
-            subgoal_plan_summary, _n_summ = _mask_asserted_values(subgoal_plan_summary)
-            if _n_summ:
-                self.record(ctx, "blueprint_lock_guard",
-                            f"子目标规划摘要内嵌 {_n_summ} 处断言数值 → 已屏蔽为占位符"
-                            "（K11 摘要注入点守卫）")
+        subgoal_plan_summary = build_plan_summary(self, ctx, subgoals, merge_strategy)
         results_map = {}  # subgoal_id → result_text
         _ctx_inject_chars = 0  # S4-lite 指标：累计前序注入字符数（近似上下文量）
         # 2026-09-12 新增（用户要求「原本完成的子目标要记录，不能重头再来」）：

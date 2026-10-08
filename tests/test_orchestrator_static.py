@@ -65,6 +65,8 @@ GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
 _EXTRACTED_SUBGOAL_FLOW = [
     "agent/sub_goal_solver__stage.py",
     "agent/sub_goal_solver__exhaust.py",
+    "agent/sub_goal_solver__plan.py",
+    "agent/sub_goal_solver__loop.py",
 ]
 GUARDED += [p for p in _EXTRACTED_SUBGOAL_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
