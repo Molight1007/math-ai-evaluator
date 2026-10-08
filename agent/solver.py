@@ -36,8 +36,9 @@ from .base import (
     detect_hallucination, detect_truncated,
     next_candidate_id,           # 2026-09-17：候选 id 单一来源（防腾位后 id 冲突）
     pick_best_candidates,        # 2026-09-17：腾位按票数选优（单一来源）
-    _pool_gate_v2_on,            # 2026-10-07：候选入池门槛 v2 开关（单一来源，见 base.py）
 )
+# 2026-10-08 拆分批4：`_pool_gate_v2_on` 的唯一使用点（`_normalize_and_check_answer`）
+# 已随候选池簇迁至 `agent/solver__pool.py`（该模块从 `.base` 直接导入），此处删除。
 # 2026-10-08：`get_domain_hint` / `build_blueprint_user_message` 随段 4–7 迁至
 # `agent/solver__prompt.py`，此处不再需要。
 # 2026-10-08 拆分：`REVISE_SYSTEM` / `REVISE_USER_TEMPLATE`（随 `_generate_revise`
@@ -68,6 +69,8 @@ from .solver__sample import _run_initial_sampling  # noqa: E402
 # 与 `_improve_candidates_once` 的「单轮自改进主循环」已抽到独立模块（逐字搬）。
 from .solver__revise import _revise_run_sampling       # noqa: E402
 from .solver__improve import _improve_loop             # noqa: E402
+# 2026-10-08 拆分批4：候选池/规模/入场门槛 与 lemma 上下文已抽到独立模块（逐字搬）。
+from .solver__pool import _pool_room                    # noqa: E402
 
 logger = logging.getLogger("MathPilot")
 
@@ -120,33 +123,6 @@ _REINFORCED_SYSTEM = (
 #   `<calc>` 的"工具来源 / 裸数值断言"判据，已随板块消失。
 # ==================================================================
 
-
-_POOL_UNLIMITED_ROOM = 12   # 「不限」时本次最多再补的候选数（安全上界，见下）
-
-def _pool_room(cfg, ctx) -> int:
-    """候选池**本次最多还能再补几个**候选（`candidate_pool_limit`，默认 6）。
-
-    ★ 2026-10-04 修（D7）：原先本文件与 `sub_goal_solver` 共 **三处硬编码 `6`**，
-    现统一到本函数（单一来源，可配）。
-    同时修掉 `agent/orchestrator.py` 那处与事实不符的注释（它自称"封顶已删除、
-    不再截断候选"，但三处仍在封顶）—— **口径以本函数为准**。
-
-    ⚠⚠ 重要语义（2026-10-04 实测踩坑）：本返回值**同时被当作本次生成数量**
-    （`run()` 里 `_generate_initial(ctx, count=remaining)`）—— 所以它**不能**是
-    一个天文数字。我最初把"不限"实现成 `10**9`，结果 `count=1e9` 会让
-    `_generate_initial` 尝试生成十亿个候选（`_adaptive_count` 对非证明题不收敛），
-    **直接跑飞**。幸被回归测试 `test_M1_full_pool_non_revise_still_early_returns`
-    抓住。故此处对"不限"设安全上界 `_POOL_UNLIMITED_ROOM`。
-    """
-    _lim = 0
-    try:
-        _v = float(getattr(cfg, "candidate_pool_limit", 6.0) or 0.0)
-        _lim = int(_v) if _v > 0 else 0
-    except (TypeError, ValueError):
-        _lim = 0
-    if _lim <= 0:
-        _lim = _POOL_UNLIMITED_ROOM
-    return _lim - len(getattr(ctx, "candidates", None) or [])
 
 
 def _is_refusal(text: str) -> bool:
@@ -247,123 +223,36 @@ class SolverAgent(BaseAgent):
 
     @staticmethod
     def _adaptive_count(ctx: TaskContext, default_count: int) -> int:
-        """根据题目领域自适应调整候选数量"""
-        domain = (ctx.domain or "").lower()
-        # 难题深度通道：deep 档保持多候选（3 候选，不做缩减）
-        if getattr(ctx, 'tier', 'standard') == 'deep':
-            return default_count
-        # 证明题 → 减少候选（精确推演比广度采样更重要）
-        proof_keywords = ["proof", "prove", "证明", "证明题", "不等式证明", "几何证明"]
-        if any(k in domain for k in proof_keywords):
-            return max(1, default_count // 3)
-        # P0-4 修复：不再为高难度题提高候选数——3 候选 × 3 重试曾耗尽单题
-        # 300s 预算导致 45 error。保持 default_count（配置=2），省预算保产出。
-        # 2026-09-12 定型前审核精简：此处原本有一段 hard_signals 判定
-        # （题长 / 微分方程 / 级数 / 积分 / 客观题 → 意图给高难题更多候选），
-        # 但上面的 P0-4 修复已取消"难题多给候选"策略，使该块的
-        # **三个分支全部 `return default_count`** —— 计算了 12 行却零效果，
-        # 属典型的"逻辑堆叠后残留"。整块删除（零行为变化）。
-        return default_count
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__pool.py（逐字搬，见该模块）。
+        from .solver__pool import _adaptive_count as _impl
+        return _impl(ctx, default_count)
 
     @staticmethod
     def _adaptive_max_tokens(ctx: TaskContext, base_tokens: int) -> int:
-        """2026-09-04：比赛不限制模型 token → 各档统一返回 base_tokens（=policy_max_tokens=65536）。
-
-        原分级（简单题 8192 / 难题 24576）在平台单题 1200s 时间墙下大量
-        finish_reason=length 答案被腰斩（2534334 平台实测 truncated 238 次、
-        64 题 invalid）——截断比多花时间更丢分。上限只作保险，prefill 压缩下
-        模型实际输出仍克制；真正边界是 1200s 时间墙而非 token 帽。
-        """
-        return base_tokens
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__pool.py（逐字搬，见该模块）。
+        from .solver__pool import _adaptive_max_tokens as _impl
+        return _impl(ctx, base_tokens)
 
     def _normalize_and_check_answer(self, ctx: TaskContext, cid,
                                     answer) -> tuple:
-        """候选**入池前**的答案规范化 + 有效性校验。
-
-        ★ 2026-10-06 新增（由**端到端模拟**暴露的必要修正）：
-        初版只做「接受 / 拒绝」，模拟里发现它会**误杀可抢救的候选** ——
-        `'所以最小 d 是 48。'` 被判 False 直接丢，**但它能抢救出 `48`**。
-        正确做法是**先抢救、再判定**：句子形态里含明确最终值时，
-        **把 answer 换成那个值**（而不是丢候选，也不是留整句）。
-
-        判据优先级：
-          1. `_looks_like_answer(a)` 通过 ⇒ 原样可用；
-          2. 否则尝试 `_salvage_value_from_line(a)` 抽出值 ⇒ **用抽出的值**；
-          3. 都不行 ⇒ 判定不可用（调用方不入池）。
-
-        返回 `(规范化后的 answer, 是否可用)`。
-        开关 `require_answer_in_pool`（默认 True）；置 False 时恒返回 (原值, True) 做 A/B。
-        """
-        a = str(answer or "").strip()
-        if not bool(getattr(self.config, "require_answer_in_pool", True)):
-            return a, True
-        try:
-            from utils.extract import _looks_like_answer, _salvage_value_from_line
-        except Exception:  # noqa: BLE001  校验不可用时放行，不阻断
-            return a, True
-        # ★★ 2026-10-07（问题 2.4 v2）：判据升级为 `looks_like_pool_answer`
-        #   （补漏网 + 修误杀，见 `utils/extract.py` 顶部背景与实测数字）。
-        #   开关 `pool_gate_v2`（默认 True）：置 0 完全回退上一轮口径
-        #   （只用 `_looks_like_answer`）做 A/B。
-        if _pool_gate_v2_on():
-            try:
-                from utils.extract import normalize_pool_answer
-            except Exception:  # noqa: BLE001
-                normalize_pool_answer = None
-            if normalize_pool_answer is not None:
-                _norm, _ok = normalize_pool_answer(a)
-                if _ok:
-                    if _norm != a:
-                        self.record(ctx, "answer_salvaged",
-                                    "候选#%s **从句子中抢救出答案** %r"
-                                    "（原句前 40 字：%r）" % (cid, _norm, a[:40]))
-                    return _norm, True
-                self.record(ctx, "candidate_invalid",
-                            "候选#%s **不含最终答案 → 不入池**（answer 前 40 字：%r）"
-                            % (cid, a[:40]))
-                return a, False
-        if _looks_like_answer(a):
-            return a, True
-        _sal = _salvage_value_from_line(a)
-        if _sal and _looks_like_answer(_sal):
-            self.record(ctx, "answer_salvaged",
-                        "候选#%s **从句子中抢救出答案** %r（原句前 40 字：%r）"
-                        % (cid, _sal, a[:40]))
-            return _sal, True
-        self.record(ctx, "candidate_invalid",
-                    "候选#%s **不含最终答案 → 不入池**（answer 前 40 字：%r）"
-                    % (cid, a[:40]))
-        return a, False
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__pool.py（逐字搬，见该模块）。
+        from .solver__pool import _normalize_and_check_answer as _impl
+        return _impl(self, ctx, cid, answer)
 
     def _answer_is_usable(self, ctx: TaskContext, cid, answer) -> bool:
-        """兼容旧签名的布尔包装（仅供既有调用方；新增代码请用 `_normalize_and_check_answer`）。"""
-        _norm, ok = self._normalize_and_check_answer(ctx, cid, answer)
-        return ok
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__pool.py（逐字搬，见该模块）。
+        from .solver__pool import _answer_is_usable as _impl
+        return _impl(self, ctx, cid, answer)
 
     def _use_lemma(self, ctx: TaskContext) -> bool:
-        """判断当前题是否启用 lemma 累积（按领域路由，2026-08-29）。
-
-        A/B 实测：lemma 全领域开 = 净 0.0pp（代数/组合被噪声拖累，数论 +23pp）。
-        因此默认按领域路由：lemma_domains 命中才注入，把数论的收益变成
-        确定收益，同时避免拖累其他领域。
-        """
-        if not getattr(self.config, 'use_lemma_accumulation', False):
-            return False
-        domains = list(getattr(self.config, 'lemma_domains', []) or [])
-        if not domains:
-            return True  # 空列表 = 全领域开启
-        d = str(getattr(ctx, 'domain', '') or '')
-        return any(k in d for k in domains)
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__lemma.py（逐字搬，见该模块）。
+        from .solver__lemma import _use_lemma as _impl
+        return _impl(self, ctx)
 
     def _collect_lemma_context(self, ctx: TaskContext) -> str:
-        """收集已验证的子结论（引理库），作为解题上下文注入。"""
-        if not self._use_lemma(ctx):
-            return ""
-        lemmas = getattr(ctx, 'lemma_repo', [])
-        if not lemmas:
-            return ""
-        recent = lemmas[-5:]  # 最多注入 5 条
-        return "【已验证的中间结论】\n" + "\n".join(f"- {l}" for l in recent) + "\n\n"
+        # 2026-10-08 拆分批4：实现迁至 agent/solver__lemma.py（逐字搬，见该模块）。
+        from .solver__lemma import _collect_lemma_context as _impl
+        return _impl(self, ctx)
 
     # ==========================================================
     # 阶段一（2026-10-02）：子目标结论 → 主求解 信息流
