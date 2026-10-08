@@ -51,14 +51,17 @@ class WebSearchSwitchTest(unittest.TestCase):
         self.assertTrue(U.AgentConfig().enable_web_search)
 
     def test_declared_and_whitelisted(self):
-        import inspect
         import user_agent as U
         self.assertTrue(hasattr(U.AgentConfig(), "enable_web_search"))
-        src = inspect.getsource(U.ReasoningAgent.__init__)
-        self.assertIn('"enable_web_search"', src,
+        # ★ 2026-10-08 拆分：白名单从 __init__ 内联元组提取为模块级常量
+        #   `_CONFIG_OVERRIDE_KEYS`（user_agent.py）。原用 inspect.getsource(__init__)
+        #   断言字符串出现；今改为**运行时**断言这些键确实在白名单里 —— 断言与意图
+        #   不变，**非放宽判据**（运行时成员校验强于源码子串匹配）。
+        wl = U._CONFIG_OVERRIDE_KEYS
+        self.assertIn("enable_web_search", wl,
                       "必须在 kwargs 白名单里，否则 CLI 传参被静默丢弃")
-        self.assertIn('"enable_question_type_hint"', src)
-        self.assertIn('"verify_reserve_seconds"', src)
+        self.assertIn("enable_question_type_hint", wl)
+        self.assertIn("verify_reserve_seconds", wl)
 
     def test_cli_arg_exists(self):
         import io

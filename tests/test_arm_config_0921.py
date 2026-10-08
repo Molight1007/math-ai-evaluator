@@ -2,13 +2,14 @@
 """实验臂配置的不变式测试（2026-09-21）。
 
 背景：本项目已**四次**踩同一类坑 —— 注释/CLI 承诺了一个开关，但该键
-① 未在 `AgentConfig` 声明，或 ② 不在 `ReasoningAgent.__init__` 的覆盖白名单内
+① 未在 `AgentConfig` 声明，或 ② 不在 `ReasoningAgent` 的覆盖白名单内
+（2026-10-08 拆分后白名单为 user_agent.py 的模块级常量 `_CONFIG_OVERRIDE_KEYS`）
 ⇒ kwargs 覆盖被**静默丢弃**，开关是「假的」。
 
 `deploy/run_112.py` 的 `ARMS` 引入后，这类风险会随臂数量增长。
 本测试把「臂里出现的每个键都必须三层齐备」固化为**不变式**：
   ① 在 `AgentConfig` 中已声明
-  ② 在 `ReasoningAgent.__init__` 的覆盖白名单内
+  ② 在 `ReasoningAgent` 覆盖白名单（`_CONFIG_OVERRIDE_KEYS`）内
   ③ `setattr` 后能读到新值
 
 ⚠ 注意 `enable_skeleton_review` 的反例形态：它有注解承诺
@@ -45,18 +46,35 @@ def _load_run112():
 
 
 def _whitelist():
-    """从 `ReasoningAgent.__init__` 里抽取 kwargs 覆盖白名单（ast，非正则）。"""
+    """抽取 kwargs 覆盖白名单（ast，非正则）。
+
+    ★ 2026-10-08 拆分：白名单从 `ReasoningAgent.__init__` 的**内联元组**提取为
+    user_agent.py 的**模块级常量** `_CONFIG_OVERRIDE_KEYS`（__init__ 逐字改为
+    `for key in _CONFIG_OVERRIDE_KEYS:`）。故此处改读该常量，并**额外断言**
+    `__init__` 确实引用它 —— 断言（每个臂键必须命中白名单）与守卫意图均不变，
+    **非放宽判据**（反而是加强：新增"白名单被 __init__ 消费"这条不变式）。
+    """
     tree = ast.parse((REPO / "user_agent.py").read_bytes().decode("utf-8"))
     keys = set()
+    used_by_init = False
     for node in ast.walk(tree):
+        # 白名单常量（模块级）：_CONFIG_OVERRIDE_KEYS = (...)
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "_CONFIG_OVERRIDE_KEYS"
+                for t in node.targets):
+            if isinstance(node.value, (ast.Tuple, ast.List)):
+                for elt in node.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        keys.add(elt.value)
         if isinstance(node, ast.ClassDef) and node.name == "ReasoningAgent":
             for fn in node.body:
                 if isinstance(fn, ast.FunctionDef) and fn.name == "__init__":
                     for sub in ast.walk(fn):
-                        if isinstance(sub, ast.For) and isinstance(sub.iter, ast.Tuple):
-                            for elt in sub.iter.elts:
-                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                    keys.add(elt.value)
+                        if isinstance(sub, ast.Name) and sub.id == "_CONFIG_OVERRIDE_KEYS":
+                            used_by_init = True
+    assert keys, "未找到覆盖白名单常量 _CONFIG_OVERRIDE_KEYS（user_agent.py）"
+    assert used_by_init, (
+        "ReasoningAgent.__init__ 未引用 _CONFIG_OVERRIDE_KEYS ⇒ 白名单已失效")
     return keys
 
 

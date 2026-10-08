@@ -39,6 +39,15 @@ def _src(rel):
                 os.path.join(ROOT, "agent", "orchestrator__*.py"))):
             txt += "\n" + io.open(p, encoding="utf-8",
                                   errors="replace").read()
+    # 2026-10-08：`AgentConfig`（配置类）已逐字搬到 user_agent__config.py。
+    # 读 user_agent.py 的源码级守卫改为读「主文件 + 抽取模块」并集 ——
+    # 断言字面量与守卫意图均不变（非放宽判据），与上面的 orchestrator 同口径。
+    if rel.replace("\\", "/") == "user_agent.py":
+        import glob
+        for p in sorted(glob.glob(
+                os.path.join(ROOT, "user_agent__*.py"))):
+            txt += "\n" + io.open(p, encoding="utf-8",
+                                  errors="replace").read()
     return txt
 
 
