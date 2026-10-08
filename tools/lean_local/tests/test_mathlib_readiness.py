@@ -35,6 +35,7 @@ import unittest
 from unittest import mock
 
 from tools.lean_local import lean_bridge as lb
+from tools.lean_local import lean_bridge__env as lb_env
 
 
 # ---------------------------------------------------------------------------
@@ -76,13 +77,21 @@ class _NoRepoRoots:
     """上下文管理器：把仓库内默认闭包路径清空，隔离来自真实仓库的干扰。"""
 
     def __enter__(self):
-        self._p = mock.patch.object(lb, "_repo_closure_roots", return_value=[])
-        self._p.start()
+        # ★ 2026-10-08 拆分：`_repo_closure_roots` 已迁至 lean_bridge__env，
+        #   真实调用点在新模块内部 ⇒ patch 两模块（并集），隔离意图不变
+        #   （patch 目标=读源入口；断言与比较逻辑一字未改）。
+        self._ps = [
+            mock.patch.object(lb_env, "_repo_closure_roots", return_value=[]),
+            mock.patch.object(lb, "_repo_closure_roots", return_value=[]),
+        ]
+        for _p in self._ps:
+            _p.start()
         self._lp = os.environ.pop("LEAN_PATH", None)
         return self
 
     def __exit__(self, *exc):
-        self._p.stop()
+        for _p in self._ps:
+            _p.stop()
         if self._lp is not None:
             os.environ["LEAN_PATH"] = self._lp
         else:
