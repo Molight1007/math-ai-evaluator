@@ -79,6 +79,7 @@ _EXTRACTED_SUBGOAL_FLOW = [
     "agent/sub_goal_solver__contract.py",
     "agent/sub_goal_solver__merge.py",
     "agent/sub_goal_solver__format.py",
+    "agent/sub_goal_solver__parse.py",
 ]
 GUARDED += [p for p in _EXTRACTED_SUBGOAL_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
