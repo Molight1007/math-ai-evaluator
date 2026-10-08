@@ -11,6 +11,7 @@
      而 6.5 在 formatter **之后**运行 ⇒ 可以把脏文本覆盖成最终答案
      （证据：`pick_diag.picked` 与实际 pred 不一致）。
 """
+import glob
 import io
 import os
 
@@ -31,11 +32,14 @@ def _src(rel):
     # `self._set_final_response(...)`，是「统一写入口」计数的组成部分）已逐字搬到
     # agent/orchestrator__low_conf.py。读 orchestrator.py 的源码级守卫改为读
     #「主文件 + 抽取模块」并集 —— 断言字面量与守卫意图均不变（非放宽判据）。
+    # 2026-10-08 批9：改为读**全部** agent/orchestrator__*.py（glob 并集，原先只
+    # 显式列 final_gate/low_conf）；后续新抽的 orchestrator__oracle.py 等自动纳入
+    # —— 仍非放宽判据（断言字符串与比较逻辑一字不改）。
     if rel.replace("\\", "/") == "agent/orchestrator.py":
-        for _m in ("orchestrator__final_gate.py", "orchestrator__low_conf.py"):
+        for _p in sorted(glob.glob(
+                os.path.join(ROOT, "agent", "orchestrator__*.py"))):
             txt += "\n" + io.open(
-                os.path.join(ROOT, "agent", _m),
-                encoding="utf-8", errors="replace").read()
+                _p, encoding="utf-8", errors="replace").read()
     return txt
 
 

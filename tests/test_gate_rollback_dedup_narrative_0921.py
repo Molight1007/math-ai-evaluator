@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import glob
 import os
 import re
 import sys
@@ -160,9 +161,13 @@ def _src() -> str:
     # 2026-10-07 阶段C2：run 的 6.5_audit_gate 段（含回滚分支）已**逐字搬**到
     # agent/orchestrator__final_gate.py。源码级守卫改为读「主文件 + 抽取模块」**并集**
     # —— 断言的字面量与守卫意图均不变（只是被查代码换了文件，非放宽判据）。
-    with open(os.path.join(ROOT, "agent", "orchestrator__final_gate.py"),
-              "r", encoding="utf-8") as fh:
-        txt += "\n" + fh.read()
+    # 2026-10-08 批9：改为读**全部** agent/orchestrator__*.py（glob 并集），与其余
+    # 并集读者同口径；后续再抽出 orchestrator__oracle.py 等模块自动纳入
+    # —— 仍非放宽判据（断言字符串与比较逻辑一字不改，覆盖面不缩小）。
+    for _p in sorted(glob.glob(
+            os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+        with open(_p, "r", encoding="utf-8") as fh:
+            txt += "\n" + fh.read()
     return txt
 
 

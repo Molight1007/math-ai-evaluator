@@ -55,6 +55,10 @@ _EXTRACTED_MAIN_FLOW = [
     "agent/orchestrator__verify.py",
     # 2026-10-07 阶段C6：求解前准备族 1.2/2.6 段（orchestrator__prep.py）。
     "agent/orchestrator__prep.py",
+    # 2026-10-08 批9：Oracle/对抗/证伪职责簇（_enhance_window_ok /
+    # _adversarial_probe / _falsify_candidates / _falsify_rejects /
+    # _oracle_review_best）已逐字搬到 agent/orchestrator__oracle.py。
+    "agent/orchestrator__oracle.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
@@ -68,6 +72,7 @@ _EXTRACTED_SUBGOAL_FLOW = [
     "agent/sub_goal_solver__plan.py",
     "agent/sub_goal_solver__loop.py",
     "agent/sub_goal_solver__pool.py",
+    "agent/sub_goal_solver__lean.py",
 ]
 GUARDED += [p for p in _EXTRACTED_SUBGOAL_FLOW
             if os.path.exists(os.path.join(ROOT, p))]

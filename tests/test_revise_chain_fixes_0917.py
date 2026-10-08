@@ -11,6 +11,7 @@
   M2  审核未试过任何候选时**不得清空候选池**
   泛化句  `_review_bug_feedback` 判"无实质缺陷"时返回空串（由调用方结束 revise）
 """
+import glob
 import io
 import os
 from types import SimpleNamespace
@@ -34,10 +35,14 @@ def _src(rel):
     # 2026-10-07 阶段C2：run 的 6.5_audit_gate 段已逐字搬到
     # agent/orchestrator__final_gate.py。读 orchestrator.py 的源码级守卫改为读
     #「主文件 + 抽取模块」并集 —— 断言字面量与守卫意图均不变（非放宽判据）。
+    # 2026-10-08 批9：改为读**全部** agent/orchestrator__*.py（glob 并集，原先只
+    # 显式列 final_gate）；后续新抽的 orchestrator__oracle.py 等自动纳入
+    # —— 仍非放宽判据（断言字符串与比较逻辑一字不改）。
     if rel.replace("\\", "/") == "agent/orchestrator.py":
-        txt += "\n" + io.open(
-            os.path.join(ROOT, "agent", "orchestrator__final_gate.py"),
-            encoding="utf-8", errors="replace").read()
+        for _p in sorted(glob.glob(
+                os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+            txt += "\n" + io.open(
+                _p, encoding="utf-8", errors="replace").read()
     # 2026-10-08 拆分：`_generate_revise` 的「池满腾位（pick_best_candidates）」与
     # 「上一轮解答注入（prev_answer=_prev_block）」两段已逐字搬到
     # agent/solver__revise.py。读 solver.py 的源码级守卫改为读「主文件 + 抽取模块」

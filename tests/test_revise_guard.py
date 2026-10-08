@@ -26,6 +26,7 @@
 本测试用**源码级守卫**锁定该口径：5.5 块内不得再出现 `gen_time_up()`。
 （这类"语义口径"很难用行为测试覆盖，源码守卫是性价比最高的防回归手段。）
 """
+import glob
 import io
 import os
 import re
@@ -53,7 +54,16 @@ _STAGE_MODULE = {
 class ReviseGuardTest(unittest.TestCase):
 
     def _src(self):
-        return io.open(ORCH, encoding="utf-8").read()
+        # 2026-10-08 批9：改为读「主文件 + **全部** agent/orchestrator__*.py」并集，
+        # 与其余 7 个并集读者（test_verify_only._orch_src 等）同口径。
+        # `test_generation_stages_still_use_gen_time_up` 断言的是「**生成**阶段仍
+        # 受 gen_time_up 约束」这一意图；被查代码从单文件变并集后，子串命中只增
+        # 不减 ⇒ **非放宽判据**（断言字符串与比较逻辑一字不改，只是覆盖面不缩小）。
+        txt = io.open(ORCH, encoding="utf-8").read()
+        for _p in sorted(glob.glob(
+                os.path.join(ROOT, "agent", "orchestrator__*.py"))):
+            txt += "\n" + io.open(_p, encoding="utf-8").read()
+        return txt
 
     def _extracted(self, module_rel: str, func_header: str) -> str:
         p = os.path.join(ROOT, "agent", module_rel)
