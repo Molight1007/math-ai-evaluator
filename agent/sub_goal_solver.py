@@ -45,6 +45,10 @@ from typing import Optional
 from .base import (
     BaseAgent, TaskContext, Candidate, next_candidate_id, _pool_gate_v2_on)
 
+# 2026-10-08 批1：run 的两段已抽到同包模块（逐字搬）。
+from .sub_goal_solver__stage import wire_subgoal_stage_budget  # noqa: F401
+from .sub_goal_solver__exhaust import append_exhaust_subgoal  # noqa: F401
+
 try:
     from prompts.sub_goal import (
         SUBGOAL_PLAN_SYSTEM,
@@ -543,48 +547,10 @@ class SubGoalSolverAgent(BaseAgent):
             self.record(ctx, "subgoal", "预算耗尽，跳过子目标求解")
             return ctx
 
-        # 2026-09-04 子目标阶段预算（老师：砍环节内重复、不砍环节本身；
-        # 且不止加限制，还要保证体系在规定时间内跑完、强制收尾产出）。
-        # 背景：preverify 提速省下的 ~300s 全被子目标贪婪 re-plan/re-review
-        # 吃掉（bridge sub 529-717s → mcp sub 780-1112s），merge 被挤进
-        # is_time_critical 区 → 走 fallback 而非真合并 → 060 对变错
-        # （答案停在 S(1)..S(12) 枚举、未合成 2617/2618）。
-        # 依据（bridge 18 题实测）：正确题 sub 全在 661-717s，失控题 780-1112s。
-        # 预算取 750s：保住已知正确深度、刹住失控；可配 subgoal_stage_budget_sec。
-        # 时钟挂 ctx（⚠ 不能挂 self：EvalEngine 的 agent 是共享单例，
-        # ThreadPoolExecutor 并发 2 时同一实例同时服务多题，self 属性会竞态；
-        # ctx 每题独立）。orchestrator 可能多次调用 run()（2.7 / deep 3_solve /
-        # 3.5），共享 ctx._subgoal_stage_start，避免"每次调用重置预算"把总时间再吃一遍。
-        # 2026-09-06 P1（用户拍板）：子目标预算按档拆分——deep 保留 750s
-        # （难题深度分解值），standard/fast 用 450s（省下预算流向 solve/verify）。
-        # 依据：2.7 子目标全档均 ~587s 是最大黑洞，standard 档 geom-051 曾 1073s
-        # 仍错（post-fix 靠 3_solve 做对）——standard 题子目标分解性价比存疑。
-        # 兼容：config 未显式设 std 档字段（测试 SimpleNamespace）→ 回退主字段
-        # 语义（主字段=0 表示停用固定预算，仅 tail_reserve 兜底）。
-        _tier_now = str(getattr(ctx, "tier", "standard") or "standard")
-        if _tier_now == "deep":
-            _raw_budget = getattr(self.config, "subgoal_stage_budget_sec", 750.0)
-        else:
-            _raw_budget = getattr(self.config, "subgoal_stage_budget_sec_std", None)
-            if _raw_budget is None:
-                _raw_budget = getattr(self.config, "subgoal_stage_budget_sec", 750.0)
-        stage_budget = float(_raw_budget or 0.0)
-        stage_start = float(getattr(ctx, "_subgoal_stage_start", 0.0) or 0.0)
-        if not stage_start:
-            stage_start = time.time()
-            ctx._subgoal_stage_start = stage_start
-        ctx._subgoal_stage_budget = stage_budget
-        # 2026-10-01 按用户决策：研究期不限时 —— **删除"全局 deadline − tail_reserve"
-        # 的尾部预留**（原逻辑逼子目标在 `全局 deadline − 180s` 前结束，为下游
-        # 3_solve/format/gate 预留时间）。研究期不省资源，不再为下游阶段预留时间。
-        # ⚠ 固定阶段预算 `subgoal_stage_budget_sec` 仍生效（见下方 _fixed_end）；
-        #   是否一并放开由主理人确认（不在本次明确清单内）。
-        _fixed_end = (stage_start + stage_budget
-                      if stage_budget > 0 else float("inf"))
-        if stage_budget > 0:
-            ctx._subgoal_stage_end = _fixed_end
-        else:
-            ctx._subgoal_stage_end = 0.0
+        # 2026-09-04 子目标阶段预算（装配细节、依据与取舍见
+        # agent/sub_goal_solver__stage.py::wire_subgoal_stage_budget；
+        # 2026-10-08 批1：逐字搬，调用点改一行委托）。
+        wire_subgoal_stage_budget(self, ctx)
 
         def _stage_left() -> float:
             """子目标阶段剩余秒数（0 = 未启用阶段预算，返回 inf）"""
@@ -633,95 +599,9 @@ class SubGoalSolverAgent(BaseAgent):
             except Exception:  # noqa: BLE001
                 pass
         # ---- 2026-09-14 穷尽性搜索机制（B0 遗留课题）----
-        # 实测 003（漏 `2030`）与 074（漏取整解族）的失败**不是形态问题**：
-        # 模型自信地认为"只有一个解"，因此"必须枚举"的形态要求对它无效。
-        # 现由代码**强制追加**一个「解族穷尽性检查」子目标，逼迫模型按解族
-        # 分类穷举（常数/线性/周期/取整/分段…）并回答"是否还有其他解族"。
-        # 追加发生在规划**之后** ⇒ 不会被 max_subgoals 截断，且覆盖全部规划路径
-        # （选择题 / Blueprint DAG / LLM 规划）。
-        try:
-            from .question_type import asks_all_values as _aav
-            if _aav(ctx.problem or "") and subgoals:
-                _max_id = max(int(sg.get("id", 0) or 0) for sg in subgoals)
-                subgoals.append({
-                    "id": _max_id + 1,
-                    "title": "解族穷尽性检查",
-                    "description": (
-                        "本题问『所有 / 全部』取值。\n\n"
-                        "⚠ **前序子目标的结论尚未经过完备性检验**，它们只是"
-                        "**待检验的假设**，不是已确立的事实。你的任务是找出它们"
-                        "**遗漏**了什么，**不是**确认它们正确。\n\n"
-                        "必须按下列**固定格式**作答（缺任一段视为未完成检查）：\n\n"
-                        "解族清单: 列出本题所有可能的解族类型"
-                        "（如：常数解 / 线性解 / 多项式解 / 周期解 / 取整型解（⌈x⌉、⌊x⌋）/ "
-                        "分段定义解 / 特殊函数解 / 指数对数型解 …）—— **尽量列全**；\n"
-                        "逐族判定: 对上一步列出的**每一族**逐一给出『存在 / 不存在』"
-                        "及其依据（**排除某类必须给出反证或构造性论证**，"
-                        "不得只写“不可能”“显然无解”）；\n"
-                        "前序结论复核: 对前序子目标已找到的解，明确写出"
-                        "『该解属于上述哪一族』『是否还有其他解与它同族』；\n"
-                        "结论: EXHAUSTIVE: yes 或 EXHAUSTIVE: no\n"
-                        "遗漏解族: 若上一步为 no，写出遗漏解族的具体形式（含参数）；"
-                        "若为 yes，写『无』。\n\n"
-                        "⚠ 宁可多列一类再排除，也不得因“看起来不可能”而跳过；"
-                        "给出结论时必须注明依据。"
-                    ),
-                    "type": "verify",
-                    # ⚠ **必须依赖全部已有子目标**：执行期 `_format_dep_results`
-                    # 只注入**直接依赖**的结果 —— 若只依赖最后一个，穷尽性检查就
-                    # 看不到前面找到的任何解，而它的任务恰恰是"检查是否遗漏解族"。
-                    # ★ 2026-09-17 改进：注入**保留**（否则它无从对照），但注入的
-                    #   语义已改为"待检验假设"（见上方 description 第一段）——
-                    #   实测 003 原实现下，该子目标只复述了前序结论 `a_n = n`，
-                    #   既没列解族也没做排除，属**被前序结论锚定**。
-                    #   同时要求**固定格式输出**，使"没做检查"从不可检测变为可检测
-                    #   （`_collect_diag` 会解析出 `exhaust_result`）。
-                    "depends_on": [sg["id"] for sg in subgoals],
-                    "expected_output": (
-                        "必须包含四段：『解族清单:』『逐族判定:』『前序结论复核:』"
-                        "『结论: EXHAUSTIVE: yes|no』；若为 no 还需『遗漏解族:』。"
-                        "缺任一段视为未完成检查。"),
-                    "result": "",
-                })
-                # merge 必须把「解族穷尽性检查」的结论纳入最终答案（否则子目标白跑）
-                _exh_note = (
-                    "\n【穷尽性要求（必须遵守）】最终答案**必须综合『解族穷尽性检查』"
-                    "子目标的结论**：把检查中确认存在的**所有解族**全部列出"
-                    "（含该检查新发现的遗漏解族的具体形式），"
-                    "**不得**只采用前面子目标找到的部分解；"
-                    "若检查结论与前面矛盾，以穷尽性检查为准并说明理由。"
-                )
-                merge_strategy = (merge_strategy or "直接给出最终答案") + _exh_note
-                self.record(ctx, "subgoal",
-                            "穷尽性搜索：追加『解族穷尽性检查』子目标"
-                            "（题面要求『所有』，共 {} 个子目标）".format(len(subgoals)))
-                # 埋点落 diag（2026-09-14）：trace 不进结果文件 ⇒ 此前无法确认
-                # 机制是否真的生效，只能靠猜。写入 ctx 供 _collect_diag 落盘。
-                try:
-                    ctx._exhaust_diag = {
-                        "appended": True,
-                        "n_before": len(subgoals) - 1,
-                        "n_after": len(subgoals),
-                        "trigger": "asks_all_values",
-                    }
-                except Exception:  # noqa: BLE001
-                    pass
-            else:
-                try:
-                    ctx._exhaust_diag = {
-                        "appended": False,
-                        "reason": ("非『求所有』题" if not _aav(ctx.problem or "")
-                                   else "无子目标可追加"),
-                    }
-                except Exception:  # noqa: BLE001
-                    pass
-        except Exception as _e:  # noqa: BLE001
-            logger.debug("[穷尽性] 子目标追加失败: %s", _e)
-            try:
-                ctx._exhaust_diag = {"appended": False,
-                                     "reason": "异常: {}".format(type(_e).__name__)}
-            except Exception:  # noqa: BLE001
-                pass
+        # 2026-10-08 批1：本段逐字搬到 agent/sub_goal_solver__exhaust.py::
+        # append_exhaust_subgoal，调用点改一行委托（merge_strategy 由之返回）。
+        merge_strategy = append_exhaust_subgoal(self, ctx, subgoals, merge_strategy)
 
         _sg_stats = self._subgoal_stats(subgoals)
         ctx.subgoal_stats = _sg_stats   # S4-lite：落 ctx 供 _collect_diag 进结果文件（A/B 对照）

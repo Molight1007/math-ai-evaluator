@@ -29,6 +29,26 @@ from agent.orchestrator import _parse_exhaust_result  # noqa: E402
 TITLE = "解族穷尽性检查"
 
 
+def _sgs_union_src() -> str:
+    """`agent/sub_goal_solver.py` + 已抽出的 `agent/sub_goal_solver__*.py` 的**并集**。
+
+    2026-10-08 批1：`SubGoalSolverAgent.run` 的「穷尽性搜索机制」段（含
+    『待检验假设』『遗漏解族』等**子目标描述字面量**）已**逐字搬**到
+    `agent/sub_goal_solver__exhaust.py`。源码级守卫改为读「主文件 + 抽出模块」
+    并集 —— 断言的字面量与守卫意图**均不变**（只是被查代码换了文件，非放宽判据）。
+    与 `tests/test_orchestrator_static.py::_orch_union_src` 同口径。
+    """
+    import glob
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    txt = open(os.path.join(root, "agent", "sub_goal_solver.py"),
+               encoding="utf-8").read()
+    for p in sorted(glob.glob(
+            os.path.join(root, "agent", "sub_goal_solver__*.py"))):
+        with open(p, encoding="utf-8") as fh:
+            txt += "\n" + fh.read()
+    return txt
+
+
 def _trace(result, title=TITLE):
     return [{"id": 5, "title": title, "result": result}]
 
@@ -111,20 +131,14 @@ class ExhaustPromptFormatTest(unittest.TestCase):
     """子目标描述必须把四段格式写清楚（否则模型无从遵守）。"""
 
     def test_description_requires_fixed_sections(self):
-        import inspect
-
-        from agent import sub_goal_solver as M
-        src = inspect.getsource(M)
+        src = _sgs_union_src()
         for seg in ("解族清单", "逐族判定", "前序结论复核", "EXHAUSTIVE", "遗漏解族"):
             with self.subTest(seg=seg):
                 self.assertIn(seg, src)
 
     def test_description_frames_prior_as_hypotheses(self):
         """前序结论必须被标注为"待检验假设"，否则会被锚定（实测失败根因）。"""
-        import inspect
-
-        from agent import sub_goal_solver as M
-        src = inspect.getsource(M)
+        src = _sgs_union_src()
         self.assertIn("待检验", src)
         self.assertIn("遗漏", src)
 

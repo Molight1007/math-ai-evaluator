@@ -59,6 +59,16 @@ _EXTRACTED_MAIN_FLOW = [
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
 
+# 2026-10-08 批1：`SubGoalSolverAgent.run` 的阶段预算装配段 / 穷尽性搜索机制段
+# 已逐字抽到 `agent/sub_goal_solver__*.py`。守卫意图不变：这些模块承载主流程
+# 代码，同样必须在 pyflakes 下无未定义名称（不存在则自动跳过）。
+_EXTRACTED_SUBGOAL_FLOW = [
+    "agent/sub_goal_solver__stage.py",
+    "agent/sub_goal_solver__exhaust.py",
+]
+GUARDED += [p for p in _EXTRACTED_SUBGOAL_FLOW
+            if os.path.exists(os.path.join(ROOT, p))]
+
 
 def _pyflakes_available() -> bool:
     try:
