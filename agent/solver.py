@@ -4,10 +4,10 @@ from __future__ import annotations
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 try:
     from agent.switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+        get_num as _sw_num, get_str as _sw_str)
 except ImportError:
     from switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+        get_num as _sw_num, get_str as _sw_str)
 """
 通用求解智能体（SolverAgent）
 ============================
@@ -30,7 +30,6 @@ import logging
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .base import (
     BaseAgent, TaskContext, Candidate,
@@ -41,11 +40,10 @@ from .base import (
 )
 # 2026-10-08：`get_domain_hint` / `build_blueprint_user_message` 随段 4–7 迁至
 # `agent/solver__prompt.py`，此处不再需要。
-from prompts.policy import (
-    SELF_IMPROVE_USER,
-    get_policy_system,
-)
-from prompts.revise import REVISE_SYSTEM, REVISE_USER_TEMPLATE
+# 2026-10-08 拆分：`REVISE_SYSTEM` / `REVISE_USER_TEMPLATE`（随 `_generate_revise`
+# 段 3–6 迁至 `agent/solver__revise.py`）与 `SELF_IMPROVE_USER` / `get_policy_system`
+# （随 `_improve_candidates_once` 段 4–尾 迁至 `agent/solver__improve.py`）在本文件
+# 已无使用者，一并删除，避免"双份导入"。
 from prompts.proof import PROOF_SYSTEM, PROOF_TEMPLATE
 # 2026-10-08 拆分：符号化「本地计算接管答案」三通道
 # （表达式范式 / L2 独立符号建模复核 / 符号化方程求解）已整体迁至
@@ -65,6 +63,11 @@ from .solver__prompt import (          # noqa: E402
     _build_initial_prompt, _inject_initial_context,
 )
 from .solver__sample import _run_initial_sampling  # noqa: E402
+
+# 2026-10-08 拆分：`_generate_revise` 的「上一轮解答装配 + 并行重解 + 结果入池」
+# 与 `_improve_candidates_once` 的「单轮自改进主循环」已抽到独立模块（逐字搬）。
+from .solver__revise import _revise_run_sampling       # noqa: E402
+from .solver__improve import _improve_loop             # noqa: E402
 
 logger = logging.getLogger("MathPilot")
 
@@ -797,123 +800,7 @@ class SolverAgent(BaseAgent):
         # （`orchestrator` 的 `_gate_tried`、`formatter` 的簇内候选匹配）随之错位。
         base_cid = next_candidate_id(ctx.candidates)
 
-        # ★ 2026-09-17（M7）：把「上一轮解答」**真正**喂给 revise。
-        # REVISE_SYSTEM 第 1/3 条明确要求“认真阅读【上一轮错误解答】”「保留正确的
-        # 推理部分」，但 user 模板此前**只有题目 + 反馈** ⇒ 模型无从保留，只能整题
-        # 重解。这正是 revise 越改越差的机制之一（013 蓝图 d=50 → revise 改成 19、
-        # 025 蓝图 4 → 直答 509040-2*169680）。此处给出上一轮各候选的答案清单
-        # 与主推理尾部，使“保留正确部分”成为可执行指令。
-        _prev_lines = []
-        for _pc in (getattr(ctx, "candidates", None) or [])[:6]:
-            _pa = str(getattr(_pc, "answer", "") or "").strip()
-            if _pa:
-                _prev_lines.append("· 候选#%s 答案：%s"
-                                   % (getattr(_pc, "id", "?"), _pa))
-        _cs_all = list(getattr(ctx, "candidates", None) or [])
-        _main_reasoning = ""
-        if _cs_all:
-            _main_reasoning = max(
-                (str(getattr(_c2, "reasoning", "") or "") for _c2 in _cs_all),
-                key=len)
-        _prev_block = "\n".join(_prev_lines) or "（无——本轮无既有候选答案）"
-        if _main_reasoning:
-            _prev_block += ("\n\n（上一轮主推理尾部 1200 字，供沿用正确结论）\n"
-                            + _main_reasoning[-1200:])
-
-        def _make_one(i: int):
-            cid = base_cid + i
-            user_content = REVISE_USER_TEMPLATE.format(
-                problem=ctx.problem, feedback=feedback_text,
-                prev_answer=_prev_block)
-            # ★ 2026-09-29：revise 是**独立于 _generate_initial 的生成路径**，
-            # 不注入则"重解一次"会把定理线索丢掉（本项目教训：只改一处路径=没改）。
-            if getattr(self.config, 'enable_theorem_hint', True):
-                _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
-                if _th:
-                    user_content = user_content + "\n\n" + _th
-            # ★ 2026-10-02（阶段一补）：重解同属"主求解"，不带子目标结论=又从头推
-            # 一遍。复用同一注入逻辑（含 diag 埋点）。
-            user_content = self._apply_subgoal_findings(ctx, user_content)
-            for retry in range(3):
-                # 2026-09-13 循环时间检查（防卡死）：同 _generate_initial 处说明。
-                # 本函数在线程池内并行执行，到点即 break，避免"重试 × 并行"叠加穿预算。
-                if retry > 0 and ctx.gen_time_up():
-                    self.record(ctx, "revise",
-                                f"revise 候选 {cid} 重试因时间到点提前停止")
-                    break
-                # v2.4.1：revise 也走 prefill（完整 CoT 在本环境必然超时）
-                # 2026-09-04：prefill 种子与 REVISE_SYSTEM 五段格式对齐——【错误分析】开头
-                resp = self._compressed_solve(
-                    ctx, REVISE_SYSTEM, user_content,
-                    temperature=self.config.policy_temperature,
-                    max_tokens=self._adaptive_max_tokens(
-                        ctx, self.config.policy_max_tokens),
-                    prefill_seed="【错误分析】\n",
-                )
-                if resp is not None and resp.strip():
-                    # 幻觉/拒绝检测（与 _generate_initial 一致）
-                    hallu = detect_hallucination(resp)
-                    if any("42" in h[0] for h in hallu) and retry < 2:
-                        logger.warning("Revise %d 42-dodge (retry %d/2)", cid, retry + 1)
-                        time.sleep(1)
-                        continue
-                    if _is_refusal(resp) and retry < 2:
-                        logger.warning("Revise %d refused (retry %d/2)", cid, retry + 1)
-                        time.sleep(1)
-                        continue
-                    if detect_truncated(resp):
-                        logger.info("Revise %d truncated; will attempt completion", cid)
-                    return cid, resp
-                if retry < 2:
-                    logger.warning("Revise candidate %d empty response (retry %d/2)", cid, retry + 1)
-                    time.sleep(1)
-            return cid, resp
-
-        # 并行生成修正候选
-        results = []
-        max_workers = min(count, 6)
-        # 2026-09-13：与 `_generate_initial` 同款修复 —— 改**分批提交 + 批间检查**。
-        # 原实现一次性提交全部候选且 `as_completed` 内无任何时间检查、已提交任务无法取消
-        # ⇒ 生成侧软截止 `gen_time_up()` 在这段失效（该病理已在 3_solve 实测造成
-        # 单题超出软预算 421s，见 `_generate_initial` 处注释）。
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            _pending = list(range(count))
-            while _pending:
-                if results and ctx.gen_time_up():
-                    self.record(ctx, "revise",
-                                f"生成侧时间到，跳过剩余 {len(_pending)} 个修正候选"
-                                f"（已完成 {len(results)}/{count}）")
-                    break
-                _batch, _pending = _pending[:max_workers], _pending[max_workers:]
-                _futs = [pool.submit(_make_one, i) for i in _batch]
-                for _f in as_completed(_futs):
-                    results.append(_f.result())
-        results.sort(key=lambda x: x[0])
-
-        for cid, resp in results:
-            if resp is None:
-                ctx.candidates.append(Candidate(
-                    id=cid, answer="", reasoning="[重解失败] 调用受限"))
-                logger.warning("Revise candidate %d failed/skipped", cid)
-                continue
-            answer = extract_final_answer(resp)
-            if not answer or len(answer) > 300:
-                answer = rescue_final_answer(resp)[0]
-            if not answer:
-                answer = smart_fallback_answer(resp)
-            # ★★ 2026-10-06：**重解路径同样做入池门槛**（与 _generate_initial 同口径）。
-            #   ⚠ 注意：上面那条 `answer=""` 的"[重解失败]"占位候选**不加门槛**
-            #   （它是显式标记的失败记录，不是"假答案"）。
-            answer, _ans_ok = self._normalize_and_check_answer(ctx, cid, answer)
-            if not _ans_ok:
-                logger.warning("Revise candidate %d 不含最终答案 → 不入池", cid)
-                continue
-            ctx.candidates.append(Candidate(
-                id=cid,
-                answer=answer,
-                reasoning=resp,
-                revised=True,
-            ))
+        _revise_run_sampling(self, ctx, count, base_cid, feedback_text)
 
         self.record(
             ctx, "revise",
@@ -1053,147 +940,7 @@ class SolverAgent(BaseAgent):
         if not targets:
             return 0
 
-        n_ok = 0
-        _imp_min_remaining = float(
-            getattr(self.config, "improve_min_remaining", 0.0) or 0.0)
-        for cand in targets:
-            # 2026-09-06：升级 gen_time_up——仅 is_time_critical 会在单候选
-            # 300s 级 LLM 调用前放行最后 1-2 个候选，烧穿剩余预算（冒烟
-            # nt-031 3.3=595s / algebra-003 3.3=325s 实证），须按生成侧软截止停。
-            # N1''（2026-09-11 修正）：**改回硬墙口径**。原因：外层（orchestrator）
-            # 已判定 3.3 该跑（用 time_remaining 门槛放行），但 3.3 排在 2.7/3_solve
-            # 之后，而 gen_time_up() 用的是 _gen_deadline(=deadline−480s)=720s——
-            # 走到这里必然已越过 → 内层立刻 break → 外层放行被作废（smoke6_v2
-            # 六题 3.3 恒为 0s 的最终原因）。改为只防"逼近 1200s 硬墙"。
-            if ctx.is_time_critical():
-                break
-            # 2026-09-07（A，冒烟 alg-060 3.3=640s 烧穿实证）：单候选改进
-            # 是一次 200-300s 不可打断的 LLM 调用——仅靠 gen_time_up（=烧到
-            # 生成软截止才停）会让"正在跑的最后一个候选"把验证预留吃光，
-            # 6.5 终局 Lean/Audit 闸门 time_critical 饿死。
-            # 预留 single-call 最坏成本：距生成软截止不足 improve_min_remaining
-            # （默认 300s）即停手不再开新候选，把验证预算完整留给 4_verify+6.5。
-            # N1''（2026-09-11 修正）：**基准改为硬墙 deadline，而非 _gen_deadline**。
-            # 原因同 L37：_gen_deadline(720s) 是"生成类"的统一截止，3.3 走到这里
-            # 必然已越过，用它做差会出现负值 → 恒 break（第三层拦截，实测默认
-            # improve_min_remaining=300 时 100% 触发）。改用 deadline(1200s) 起算，
-            # 语义仍是"给单候选最坏成本留够余量"，但不会在 3.3 处必然失败。
-            _hd = float(getattr(ctx, "deadline", 0.0) or 0.0)
-            if (_imp_min_remaining > 0 and _hd >= 10**8
-                    and _hd - time.time() < _imp_min_remaining):
-                # ⚠ 2026-09-30 修正阶段名：原写 `"paper_pacer"` —— 但这里判的是
-                #   **单题硬墙余量**，与已删除的 PaperPacer（全卷配速）毫无关系。
-                #   错误阶段名的后果：诊断按 step 聚合时，这条记录会被算进
-                #   `paper_pacer` 桶，而该桶在 PaperPacer 删除后本应只剩全卷配速
-                #   那几行 ⇒ 归因时把"自改进因时间停手"误读成"全卷配速在收紧"。
-                self.record(ctx, "self_improve",
-                            f"Step2 自改进停手：距硬墙 {_hd - time.time():.0f}s < "
-                            f"{_imp_min_remaining:.0f}s（单候选最坏成本预留），"
-                            f"不再改进剩余候选")
-                break
-            user_content = SELF_IMPROVE_USER.format(
-                problem=ctx.problem,
-                candidate_solution=cand.reasoning,
-            )
-            # ★ 2026-10-04 修（**做题逻辑错误**，用户点名担心的那条）：
-            #   3.3 自改进走 `_compressed_solve` **重写候选并覆盖 `cand.answer`**，
-            #   但它此前**不注入子目标结论** ⇒ 改进版是"**脱离子目标结论的独立重解**"，
-            #   等于把"**主求解必须建立在子目标结论之上**"的设计在自改进这一步悄悄作废
-            #   （用户原话：「会不会出现之前子目标的结论没用上，再在总解题中自己再解一遍」
-            #     —— 这里字面成立）。
-            #   已知后果：项目自陈 098 原候选答 B（正确），3.3 后被改成 D（错误）。
-            #   现与 `_generate_proof`(:954) / `_generate_initial`(:1076) /
-            #   `_generate_revise`(:1498) **同口径注入**（开关 `enable_subgoal_findings`）。
-            user_content = self._apply_subgoal_findings(ctx, user_content)
-            resp = self._compressed_solve(
-                ctx,
-                get_policy_system(use_blueprint=getattr(self.config, "use_blueprint", True)),
-                user_content,
-                temperature=0.1,
-                max_tokens=self._adaptive_max_tokens(
-                    ctx, self.config.policy_max_tokens),
-                prefill_seed="【第一步：诊断】\n",
-            )
-            if not resp or not resp.strip():
-                # 观测埋点（2026-09-11）：3.3 此前只报"完成 N 个"，失败出口
-                # （空/拒绝/过短）**全部静默 continue** → 跑了几百秒却看到 n_imp=0
-                # 却无从定位（smoke6_v3 实证：3.3=365s 但"自改进完成"0 条）。
-                self.record(ctx, "self_improve",
-                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：空响应")
-                continue
-            if _is_refusal(resp):
-                self.record(ctx, "self_improve",
-                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：模型拒绝作答")
-                continue
-            # 改进版比原版还差（明显更短/空壳）则丢弃
-            _thr = max(40, len(cand.reasoning) // 3)
-            if len(resp.strip()) < _thr:
-                self.record(ctx, "self_improve",
-                            f"Step2 丢弃候选#{getattr(cand, 'id', '?')}：输出过短"
-                            f"（{len(resp.strip())} < 门槛 {_thr}）")
-                continue
-            answer = extract_final_answer(resp)
-            if not answer or len(answer) > 300:
-                answer = rescue_final_answer(resp)[0]
-            if not answer:
-                answer = smart_fallback_answer(resp)
-            # ★★ 2026-10-07（2.4 v2 入口穷举 · 入口③）：**自改进是"改写既有候选
-            #   answer 字段"的写入点，此前完全不过门槛** —— 实测题 003/007 的池内
-            #   id=0（answer = `'实际上，这个问题是已知的竞赛题…'` /
-            #   `'实际上，对于这种问题，通常有一个不变量…'`，reasoning 以
-            #   「【第一步：诊断】」开头 = 自改进产物）正是**被覆盖进池**的非答案，
-            #   且题 007 该候选还进了投票。此处：改进版不是答案 ⇒ **不覆盖原答案**
-            #   （保留既有、通常更好的答案），只更新 reasoning 与改进标记。
-            if _pool_gate_v2_on():
-                _ians, _iok = self._normalize_and_check_answer(
-                    ctx, getattr(cand, "id", "?"), answer)
-                if _iok:
-                    answer = _ians
-                else:
-                    self.record(ctx, "self_improve",
-                                f"Step2 改进版#{getattr(cand, 'id', '?')} 不含最终答案"
-                                f" → **保留原答案不覆盖**（防非答案覆盖入池）")
-                    answer = ""
-            # B 方案（2026-09-11，本地实验）：**覆盖前先把原版保留为独立候选**。
-            # 依据：smoke6_v3 实证 098 原候选答 B（正确），3.3 自改进后被改成 D
-            # （错误）——「无条件替换」会把好答案直接改坏，且没有任何回退机制。
-            # 现在改为"原版 + 改进版并存"，交由下游验证/投票择优（不改变下游逻辑）。
-            # 开关：SELF_IMPROVE_KEEP_ORIGINAL（默认 1）。
-            if _sw_bool("self_improve_keep_original"):
-                try:
-                    import copy as _copy
-                    _orig = _copy.copy(cand)
-                    _orig.id = 1 + max(
-                        [int(getattr(c, "id", 0) or 0) for c in ctx.candidates] or [0])
-                    _orig.self_improved = True      # 防对同一份再改进
-                    _orig.source = (getattr(cand, "source", "") or "") + "+pre_improve"
-                    # （2.4 v2 入口清单）此处 append **刻意不再过门槛**：`_orig` 是
-                    #   "**已入池候选**的深拷贝"（其 answer 在入池时已过门槛），
-                    #   再判一次只会白丢这份"回退副本"，属冗余而非漏网。
-                    ctx.candidates.append(_orig)
-                    self.record(ctx, "self_improve",
-                                f"Step2 保留原版候选#{_orig.id}"
-                                f"（答案 {str(getattr(_orig, 'answer', ''))[:30]}），"
-                                f"改进版写入#{getattr(cand, 'id', '?')}")
-                except Exception as _ce:  # noqa: BLE001
-                    self.record(ctx, "self_improve",
-                                f"Step2 保留原版失败（{type(_ce).__name__}）→ 走覆盖")
-            cand.reasoning = resp
-            if answer:
-                cand.answer = answer
-            # 2026-09-01（SU-01 优化 2）：标记 self_improved，下次再调 Step2 跳过此候选
-            cand.self_improved = True
-            n_ok += 1
-            time.sleep(0.3)  # 速率限制
-
-        if n_ok:
-            self.record(ctx, "self_improve",
-                        f"Step2 自改进 {n_ok}/{len(targets)} 个候选"
-                        f"（无条件={not bool(getattr(self.config, 'self_improve_conditional', False))}）")
-        elif targets:
-            self.record(ctx, "self_improve",
-                        f"Step2 本轮 {len(targets)} 个候选全部未产出改进")
-        return n_ok
+        return _improve_loop(self, ctx, targets)
 
     # ----------------------------------------------------------
     # 兜底直接求解（所有候选都失败时的 last-resort）

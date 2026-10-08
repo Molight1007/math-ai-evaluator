@@ -38,6 +38,14 @@ def _src(rel):
         txt += "\n" + io.open(
             os.path.join(ROOT, "agent", "orchestrator__final_gate.py"),
             encoding="utf-8", errors="replace").read()
+    # 2026-10-08 拆分：`_generate_revise` 的「池满腾位（pick_best_candidates）」与
+    # 「上一轮解答注入（prev_answer=_prev_block）」两段已逐字搬到
+    # agent/solver__revise.py。读 solver.py 的源码级守卫改为读「主文件 + 抽取模块」
+    # 并集 —— 断言字面量与守卫意图均不变（非放宽判据）。
+    if rel.replace("\\", "/") == "agent/solver.py":
+        txt += "\n" + io.open(
+            os.path.join(ROOT, "agent", "solver__revise.py"),
+            encoding="utf-8", errors="replace").read()
     return txt
 
 
