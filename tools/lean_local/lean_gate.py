@@ -51,6 +51,7 @@ from contracts.protocols import TaskContext
 from contracts.types import Budget
 from tools.lean_local.lean_bridge import (
     LeanBridge, hint_for_compile_error, lean_parallelism, mcp_available)
+from tools.lean_local import lean_gate__support as _support
 
 logger = logging.getLogger("MathPilot")
 
@@ -65,6 +66,15 @@ class LeanGate:
     """证明题的 Lean 硬验证门禁（v2.8 扩展到全部档位）。"""
 
     name = "LeanGate"
+    # 2026-10-08 拆文件：agent-free 支持簇已逐字搬到 lean_gate__support.py。
+    # 类内绑定 ⇒ 调用点（self._x / LeanGate._x）零改动，且 `is` 同一对象。
+    _not_applicable = staticmethod(_support._not_applicable)
+    _verify_key = staticmethod(_support._verify_key)
+    _cache_get = staticmethod(_support._cache_get)
+    _cache_put = staticmethod(_support._cache_put)
+    _record_ctx = _support._record_ctx
+    _note_self_proof_trace = _support._note_self_proof_trace
+    _record_to_memory = _support._record_to_memory
 
     def __init__(self, client, config, budget: Budget | None = None):
         self.client = client
@@ -127,27 +137,6 @@ class LeanGate:
     def strict(self) -> bool:
         return bool(getattr(self.config, "lean_gate_strict", False))
 
-    @staticmethod
-    def _not_applicable(ctx: TaskContext) -> tuple[bool, str]:
-        """按题 Lean 适用性豁免（2026-09-10 用户要求「所有题都要用 Lean，
-        除非非常简单的题」）。
-
-        答案不是数学对象的题（选项字母 / 判断值 / 概念文字）Lean 结构上无从
-        形式化核验，按**题**豁免而不是用全局开关一刀切。判定值由
-        ``orchestrator`` 在 1.1) 步骤落盘到 ``ctx.metadata["lean_applicable"]``
-        （:func:`agent.question_type.lean_applicable`）——本模块只读 metadata，
-        保持 ``tools/`` 单向依赖 ``agent/`` 的隔离原则。
-
-        缺省语义：metadata 无该键（旧结果 / 手搓 ctx / 单测 fixture）→
-        视为适用，既有行为完全不变。
-
-        返回 ``(是否豁免, 原因)``。
-        """
-        md = getattr(ctx, "metadata", None)
-        if isinstance(md, dict) and md.get("lean_applicable") is False:
-            return True, str(md.get("lean_skip_reason", "") or "not_applicable")
-        return False, ""
-
     @property
     def _unknown_stop(self) -> int:
         """连续 N 个 unknown 后止损（B，2026-09-07）：剩余候选不再逐个
@@ -165,58 +154,6 @@ class LeanGate:
                 logger.warning("LeanBridge 初始化失败，Lean 门禁整体降级: %s", e)
                 self._bridge = None
         return self._bridge
-
-    # ------------------------------------------------------------------
-    # 验证结果缓存（2026-09-17，Z3）
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _verify_key(problem: str, reasoning: str, answer: str, is_proof: bool):
-        """**语义等价**的验证去重键 = sha1(题目, 推理, 答案, 是否证明题)。
-
-        为什么安全：键里含 `reasoning` 的哈希 —— 只有三者**逐字相同**才算命中，
-        与 `bridge.verify/verify_answer` 的实际入参一一对应 ⇒ 复用报告**不改变任何
-        验证语义**。这正是它与 `lean_dedup_by_answer`（只按答案、默认关，自述"会改
-        语义"）的本质区别。
-
-        解决的浪费（确定性重复）：3.6 `apply` 已逐候选验一次，而 6.5
-        `gate_final_answer` 又用**逐字相同的三元组**再验一次（orchestrator 取
-        `best_reasoning` 时取的就是 `answer == final_response` 的那个候选）
-        ⇒ 同一份输入被验两遍，每遍 = 1 次 LLM 翻译 + 1 次 Lean 编译。
-        """
-        import hashlib as _hl
-        try:
-            _raw = "%s\x1f%s\x1f%s\x1f%d" % (
-                problem or "", reasoning or "", answer or "",
-                1 if is_proof else 0)
-            return _hl.sha1(_raw.encode("utf-8", "replace")).hexdigest()
-        except Exception:  # noqa: BLE001
-            return None
-
-    @staticmethod
-    def _cache_get(ctx, key):
-        """命中返回 report，未命中/不可用返回 None（缓存挂在 ctx，每题独立）。"""
-        if not key:
-            return None
-        try:
-            _c = getattr(ctx, "_lean_verify_cache", None)
-            if isinstance(_c, dict):
-                return _c.get(key)
-        except Exception:  # noqa: BLE001
-            pass
-        return None
-
-    @staticmethod
-    def _cache_put(ctx, key, report):
-        if not key or report is None:
-            return
-        try:
-            _c = getattr(ctx, "_lean_verify_cache", None)
-            if not isinstance(_c, dict):
-                _c = {}
-                ctx._lean_verify_cache = _c
-            _c[key] = report
-        except Exception:  # noqa: BLE001
-            pass
 
     # ------------------------------------------------------------------
     # 候选级并行预取（2026-09-13）
@@ -404,208 +341,12 @@ class LeanGate:
         # 决策 / kept / feedbacks / ctx 埋点**全部仍在主线程按原顺序执行** ——
         # 并发面收敛到最小，行为与串行版逐候选一致。
         _pre = self._prefetch_reports(ctx, candidates, bridge, is_proof, domain)
+        # 逐候选门禁（2026-10-08：循环体已原地拆入 _gate_candidate，语义逐字不变）
         for _idx, cand in enumerate(candidates):
-            # 逐候选时间护栏（2026-09-11，依据 审计_112题Lean阻断路径全量排查_0910.md）
-            # 问题：本循环此前**无时间检查**，而 72/81 题有 6 个候选，6 × 20–38s =
-            #   120–230s，可能把该题推过 1200s 硬墙 → 反过来饿死 6.5 最终闸门
-            #   （实测 14/81 = 17.3% 的题在 6.5 因 time_critical 跳过 Lean）。
-            # 口径：剩余 < 45s（≈ 一次编译 + 余量）即停止验剩余候选，按"未验"降级
-            #   保留（不淘汰，与 lenient 一致），记 degraded="time_budget" 便于统计。
-            # 2026-10-01：比赛期「剩余 <45s 即停止验证、未验证候选直接进池」已按研究期
-            # 标尺删除（审计 A 级第 4 条）。原逻辑为护 6.5 最终闸门而"按未验降级保留"，
-            # 结果是把**未经 Lean 把关的候选**放进池内。研究期求正确率上限，
-            # 宁可多花 Lean 编译时间，也不放行未验证候选。
-            # （单题硬墙仍由 `is_timed_out` / `max_time_per_question` 把控。）
-            entry = {
-                "id": cand.id,
-                "verdict": "unknown",
-                "lean_valid": False,
-                "degraded": None,
-                "error": None,
-            }
-            # 去重键：**归一化后**的答案（剥 `\boxed{}` 等外壳），仅非证明题使用。
-            _dedup_key = ""
-            if _dedup and not is_proof:
-                try:
-                    from agent.answer_oracle import AnswerOracle as _AO
-                    _dedup_key = (_AO.strip_wrappers(
-                        str(getattr(cand, "answer", "") or "")) or "").strip()
-                except Exception:  # noqa: BLE001
-                    _dedup_key = ""
-            # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
-            # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
-            # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
-            if _stop > 1 and _unknown_streak >= _stop and len(candidates) > _stop + 1:
-                entry["degraded"] = "verify_stop"
-                entry["reason"] = (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
-                                   "（验证器失效），止损跳过整题 verify")
-                if self.strict:
-                    feedbacks.append(
-                        f"[Lean 硬验证] 候选 {cand.id} 跳过验证（unknown 止损，"
-                        "strict 保守拒绝）")
-                    # strict 模式：不进 kept
-                else:
-                    kept.append(cand)
-                self._record_ctx(ctx, entry)
-                continue
-            # ★ 2026-09-17（Z5）：**非数学对象答案直接跳过验证**。
-            # 实测日志里 `答案 '</tool_call>'`、`答案 '步骤8：重新思考——正确的下界构造'`
-            # 都被送进 Lean（`verify_answer` 只挡空串与选项字母，中文步骤名/散文未挡），
-            # 每次 = 1 次 LLM 翻译 + 1 次 Lean 编译，纯浪费。
-            # 语义与"验证返回 unknown"一致（候选仍按 lenient 保留），只是不再付出调用。
-            if not is_proof:
-                try:
-                    from agent.formatter import _looks_like_non_answer as _nma
-                    if _nma(str(getattr(cand, "answer", "") or "")):
-                        entry["verdict"] = "unknown"
-                        entry["degraded"] = "non_math_answer"
-                        entry["reason"] = ("答案非数学对象（工具残留/步骤标签/散文/代码）"
-                                           "→ 跳过 Lean 验证（Z5 2026-09-17）")
-                        if not self.strict:
-                            kept.append(cand)
-                        self._record_ctx(ctx, entry)
-                        continue
-                except Exception:  # noqa: BLE001  判据不可用则放行原路径
-                    pass
-            try:
-                # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
-                # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
-                # 非证明题（解答/计算）走轻量 verify_answer（norm_num/ring
-                # 验证最终答案与关键计算，5-21s，避免整题形式化拖垮时间预算）。
-                # 2026-09-13：已并行预取的候选直接取结果（异常原样重抛 → 落到下方
-                # degraded 分支，与串行版逐字一致）；未预取（预算不足 / 已止损 /
-                # 并行关闭）的候选照旧当场串行验证。
-                if _pre is not None and _pre[_idx] is not None:
-                    report, _pre_exc = _pre[_idx]
-                    if _pre_exc is not None:
-                        raise _pre_exc
-                elif is_proof:
-                    report = bridge.verify(
-                        problem=ctx.problem or "",
-                        reasoning=cand.reasoning or "",
-                        domain=domain,
-                        timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                    )
-                elif _dedup and _dedup_key and _dedup_key in _ans_cache:
-                    # ★ 去重命中：复用同答案候选的验证结论（开关默认关，见上方说明）
-                    report = _ans_cache[_dedup_key]
-                    entry["cached_from_answer"] = True
-                else:
-                    # 2026-09-17（Z3）：串行路径也走语义等价缓存
-                    _z3k = self._verify_key(ctx.problem or "", cand.reasoning or "",
-                                            cand.answer or "", is_proof)
-                    _z3hit = self._cache_get(ctx, _z3k)
-                    if _z3hit is not None:
-                        report = _z3hit
-                        entry["cached_from_identity"] = True
-                    else:
-                        report = bridge.verify_answer(
-                            problem=ctx.problem or "",
-                            reasoning=cand.reasoning or "",
-                            answer=cand.answer or "",
-                            domain=domain,
-                            timeout=float(getattr(self.config, "lean_timeout", 60.0)),
-                        )
-                        self._cache_put(ctx, _z3k, report)
-                    if _dedup and _dedup_key:
-                        _ans_cache[_dedup_key] = report
-                # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
-                # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
-                used_names: list[str] = []
-                if report is not None:
-                    code = getattr(report, "lean_code", "") or ""
-                    if code:
-                        mods = re.findall(r"^\s*import\s+(Mathlib\.\S+)",
-                                          code, re.MULTILINE)
-                        thms = re.findall(
-                            r"^\s*(?:theorem|lemma|example)\s+(\w+)",
-                            code, re.MULTILINE)
-                        used_names = mods + thms
-                        # 2026-08-30 修 bug：add_used_theorems / note_compile_valid
-                        # 是 TaskContext 的静态方法，原代码误用 self.（LeanGate 无此方法）
-                        # 调用，每次都抛 AttributeError 被下方 except 吞掉 →
-                        # proof_valid 候选被当成"验证异常"降级放行，导致
-                        # used_theorems / compile_valid / 跨题定理记忆全部从未写入。
-                        BaseAgent.add_used_theorems(ctx, used_names)
-                # ★★ 2026-09-17 可观测性补强（用户问"Lean 有没有顺利检测出错误"时无据可查）：
-                #   此前 `entry` 只带 id/verdict/lean_valid/degraded/error —— **看不到
-                #   实际送编译的代码，也看不到两道守卫的判定依据**。
-                #   实测 003：7 个候选全 `answer_valid`，但 diag 里没有任何证据能解释
-                #   "它凭什么判对"，只能靠读源码推测两个守卫都失效了。
-                #   现把验证器的诊断属性带进 diag（lean_code 截断 2000 字符防膨胀）。
-                if report is not None:
-                    _lc = getattr(report, "lean_code", "") or ""
-                    if _lc:
-                        entry["lean_code"] = _lc[:2000]
-                    for _dk in ("verdict_reason", "cross_check",
-                                "sys_verify", "compiled"):
-                        try:
-                            _dv = getattr(report, _dk, None)
-                        except Exception:  # noqa: BLE001
-                            _dv = None
-                        if _dv is not None:
-                            entry[_dk] = _dv
-                    # ★★ 2026-10-07：自证类成因单独落一条 trace（供效果脚本独立观测）
-                    self._note_self_proof_trace(ctx, report)
-                if report is None:
-                    entry["degraded"] = "no_report"
-                    _unknown_streak += 1
-                    kept.append(cand)          # 无报告 → 降级放行
-                elif report.verdict in ("proof_valid", "answer_valid"):
-                    entry["verdict"] = report.verdict
-                    entry["lean_valid"] = True
-                    _unknown_streak = 0        # 验证器正常工作（出绿点），计数清零
-                    BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
-                    # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
-                    # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
-                    # 检索侧无法判断定理是否真的进了证明，只有这里能确认。
-                    # 注：仅证明题整题形式化（is_proof）有"定理采用"语义；
-                    # 非证明题的 example 答案验证无定理名，跳过避免污染统计/记忆。
-                    if is_proof:
-                        self._note_theorems_adopted(used_names)
-                        # 跨题定理记忆：验证通过的定理 → 按域持久化，供同域新题复用
-                        self._record_to_memory(ctx, domain, used_names)
-                    kept.append(cand)
-                elif report.verdict == "proof_invalid":
-                    entry["verdict"] = "proof_invalid"
-                    # 淘汰（hard gate）：不进 kept
-                    # v2.7：结构化注入 Finding 精确错误定位（location/kind/desc），
-                    # 而非只取 suggestion 或第一个 finding 的 desc，让 revise 拿到
-                    # "第 X 步/某位置：错误描述" 的定向修正依据。
-                    msg = "Lean 编译/逻辑错误"
-                    try:
-                        from agent.answer_oracle import AnswerOracle
-                        structured = AnswerOracle.findings_to_feedback(
-                            getattr(report, "findings", []) or [])
-                        if structured:
-                            msg = structured
-                        elif getattr(report, "suggestion", ""):
-                            msg = report.suggestion
-                    except Exception:  # noqa: BLE001
-                        if report.suggestion or report.findings:
-                            msg = report.suggestion or report.findings[0].desc
-                    feedbacks.append(
-                        f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：\n{msg}")
-                    _unknown_streak = 0   # 编译器明确判错 = 验证器正常，计数清零
-                else:  # unknown
-                    entry["verdict"] = "unknown"
-                    _unknown_streak += 1
-                    if self.strict:
-                        entry["degraded"] = "strict_reject"
-                        feedbacks.append(
-                            f"[Lean 硬验证] 候选 {cand.id} Lean 验证未知（strict 保守拒绝）")
-                        # strict 模式：不进 kept
-                    else:
-                        entry["degraded"] = "lenient_pass"
-                        kept.append(cand)
-            except Exception as e:  # noqa: BLE001
-                entry["error"] = str(e)[:200]
-                entry["degraded"] = "exception_lenient"
-                logger.warning("LeanGate: 候选 %s Lean 验证异常，降级放行: %s",
-                               cand.id, e)
-                kept.append(cand)
-
-            self._record_ctx(ctx, entry)
+            _unknown_streak = self._gate_candidate(
+                ctx, cand, _idx, _pre, bridge, is_proof, domain, _dedup,
+                _ans_cache, _stop, len(candidates), _unknown_streak,
+                kept, feedbacks)
 
         if feedbacks:
             self._record_ctx(ctx, {
@@ -616,6 +357,233 @@ class LeanGate:
         else:
             self._record_ctx(ctx, {"rejected": 0, "kept": len(kept)})
         return kept, feedbacks
+
+    def _gate_candidate(self, ctx: TaskContext, cand, _idx: int, _pre, bridge,
+                        is_proof: bool, domain: str, _dedup: bool,
+                        _ans_cache: dict, _stop: int, n_candidates: int,
+                        _unknown_streak: int, kept: list,
+                        feedbacks: list) -> int:
+        """单候选 Lean 门禁（原地拆自 apply 循环体；跳过分支 return 代 continue）。"""
+        # 逐候选时间护栏（2026-09-11，依据 审计_112题Lean阻断路径全量排查_0910.md）
+        # 问题：本循环此前**无时间检查**，而 72/81 题有 6 个候选，6 × 20–38s =
+        #   120–230s，可能把该题推过 1200s 硬墙 → 反过来饿死 6.5 最终闸门
+        #   （实测 14/81 = 17.3% 的题在 6.5 因 time_critical 跳过 Lean）。
+        # 口径：剩余 < 45s（≈ 一次编译 + 余量）即停止验剩余候选，按"未验"降级
+        #   保留（不淘汰，与 lenient 一致），记 degraded="time_budget" 便于统计。
+        # 2026-10-01：比赛期「剩余 <45s 即停止验证、未验证候选直接进池」已按研究期
+        # 标尺删除（审计 A 级第 4 条）。原逻辑为护 6.5 最终闸门而"按未验降级保留"，
+        # 结果是把**未经 Lean 把关的候选**放进池内。研究期求正确率上限，
+        # 宁可多花 Lean 编译时间，也不放行未验证候选。
+        # （单题硬墙仍由 `is_timed_out` / `max_time_per_question` 把控。）
+        entry = {
+            "id": cand.id,
+            "verdict": "unknown",
+            "lean_valid": False,
+            "degraded": None,
+            "error": None,
+        }
+        # 去重键：**归一化后**的答案（剥 `\boxed{}` 等外壳），仅非证明题使用。
+        _dedup_key = ""
+        if _dedup and not is_proof:
+            try:
+                from agent.answer_oracle import AnswerOracle as _AO
+                _dedup_key = (_AO.strip_wrappers(
+                    str(getattr(cand, "answer", "") or "")) or "").strip()
+            except Exception:  # noqa: BLE001
+                _dedup_key = ""
+        # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
+        # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
+        # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
+        if _stop > 1 and _unknown_streak >= _stop and n_candidates > _stop + 1:
+            entry["degraded"] = "verify_stop"
+            entry["reason"] = (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
+                               "（验证器失效），止损跳过整题 verify")
+            if self.strict:
+                feedbacks.append(
+                    f"[Lean 硬验证] 候选 {cand.id} 跳过验证（unknown 止损，"
+                    "strict 保守拒绝）")
+                # strict 模式：不进 kept
+            else:
+                kept.append(cand)
+            self._record_ctx(ctx, entry)
+            return _unknown_streak
+        # ★ 2026-09-17（Z5）：**非数学对象答案直接跳过验证**。
+        # 实测日志里 `答案 '</tool_call>'`、`答案 '步骤8：重新思考——正确的下界构造'`
+        # 都被送进 Lean（`verify_answer` 只挡空串与选项字母，中文步骤名/散文未挡），
+        # 每次 = 1 次 LLM 翻译 + 1 次 Lean 编译，纯浪费。
+        # 语义与"验证返回 unknown"一致（候选仍按 lenient 保留），只是不再付出调用。
+        if not is_proof:
+            try:
+                from agent.formatter import _looks_like_non_answer as _nma
+                if _nma(str(getattr(cand, "answer", "") or "")):
+                    entry["verdict"] = "unknown"
+                    entry["degraded"] = "non_math_answer"
+                    entry["reason"] = ("答案非数学对象（工具残留/步骤标签/散文/代码）"
+                                       "→ 跳过 Lean 验证（Z5 2026-09-17）")
+                    if not self.strict:
+                        kept.append(cand)
+                    self._record_ctx(ctx, entry)
+                    return _unknown_streak
+            except Exception:  # noqa: BLE001  判据不可用则放行原路径
+                pass
+        try:
+            report, used_names = self._compute_report(
+                ctx, cand, _idx, _pre, bridge, is_proof, domain, _dedup,
+                _dedup_key, _ans_cache, entry)
+            # ★★ 2026-09-17 可观测性补强（用户问"Lean 有没有顺利检测出错误"时无据可查）：
+            #   此前 `entry` 只带 id/verdict/lean_valid/degraded/error —— **看不到
+            #   实际送编译的代码，也看不到两道守卫的判定依据**。
+            #   实测 003：7 个候选全 `answer_valid`，但 diag 里没有任何证据能解释
+            #   "它凭什么判对"，只能靠读源码推测两个守卫都失效了。
+            #   现把验证器的诊断属性带进 diag（lean_code 截断 2000 字符防膨胀）。
+            if report is not None:
+                _lc = getattr(report, "lean_code", "") or ""
+                if _lc:
+                    entry["lean_code"] = _lc[:2000]
+                for _dk in ("verdict_reason", "cross_check",
+                            "sys_verify", "compiled"):
+                    try:
+                        _dv = getattr(report, _dk, None)
+                    except Exception:  # noqa: BLE001
+                        _dv = None
+                    if _dv is not None:
+                        entry[_dk] = _dv
+                # ★★ 2026-10-07：自证类成因单独落一条 trace（供效果脚本独立观测）
+                self._note_self_proof_trace(ctx, report)
+            _unknown_streak = self._apply_verdict(
+                ctx, cand, report, entry, used_names, domain, is_proof,
+                kept, feedbacks, _unknown_streak)
+        except Exception as e:  # noqa: BLE001
+            entry["error"] = str(e)[:200]
+            entry["degraded"] = "exception_lenient"
+            logger.warning("LeanGate: 候选 %s Lean 验证异常，降级放行: %s",
+                           cand.id, e)
+            kept.append(cand)
+        self._record_ctx(ctx, entry)
+        return _unknown_streak
+
+    def _compute_report(self, ctx: TaskContext, cand, _idx: int, _pre, bridge,
+                        is_proof: bool, domain: str, _dedup: bool,
+                        _dedup_key: str, _ans_cache: dict, entry: dict):
+        """算单候选 report（不捕异常，由调用方 try 兜底）；返回 (report, used_names)。"""
+        # 2026-09-01 用户要求「所有题目都要用到 Lean」两阶段流程：
+        # 阶段二答案审核 —— 证明题走整题形式化 verify（原逻辑），
+        # 非证明题（解答/计算）走轻量 verify_answer（norm_num/ring
+        # 验证最终答案与关键计算，5-21s，避免整题形式化拖垮时间预算）。
+        # 2026-09-13：已并行预取的候选直接取结果（异常原样重抛 → 落到下方
+        # degraded 分支，与串行版逐字一致）；未预取（预算不足 / 已止损 /
+        # 并行关闭）的候选照旧当场串行验证。
+        if _pre is not None and _pre[_idx] is not None:
+            report, _pre_exc = _pre[_idx]
+            if _pre_exc is not None:
+                raise _pre_exc
+        elif is_proof:
+            report = bridge.verify(
+                problem=ctx.problem or "",
+                reasoning=cand.reasoning or "",
+                domain=domain,
+                timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+            )
+        elif _dedup and _dedup_key and _dedup_key in _ans_cache:
+            # ★ 去重命中：复用同答案候选的验证结论（开关默认关，见上方说明）
+            report = _ans_cache[_dedup_key]
+            entry["cached_from_answer"] = True
+        else:
+            # 2026-09-17（Z3）：串行路径也走语义等价缓存
+            _z3k = self._verify_key(ctx.problem or "", cand.reasoning or "",
+                                    cand.answer or "", is_proof)
+            _z3hit = self._cache_get(ctx, _z3k)
+            if _z3hit is not None:
+                report = _z3hit
+                entry["cached_from_identity"] = True
+            else:
+                report = bridge.verify_answer(
+                    problem=ctx.problem or "",
+                    reasoning=cand.reasoning or "",
+                    answer=cand.answer or "",
+                    domain=domain,
+                    timeout=float(getattr(self.config, "lean_timeout", 60.0)),
+                )
+                self._cache_put(ctx, _z3k, report)
+            if _dedup and _dedup_key:
+                _ans_cache[_dedup_key] = report
+        # 记录本次验证实际用到的 Mathlib 模块与声明的定理名
+        # （#1/#2 证据链：AI 解答 → Lean 形式化验证用了哪些定理）
+        used_names: list[str] = []
+        if report is not None:
+            code = getattr(report, "lean_code", "") or ""
+            if code:
+                mods = re.findall(r"^\s*import\s+(Mathlib\.\S+)",
+                                  code, re.MULTILINE)
+                thms = re.findall(
+                    r"^\s*(?:theorem|lemma|example)\s+(\w+)",
+                    code, re.MULTILINE)
+                used_names = mods + thms
+                # 2026-08-30 修 bug：add_used_theorems / note_compile_valid
+                # 是 TaskContext 的静态方法，原代码误用 self.（LeanGate 无此方法）
+                # 调用，每次都抛 AttributeError 被下方 except 吞掉 →
+                # proof_valid 候选被当成"验证异常"降级放行，导致
+                # used_theorems / compile_valid / 跨题定理记忆全部从未写入。
+                BaseAgent.add_used_theorems(ctx, used_names)
+        return report, used_names
+
+    def _apply_verdict(self, ctx: TaskContext, cand, report, entry: dict,
+                       used_names: list, domain: str, is_proof: bool,
+                       kept: list, feedbacks: list,
+                       _unknown_streak: int) -> int:
+        """按 report.verdict 归置候选；返回更新后的 _unknown_streak。"""
+        if report is None:
+            entry["degraded"] = "no_report"
+            _unknown_streak += 1
+            kept.append(cand)          # 无报告 → 降级放行
+        elif report.verdict in ("proof_valid", "answer_valid"):
+            entry["verdict"] = report.verdict
+            entry["lean_valid"] = True
+            _unknown_streak = 0        # 验证器正常工作（出绿点），计数清零
+            BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
+            # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
+            # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
+            # 检索侧无法判断定理是否真的进了证明，只有这里能确认。
+            # 注：仅证明题整题形式化（is_proof）有"定理采用"语义；
+            # 非证明题的 example 答案验证无定理名，跳过避免污染统计/记忆。
+            if is_proof:
+                self._note_theorems_adopted(used_names)
+                # 跨题定理记忆：验证通过的定理 → 按域持久化，供同域新题复用
+                self._record_to_memory(ctx, domain, used_names)
+            kept.append(cand)
+        elif report.verdict == "proof_invalid":
+            entry["verdict"] = "proof_invalid"
+            # 淘汰（hard gate）：不进 kept
+            # v2.7：结构化注入 Finding 精确错误定位（location/kind/desc），
+            # 而非只取 suggestion 或第一个 finding 的 desc，让 revise 拿到
+            # "第 X 步/某位置：错误描述" 的定向修正依据。
+            msg = "Lean 编译/逻辑错误"
+            try:
+                from agent.answer_oracle import AnswerOracle
+                structured = AnswerOracle.findings_to_feedback(
+                    getattr(report, "findings", []) or [])
+                if structured:
+                    msg = structured
+                elif getattr(report, "suggestion", ""):
+                    msg = report.suggestion
+            except Exception:  # noqa: BLE001
+                if report.suggestion or report.findings:
+                    msg = report.suggestion or report.findings[0].desc
+            feedbacks.append(
+                f"[Lean 硬验证] 候选 {cand.id} 未通过 Lean 编译验证：\n{msg}")
+            _unknown_streak = 0   # 编译器明确判错 = 验证器正常，计数清零
+        else:  # unknown
+            entry["verdict"] = "unknown"
+            _unknown_streak += 1
+            if self.strict:
+                entry["degraded"] = "strict_reject"
+                feedbacks.append(
+                    f"[Lean 硬验证] 候选 {cand.id} Lean 验证未知（strict 保守拒绝）")
+                # strict 模式：不进 kept
+            else:
+                entry["degraded"] = "lenient_pass"
+                kept.append(cand)
+        return _unknown_streak
 
     # ------------------------------------------------------------------
     # 最终答案闸门（2026-09-02 老师需求：Lean 拦错误逻辑、提高优先级）
@@ -742,6 +710,10 @@ class LeanGate:
             entry["feedback"] = msg[:400]
             self._record_ctx(ctx, entry)
             return False
+        return self._final_gate_unknown(ctx, entry)
+
+    def _final_gate_unknown(self, ctx: TaskContext, entry: dict) -> bool:
+        """unknown 的最终裁决（严格拒绝 / 开关放行）；返回 True=放行。"""
         # 2026-09-03 老师指令："当答案无法被验证或标记为未知时，必须默认拒绝
         # 而非放行"。unknown（翻译失败/验证无法判定/自证嫌疑）→ 一律拒绝，
         # 让 6.5 步换候选/重生成（校验不了就不许裸奔输出）。
@@ -786,49 +758,6 @@ class LeanGate:
     # ------------------------------------------------------------------
     # 诊断记录
     # ------------------------------------------------------------------
-    def _record_ctx(self, ctx: TaskContext, data: dict) -> None:
-        try:
-            ctx.lean_gate.append(data)
-        except Exception:  # noqa: BLE001
-            ctx.lean_gate = [data]
-
-    def _note_self_proof_trace(self, ctx: TaskContext, report) -> None:
-        """把「自证 → 形式化不充分」判定写一条 **trace**（供外部效果指标单独观测）。
-
-        ★★ 2026-10-07（本次修复 B 项）：`lean_bridge.verify_answer` 的三类自证
-        成因（数字/符号未交叉 / 闭式自证 / **恒等式自证**）此前**复用同一条失败
-        分支、产出同一句 desc** ⇒ 外部**无法区分**「真的检测到恒等式」与「普通
-        cross_check 失败」。效果捕捉脚本 `tools/effect_capture.py` 的 #10 判据
-        （`trace` 中『恒等式』出现次数）因此**恒为 0、无法判定该机制是否生效**。
-        现在 `verify_answer` 已为各成因设独立 `verdict_reason`（随 diag 落盘）；
-        本函数再把**自证类**成因单独落一条 trace，使「是否拦截了恒等式自证」
-        可被 trace / 效果脚本**独立计数**（`step == "lean_self_proof"`）。
-        """
-        try:
-            reason = getattr(report, "verdict_reason", "") or ""
-            if reason not in ("identity_self_proof", "ground_self_proof"):
-                return
-            # 同一题内同一成因只记一次（报告可能被多个候选复用）
-            seen = getattr(ctx, "_self_proof_traced", None)
-            if seen is None:
-                seen = set()
-                setattr(ctx, "_self_proof_traced", seen)
-            if reason in seen:
-                return
-            seen.add(reason)
-            label = ("恒等式自证（X = X，等号两边文本等价）"
-                     if reason == "identity_self_proof"
-                     else "闭式自证（含参题面 + ground 验证代码）")
-            ctx.trace.append({
-                "agent": self.name, "step": "lean_self_proof",
-                "reason": reason,
-                "content": ("Lean 验证拦截自证（%s）：%s；代码已编译通过 ⇒ "
-                            "属**形式化不充分**（无法核验，非答案错）"
-                            % (reason, label)),
-            })
-        except Exception:  # noqa: BLE001  埋点失败不影响主链
-            pass
-
     def _note_theorems_adopted(self, names: list) -> None:
         """#44 埋点：回记「最终被采用」的定理（Lean 编译通过＝真采用）。
 
@@ -853,19 +782,3 @@ class LeanGate:
                     "[lean_gate] LeanSearch 埋点不可用（import/调用失败）：%s "
                     "—— 后果是引理检索统计恒为 0（历史 202 题 search_calls=0 即此因）",
                     exc)
-
-    def _record_to_memory(self, ctx: TaskContext, domain: str,
-                          names: list) -> None:
-        """跨题定理记忆：验证通过的定理按域持久化（供同域新题复用）。"""
-        try:
-            if not names:
-                return
-            if not getattr(self.config, "theorem_memory_enable", True):
-                return
-            from tools.lean_local.theorem_memory import TheoremMemory
-            mem = TheoremMemory(
-                str(getattr(self.config, "theorem_memory_path", "")))
-            for n in names:
-                mem.record_hit(domain, n)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[lean_gate] 定理记忆写入失败（不阻断）: %s", exc)
