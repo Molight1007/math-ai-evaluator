@@ -125,7 +125,10 @@ def test_z6_dedup_excludes_force():
 
 # ============================ Z2：早退埋点 ============================
 def test_value_attack_early_returns_are_recorded():
-    src = _src("agent/orchestrator.py")
+    # 2026-10-08 批10：`_value_attack_blueprint`（含全部早退埋点）已**逐字搬**到
+    # agent/orchestrator__numeric.py，Orchestrator 内改为一行委托。本守卫改为
+    # 读该模块 —— 断言字符串与守卫意图均不变（只是被查代码换了文件，非放宽判据）。
+    src = _src("agent/orchestrator__numeric.py")
     i = src.find("def _value_attack_blueprint")
     assert i > 0
     seg = src[i:i + 9000]
