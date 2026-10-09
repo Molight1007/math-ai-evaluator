@@ -323,6 +323,12 @@ class AuditGate(BaseAgent):
                         "且确定性判别重写已关 ⇒ 本闸门对该题型结构性无输出")
             self._record_ctx(ctx, entry)
 
+        return self._finalize_candidate_audit(ctx, candidates, n_fail, rejected, _empty)
+
+    def _finalize_candidate_audit(self, ctx, candidates, n_fail, rejected, _empty):
+        """聚合候选审核结果：回退保留 / 淘汰留痕 / 空答案剔除（2026-10-08 从 audit_candidates 逐字搬出）。"""
+        kept = list(candidates)
+        feedbacks: list[str] = []
         # 全部被否 → 回退保留（宁 unknown 不误杀，绝不整批清空）
         if rejected and n_fail < len(candidates):
             kept = [c for c in candidates
