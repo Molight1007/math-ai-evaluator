@@ -301,6 +301,12 @@ class LLMClient:
         if tools is not None:
             payload["tools"] = tools
 
+        return self._post_with_retries(
+            url, headers, payload, stream, max_tokens, retry_on_timeout)
+
+    def _post_with_retries(self, url, headers, payload, stream, max_tokens,
+                           retry_on_timeout):
+        """执行 POST 与重试/退避/异常分类（2026-10-08 从 chat 逐字搬出）。"""
         last_error = None
         _tried = 0
         for attempt in range(self.max_retries + 1):
