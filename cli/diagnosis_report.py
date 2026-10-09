@@ -95,17 +95,16 @@ def clip(s, n=200):
     return s if len(s) <= n else s[:n] + " …"
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("result_jsonl")
-    ap.add_argument("--md", default="")
-    ap.add_argument("--top", type=int, default=12)
-    args = ap.parse_args()
-
-    rows = [json.loads(l) for l in open(args.result_jsonl, encoding="utf-8") if l.strip()]
-    stem = os.path.splitext(os.path.basename(args.result_jsonl))[0]
-    md_path = args.md or os.path.join(os.path.dirname(args.result_jsonl) or ".", f"{stem}_诊断报告.md")
-
+def _reset_accumulators(rows):
+    """逐题统计量 + 计数器初始化（2026-10-08 从 main 逐字搬出）。"""
+    global scored, n_ok, acc, wrong, el, dom, ec, pre_fail, gaps_n, replan_n, degraded_n
+    global sub_fail_q, sub_allout_q, revise_q, tool_used, sub_steps, audit_v
+    global audit_q_with_reject, audit_q_with_accept, lean_final_v, lean_cross, lean_deg
+    global value_attack_n, va_wrong, va_wrong_revise, budget_q, tier_c, trunc_n, stage_sum
+    global gap_kind_c, gap_reasoning_n, gap_total_n, gap_q_with_reasoning, dr_q, dr_nodes
+    global dr_reject_nodes, dr_replan, dr_degraded, dr_ratio_sum, dr_issue_c, dr_issue_q
+    global dr_confidence, lg_q_run, lg_q_pass, lg_q_fail, lg_nodes, lg_fails, lg_reason
+    global lg_nonreason, lg_kind_c
     scored = [r for r in rows if r.get("correct") is not None]
     n_ok = sum(1 for r in scored if r["correct"])
     acc = n_ok / len(scored) * 100 if scored else 0.0
@@ -149,6 +148,17 @@ def main():
     lg_nodes = lg_fails = lg_reason = lg_nonreason = 0
     lg_kind_c = Counter()
 
+
+def _aggregate(rows):
+    """逐题聚合循环 + 派生量（2026-10-08 从 main 逐字搬出）。"""
+    global pre_fail, gaps_n, replan_n, degraded_n, sub_fail_q, sub_allout_q, revise_q
+    global tool_used, audit_q_with_reject, audit_q_with_accept
+    global value_attack_n, va_wrong, va_wrong_revise
+    global budget_q, trunc_n, gap_reasoning_n, gap_total_n
+    global gap_q_with_reasoning, dr_q, dr_nodes, dr_reject_nodes, dr_replan, dr_degraded
+    global dr_ratio_sum, lg_q_run, lg_q_pass
+    global lg_q_fail, lg_nodes, lg_fails, lg_reason, lg_nonreason, stage_total
+    global audit_total, lean_final_total, avg_sub
     for r in rows:
         d = r.get("diag") or {}
         # ② 理解 · 形式化
@@ -278,8 +288,9 @@ def main():
     lean_final_total = sum(lean_final_v.values()) or 1
     avg_sub = statistics.mean(sub_steps) if sub_steps else 0
 
-    L = []
-    A = L.append
+
+def _render_overview_and_attribution(A, args, stem, rows):
+    """〇 总览 + 一 环节归因表 + 1.1' 缺口性质（2026-10-08 从 main 逐字搬出）。"""
     A(f"# 智能体评测诊断报告 — {stem}")
     A("")
     A(f"> 数据文件：`{os.path.abspath(args.result_jsonl)}`　｜　已完成 **{len(rows)}** 题")
@@ -346,6 +357,10 @@ def main():
           "若 `formalization` 占比高，优化方向应是 `lean_translator`（译题），"
           "去调解题提示词是南辕北辙。")
         A("")
+
+
+def _render_blueprint_and_lean(A):
+    """1.1'' 蓝图质量 + 1.1''' Lean 逻辑缺口（2026-10-08 从 main 逐字搬出）。"""
     # ★ 2026-09-30（截图 #6 收口）：**蓝图设计质量** —— 直接回答用户原话
     #   「蓝图的设计有没有问题」。数据源 = DagReviewer（LEAP 5.3）逐节点
     #   verdict + issues，标签经 normalize_issue_tag 归一（否则同义异写会把
@@ -436,6 +451,9 @@ def main():
           "**那才是子目标分解真正该解决的问题**。")
         A("")
 
+
+def _render_verify_and_rest(A, args, rows):
+    """1.1 验证有效性 + 1.2 联动 + 二 错误 + 三 耗时 + 附录（2026-10-08 从 main 逐字搬出）。"""
     A("### 1.1 验证环节有效性：Lean 判定 × 实际正确率")
     A("")
     A("| Lean final_gate 判定 | 题数 | 其中正确 | 该组正确率 |")
@@ -542,6 +560,27 @@ def main():
     for k, v in tier_c.most_common():
         A(f"| {k} | {v} |")
     A("")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("result_jsonl")
+    ap.add_argument("--md", default="")
+    ap.add_argument("--top", type=int, default=12)
+    args = ap.parse_args()
+
+    rows = [json.loads(l) for l in open(args.result_jsonl, encoding="utf-8") if l.strip()]
+    stem = os.path.splitext(os.path.basename(args.result_jsonl))[0]
+    md_path = args.md or os.path.join(os.path.dirname(args.result_jsonl) or ".", f"{stem}_诊断报告.md")
+
+    _reset_accumulators(rows)
+    _aggregate(rows)
+
+    L = []
+    A = L.append
+    _render_overview_and_attribution(A, args, stem, rows)
+    _render_blueprint_and_lean(A)
+    _render_verify_and_rest(A, args, rows)
 
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
