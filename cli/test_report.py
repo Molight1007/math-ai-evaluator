@@ -457,18 +457,7 @@ _STAGE_DASHBOARD = [
 ]
 
 
-def _stage_dashboard_rows(recs):
-    """汇总每个阶段的**四维**：耗时 / 结果 / 是否达标 / 工具使用。
-
-    数据源（**全部复用既有 diag 字段，不新造判据**）：
-      · 耗时     ← `diag.stage_timers[stage]`（同第四节的源）
-      · 结果     ← 各阶段既有的结果埋点（下见每行 `raw`）
-      · 是否达标 ← 由 `raw` 按该阶段的**既有**判据推出（判据写在 `_STAGE_DASHBOARD`）
-      · 工具使用 ← `diag.tool_gateway.by_tool` 中与该阶段相关的工具调用数
-
-    返回 `[(阶段键, 显示名, 耗时秒, 结果摘要, 达标判定, 工具摘要)]`。
-    """
-    n = len(recs) or 1
+def _dashboard_preagg(recs):
     # 预聚合：阶段耗时
     t_agg: dict = collections.defaultdict(list)
     # 预聚合：工具门面按阶段的调用数（`step` 里含阶段键的才算）
@@ -482,6 +471,22 @@ def _stage_dashboard_rows(recs):
         for tk, tv in (_as_dict(g.get("by_tool")) or {}).items():
             # 门面的 step 一般写成目标阶段名；取不到就归到"未标注"
             tool_by_stage["*"][str(tk)] += int(_num_or_zero(tv))
+    return t_agg, tool_by_stage
+
+
+def _stage_dashboard_rows(recs):
+    """汇总每个阶段的**四维**：耗时 / 结果 / 是否达标 / 工具使用。
+
+    数据源（**全部复用既有 diag 字段，不新造判据**）：
+      · 耗时     ← `diag.stage_timers[stage]`（同第四节的源）
+      · 结果     ← 各阶段既有的结果埋点（下见每行 `raw`）
+      · 是否达标 ← 由 `raw` 按该阶段的**既有**判据推出（判据写在 `_STAGE_DASHBOARD`）
+      · 工具使用 ← `diag.tool_gateway.by_tool` 中与该阶段相关的工具调用数
+
+    返回 `[(阶段键, 显示名, 耗时秒, 结果摘要, 达标判定, 工具摘要)]`。
+    """
+    n = len(recs) or 1
+    t_agg, tool_by_stage = _dashboard_preagg(recs)
 
     # 各阶段的"结果"取值（尽量取既有的、信息量最大的字段）
     def _raw_for(stage, r):
