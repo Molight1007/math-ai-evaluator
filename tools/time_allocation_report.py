@@ -45,6 +45,44 @@ VERIFY_STAGES = ("3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv",
                  "6.5_audit_gate")
 
 
+def _render_lean_budget(w, rows, n) -> int:
+    """D 段：Lean 触点是否被时间饿死（2026-10-08 从 main 逐字搬出）；返回 tc。"""
+    # ---------- D Lean 触点预算 ----------
+    w("## 三、Lean 触点是否被时间饿死")
+    w()
+    tc = 0
+    cand_level = 0
+    for r in rows:
+        g = [e for e in ((r.get("diag") or {}).get("lean_gate") or []) if isinstance(e, dict)]
+        if any("id" in e for e in g):
+            cand_level += 1
+        fg = [e for e in g if e.get("step") == "final_gate"]
+        if fg and fg[-1].get("degraded") == "time_critical":
+            tc += 1
+    w(f"- 3.6 候选级 Lean 真跑过的题：**{cand_level}**")
+    w(f"- 6.5 最终闸门因 **剩余<2s 被跳过** 的题：**{tc}**（{tc/n*100:.1f}%）")
+    w()
+    w("| 触点 | 中位剩余预算 | <2s(被跳过) | <20s | >120s |")
+    w("|---|---|---|---|---|")
+    for stage, label in [("3.6_audit_filter", "3.6 候选级"),
+                         ("6.5_audit_gate", "6.5 最终闸门")]:
+        rems = []
+        for r in rows:
+            st = (r.get("diag") or {}).get("stage_timers") or {}
+            if not isinstance(st, dict) or stage not in st:
+                continue
+            ks = list(st.keys())
+            try:
+                rems.append(WALL - sum(float(st[k]) for k in ks[:ks.index(stage)]))
+            except (TypeError, ValueError):
+                pass
+        if rems:
+            w(f"| {label} | {_pct(rems,0.5):.0f}s | {sum(1 for x in rems if x<2)} | "
+              f"{sum(1 for x in rems if x<20)} | {sum(1 for x in rems if x>120)} |")
+    w()
+    return tc
+
+
 def main():
     # 2026-09-29：原先硬编码 `D:\挑战杯`（工作区已迁走）⇒ 改为由本文件位置
     # 反推仓库根，保证任何机器/盘符下都能跑。
@@ -129,39 +167,7 @@ def main():
           f"**{'慢题更差，说明时间被烧在了死路上' if sa < fa else '慢题不差，时间投入有效'}**")
     w()
 
-    # ---------- D Lean 触点预算 ----------
-    w("## 三、Lean 触点是否被时间饿死")
-    w()
-    tc = 0
-    cand_level = 0
-    for r in rows:
-        g = [e for e in ((r.get("diag") or {}).get("lean_gate") or []) if isinstance(e, dict)]
-        if any("id" in e for e in g):
-            cand_level += 1
-        fg = [e for e in g if e.get("step") == "final_gate"]
-        if fg and fg[-1].get("degraded") == "time_critical":
-            tc += 1
-    w(f"- 3.6 候选级 Lean 真跑过的题：**{cand_level}**")
-    w(f"- 6.5 最终闸门因 **剩余<2s 被跳过** 的题：**{tc}**（{tc/n*100:.1f}%）")
-    w()
-    w("| 触点 | 中位剩余预算 | <2s(被跳过) | <20s | >120s |")
-    w("|---|---|---|---|---|")
-    for stage, label in [("3.6_audit_filter", "3.6 候选级"),
-                         ("6.5_audit_gate", "6.5 最终闸门")]:
-        rems = []
-        for r in rows:
-            st = (r.get("diag") or {}).get("stage_timers") or {}
-            if not isinstance(st, dict) or stage not in st:
-                continue
-            ks = list(st.keys())
-            try:
-                rems.append(WALL - sum(float(st[k]) for k in ks[:ks.index(stage)]))
-            except (TypeError, ValueError):
-                pass
-        if rems:
-            w(f"| {label} | {_pct(rems,0.5):.0f}s | {sum(1 for x in rems if x<2)} | "
-              f"{sum(1 for x in rems if x<20)} | {sum(1 for x in rems if x>120)} |")
-    w()
+    tc = _render_lean_budget(w, rows, n)
 
     # ---------- E 候选数 / 返工 / 降级 ----------
     w("## 四、预算消耗的可疑来源")
