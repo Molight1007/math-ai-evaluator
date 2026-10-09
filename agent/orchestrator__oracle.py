@@ -188,10 +188,21 @@ def _falsify_rejects(self, ctx: TaskContext, answer: str) -> bool:
         """
     try:
         if not getattr(self.config, "enable_answer_falsifier", True):
+            # ★ 2026-10-09 P0 观测补齐：**前置拦截也是"证伪未命中"**。
+            #   原为裸 `return False`，一条痕都不留 ⇒ "被前置条件挡住"与
+            #   "调了没找到"不可区分（正是本次 P0 要消灭的观测缺口）。
+            #   本出口与下列各出口互斥 ⇒ 有且仅有一条 falsify_miss 记录。
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：证伪器已关闭"
+                        "（enable_answer_falsifier=False）")
             return False
         if not str(answer or "").strip():
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：答案为空白（无可检验文本）")
             return False
         if ctx.is_time_critical():
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：时间不足（is_time_critical）")
             return False
         from .answer_falsifier import AnswerFalsifier
         f = AnswerFalsifier(self.client, self.config)
@@ -207,6 +218,10 @@ def _falsify_rejects(self, ctx: TaskContext, answer: str) -> bool:
             #   ⇒ **一条失败原因都不留痕**，无法区分
             #   "没调用 / 调了没找到 / 被前置条件挡住"。
             #   现补一条 attempt 记录（含 reason），供后续按原因归因。
+            # ★ 2026-10-09 P0 观测补齐：此 `falsify_miss` 记录此前**未被
+            #   diag 导出**（`diag_export.falsify_events` 只过滤 `step=="falsify"`
+            #   命中键）⇒ 恒为空。已在 diag_export 新增 `falsify_miss_events`
+            #   专门导出本记录；命中键另设显式命名 `falsify_hit_events`。
             self.record(ctx, "falsify_miss",
                         "证伪未命中（放行）：%s" % (res.reason or "未给出原因"))
             return False
@@ -224,6 +239,12 @@ def _falsify_rejects(self, ctx: TaskContext, answer: str) -> bool:
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning("[orchestrator] 证伪器异常（放行）: %s", str(exc)[:120])
+        # ★ 2026-10-09 P0 观测补齐：导入失败 / 未预期异常同样要留痕 ——
+        #   否则整段证伪"静默消失"（本项目反复吃的坑）。此出口为异常兜底，
+        #   与上面各 return 出口互斥 ⇒ 有且仅有一条 falsify_miss 记录。
+        self.record(ctx, "falsify_miss",
+                    "证伪未命中（放行）：证伪器异常：%s: %s"
+                    % (type(exc).__name__, str(exc)[:120]))
         return False
 
 

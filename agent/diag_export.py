@@ -230,13 +230,34 @@ def _diag_blueprint_review(ctx, config) -> dict:
                             for t in (getattr(ctx, "trace", None) or [])
                             if isinstance(t, dict)
                             and t.get("step") == "p1_check"],
-        # ★ 2026-09-23 新增：候选证伪器的命中记录（answer_falsifier）。
+        # ★ 2026-09-23 新增：候选证伪器的**命中**记录（answer_falsifier）。
         #   必须导出 —— 否则"证伪器没生效"与"埋点缺失"无法区分
         #   （教训见 skill mathpilot-deepseek-error-audit §10.1）。
+        #   ⚠ `falsify_events` = **命中**键（`step == "falsify"`，过滤条件与截断
+        #   长度 220 **保持不变**）；**未命中**另有 `falsify_miss_events`（见下，
+        #   `step == "falsify_miss"`）。
+        #   2026-10-09 P0：此前只导出命中键 ⇒ `falsify_miss` 一条不落 ⇒
+        #   "没调用 / 调了没命中 / 被前置条件挡住"三者不可区分（观测缺口）。
         "falsify_events": [str(t.get("content", ""))[:220]
                            for t in (getattr(ctx, "trace", None) or [])
                            if isinstance(t, dict)
                            and t.get("step") == "falsify"],
+        # ★ 2026-10-09 P0 新增：`falsify_events` 的**显式命名**命中键。
+        #   与 `falsify_events` **同源同长**（过滤条件与 220 截断逐字一致），
+        #   仅提供语义化键名供下游按"命中/未命中"对称消费，口径零漂移。
+        "falsify_hit_events": [str(t.get("content", ""))[:220]
+                               for t in (getattr(ctx, "trace", None) or [])
+                               if isinstance(t, dict)
+                               and t.get("step") == "falsify"],
+        # ★ 2026-10-09 P0 新增：证伪器**未命中**记录（新键）。
+        #   证伪器每个失败出口都经 `orchestrator__oracle._falsify_rejects` 的
+        #   `falsify_miss` 埋点留痕（含具体 reason：未取得证书 / 无可机检等式 /
+        #   答案过长 / 时间不足 / 已达上限 / 异常 / 被前置条件挡住）。
+        #   截断长度与 `falsify_events` 一致（220）。
+        "falsify_miss_events": [str(t.get("content", ""))[:220]
+                                for t in (getattr(ctx, "trace", None) or [])
+                                if isinstance(t, dict)
+                                and t.get("step") == "falsify_miss"],
         # 被客观证伪的候选答案原文（供审计"证伪器到底剔除了什么"）
         "falsified_answers": [
             str(x.get("answer"))[:160] for x in
