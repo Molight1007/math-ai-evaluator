@@ -536,6 +536,15 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
              "不是「哪个代码机制失效」。")
     L.append("")
 
+    _render_disproven(L)
+    _render_overview(L, agg)
+    _render_plan(L, agg, status, agg["n"])
+    _render_rounds(L, rounds)
+    _render_details(L, agg)
+    return "\n".join(L)
+
+
+def _render_disproven(L: List[str]) -> None:
     # ---------- 〇、已否证结论（防旧结论自动复活）
     L.append("## 〇、★ 已否证结论（**不得再据此改动**）")
     L.append("")
@@ -553,6 +562,8 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
         L.append("_（暂无）_")
     L.append("")
 
+
+def _render_overview(L: List[str], agg: Dict[str, Any]) -> None:
     # ---------- 一、错题归因总览
     n = agg["n"]
     L.append(f"## 一、错题归因总览（DeepSeek 逐题，n={n}）")
@@ -598,6 +609,8 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
         L.append("```")
         L.append("")
 
+
+def _render_plan(L: List[str], agg: Dict[str, Any], status: Dict[str, Any], n: int) -> None:
     # ---------- 二、优化计划候选（两层）
     st_alias = {
         "pending": "⬜ 待办",
@@ -643,6 +656,8 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
         )
     L.append("")
 
+
+def _render_rounds(L: List[str], rounds: List[Dict[str, Any]]) -> None:
     # ---------- 三、云端轮次概览
     L.append("## 三、云端轮次概览（环节 / 工具效果）")
     L.append("")
@@ -688,6 +703,8 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
                 L.append("选答分支分布：" + "；".join(f"`{k}` {v}" for k, v in sorted(r["branches"].items(), key=lambda x: -x[1])))
             L.append("")
 
+
+def _render_details(L: List[str], agg: Dict[str, Any]) -> None:
     # ---------- 四、逐题明细
     L.append("## 四、逐题明细")
     L.append("")
@@ -700,7 +717,8 @@ def render(agg: Dict[str, Any], rounds: List[Dict[str, Any]], status: Dict[str, 
             f"{r['data_quality']} | {md_cell(r['root_cause'],110)} |"
         )
     L.append("")
-    return "\n".join(L)
+
+
 
 
 # ---------------------------------------------------------------- main
