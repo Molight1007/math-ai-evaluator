@@ -515,6 +515,9 @@ def apply_env_to_config(cfg) -> None:
                     # 与 get_bool 同口径：0/false/no/off/""（忽略大小写）= 关。
                     val: Any = str(raw).strip().lower() not in _OFF
                 elif kind == "int":
+                    # ★ 落在 config 上的值必须是 **int**（`getattr(config, 字段)`
+                    #   的消费点按整数用：池上限/候选数下限等；且 `snapshot()` 对
+                    #   kind=="int" 也返回 int）。失败（非数字）→ 跳过，保留 config 现值。
                     val = int(float(str(raw).strip()))
                 elif kind == "num":
                     val = float(str(raw).strip())
@@ -605,6 +608,14 @@ def snapshot() -> Dict[str, Dict[str, Any]]:
             eff: Any = get_bool(field)
         elif kind == "num":
             eff = get_num(field)
+        elif kind == "int":
+            # ★ 2026-10-09 修（同源另一处类型错误）：`int` 型开关此前落进 `else`
+            #   走 `get_str` ⇒ `switch_snapshot.value` 是**字符串** `"3"` 而非整数 `3`。
+            #   危害：`switch_snapshot` 是运维/复盘判断"开关当时生效成什么"的唯一权威
+            #   读数，类型错了会让 `value == 3` 恒为假、或被当字符串拼进报告。
+            #   此处显式取数值并**保持 int 类型**（`get_num` 走 float 分支再 `int()`，
+            #   不会把 `bool` 混进来 —— bool 虽为 int 子类，但不经此路径）。
+            eff = int(get_num(field))
         else:
             eff = get_str(field)
         out[field] = {

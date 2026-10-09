@@ -25,7 +25,10 @@
 本文件把这条不变式**逐名**固化为断言：
   · 每个「注册名 ∩ AgentConfig 字段」：设一个**与默认值不同**的 env ⇒
     `getattr(AgentConfig(), 字段) == 注册表生效值`（且 ≠ 默认值，证明确实生效）；
-  · env 不设时 ⇒ 字段值 == 该字段的声明默认值（不破坏「config > 默认值」这半语义）。
+  · env 不设时 ⇒ 字段值 == 该字段的声明默认值（不破坏「config > 默认值」这半语义）；
+  · `kind == "int"` 的每一个注册项（**按注册表动态生成**）⇒
+    `snapshot()[字段]["value"]` 与经 env 桥后的 `getattr(AgentConfig(), 字段)`
+    都必须是 `int` 且**非 `bool`**（`bool` 是 `int` 子类，需显式排掉）。
 
 判别力自证（必做）
 ==================
@@ -50,6 +53,7 @@ from contracts.switch_registry import (  # noqa: E402
     get_bool,
     get_num,
     get_str,
+    snapshot,
 )
 from user_agent__config import AgentConfig  # noqa: E402
 
@@ -58,6 +62,10 @@ from user_agent__config import AgentConfig  # noqa: E402
 # ---------------------------------------------------------------------------
 _FIELDS = tuple(sorted(f for f in SWITCHES if f in AgentConfig.__dataclass_fields__))
 _ALL_ENV_KEYS = tuple(sorted({m[0] for m in SWITCHES.values()}))
+
+# kind == "int" 的注册项（**按注册表动态生成**，不写死字面名 ⇒ 新增 int 类开关
+# 自动被下述断言覆盖）。当前为 diversity_resample_count / revise_min_candidates。
+_INT_FIELDS = tuple(sorted(f for f in SWITCHES if SWITCHES[f][1] == "int"))
 
 assert _FIELDS, "未抽到任何「注册名 ∩ AgentConfig 字段」（抽取逻辑已失效）"
 
@@ -152,6 +160,51 @@ def test_anchors_present():
     missing = [f for f in _ANCHORS if f not in _FIELDS]
     assert not missing, (
         "锚点开关不在靶点集（疑似改名/删除，守卫会真空通过）：%r" % missing)
+
+
+# ===========================================================================
+# 4. kind == "int" 的类型正确性
+#    背景（2026-10-09 同源另一处）：`snapshot()` 此前只对 bool/num/str 分支取值，
+#    `int` 落进 `else` 走 `get_str` ⇒ `switch_snapshot.value` 是字符串 `"3"` 而非
+#    整数 `3`（`value == 3` 恒为假 / 被当字符串拼进报告）。同时要求经 env 桥后
+#    `getattr(AgentConfig(), 字段)` 也是 int（消费点按整数用）。
+#    ⚠ bool 是 int 子类，故断言必须显式排掉 bool。
+# ===========================================================================
+def test_int_kind_registry_nonempty():
+    """防止「注册表已无 int 型条目 ⇒ 下列断言真空通过」。"""
+    assert _INT_FIELDS, (
+        "注册表 SWITCHES 中已无 kind=='int' 的条目 ⇒ int 型断言会真空通过；"
+        "若确已全部移除，请连同本组断言一并删除")
+
+
+@pytest.mark.parametrize("field", _INT_FIELDS)
+def test_int_kind_snapshot_value_is_int(field, _clean_env, monkeypatch):
+    """`snapshot()[字段]['value']` 必须是 int（且非 bool）—— env 设与不设都如此。"""
+    env_key, _kind, default, _doc = SWITCHES[field]
+    for raw, expect in ((None, int(default)), ("7", 7)):
+        if raw is None:
+            monkeypatch.delenv(env_key, raising=False)
+        else:
+            monkeypatch.setenv(env_key, raw)
+        v = snapshot()[field]["value"]
+        assert isinstance(v, int) and not isinstance(v, bool), (
+            f"`{field}`(kind=int) 的 switch_snapshot.value = {v!r} "
+            f"（type={type(v).__name__}）：应为 int 且非 bool ⇒ snapshot() 对 "
+            f"int 型走了 get_str（env={raw!r}）")
+        assert v == expect, (
+            f"`{field}`（env={raw!r}）的 snapshot.value = {v!r}，期望 {expect!r}")
+
+
+@pytest.mark.parametrize("field", _INT_FIELDS)
+def test_int_kind_env_bridge_yields_int(field, _clean_env, monkeypatch):
+    """经 env 桥后 config 字段必须是 int（消费点按整数用，且与 snapshot 同类型）。"""
+    env_key = SWITCHES[field][0]
+    monkeypatch.setenv(env_key, "7")
+    got = getattr(AgentConfig(), field)
+    assert isinstance(got, int) and not isinstance(got, bool), (
+        f"env `{env_key}=7` ⇒ `{field}` 字段 = {got!r}"
+        f"（type={type(got).__name__}）：应为 int 且非 bool ⇒ env 桥未按 int 落值")
+    assert got == 7, f"`{field}` 经 env 桥应为 7，实得 {got!r}"
 
 
 @pytest.mark.parametrize("field,env_key,env_val,expect", [
