@@ -76,6 +76,10 @@ _EXTRACTED_MAIN_FLOW = [
     # _phase_deadline_guard / _phase_deadline_restore）已逐字搬到
     # agent/orchestrator__budget.py。
     "agent/orchestrator__budget.py",
+    # 2026-10-09 批15：Lean 环境/检索簇（_ensure_lean_modules / _lean_active /
+    # _lean_applicable / _retrieve_theorem_hints）已搬到
+    # agent/orchestrator__lean.py（_ensure_lean_modules 带惰性 _orch 引用 shim）。
+    "agent/orchestrator__lean.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
