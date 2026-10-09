@@ -218,6 +218,127 @@ def preflight_quota_check() -> str:
         return ""
 
 
+def _install_log_tee(log) -> None:
+    """把 stdout/stderr 同时写日志文件（2026-10-08 从 main L278-299 逐字搬出）。"""
+    # ---- 日志 Tee ----
+    logf = io.open(log, "w", encoding="utf-8", buffering=1)
+
+    class Tee:
+        def __init__(self, *s):
+            self.s = s
+
+        def write(self, x):
+            for st in self.s:
+                try:
+                    st.write(x)
+                except Exception:  # noqa: BLE001
+                    pass
+
+        def flush(self):
+            for st in self.s:
+                try:
+                    st.flush()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    sys.stdout, sys.stderr = Tee(sys.__stdout__, logf), Tee(sys.__stderr__, logf)
+
+
+def _set_run_eval_argv(args, out) -> None:
+    """构造并设置 run_eval 的 sys.argv（2026-10-08 从 main L328-361 逐字搬出）。"""
+    # ---- run_eval 的命令行（与本地逐项对齐）----
+    sys.argv = [
+        "run_eval.py",
+        "--test_file", args.test_file,
+        "--output", out,
+        "--concurrency", str(args.concurrency),
+        # 时间：无实际上限，不跳过、不中断、不终止
+        "--max_time_per_question", "86400",
+        # ★★ 2026-09-29：档位已统一为单档（一律取原 deep 最强配置），
+        #   `--tier_budget` 只需给**单段**值（旧的三段式 f,s,d 仍兼容，取末段）。
+        #   全卷时间池（PaperPacer）与 `--paper_target_time` / `--paper_total_questions`
+        #   已按用户要求**彻底删除** —— 云端不再有全卷总量控制，单题只受上方的
+        #   86400s 硬顶约束（适合不限时研究评测）。
+        "--tier_budget", "86400",
+        "--max_total_time_seconds", "86400000",
+        # 两项复核机制
+        "--verifier_deep_final_enabled", "true",
+        "--verifier_diversify_enabled", "true",
+        # ★★ 2026-09-21 参数审查实测（105 条 deep_review 样本）：
+        #   原值 6144 只有代码默认值（16384）的 37%。实测输出长度
+        #   中位 7409 tokens、p90 8755、max 9827 ⇒ **72%（76/105）的深度评审
+        #   输出被截断**，等于"判对/判错"的结论根本没写完就被砍掉。
+        #   提到 16384 后超限样本 0 / 105。
+        "--verifier_deep_review_max_tokens", "16384",
+        # 检索
+        "--use_leansearch", "true",
+        # ★★ 2026-09-21 参数审查实测（44 题）：`hits` **恒等于 5 = top_k**，
+        #   `unique` 亦恒等于 5 ⇒ 100% 饱和。饱和说明条数是被"截"出来的，
+        #   而不是"恰好只有 5 条相关"。代码默认 5；
+        #   run_eval.py:1515 载「老师 #46 要求扫 3/5/10」⇒ 本轮取 10。
+        "--leansearch_top_k", "10",
+        "--enable_web_search", "true",
+        "--verbose",
+    ]
+
+
+def _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_overrides) -> None:
+    """启动 banner（2026-10-08 从 main L363-415 逐字搬出；本地 argval 一并搬入）。"""
+    def argval(flag, default="-"):
+        try:
+            return sys.argv[sys.argv.index(flag) + 1]
+        except (ValueError, IndexError):
+            return default
+
+    print("=" * 74, flush=True)
+    print(f"START  云端 112 题全量评测（无时间上限 / 并发 {argval('--concurrency')}）", flush=True)
+    print(f"题单   {args.test_file}  共 {n_questions} 题", flush=True)
+    print(f"输出   {out}", flush=True)
+    print(f"日志   {log}", flush=True)
+    print(f"环境   {env_snap}（值已脱敏）", flush=True)
+    print(f"时间   max_time_per_question={argval('--max_time_per_question')}s  "
+          f"tier_budget={argval('--tier_budget')}", flush=True)
+    print(f"       max_total_time_seconds={argval('--max_total_time_seconds')}"
+          f"（单档统一：无全卷时间池，单题只受硬顶约束）", flush=True)
+    print(f"并发   {argval('--concurrency')}", flush=True)
+    print(f"实验臂 MP_ARM={arm_name}  覆盖 {len(arm_overrides)} 项"
+          + ("" if arm_overrides else "（baseline：不改任何机制）"), flush=True)
+    for _ak in sorted(arm_overrides):
+        print(f"       {_ak} = {arm_overrides[_ak]!r}", flush=True)
+    print(f"开关   deep_final={argval('--verifier_deep_final_enabled')}  "
+          f"diversify={argval('--verifier_diversify_enabled')}  "
+          f"leansearch={argval('--use_leansearch')}  "
+          f"web_search={argval('--enable_web_search')}", flush=True)
+    # ★ 2026-09-21 参数审查：把本轮两个改动量显式打出来，便于启动时逐项核验
+    print(f"检索   leansearch_top_k={argval('--leansearch_top_k')}  "
+          f"deep_review_max_tokens={argval('--verifier_deep_review_max_tokens')}"
+          f"（旧值 5 / 6144）", flush=True)
+    # ★ MCP 增强三项（0921 由"为省时间默认关"改为一律开，见 cloud_run.env）
+    print(f"MCP增强 goal_loc={os.environ.get('LEAN_MCP_GOAL_LOC', '0')}  "
+          f"multi_attempt={os.environ.get('LEAN_MCP_MULTI_ATTEMPT', '0')}  "
+          f"hover_check={os.environ.get('LEAN_MCP_HOVER_CHECK', '0')}", flush=True)
+    print(f"LLM    base={os.environ['OPENAI_BASE_URL']}  "
+          f"model={os.environ.get('LLM_MODEL')}  "
+          f"timeout={os.environ.get('LLM_TIMEOUT')}  "
+          f"retry={os.environ.get('LLM_RETRY_ON_TIMEOUT')}", flush=True)
+    print(f"语料   {os.environ.get('LEANSEARCH_CORPUS_PATH')}  "
+          f"存在={os.path.isfile(os.environ.get('LEANSEARCH_CORPUS_PATH', ''))}", flush=True)
+    print(f"LEAN   PATH={'有' if os.environ.get('LEAN_PATH') else '无'}  "
+          f"ALLOW_NET={os.environ.get('LEAN_MCP_ALLOW_NET')}", flush=True)
+    # MCP 通道是否真能生效（决定性：找不到执行器就会静默回落 bridge）
+    try:
+        sys.path.insert(0, str(ROOT))
+        from tools.lean_local.lean_bridge import _detect_mcp_proxy_python
+        _mp = _detect_mcp_proxy_python()
+    except Exception as e:  # noqa: BLE001
+        _mp = f"(探测异常 {type(e).__name__})"
+    print(f"MCP    执行器={'★ ' + _mp if _mp else '❌ 未找到 → 会回落 bridge'}  "
+          f"AUTOLAKE={os.environ.get('LEAN_MCP_AUTOLAKE', '1(默认)')}", flush=True)
+    print(f"       lean={'✓ ' + os.environ['LEAN_PATH'] if os.environ.get('LEAN_PATH') else '❌ 无 LEAN_PATH'}",
+          flush=True)
+    print("=" * 74, flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="服务器端 112 题评测启动器")
     ap.add_argument("--test-file", default=DEFAULT_TEST)
@@ -275,28 +396,7 @@ def main() -> int:
         os.replace(out, arch)
         print(f"!! 输出已存在，已归档为 {arch}", flush=True)
 
-    # ---- 日志 Tee ----
-    logf = io.open(log, "w", encoding="utf-8", buffering=1)
-
-    class Tee:
-        def __init__(self, *s):
-            self.s = s
-
-        def write(self, x):
-            for st in self.s:
-                try:
-                    st.write(x)
-                except Exception:  # noqa: BLE001
-                    pass
-
-        def flush(self):
-            for st in self.s:
-                try:
-                    st.flush()
-                except Exception:  # noqa: BLE001
-                    pass
-
-    sys.stdout, sys.stderr = Tee(sys.__stdout__, logf), Tee(sys.__stderr__, logf)
+    _install_log_tee(log)
 
     # ---- 环境快照（值脱敏）----
     with io.open(env_snap, "w", encoding="utf-8") as fh:
@@ -325,94 +425,9 @@ def main() -> int:
         }, _fh, ensure_ascii=False, indent=2, sort_keys=True)
     print(f"臂快照 {arm_snap}", flush=True)
 
-    # ---- run_eval 的命令行（与本地逐项对齐）----
-    sys.argv = [
-        "run_eval.py",
-        "--test_file", args.test_file,
-        "--output", out,
-        "--concurrency", str(args.concurrency),
-        # 时间：无实际上限，不跳过、不中断、不终止
-        "--max_time_per_question", "86400",
-        # ★★ 2026-09-29：档位已统一为单档（一律取原 deep 最强配置），
-        #   `--tier_budget` 只需给**单段**值（旧的三段式 f,s,d 仍兼容，取末段）。
-        #   全卷时间池（PaperPacer）与 `--paper_target_time` / `--paper_total_questions`
-        #   已按用户要求**彻底删除** —— 云端不再有全卷总量控制，单题只受上方的
-        #   86400s 硬顶约束（适合不限时研究评测）。
-        "--tier_budget", "86400",
-        "--max_total_time_seconds", "86400000",
-        # 两项复核机制
-        "--verifier_deep_final_enabled", "true",
-        "--verifier_diversify_enabled", "true",
-        # ★★ 2026-09-21 参数审查实测（105 条 deep_review 样本）：
-        #   原值 6144 只有代码默认值（16384）的 37%。实测输出长度
-        #   中位 7409 tokens、p90 8755、max 9827 ⇒ **72%（76/105）的深度评审
-        #   输出被截断**，等于"判对/判错"的结论根本没写完就被砍掉。
-        #   提到 16384 后超限样本 0 / 105。
-        "--verifier_deep_review_max_tokens", "16384",
-        # 检索
-        "--use_leansearch", "true",
-        # ★★ 2026-09-21 参数审查实测（44 题）：`hits` **恒等于 5 = top_k**，
-        #   `unique` 亦恒等于 5 ⇒ 100% 饱和。饱和说明条数是被"截"出来的，
-        #   而不是"恰好只有 5 条相关"。代码默认 5；
-        #   run_eval.py:1515 载「老师 #46 要求扫 3/5/10」⇒ 本轮取 10。
-        "--leansearch_top_k", "10",
-        "--enable_web_search", "true",
-        "--verbose",
-    ]
+    _set_run_eval_argv(args, out)
 
-    def argval(flag, default="-"):
-        try:
-            return sys.argv[sys.argv.index(flag) + 1]
-        except (ValueError, IndexError):
-            return default
-
-    print("=" * 74, flush=True)
-    print(f"START  云端 112 题全量评测（无时间上限 / 并发 {argval('--concurrency')}）", flush=True)
-    print(f"题单   {args.test_file}  共 {n_questions} 题", flush=True)
-    print(f"输出   {out}", flush=True)
-    print(f"日志   {log}", flush=True)
-    print(f"环境   {env_snap}（值已脱敏）", flush=True)
-    print(f"时间   max_time_per_question={argval('--max_time_per_question')}s  "
-          f"tier_budget={argval('--tier_budget')}", flush=True)
-    print(f"       max_total_time_seconds={argval('--max_total_time_seconds')}"
-          f"（单档统一：无全卷时间池，单题只受硬顶约束）", flush=True)
-    print(f"并发   {argval('--concurrency')}", flush=True)
-    print(f"实验臂 MP_ARM={arm_name}  覆盖 {len(arm_overrides)} 项"
-          + ("" if arm_overrides else "（baseline：不改任何机制）"), flush=True)
-    for _ak in sorted(arm_overrides):
-        print(f"       {_ak} = {arm_overrides[_ak]!r}", flush=True)
-    print(f"开关   deep_final={argval('--verifier_deep_final_enabled')}  "
-          f"diversify={argval('--verifier_diversify_enabled')}  "
-          f"leansearch={argval('--use_leansearch')}  "
-          f"web_search={argval('--enable_web_search')}", flush=True)
-    # ★ 2026-09-21 参数审查：把本轮两个改动量显式打出来，便于启动时逐项核验
-    print(f"检索   leansearch_top_k={argval('--leansearch_top_k')}  "
-          f"deep_review_max_tokens={argval('--verifier_deep_review_max_tokens')}"
-          f"（旧值 5 / 6144）", flush=True)
-    # ★ MCP 增强三项（0921 由"为省时间默认关"改为一律开，见 cloud_run.env）
-    print(f"MCP增强 goal_loc={os.environ.get('LEAN_MCP_GOAL_LOC', '0')}  "
-          f"multi_attempt={os.environ.get('LEAN_MCP_MULTI_ATTEMPT', '0')}  "
-          f"hover_check={os.environ.get('LEAN_MCP_HOVER_CHECK', '0')}", flush=True)
-    print(f"LLM    base={os.environ['OPENAI_BASE_URL']}  "
-          f"model={os.environ.get('LLM_MODEL')}  "
-          f"timeout={os.environ.get('LLM_TIMEOUT')}  "
-          f"retry={os.environ.get('LLM_RETRY_ON_TIMEOUT')}", flush=True)
-    print(f"语料   {os.environ.get('LEANSEARCH_CORPUS_PATH')}  "
-          f"存在={os.path.isfile(os.environ.get('LEANSEARCH_CORPUS_PATH', ''))}", flush=True)
-    print(f"LEAN   PATH={'有' if os.environ.get('LEAN_PATH') else '无'}  "
-          f"ALLOW_NET={os.environ.get('LEAN_MCP_ALLOW_NET')}", flush=True)
-    # MCP 通道是否真能生效（决定性：找不到执行器就会静默回落 bridge）
-    try:
-        sys.path.insert(0, str(ROOT))
-        from tools.lean_local.lean_bridge import _detect_mcp_proxy_python
-        _mp = _detect_mcp_proxy_python()
-    except Exception as e:  # noqa: BLE001
-        _mp = f"(探测异常 {type(e).__name__})"
-    print(f"MCP    执行器={'★ ' + _mp if _mp else '❌ 未找到 → 会回落 bridge'}  "
-          f"AUTOLAKE={os.environ.get('LEAN_MCP_AUTOLAKE', '1(默认)')}", flush=True)
-    print(f"       lean={'✓ ' + os.environ['LEAN_PATH'] if os.environ.get('LEAN_PATH') else '❌ 无 LEAN_PATH'}",
-          flush=True)
-    print("=" * 74, flush=True)
+    _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_overrides)
 
     import run_eval
     # ★★ 2026-09-21 用户指示"放开"：默认档位 8192 → 32768（4x）。
