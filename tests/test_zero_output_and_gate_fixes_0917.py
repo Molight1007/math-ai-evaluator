@@ -118,14 +118,20 @@ def test_no_gen_time_up_on_verification_side():
 
 # ============================ Z6：同答案不重复 revise ============================
 def test_z6_dedup_guard_present():
-    src = _src("agent/orchestrator.py")
+    # 2026-10-09 批12：Z6 去重键代码（`_revise_pass_keys` 与"同一答案…已 revise 过"
+    # 文案）随 `_deep_revise_loop_inner` **逐字搬**到 agent/orchestrator__revise.py。
+    # 本守卫改为读该模块 —— 断言字符串与守卫意图均不变（只是被查代码换了文件，
+    # 非放宽判据）。
+    src = _src("agent/orchestrator__revise.py")
     assert "_revise_pass_keys" in src
     assert "同一答案（round=%d）本趟已 revise 过" in src
 
 
 def test_z6_dedup_excludes_force():
     """P1 应急重解（force=True）不参与去重。"""
-    src = _src("agent/orchestrator.py")
+    # 2026-10-09 批12：同 test_z6_dedup_guard_present —— 去重分支逐字搬到
+    # agent/orchestrator__revise.py；读该模块。断言逻辑一字未改（非放宽判据）。
+    src = _src("agent/orchestrator__revise.py")
     i = src.find("_revise_pass_keys")
     assert i > 0
     seg = src[max(0, i - 900):i]
@@ -149,7 +155,10 @@ def test_value_attack_early_returns_are_recorded():
 
 # ============================ Audit-1：死配置接线 ============================
 def test_max_revise_rounds_is_wired():
-    src = _src("agent/orchestrator.py")
+    # 2026-10-09 批12：`max_revise_rounds` 的接线落在 `_deep_revise_loop_inner`
+    # （已逐字搬到 agent/orchestrator__revise.py）。本守卫改读该模块 —— 两条断言
+    # 的字面量与守卫意图均不变（只是被查代码换了文件，非放宽判据）。
+    src = _src("agent/orchestrator__revise.py")
     assert "max_revise_rounds" in src, "全局轮数上限未接到 config（CLI 仍静默失效）"
     assert ">= 5:" not in src, "仍有硬编码 5 轮上限"
 

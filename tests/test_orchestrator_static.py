@@ -59,6 +59,16 @@ _EXTRACTED_MAIN_FLOW = [
     # _adversarial_probe / _falsify_candidates / _falsify_rejects /
     # _oracle_review_best）已逐字搬到 agent/orchestrator__oracle.py。
     "agent/orchestrator__oracle.py",
+    # 2026-10-08 批10：数值化/方案攻击职责簇（含 _value_attack_blueprint）已
+    # 逐字搬到 agent/orchestrator__numeric.py。
+    "agent/orchestrator__numeric.py",
+    # 2026-10-08 批11：选择/装配职责簇（_pick_best_from_candidates / _collect_diag /
+    # _verdicts_from_ver_result 等）已逐字搬到 agent/orchestrator__select.py。
+    "agent/orchestrator__select.py",
+    # 2026-10-09 批12：深复核/revise 回环簇（_review_bug_feedback / _deep_revise_loop /
+    # _deep_revise_loop_inner / _build_revise_feedback / _revise_rounds /
+    # _update_accept_gate）已逐字搬到 agent/orchestrator__revise.py。
+    "agent/orchestrator__revise.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
