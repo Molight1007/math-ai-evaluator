@@ -80,6 +80,11 @@ _EXTRACTED_MAIN_FLOW = [
     # _lean_applicable / _retrieve_theorem_hints）已搬到
     # agent/orchestrator__lean.py（_ensure_lean_modules 带惰性 _orch 引用 shim）。
     "agent/orchestrator__lean.py",
+    # 2026-10-09 批16：7 个模块级工具函数（_sw_bool_or / _sw_num_or /
+    # _emergency_direct_max_tokens / _load_lean_modules / _answer_fingerprint /
+    # _merge_review_into_feedback / _collect_tool_findings）已搬到
+    # agent/orchestrator__helpers.py（_load_lean_modules 带惰性 _orch 引用 shim）。
+    "agent/orchestrator__helpers.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
