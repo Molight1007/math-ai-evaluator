@@ -120,6 +120,12 @@ def _adversarial_probe(self, ctx: TaskContext, tier: str) -> bool:
         return False
 
 
+def _candidate_tag(candidate, idx: int) -> str:
+    """候选标识（供证伪埋点归因）：优先候选 id，缺失/空则回退列表下标。"""
+    cid = getattr(candidate, "id", None)
+    return str(cid) if cid not in (None, "") else str(idx)
+
+
 def _falsify_candidates(self, ctx: TaskContext) -> tuple:
     """对候选池逐个跑证伪器，把**已被证伪**的候选答案记进 `ctx._falsified_answers`。
 
@@ -132,29 +138,66 @@ def _falsify_candidates(self, ctx: TaskContext) -> tuple:
           的误报率都是 56% ⇒ "排除正确的"是结构性噪声。用户判据是
           "**错误答案一定是能证明错误的**" ⇒ 与其让闸门投票淘汰（同源自评、无判别力），
           不如用**可机检的证伪**来淘汰：只有拿到 SymPy 确认的反例才剔除。
+
+        ★ 2026-10-09 P0（观测补齐，**判定/放行逻辑零变化，只加埋点**）：
+          原先**只在整批有命中时**记一条汇总 ⇒ 每个候选"为什么没被证伪"不可见。
+          现**逐候选**留痕、**都带候选标识**（`#<id>`，id 缺失用下标，见 `_candidate_tag`）：
+            · 命中   → `falsify`      `证伪命中 #<id>：<reason> | 反例：<witness>`
+            · 未命中 → `falsify_miss` `证伪未命中 #<id>（放行）：<reason>`
+            · 异常   → `falsify_miss` `证伪异常 #<id>：<type>: <msg>`（逐候选兜底）
+          命中 / 未命中互斥 ⇒ **被尝试的每个候选恰好一条痕**。时间不足时该候选记
+          `falsify_miss`（时间不足，跳过）后 `continue`（与旧 `break` 同样不调用证伪器、
+          `falsified`/返回值不变）。整批不可用（开关关 / 空池 / 进循环前时间不足）与
+          兜底异常各留 **1 条批级** `falsify_miss`（无候选被尝试，故不带候选标识）；
+          原「候选证伪：x/y」汇总改记 `control`（否则会与逐候选命中撞 `falsify` 键，
+          使 `diag.falsify_events` 每个候选不止一条）。
         """
     try:
         if not getattr(self.config, "enable_answer_falsifier", True):
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：证伪器已关闭"
+                        "（enable_answer_falsifier=False，整批跳过）")
             return False, 0
         cands = list(getattr(ctx, "candidates", None) or [])
         if not cands:
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：候选池为空（整批跳过）")
             return False, 0
         if ctx.is_time_critical():
+            self.record(ctx, "falsify_miss",
+                        "证伪未命中（放行）：时间不足（is_time_critical，整批跳过）")
             return False, 0
         from .answer_falsifier import AnswerFalsifier
         f = AnswerFalsifier(self.client, self.config)
         prob = getattr(ctx, "problem", "") or ""
         falsified = []
-        for c in cands:
+        for _idx, c in enumerate(cands):
+            _cid = _candidate_tag(c, _idx)
             if ctx.is_time_critical():
-                break
-            res = f.falsify(ctx, c, problem=prob)
+                # 时间不足 ⇒ 跳过本候选，但仍留痕（等价旧 `break`，返回值不变）
+                self.record(ctx, "falsify_miss",
+                            "证伪未命中 #%s（放行）：时间不足，跳过" % _cid)
+                continue
+            try:
+                res = f.falsify(ctx, c, problem=prob)
+            except Exception as _e_c:  # noqa: BLE001  逐候选兜底（不得静默消失）
+                self.record(ctx, "falsify_miss",
+                            "证伪异常 #%s：%s: %s"
+                            % (_cid, type(_e_c).__name__, str(_e_c)[:120]))
+                continue
             if res.is_incorrect:
+                self.record(ctx, "falsify",
+                            "证伪命中 #%s：%s | 反例：%s"
+                            % (_cid, res.reason, (res.witness or "")[:160]))
                 falsified.append({
                     "answer": str(getattr(c, "answer", ""))[:160],
                     "witness": (res.witness or "")[:200],
                     "oracle_type": res.oracle_type,
                 })
+            else:
+                self.record(ctx, "falsify_miss",
+                            "证伪未命中 #%s（放行）：%s"
+                            % (_cid, res.reason or "未给出原因"))
         if falsified:
             try:
                 ctx._falsified_answers = [x["answer"] for x in falsified]
@@ -163,7 +206,9 @@ def _falsify_candidates(self, ctx: TaskContext) -> tuple:
                 ctx.metadata = meta
             except Exception:  # noqa: BLE001
                 pass
-            self.record(ctx, "falsify",
+            # ⚠ step 由 "falsify" 改 "control"：逐候选命中已占 `falsify` 键，
+            #   汇总若也用 `falsify` 会让每个命中候选在 diag.falsify_events 里 ≥2 条。
+            self.record(ctx, "control",
                         "候选证伪：%d/%d 个候选被客观证伪（SymPy 精确判定%s）"
                         % (len(falsified), len(cands),
                            "+Lean 背书" if any(x["oracle_type"] == "sympy+lean"
@@ -171,6 +216,9 @@ def _falsify_candidates(self, ctx: TaskContext) -> tuple:
         return True, max(0, len(cands) - len(falsified))
     except Exception as exc:  # noqa: BLE001
         logger.warning("[orchestrator] 候选证伪异常（忽略）: %s", str(exc)[:120])
+        self.record(ctx, "falsify_miss",
+                    "证伪未命中（放行）：证伪器异常：%s: %s"
+                    % (type(exc).__name__, str(exc)[:120]))
         return False, 0
 
 

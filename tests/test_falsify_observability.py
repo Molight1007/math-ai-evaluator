@@ -25,7 +25,7 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock
 
-from agent.base import TaskContext
+from agent.base import Candidate, TaskContext
 from agent.diag_export import collect_diag
 from agent.orchestrator import Orchestrator
 
@@ -197,3 +197,143 @@ def test_exit_falsifier_exception_records_one_miss(monkeypatch):
     assert _count(ctx, "falsify") == 0
     assert "异常" in ctx.trace[-1]["content"]
     assert "RuntimeError" in ctx.trace[-1]["content"]
+
+
+# ----------------------------------------------------------------------
+# 3) _falsify_candidates：逐候选恰好一条痕（命中/未命中/异常互斥）+ 带候选标识
+# ----------------------------------------------------------------------
+def _mk_candidates(n: int):
+    """构造 n 个带 id 的候选（id = 0..n-1）。"""
+    return [Candidate(id=i, answer="ans%d" % i, reasoning="") for i in range(n)]
+
+
+def _has_tag(events, i: int) -> bool:
+    """事件里是否含候选 #i 的标识（命中格式 `#i：`，未命中格式 `#i（`）。"""
+    return any(("#%d：" % i) in e or ("#%d（" % i) in e for e in events)
+
+
+def test_falsify_candidates_each_candidate_exactly_one_trace(monkeypatch):
+    """N 候选：1 个可证伪、N-1 个不可 ⇒ hit 恰 1 条、miss 恰 N-1 条，且都带候选标识。"""
+    from agent.answer_falsifier import AnswerFalsifier, FalsifyResult
+
+    N = 4
+    _HIT_ID = 2
+
+    def _fake(self, ctx, cand, problem=""):  # noqa: ANN001
+        if getattr(cand, "id", None) == _HIT_ID:
+            return FalsifyResult(verdict="incorrect", reason="确定性矛盾",
+                                 witness="w", oracle_type="sympy")
+        return FalsifyResult(reason="未取得证伪证书")
+
+    monkeypatch.setattr(AnswerFalsifier, "falsify", _fake)
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.candidates = _mk_candidates(N)
+
+    avail, n_surv = _orch(True)._falsify_candidates(ctx)
+    assert avail is True and n_surv == N - 1
+
+    diag = _diag(ctx)
+    hit = diag["falsify_events"]
+    miss = diag["falsify_miss_events"]
+    assert len(hit) == 1, hit
+    assert _has_tag(hit, _HIT_ID) and "证伪命中" in hit[0]
+    assert len(miss) == N - 1, miss
+    # 逐候选：命中候选不出现在 miss；其余每个都带各自标识（互斥、不漏记）
+    for i in range(N):
+        assert _has_tag(miss, i) == (i != _HIT_ID), (i, miss)
+    # 总痕数 == N（命中 1 + 未命中 N-1）
+    assert len(hit) + len(miss) == N
+    # 命中键与显式命名键逐条一致
+    assert diag["falsify_hit_events"] == hit
+    # 整批汇总已改记 `control`，不再污染 `falsify` 键
+    assert all("个候选被客观证伪" not in e for e in hit)
+    assert any("个候选被客观证伪" in str(t.get("content", ""))
+               for t in ctx.trace if t.get("step") == "control")
+
+
+def test_falsify_candidates_tag_falls_back_to_index(monkeypatch):
+    """候选无 id ⇒ 用列表下标作标识。"""
+    from types import SimpleNamespace
+
+    from agent.answer_falsifier import AnswerFalsifier, FalsifyResult
+
+    monkeypatch.setattr(AnswerFalsifier, "falsify",
+                        lambda self, c, problem="": FalsifyResult(reason="x"))
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.candidates = [SimpleNamespace(answer="a"), SimpleNamespace(answer="b")]
+    _orch(True)._falsify_candidates(ctx)
+    miss = _diag(ctx)["falsify_miss_events"]
+    assert len(miss) == 2, miss
+    assert _has_tag(miss, 0) and _has_tag(miss, 1)
+
+
+def test_falsify_candidates_per_candidate_exception(monkeypatch):
+    """某候选证伪抛异常 ⇒ 该候选记 `证伪异常 #<id>`（miss 键），不静默消失。"""
+    from agent.answer_falsifier import AnswerFalsifier, FalsifyResult
+
+    def _flaky(self, ctx, cand, problem=""):  # noqa: ANN001
+        if getattr(cand, "id", None) == 1:
+            raise RuntimeError("boom")
+        return FalsifyResult(reason="未取得证伪证书")
+
+    monkeypatch.setattr(AnswerFalsifier, "falsify", _flaky)
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.candidates = _mk_candidates(3)
+    avail, n_surv = _orch(True)._falsify_candidates(ctx)
+    assert avail is True and n_surv == 3          # 异常候选算未被证伪 ⇒ 幸存
+    miss = _diag(ctx)["falsify_miss_events"]
+    assert len(miss) == 3, miss
+    assert any("证伪异常 #1" in e and "RuntimeError" in e for e in miss)
+
+
+def test_falsify_candidates_inloop_time_critical_skip(monkeypatch):
+    """循环中时间变紧 ⇒ 剩余候选各记 1 条 miss（等价旧 break，返回值不变）。"""
+    from agent.answer_falsifier import AnswerFalsifier, FalsifyResult
+
+    def _fake(self, ctx, cand, problem=""):  # noqa: ANN001
+        ctx.deadline = time.time() - 100.0        # 首个候选处理后即 critical
+        return FalsifyResult(reason="未取得证伪证书")
+
+    monkeypatch.setattr(AnswerFalsifier, "falsify", _fake)
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.critical_tail_seconds = 120.0
+    ctx.candidates = _mk_candidates(3)
+    avail, n_surv = _orch(True)._falsify_candidates(ctx)
+    assert avail is True and n_surv == 3
+    miss = _diag(ctx)["falsify_miss_events"]
+    assert len(miss) == 3, miss
+    assert any("时间不足，跳过" in e for e in miss)
+
+
+def test_falsify_candidates_batch_guard_config_off():
+    """开关关 ⇒ 整批跳过，1 条批级 miss（无候选被尝试）。"""
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.candidates = _mk_candidates(3)
+    assert _orch(False)._falsify_candidates(ctx) == (False, 0)
+    diag = _diag(ctx)
+    assert diag["falsify_events"] == []
+    assert len(diag["falsify_miss_events"]) == 1
+    assert "已关闭" in diag["falsify_miss_events"][0]
+
+
+def test_falsify_candidates_batch_guard_empty_pool():
+    """空候选池 ⇒ 整批跳过，1 条批级 miss。"""
+    ctx = TaskContext(problem="p", metadata={})   # candidates 默认 []
+    assert _orch(True)._falsify_candidates(ctx) == (False, 0)
+    diag = _diag(ctx)
+    assert len(diag["falsify_miss_events"]) == 1
+    assert "候选池为空" in diag["falsify_miss_events"][0]
+
+
+def test_falsify_candidates_batch_guard_preloop_time_critical():
+    """进循环前时间不足 ⇒ 整批跳过，1 条批级 miss。"""
+    ctx = TaskContext(problem="p", metadata={})
+    ctx.candidates = _mk_candidates(2)
+    ctx.deadline = time.time() - 100.0
+    ctx.critical_tail_seconds = 120.0
+    assert ctx.is_time_critical() is True, "前置条件未生效，测试无效"
+    assert _orch(True)._falsify_candidates(ctx) == (False, 0)
+    diag = _diag(ctx)
+    assert diag["falsify_events"] == []
+    assert len(diag["falsify_miss_events"]) == 1
+    assert "整批跳过" in diag["falsify_miss_events"][0]
