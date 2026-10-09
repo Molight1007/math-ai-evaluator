@@ -69,6 +69,9 @@ _EXTRACTED_MAIN_FLOW = [
     # _deep_revise_loop_inner / _build_revise_feedback / _revise_rounds /
     # _update_accept_gate）已逐字搬到 agent/orchestrator__revise.py。
     "agent/orchestrator__revise.py",
+    # 2026-10-09 批13：兜底/应急簇（_emergency_direct_solve / _fallback_direct /
+    # _fallback）已逐字搬到 agent/orchestrator__fallback.py。
+    "agent/orchestrator__fallback.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
