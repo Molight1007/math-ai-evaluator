@@ -11,7 +11,6 @@ from __future__ import annotations
 但保持 MathPilot 多智能体 + 共享黑板的架构主线。
 """
 
-import concurrent.futures
 import json
 import logging
 import re
@@ -19,14 +18,10 @@ import time
 
 from .base import BaseAgent, TaskContext, Verdict
 from prompts.verifier import (
-    VERIFIER_SYSTEM,
-    VERIFIER_USER_TEMPLATE,
     VERIFIER_SCORING_SYSTEM,
     VERIFIER_SCORING_TEMPLATE,
     VERIFIER_FEEDBACK_SYSTEM,
     VERIFIER_FEEDBACK_TEMPLATE,
-    VERIFIER_BUGREPORT_SYSTEM,
-    VERIFIER_BUGREPORT_TEMPLATE,
     VERIFIER_RUBRIC_SYSTEM,
     VERIFIER_RUBRIC_TEMPLATE,
     VERIFIER_CHALLENGE_SYSTEM,
@@ -38,6 +33,13 @@ from prompts.verifier import (
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
 from utils.extract import smart_fallback_answer
 from utils.prefill import prefill_messages, stitch
+# ★ 2026-10-09 拆分（S3）：VerifierAgent 的 4 个职责簇已搬到 agent/verifier__*.py，
+# 类上 11 个方法改为一行委托跳板。A 步已消掉 verifier ↔ verifier__cluster 的
+# 模块级循环（AnswerCluster 已随簇搬到 verifier__cluster），故此处可放模块顶部。
+from . import verifier__cluster as _vc
+from . import verifier__lemma as _vl
+from . import verifier__report as _vr
+from . import verifier__vote as _vv
 
 logger = logging.getLogger("MathPilot.Verifier")
 
@@ -45,51 +47,12 @@ logger = logging.getLogger("MathPilot.Verifier")
 # 辅助数据类
 # ---------------------------------------------------------------------------
 
-class AnswerCluster:
-    """答案等价簇，用于跨候选多数投票。"""
-    __slots__ = ("answer_norm", "candidate_ids", "vote_correct", "vote_total",
-                 "n_distinct")
-
-    def __init__(self, answer_norm: str):
-        self.answer_norm = answer_norm
-        self.candidate_ids: list[int] = []
-        self.vote_correct: int = 0
-        self.vote_total: int = 0
-        # ★★ 2026-10-06 新增：**本题共有几种不同的答案**（证据独立性）。
-        #   由投票方在统计时填；0 表示未知（保持旧行为）。
-        self.n_distinct: int = 0
-
-    @property
-    def confidence(self) -> float:
-        """置信度 = **独立证据支持度**（不是"票数一致率"）。
-
-        ★★ 2026-10-06 修（**实测驱动：置信度被"同源复制"刷满**）：
-        实测三题的最终置信度与候选分布：
-            题 000：`\\boxed{0}` × **5（全部相同）** ⇒ 置信度 **1.00** ⇒ 直接放行（答案错）
-            题 001：`-2(m-1)`×4 + 变体          ⇒ 置信度 0.00
-            题 002：`(√5−1)/2`×4 + 变体        ⇒ 置信度 0.00
-        ⇒ **候选越一致置信度越高** —— 但这在"采样没有多样性"时是**假证据**：
-        5 个候选给出同一个答案，**不是 5 份独立同意，而是 1 份答案被复制了 5 遍**。
-        ⇒ 原实现 `vote_correct / vote_total` 无法区分「独立同意」与「同源复制」。
-
-        修法：引入**证据独立性折扣** —— 全题只有 1 种答案、**且有 ≥2 个候选**
-        给出同一答案时（即"同源复制"），置信度**封顶 0.5**（低于 `accept_confidence`
-        默认 0.6 ⇒ 不再直接放行，改由"零多样性补充采样"处置）。
-        ⚠ **单候选时不折扣**：只有一个候选本来就没有多样性可言，此时票数反映的是
-          "验证器自身对该候选的判断"，折扣它只会丢失信息
-          （回归测试 `test_abstain_excluded_from_denominator` 锁定此语义）。
-        `n_distinct <= 0` 表示未统计，**保持旧行为**（保守）。
-        """
-        if self.vote_total == 0:
-            return 0.0
-        base = self.vote_correct / self.vote_total
-        if 0 < self.n_distinct <= 1 and len(self.candidate_ids) >= 2:
-            return min(base, 0.5)
-        return base
-
-    @property
-    def size(self) -> int:
-        return len(self.candidate_ids)
+# ★ 2026-10-09 拆分（S3）：`AnswerCluster` 已逐字搬到 agent/verifier__cluster.py，
+# 此处**原位 re-export**，保持外部 `from agent.verifier import AnswerCluster` 契约
+# （tests/test_answer_cluster_confidence_locked.py:30、
+#   tests/test_verifier_deep_review.py:208 依赖），并让本模块顶部可安全
+# 反向 import verifier__cluster。⚠ 勿按"未使用"清理。
+from .verifier__cluster import AnswerCluster  # noqa: F401
 
 
 # ===========================================================================
@@ -183,87 +146,15 @@ class VerifierAgent(BaseAgent):
     # ==================================================================
 
     def _normalize_answer_text(self, text: str) -> str:
-        """文本级归一化：去空白/去 $/浮点舍入/文本分数→数值/LaTeX 分数统一。"""
-        if not text:
-            return ""
-        t = text.strip()
-        t = t.replace("$", "").replace(" ", "")
-        t = t.replace("\\displaystyle", "")
-        t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
-        # LaTeX 分数统一（与本地 _normalize_answer 一致，无括号便于数值解析）
-        t = re.sub(r'\\frac\s*\{\s*([^}]*)\s*\}\s*\{\s*([^}]*)\s*\}', r'\1/\2', t)
-        # 浮点舍入 6 位
-        try:
-            f = float(t)
-            t = f"{f:.6g}"
-        except (ValueError, TypeError):
-            # 文本分数（如 1/2、(1)/(2)）→ 数值，统一 1/2 与 0.5、3 与 3.0
-            stripped = re.sub(r'^\((-?\d+)\)/\((-?\d+)\)$', r'\1/\2', t)
-            if re.fullmatch(r'-?\d+/\d+', stripped):
-                try:
-                    num, den = stripped.split("/")
-                    f = int(num) / int(den)
-                    t = f"{f:.6g}"
-                except (ValueError, ZeroDivisionError):
-                    pass
-        return t
+        return _vc._normalize_answer_text(self, text)
 
     def _are_answers_equivalent(self, a: str, b: str) -> bool:
-        """三级等价判定：剥壳后文本相同 → 原文相同 → SymPy 符号等价。
-
-        ★★ 2026-09-16 审计修复（与 `AnswerOracle` 那次同一病灶的第二份拷贝）：
-        本方法与 `answer_oracle.answers_equivalent` 是**同一逻辑的两份实现**，
-        而题目要求答案写成 `\\boxed{...}`。`_preprocess_latex` 会把 `\\boxed{2026}`
-        归一成 `\\boxed2026` ⇒ 解析失败 ⇒ 判**不等价**。实测：
-            verifier._are_answers_equivalent('\\boxed{2026}', '2026') -> **False**
-            AnswerOracle.answers_equivalent ('\\boxed{2026}', '2026') -> True
-        ⇒ verifier 自洽共识恒归不了组、playoff 复算对正确答案报"不一致" ⇒ 无谓 revise。
-        修法：比较前先 `strip_wrappers`（与 answer_oracle 对齐口径），并保留原文兜底。
-        """
-        if not a or not b:
-            return False
-        try:
-            from .answer_oracle import AnswerOracle
-            ca, cb = AnswerOracle.strip_wrappers(a), AnswerOracle.strip_wrappers(b)
-        except Exception:  # noqa: BLE001
-            ca, cb = a.strip(), b.strip()
-        # Level 1: 剥壳后字符串完全相同
-        if ca and cb and ca == cb:
-            return True
-        # Level 2: 原文完全相同
-        if a.strip() == b.strip():
-            return True
-        # Level 3: SymPy 符号等价（若可用）——剥壳版优先，原文兜底
-        try:
-            from utils.sympy_tools import are_expressions_equal
-            for x, y in ((ca, cb), (a, b)):
-                if x and y and are_expressions_equal(x, y):
-                    return True
-        except ImportError:
-            pass
-        return False
+        return _vc._are_answers_equivalent(self, a, b)
 
     def _equiv_group(
         self, candidates: list, answers: list[str]
     ) -> list[list[int]]:
-        """等价答案分组：返回候选 ID 列表的列表。（BUG-3 修复：实际使用返回值）"""
-        n = len(answers)
-        visited = [False] * n
-        groups: list[list[int]] = []
-
-        for i in range(n):
-            if visited[i]:
-                continue
-            group = [i]
-            visited[i] = True
-            for j in range(i + 1, n):
-                if visited[j]:
-                    continue
-                if self._are_answers_equivalent(answers[i], answers[j]):
-                    group.append(j)
-                    visited[j] = True
-            groups.append(group)
-        return groups
+        return _vc._equiv_group(self, candidates, answers)
 
     # ==================================================================
     # 共识聚类与簇置信度
@@ -272,66 +163,7 @@ class VerifierAgent(BaseAgent):
     def _cluster_candidates(
         self, candidates: list, verdicts: list[list[Verdict]]
     ) -> list[AnswerCluster]:
-        """
-        基于 Equivalent Answer 聚类 + 跨候选多数投票：
-        1. 提取每个候选的答案（归一化）
-        2. 等价分组
-        3. 每个组统计"组内候选的总体正确票数 / 总票数"
-        4. 返回簇列表，按置信度 × 规模排序
-        """
-        answers = []
-        for cand in candidates:
-            ans = (cand.get("answer", "") if isinstance(cand, dict)
-                   else getattr(cand, "answer", ""))
-            answers.append(self._normalize_answer_text(str(ans)))
-        groups = self._equiv_group(candidates, answers)
-
-        clusters: list[AnswerCluster] = []
-        # ★★ 2026-10-06 新增：统计**本题共有几种不同答案**（证据独立性），
-        #   供 `AnswerCluster.confidence` 做折扣 —— 全题只有 1 种答案时，
-        #   票数再多也只是"1 份证据被复制"，不能算高置信（详见 confidence 注释）。
-        _n_distinct = len(groups)
-        for g in groups:
-            rep_idx = g[0]
-            cluster = AnswerCluster(answers[rep_idx])
-            cluster.n_distinct = _n_distinct
-            for idx in g:
-                cid = candidates[idx].get("id", idx) if isinstance(candidates[idx], dict) else idx
-                cluster.candidate_ids.append(cid)
-                # 统计该候选的所有票（2026-09-11：弃权票不计入分母 ——
-                # 故障≠反证，见 _is_correct_vote 三态化说明）
-                if idx < len(verdicts):
-                    for v in verdicts[idx]:
-                        if getattr(v, "abstain", False):
-                            continue
-                        cluster.vote_total += 1
-                        if v.correct:
-                            cluster.vote_correct += 1
-            clusters.append(cluster)
-
-        # 排序：置信度 × 规模的加权（等价答案人越多且票越对 = 越可信）
-        #
-        # ★ 2026-09-22 修复（"删去原本不合理的逻辑"）：
-        #   原键 `confidence * size + confidence` 在**所有簇置信度均为 0** 时
-        #   对每簇都恰好等于 0 ⇒ `sort` 退化为**插入序**，即"随便挑一个"。
-        #   实测 037：候选池里已有与 gold 一致的答案簇，但全簇置信度 0，
-        #   最终按插入序落到了另一个簇上，正确答案被挤掉。
-        #   改为**全序**键，保证任何情况下都有确定且合理的依据：
-        #     置信度 → 得票率 → 正确票数 → 答案形态 → 簇规模
-        #   ① 置信度非零时行为与原来完全一致（首键未变）⇒ 不扰动既有正确路径；
-        #   ② 仅在"全零置信度"这一退化场景下，改用得票率/票数/形态裁决，
-        #      簇规模**降到最后一键**，不再出现"0 票簇按规模压过有票簇"。
-        def _ck(c):
-            _vt = int(getattr(c, "vote_total", 0) or 0)
-            _vc = int(getattr(c, "vote_correct", 0) or 0)
-            _an = str(getattr(c, "answer_norm", "") or "")
-            _form = 3 if "\\boxed" in _an else (2 if 0 < len(_an) <= 40 else (1 if _an else 0))
-            return (float(getattr(c, "confidence", 0.0) or 0.0),
-                    (_vc / _vt) if _vt > 0 else 0.0,
-                    _vc, _form, int(getattr(c, "size", 0) or 0))
-
-        clusters.sort(key=_ck, reverse=True)
-        return clusters
+        return _vc._cluster_candidates(self, candidates, verdicts)
 
     # ==================================================================
     # 带推理的最终复核（2026-09-15 新增，回应「验证器偏松」）
@@ -558,81 +390,7 @@ class VerifierAgent(BaseAgent):
     # ⚠ 检索失败/超时/时间紧张 → 返回空串，验证器行为不变（绝不因检索拖垮主流程）。
     # ==================================================================
     def _prepare_theorem_context(self, ctx, problem: str) -> str:
-        """检索与本题相关的 Mathlib 定理原文；结果缓存在 ctx 上（一题一次）。"""
-        cfg = self.config
-        if not getattr(cfg, "use_leansearch", False):
-            return ""
-        if not getattr(cfg, "leansearch_inject_verifier", True):
-            return ""
-        cached = getattr(ctx, "_leansearch_ctx", None)
-        if cached is not None:
-            return cached
-
-        out = ""
-        try:
-            if ctx.is_time_critical():
-                self.record(ctx, "leansearch", "时间紧张，跳过引理检索（注入为空）")
-            else:
-                # 延迟导入：模块缺失时只影响本功能，不拖垮验证器
-                from tools.lean_local.lean_search import MathlibTheoremSearcher
-                searcher = getattr(self, "_ls_searcher", None)
-                if searcher is None:
-                    searcher = MathlibTheoremSearcher()
-                    self._ls_searcher = searcher
-                limit = max(1, int(getattr(cfg, "leansearch_top_k", 5) or 5))
-                max_calls = int(getattr(cfg, "leansearch_max_calls_per_q", 2) or 0)
-                n_called = int(getattr(ctx, "_leansearch_calls", 0) or 0)
-                if max_calls and n_called >= max_calls:
-                    self.record(ctx, "leansearch",
-                                "已达单题检索次数上限（%d），跳过" % max_calls)
-                else:
-                    ctx._leansearch_calls = n_called + 1
-                    self.note_mathlib_search(ctx)
-                    _t0 = time.perf_counter()
-                    res = searcher.search(problem[:800], limit=limit) or {}
-                    _ms = (time.perf_counter() - _t0) * 1000.0
-                    items = res.get("results") or []
-                    # 首次调用播报后端状态（启动门禁）：让"检索到底走没走通"
-                    # 一眼可见，而不是又一次静默（2026-09-15 教训）。
-                    if not getattr(self, "_ls_status_logged", False):
-                        self._ls_status_logged = True
-                        try:
-                            st = searcher.status()
-                            logger.info(
-                                "[LeanSearch] 后端状态: available=%s root=%s "
-                                "indexed=%s official=%s",
-                                st.get("available"), str(st.get("root"))[:90],
-                                st.get("indexed_declarations"), st.get("official"))
-                        except Exception:  # noqa: BLE001
-                            pass
-                    if items:
-                        out = "\n".join(
-                            "- %s (%s): %s" % (
-                                r.get("name", ""), r.get("kind", "?"),
-                                (r.get("snippet", "") or "").replace("\n", " ")[:200])
-                            for r in items)
-                        self.add_used_theorems(
-                            ctx, [r.get("name", "") for r in items])
-                        self.record(
-                            ctx, "leansearch",
-                            "检索到 %d 条相关定理（root=%s, %.0fms）" % (
-                                len(items), str(res.get("root", ""))[:80], _ms),
-                            n_hits=len(items), elapsed_ms=round(_ms, 1),
-                            root=str(res.get("root", ""))[:120],
-                            names=[r.get("name", "") for r in items])
-                    else:
-                        self.record(ctx, "leansearch",
-                                    "未检索到相关定理（注入为空）",
-                                    n_hits=0, elapsed_ms=round(_ms, 1))
-        except ImportError as e:  # noqa: BLE001
-            logger.warning(
-                "LeanSearch 不可用（tools.lean_local.lean_search 导入失败）：%s "
-                "—— 本次验证注入为空，行为与未启用时一致", e)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("LeanSearch 引理检索失败（注入为空）：%s", e)
-
-        ctx._leansearch_ctx = out
-        return out
+        return _vl._prepare_theorem_context(self, ctx, problem)
 
     # ==================================================================
     # 投票执行
@@ -640,40 +398,7 @@ class VerifierAgent(BaseAgent):
 
     def _vote_one(self, ctx, problem: str, candidate_text: str,
                   temperature: float = 0.0, full_reasoning: bool = False) -> str:
-        """单次投票（返回原始文本）。
-
-        v2.4.1：prefill「VERDICT: 」抑制 CoT——投票输出只需 A/B，
-        实测 prefill 仲裁 0.8s vs 普通 70.2s（140×），杜绝 Intern-S2 推理流占满预算。
-        2026-09-15：注入检索到的 Mathlib 定理原文（方案 A，未启用时为空串）。
-        2026-09-16：**温度改为参数化**。此前这里硬编码 0.0，导致
-        `config.verifier_temperature` 是**死配置**（声明了/进白名单/有 CLI，
-        但全仓无人读），且多张票在温度 0 下几乎完全相同 ⇒ **投票没有方差**，
-        "多票" 只是同一判断重复 N 次（实测：6 候选 × 3 票对错答**全票投 A**）。
-
-        ★ 2026-10-04（**B 折中**，用户决策「正确率第一位」）：新增 `full_reasoning`。
-        为 True 时**不 prefill**，让验证器跑完完整推理再给判定 —— 依据是本文件自己的
-        实测记录：「prefill 0.8s 不足以完成系统提示词要求的"**独立重算 + 逐条攻击**"
-        ⇒ 投票退化成**"看一眼就点头"**」（10 题中 5 道错题的全部候选被全票判 A）。
-        由 `_vote_profile` 在**候选分歧**时置位（折中：把昂贵算力花在真拿不准的题上）；
-        开关 `verifier_vote_reasoning` 可切 `off`(C) / `disagree`(B) / `always`(A)。
-        """
-        messages = [
-            {"role": "system", "content": VERIFIER_SYSTEM},
-            {"role": "user", "content": VERIFIER_USER_TEMPLATE.format(
-                problem=problem,
-                candidate_answer=candidate_text,
-                theorem_context=(getattr(ctx, "_leansearch_ctx", "") or "(无)"),
-            )},
-        ]
-        if full_reasoning:
-            # 不 prefill ⇒ 原样返回完整原文（推理 + 判定行）。
-            # ⚠ **不能**过 `stitch`：那会把 "VERDICT: " 种子里**拼到推理前面**，
-            #   凭空造出一个空前缀行（虽然 `_last_verdict_ab` 取最后一个匹配仍正确，
-            #   但文本被污染、且会给后续解析添乱）。直接返回最干净。
-            return self.llm(ctx, messages, temperature, 32768) or ""
-        raw = self.llm(ctx, prefill_messages(messages, "VERDICT: "),
-                       temperature, 32768)
-        return stitch("VERDICT: ", raw) if raw else raw
+        return _vv._vote_one(self, ctx, problem, candidate_text, temperature, full_reasoning)
 
     def _vote_one_scoring(self, ctx, problem: str, candidate_text: str) -> dict | None:
         """评分模式投票（返回 JSON 或 None）。
@@ -894,119 +619,14 @@ class VerifierAgent(BaseAgent):
             return "disagree"
 
     def _vote_profile(self, ctx, candidates, base_votes=None) -> tuple:
-        """返回本次投票的 ``(票数, 温度)``。
-
-        ⚠ ``base_votes`` 必须传入**调用方决定的档位票数**（orchestrator 对 deep 档传 3）。
-        2026-09-16 自审发现：本方法最初只读 `config.verifier_voting_times`(=1)，
-        而 `run()` 里又无条件 `voting_times = _d_votes` ⇒ **把 deep 档的 3 票压回 1 票**
-        （与 `tier_voting_times[deep]=3` 的设计直接矛盾）。现改为**以下限方式合并**：
-        分歧时用 `max(档位票数, 分歧票数)`，一致时保留档位票数。
-        """
-        base_votes = int(
-            base_votes if base_votes is not None
-            else (getattr(self.config, "verifier_voting_times", 1) or 1))
-        base_temp = float(getattr(self.config, "verifier_temperature", 0.0) or 0.0)
-        _rmode = self._vote_reasoning_mode()
-        if not getattr(self.config, "verifier_diversify_enabled", True):
-            return base_votes, base_temp, (_rmode == "always")
-        try:
-            answers = set()
-            # ★ 2026-09-16 审计修复：必须**剥壳后再比较**，否则 `\boxed{2026}` 与
-            #   `2026` 会被当成两种答案 ⇒ 误判"候选分歧" ⇒ 无谓加票 + 调 0.7 温度
-            #   （多花 LLM 调用）。与 `_are_answers_equivalent` 同口径。
-            try:
-                from .answer_oracle import AnswerOracle as _AO
-            except Exception:  # noqa: BLE001
-                _AO = None
-            for c in (candidates or []):
-                a = (c.get("answer", "") if isinstance(c, dict)
-                     else getattr(c, "answer", "")) or ""
-                a = str(a).strip()
-                if not a:
-                    continue
-                if _AO is not None:
-                    try:
-                        a = _AO.strip_wrappers(a) or a
-                    except Exception:  # noqa: BLE001
-                        pass
-                answers.add(a)
-        except Exception:  # noqa: BLE001
-            return base_votes, base_temp, (_rmode == "always")
-        if len(answers) < 2:
-            # 候选答案一致 ⇒ 加票/加温都无意义（只会重复同一判断）
-            return base_votes, base_temp, (_rmode == "always")
-        n = max(base_votes, int(
-            getattr(self.config, "verifier_disagreement_votes", 3) or 1))
-        t = float(getattr(
-            self.config, "verifier_disagreement_temperature", 0.7) or 0.0)
-        self.record(ctx, "vote_diversify",
-                    "候选答案存在 %d 种分歧 → 票数 %d、温度 %.2f"
-                    "（温度 0 下多票无方差，等于重复同一判断）"
-                    % (len(answers), n, t))
-        return n, t, (_rmode != "off")
+        return _vv._vote_profile(self, ctx, candidates, base_votes)
 
     def _vote(
         self, ctx, problem: str, candidate, total_votes: int = 5,
         proportional: bool = True, use_scoring: bool = False,
         temperature: float = 0.0, full_reasoning: bool = False,
     ) -> list[Verdict]:
-        """
-        批量投票并汇总（BUG-8 修复：用 valid_votes 替代 total_votes）。
-        2026-09-02 修复：deadline 已过仍启动投票 → 每票 LLM 全被跳过返回 None，
-        _is_correct_vote(None) 全判错 + 疯狂刷日志空转（027 实测超 deadline 137s）。
-        """
-        # 超时保护：deadline 已过 → 不投票（空 verdicts 由上层走兜底）
-        if ctx.is_timed_out():
-            logger.warning("Verifier: 单题 deadline 已过，跳过投票（%d 票）",
-                           total_votes)
-            return []
-        text = self._candidate_text(candidate)
-        verdicts: list[Verdict] = []
-
-        # ★ 2026-09-15 方案 A：**在启动投票线程之前**完成检索（单线程、每题一次），
-        # 避免 6 候选 × 3 票 = 18 次并发重复检索。未启用/失败时注入为空串，
-        # 验证器行为与改动前完全一致。
-        self._prepare_theorem_context(ctx, problem)
-
-        # 二元投票
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=min(total_votes, self.config.max_workers)
-        ) as executor:
-            futures = [executor.submit(self._vote_one, ctx, problem, text,
-                                       temperature, full_reasoning)
-                       for _ in range(total_votes)]
-            for f in concurrent.futures.as_completed(futures):
-                try:
-                    raw = f.result()
-                    ok = self._is_correct_vote(raw)
-                    verdicts.append(Verdict(
-                        correct=bool(ok),
-                        abstain=ok is None,   # 故障票 = 弃权，剔出 total_votes 分母
-                        raw=raw,
-                        # ★ 2026-09-15：判 B 时抽出结构化错误类型（A 票无此项）
-                        error_type=(_extract_error_type(raw)
-                                    if ok is False else ""),
-                    ))
-                except Exception as e:
-                    logger.warning(f"Vote failed: {e}")
-                    # 调用异常同样是基础设施故障 → 弃权，不得当反证
-                    verdicts.append(Verdict(correct=False, abstain=True, raw=str(e)))
-
-        # 可选评分模式（补充/校准）
-        if use_scoring and self.config.use_scoring:
-            try:
-                scoring = self._vote_one_scoring(ctx, problem, text)
-                if scoring:
-                    verdicts.append(Verdict(
-                        correct=scoring.get("overall", "B") == "A",
-                        raw=json.dumps(scoring, ensure_ascii=False),
-                        score=scoring,
-                    ))
-            except Exception as e:
-                logger.debug(f"Scoring vote failed: {e}")
-
-        self._record_error_types(ctx, verdicts)
-        return verdicts
+        return _vv._vote(self, ctx, problem, candidate, total_votes, proportional, use_scoring, temperature, full_reasoning)
 
     # ------------------------------------------------------------------
     # 结构化错误类型聚合（2026-09-15）
@@ -1073,81 +693,7 @@ class VerifierAgent(BaseAgent):
     # ------------------------------------------------------------------
     def _extract_bug_report(self, ctx, problem: str, candidate,
                             tool_findings: str = "") -> dict:
-        """让验证器产出结构化 bug report（分类 + 精确定位），而非一句话错因。
-
-        论文依据：Huang & Yang (2025) 用「验证 + 精炼」流水线把 IMO 2025
-        从 best-of-32 的 21.4%~38.1% 提到 85.7%。关键不在于多采样，而在于
-        验证器给出**可执行的错因**（哪一步、什么类型、为什么），
-        修正步骤才能有的放矢。
-
-        ★★ 2026-10-06 新增 `tool_findings`（**补上「工具判定 → 答案定位」这一环**）：
-        工具的 finding 里 `location` 装的是**检查项名**（`answer_verify`/`lean_verify`），
-        而 `agent/base.py:365` 对 `location` 的定义是「出错位置（步骤编号/行号/引用）」
-        ⇒ **契约被违背**：模型收到 `location="answer_verify"` 等于没收到位置。
-        工具看的是**形式化代码**，天然说不出"答案第 3 步错了"；但它最可靠的是
-        「**这个等式/这条命题不成立**」（客观、可复现）。
-        ⇒ 把工具判定作为**额外输入**喂进来，让检错器**只负责定位**
-          （在答案里逐字引用写下该等式的原文），从而得到
-          「**工具级的可靠性 + 答案级的定位**」。
-
-        返回 dict：{verdict, findings:[{location, type, explanation}]}
-        解析失败时返回 {"verdict": "unknown", "findings": []}。
-        """
-        text = self._candidate_text(candidate)
-        messages = [
-            {"role": "system", "content": VERIFIER_BUGREPORT_SYSTEM},
-            {"role": "user", "content": VERIFIER_BUGREPORT_TEMPLATE.format(
-                problem=problem, candidate_answer=text
-            )},
-        ]
-        if tool_findings and str(tool_findings).strip():
-            # ★ 工具判定是**客观、可复现**的 ⇒ 不要求检错器复核它，只要求**定位**。
-            #   ⚠ 明确约束"不要推翻"，否则模型可能去质疑工具结论、带回噪声。
-            messages.append({"role": "user", "content": (
-                "【工具已客观判定的错误（**不可质疑**，你只需定位）】\n"
-                + str(tool_findings).strip()[:2000]
-                + "\n\n请**只针对上面这些已被工具确认的错误**做定位：\n"
-                  "  1. 在【待审查的解答】里**逐字引用**写下这些等式/命题的原文"
-                  "（这是本步唯一的产出重点）；\n"
-                  "  2. 说明它出现在第几步、为什么会写成这样；\n"
-                  "  3. 给出可执行的修法。\n"
-                  "工具看的是形式化代码、说不出答案文本里的位置 —— **这一步正是要你来补**。\n"
-                  "若在解答里找不到对应原文（可能是形式化翻译偏差），"
-                  "请如实写明，不要编造引用。")})
-        empty = {"verdict": "unknown", "findings": []}
-        try:
-            # prefill 锚定到 JSON 开头：Intern 无短种子会先吐思维块吃满预算
-            raw = self.llm(ctx, prefill_messages(messages, "{"), 0.0, 32768)
-            if not raw:
-                return empty
-            raw = stitch("{", raw)
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"BugReport extraction failed: {e}")
-            return empty
-
-        data = self._parse_json_loose(raw)
-        if not isinstance(data, dict):
-            return empty
-        findings = []
-        for f in (data.get("findings") or []):
-            if not isinstance(f, dict):
-                continue
-            loc = str(f.get("location") or "").strip()
-            expl = str(f.get("explanation") or "").strip()
-            ftype = str(f.get("type") or "").strip().lower()
-            if ftype not in ("critical_error", "justification_gap"):
-                ftype = "justification_gap"
-            if not (loc or expl):
-                continue
-            findings.append({"location": loc, "type": ftype,
-                             "explanation": expl})
-        verdict = str(data.get("verdict") or "").strip().lower()
-        if verdict not in ("correct", "critical_error", "justification_gap"):
-            # 以 findings 反推，比信任模型的自陈更可靠
-            verdict = ("critical_error"
-                       if any(f["type"] == "critical_error" for f in findings)
-                       else "justification_gap" if findings else "unknown")
-        return {"verdict": verdict, "findings": findings}
+        return _vr._extract_bug_report(self, ctx, problem, candidate, tool_findings)
 
     @staticmethod
     def _parse_json_loose(raw: str):
@@ -1190,76 +736,11 @@ class VerifierAgent(BaseAgent):
 
     @staticmethod
     def _format_bug_report(report: dict) -> str:
-        """把结构化 bug report 渲染成注入 solver 的反馈文本。
-
-        按「关键错误优先」排序：修正步骤应当先修断链的错误，
-        论证漏洞其次（否则会先去补一处无关紧要的严谨性，浪费修正预算）。
-        """
-        findings = report.get("findings") or []
-        if not findings:
-            return ""
-        crit = [f for f in findings if f["type"] == "critical_error"]
-        gaps = [f for f in findings if f["type"] == "justification_gap"]
-        lines = []
-        if crit:
-            lines.append("【关键错误（必须修正，否则整条推理链作废）】")
-            for i, f in enumerate(crit, 1):
-                lines.append(f"{i}. 位置：“{f['location']}”")
-                lines.append(f"   问题：{f['explanation']}")
-        if gaps:
-            lines.append("【论证漏洞（需补充论证，结论可能仍成立）】")
-            for i, f in enumerate(gaps, 1):
-                lines.append(f"{i}. 位置：“{f['location']}”")
-                lines.append(f"   问题：{f['explanation']}")
-        # ★★ 2026-10-05 新增（**"以模型能理解的方式反馈 + 让它修正"**）：
-        #   ① **不生成 fix_hint**，而是把"怎么改"的责任交给解题方 —— 因为
-        #      验证器的系统提示词明确写着「**绝不要试图纠正你发现的错误或填补漏洞**」
-        #      （`prompts/verifier.py:224`），一旦让它给修法，它就会开始替解答辩护、
-        #      漏掉真错。imo2025 §2.3 的做法正是「**让被批评方把表述改清楚**」。
-        #   ② 加「逐条回应」纪律：把"报告"变成"必须逐条答复的清单"，
-        #      避免模型忽略部分条目、或只做泛泛重写。
-        #   ③ 加「**不要重写未被指出的步骤**」：防止被打回后整篇重写、
-        #      把本来正确的部分也改掉（这是"越改越错"的来源之一）。
-        lines.append("")
-        lines.append("【修正纪律（必须逐条遵守）】")
-        lines.append("1. 对上面**每一条**都要给出【同意 / 不同意】+ 理由，不许跳过；")
-        lines.append("2. **同意**的必须改，并写出**改正后的那一步（或那段论证）**；")
-        lines.append("   不同意的必须给出反驳依据（引用题目条件或已证结论）；")
-        lines.append("3. ★ **不要重写未被指出的步骤** —— 上面没有点名的地方保持原样，")
-        lines.append("   **正确的部分必须保留**（整篇重写会把对的也一起改掉）。")
-        return "\n".join(lines)
+        return _vr._format_bug_report(report)
 
     def structured_report_for(self, ctx, problem: str, candidate,
                               tool_findings: str = "") -> str:
-        """公开入口：为**指定候选**取一份结构化 bug report（位置+类型+问题）。
-
-        ★★ 2026-10-06 新增（"让结构化定位成为 revise 的**主导**反馈"）：
-        实测题 000 在 `revise_round=5` 的情况下，反馈里结构化「位置：」出现 **0 次** ——
-        因为 `_extract_revise_feedback` 的第一道门槛是
-        `if best_cluster.confidence >= 0.5: return ""`，而该题恰好是
-        **"投票高置信、但答案错误"** ⇒ **结构化报告从未生成**，
-        模型只能靠 Lean「疑似自证」与对抗那几条噪声重写（12/15 被噪声占据）。
-
-        本方法**不受 confidence 门槛约束**，供"**已经确定要重写**"的路径显式调用，
-        确保模型手上一定有一份"错在第几步、哪句话、为什么"的定位。
-        失败/未启用时返回空串，调用方按原逻辑继续（纯增量，不改变既有行为）。
-        """
-        try:
-            if not getattr(self.config, "use_bug_report_feedback", True):
-                return ""
-            if candidate is None:
-                return ""
-            rep = self._extract_bug_report(ctx, problem, candidate,
-                                           tool_findings=tool_findings)
-            out = self._format_bug_report(rep)
-            if out:
-                self.record(ctx, "bug_report",
-                            "为重写路径补取结构化 bug report（%d 字符；工具判定输入 %d 字符）"
-                            % (len(out), len(str(tool_findings or ""))))
-            return out
-        except Exception as e:  # noqa: BLE001
-            logger.warning("structured_report_for 失败（返回空）: %s", str(e)[:120])
-            return ""
+        return _vr.structured_report_for(self, ctx, problem, candidate, tool_findings)
 
     def _extract_revise_feedback(self, ctx, problem: str,
                                  candidates: list, best_cluster) -> str:

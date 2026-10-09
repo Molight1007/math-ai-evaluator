@@ -4,7 +4,8 @@
 S2（2026-10-09）：``_prepare_theorem_context`` 搬为模块级函数，原 ``self``
 作为第一个参数 ``owner`` 传入。注意：``owner._ls_searcher`` /
 ``owner._ls_status_logged`` 仍是**宿主角上的懒建属性**（本模块不持有状态）。
-本步 ``agent/verifier.py`` 尚未接线（增量安全）。
+S3（2026-10-09）：``verifier.py`` 顶部已 `from . import verifier__lemma as _vl`，
+``VerifierAgent._prepare_theorem_context`` 改为一行委托跳板。
 """
 
 from __future__ import annotations

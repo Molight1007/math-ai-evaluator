@@ -4,7 +4,9 @@
 S2（2026-10-09）：``_extract_bug_report`` / ``_format_bug_report`` /
 ``structured_report_for`` 搬为模块级函数，原 ``self`` 作为第一个参数
 ``owner`` 传入（``_format_bug_report`` 原为 staticmethod，无接收者）。
-本步 ``agent/verifier.py`` 尚未接线（增量安全）。
+S3（2026-10-09）：``verifier.py`` 顶部已 `from . import verifier__report as _vr`，
+``_extract_bug_report`` / ``_format_bug_report`` / ``structured_report_for``
+改为一行委托跳板（``_format_bug_report`` 保持 staticmethod）。
 """
 
 from __future__ import annotations

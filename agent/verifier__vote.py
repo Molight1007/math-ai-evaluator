@@ -7,7 +7,8 @@ S2（2026-10-09）：``_vote_one`` / ``_vote_profile`` / ``_vote`` 搬为模块�
 ``owner._deterministic_check`` / ``owner._prepare_theorem_context`` /
 ``owner._is_correct_vote`` / ``owner._vote_one`` / ``owner._record_error_types``）
 一律经 ``owner`` 解析 ⇒ patch 仍可穿透。
-本步 ``agent/verifier.py`` 尚未接线（增量安全）。
+S3（2026-10-09）：``verifier.py`` 顶部已 `from . import verifier__vote as _vv`，
+``_vote_one`` / ``_vote_profile`` / ``_vote`` 改为一行委托跳板。
 """
 
 from __future__ import annotations
