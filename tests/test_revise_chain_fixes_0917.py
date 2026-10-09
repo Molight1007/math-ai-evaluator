@@ -123,7 +123,12 @@ def test_solver_keep_uses_votes_not_tail():
 def _bare_solver():
     from agent.solver import SolverAgent
     a = SolverAgent.__new__(SolverAgent)
-    a.config = SimpleNamespace(revise_sample_times=3)
+    # ★ 2026-10-09：**显式钉住 test-local 的池上限 = 6**。
+    #   背景：`candidate_pool_limit` 全仓默认 6→12（用户拍板），而本组用例的
+    #   "池满" 语义是"池内 6 个"；此前它靠 `SimpleNamespace` 缺字段 ⇒ 落到
+    #   `_pool_room` 的 `getattr(..., 6.0)` 兜底，默认一变就**被动跟着漂**。
+    #   此处把假设显式写进测试（不再依赖全局默认），使 M1 三条用例与默认值解耦。
+    a.config = SimpleNamespace(revise_sample_times=3, candidate_pool_limit=6)
     return a
 
 

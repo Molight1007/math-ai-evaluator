@@ -28,12 +28,14 @@ _POOL_UNLIMITED_ROOM = 12   # 「不限」时本次最多再补的候选数（�
 
 
 def _pool_room(cfg, ctx) -> int:
-    """候选池**本次最多还能再补几个**候选（`candidate_pool_limit`，默认 6）。
+    """候选池**本次最多还能再补几个**候选（`candidate_pool_limit`，默认 12）。
 
     ★ 2026-10-04 修（D7）：原先本文件与 `sub_goal_solver` 共 **三处硬编码 `6`**，
     现统一到本函数（单一来源，可配）。
     同时修掉 `agent/orchestrator.py` 那处与事实不符的注释（它自称"封顶已删除、
     不再截断候选"，但三处仍在封顶）—— **口径以本函数为准**。
+    ★ 2026-10-09：`candidate_pool_limit` 默认 **6 → 12**（用户拍板）⇒ 本函数
+    `getattr` 兜底值同步为 12.0，与注册表 / `AgentConfig` 两处权威默认一致。
 
     ⚠⚠ 重要语义（2026-10-04 实测踩坑）：本返回值**同时被当作本次生成数量**
     （`run()` 里 `_generate_initial(ctx, count=remaining)`）—— 所以它**不能**是
@@ -44,7 +46,7 @@ def _pool_room(cfg, ctx) -> int:
     """
     _lim = 0
     try:
-        _v = float(getattr(cfg, "candidate_pool_limit", 6.0) or 0.0)
+        _v = float(getattr(cfg, "candidate_pool_limit", 12.0) or 0.0)
         _lim = int(_v) if _v > 0 else 0
     except (TypeError, ValueError):
         _lim = 0

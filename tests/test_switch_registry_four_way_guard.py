@@ -43,6 +43,7 @@
 from __future__ import annotations
 
 import ast
+import dataclasses
 import os
 import sys
 
@@ -248,6 +249,51 @@ def test_50_agent_shim_is_same_switches_object():
     assert asr.SWITCHES is csr.SWITCHES, (
         "agent/switch_registry.py 必须是对 contracts/switch_registry.py 的"
         "纯 re-export shim（SWITCHES 必须是同一对象，不是拷贝）")
+
+
+# ===========================================================================
+# 6. 默认值一致：① 注册表默认值 == ② AgentConfig 声明默认值
+#    （2026-10-09 新增；candidate_pool_limit 6→12 时两处必须同步，防再次漂移）
+#    判据**按字段名动态生成**，不写死任何具体开关/数值 ⇒ 任何开关改默认值时
+#    若只改一处，此处立即变红并逐名报出两边的值。
+# ===========================================================================
+def _declared_default(field: str):
+    """AgentConfig 字段的**声明默认值**（dataclass 层面，与 env 无关）。"""
+    d = AgentConfig.__dataclass_fields__[field]
+    if d.default is not dataclasses.MISSING:
+        return d.default
+    if d.default_factory is not dataclasses.MISSING:
+        return d.default_factory()
+    return None
+
+
+def _norm_registry_default(reg_default, cfg_default):
+    """类型归一：注册表是 str 型、而配置字段是 list/tuple（如 `lemma_domains`）时，
+    按逗号切分（与 `apply_env_to_config` 同口径）。数值靠 `==`（`0.0 == 0` 成立）。"""
+    if isinstance(cfg_default, (list, tuple)) and isinstance(reg_default, str):
+        return [p.strip() for p in reg_default.split(",") if p.strip()]
+    return reg_default
+
+
+def test_60_registry_default_matches_config_default():
+    A = _registry_names()
+    B = _config_field_names()
+    common = sorted(A & B)
+    assert len(common) >= 50, (
+        f"① ∩ ② 仅 {len(common)} 个字段，疑似抽取失效 ⇒ 本断言会真空通过")
+
+    bad = []
+    for f in common:
+        reg_default = SWITCHES[f][2]
+        cfg_default = _declared_default(f)
+        if _norm_registry_default(reg_default, cfg_default) != cfg_default:
+            bad.append((f, reg_default, cfg_default))
+
+    assert not bad, (
+        "以下开关的「① 注册表默认值」与「② AgentConfig 声明默认值」**漂移** "
+        "（两处权威默认必须逐字一致，否则 `bind_config` 会把它们绑成不一致的值）：\n"
+        + "\n".join(f"    - {n}: 注册表={r!r} 配置={c!r}" for n, r, c in bad)
+        + f"\n（共比对 {len(common)} 个字段，漂移 {len(bad)} 个）")
 
 
 if __name__ == "__main__":

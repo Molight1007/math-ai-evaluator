@@ -290,7 +290,7 @@ class AgentConfig(_AgentConfigBase):
     # ---- 2026-10-04 开关注册制补齐：新增 2 个字段（与 switch_registry 同名登记）----
     #   `k11_mask_statement`：消费方已存在（agent/sub_goal_solver.py::_k11_mask_on），
     #     此前字段/注册表皆缺 ⇒ 该函数走 try/except 兜底恒 True；现补全后可配。
-    #   `candidate_pool_limit`：候选池上限（0 = 不限），研究期默认不限。
+    #   `candidate_pool_limit`：候选池上限（0 = 不限），默认 12（2026-10-09 由 6 抬高）。
     k11_mask_statement: bool = True          # K11 注入点守卫（子目标描述/蓝图结论断言值掩码）
     # ---- 2026-10-06 子目标交付重写（A/B/C）----
     # A: 让每个子目标产出**可独立校验的结论**（值/等式/判定），并把蓝图节点的
@@ -304,11 +304,13 @@ class AgentConfig(_AgentConfigBase):
     # 默认 True = 修好后的行为；=0 一键回退旧行为做 A/B（两开关均已登记注册表）。
     subgoal_conclusion_contract: bool = True   # A+C：结论契约（结构化结论 + 推导标记）
     subgoal_objective_judge: bool = True       # B：结论客观判定 + 判不出留痕
-    #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限，**默认 6 = 与旧行为
-    #     逐字一致**（原为三处硬编码 6，现收敛到 `agent/solver._pool_room` 单一来源）。
+    #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限（原为三处硬编码 6，
+    #     现收敛到 `agent/solver._pool_room` 单一来源）。
+    #   ★ 2026-10-09（用户拍板「先 12 试试」）：**默认 6 → 12**（与注册表默认逐字一致）。
     #     ⚠ 本值**同时被当作本次生成数量**（`_generate_initial(count=remaining)`）
-    #     ⇒ 不要设成天文数字；设 0/负 = "不限"（内部有安全上界 12）。
-    candidate_pool_limit: float = 6.0        # 候选池上限（0 = 不限，内部上界 12）
+    #     ⇒ 不要设成天文数字；设 0/负 = "不限"（内部有安全上界 12；抬到 12 后
+    #        「0=不限」与「=12」行为等价，安全上界仍生效，不会跑飞）。
+    candidate_pool_limit: float = 12.0       # 候选池上限（0 = 不限，内部上界 12；默认 12）
     #   ★ 2026-10-04 修（D22）：`sub_goal_oracle_check` 此前**全仓无定义**，
     #     而唯一消费点 `agent/sub_goal_solver.py` 用 `getattr(config, ..., False)`
     #     读它 ⇒ `_oracle_check_step()` **结构性不可达**（代码写了永远跑不到）。

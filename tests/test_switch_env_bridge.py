@@ -221,5 +221,32 @@ def test_team_lead_repro(field, env_key, env_val, expect, _clean_env, monkeypatc
         f"env `{env_key}={env_val}` ⇒ `{field}` 应为 {expect}，实得 {actual!r}")
 
 
+# ===========================================================================
+# 5. candidate_pool_limit 的 env 落地（2026-10-09 默认 6→12 配套守卫）
+#    · env=0（不限）/ env=12（新默认）/ env=20（超出默认）都要按 env 落到 config；
+#    · 且注册表生效值 == config 值（两者同源）。
+#    ⚠ 「=20 是否被内部安全上界截断」：**不截断** —— `_POOL_UNLIMITED_ROOM=12`
+#      只在 `_lim <= 0`（即 0/不限）这条路径生效；正数上限照原样使用。
+# ===========================================================================
+@pytest.mark.parametrize("env_val,expect", [("0", 0.0), ("12", 12.0), ("20", 20.0)])
+def test_candidate_pool_limit_env_lands(env_val, expect, _clean_env, monkeypatch):
+    monkeypatch.setenv("CANDIDATE_POOL_LIMIT", env_val)
+    cfg = AgentConfig()
+    got = getattr(cfg, "candidate_pool_limit")
+    assert got == expect, (
+        f"env `CANDIDATE_POOL_LIMIT={env_val}` ⇒ config 值应为 {expect}，实得 {got!r}")
+    assert get_num("candidate_pool_limit") == expect, (
+        f"env `CANDIDATE_POOL_LIMIT={env_val}` ⇒ 注册表生效值应为 {expect}，"
+        f"实得 {get_num('candidate_pool_limit')!r}")
+
+
+def test_candidate_pool_limit_default_is_registry_default(_clean_env):
+    """env 不设 ⇒ config 默认值 == 注册表默认值（防两处漂移；不写死 12）。"""
+    reg_default = float(SWITCHES["candidate_pool_limit"][2])
+    got = getattr(AgentConfig(), "candidate_pool_limit")
+    assert got == reg_default, (
+        f"`candidate_pool_limit` 未设 env 时 config={got!r} ≠ 注册表默认 {reg_default!r}")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

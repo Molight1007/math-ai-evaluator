@@ -197,9 +197,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "实测 `n_judged = 0/73`。=0 回退旧行为"),
     # ---- agent/final_selector.py 候选池（研究期口径）----
     "candidate_pool_limit": (
-        "CANDIDATE_POOL_LIMIT", "num", 6.0,
-        "候选池上限（默认 6，与旧行为一致；0 = 不限，内部安全上界 12。"
-        "⚠ 该值同时是本次生成数量，勿设天文数字）"),
+        "CANDIDATE_POOL_LIMIT", "num", 12.0,
+        "候选池上限（**默认 12**；2026-10-09 用户拍板由 6 抬到 12：「先 12 试试」，"
+        "原 6 = 与旧行为逐字一致。0 = 不限（受内部安全上界 12 约束）。"
+        "⚠ 该值同时是本次生成数量，勿设天文数字 —— 设成天文数字会让 "
+        "`_generate_initial` 尝试生成天量候选而跑飞；抬到 12 后 `0=不限` 与 `=12` "
+        "行为等价，见 `agent/solver__pool._POOL_UNLIMITED_ROOM`）"),
     # ---- agent/final_selector.py（终答选择两条阻断级修复，2026-10-07 smoke10）----
     "final_answer_single_source": (
         "FINAL_ANSWER_SINGLE_SOURCE", "bool", True,
