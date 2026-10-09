@@ -298,6 +298,150 @@ def auto_diag(row: dict, verdicts: list) -> str:
                   sorted(et.items(), key=lambda x: -x[1])) if et else "（无，因无否决票）")
 
 
+def _render_question_details(A, rows, bank, core):
+    """三、逐题详情段（2026-10-08 从 build_gen_test_report 逐字搬出）。"""
+    # ---------- 三、逐题详情 ----------
+    A("## 三、逐题详情")
+    A("")
+    for i, r in enumerate(rows, 1):
+        qid = r.get("id")
+        d = r.get("diag") or {}
+        b = bank.get(qid) or {}
+        c = core.get(qid) or {}
+        q = b.get("question") or r.get("question") or ""
+        A("### 第 %d 题 · %s" % (i, qid))
+        A("")
+        A("**题目**（原文，已截断保护）")
+        A("")
+        A(code(q, 600))
+        A("")
+        A("| 项 | 值 |")
+        A("|---|---|")
+        A("| 领域 | %s |" % pick_domain(r, b, c))
+        A("| 题型 | %s |" % safe(d.get("question_type") or "（未记录）"))
+        A("| 难度档 | %s |" % safe(d.get("tier") or "（未记录）"))
+        A("| 标准答案 | %s |" % code(r.get("gold"), 160))
+        A("| 模型答案 | %s |" % code(r.get("predicted"), 160))
+        A("| 判定 | %s |" % ("✅ 正确" if r.get("correct") else "❌ 错误"))
+        A("| 本次耗时 | %.0f 秒 |" % r.get("elapsed_sec", 0))
+        if c:
+            A("| 历史（0910 批） | %.0f 秒 · %s |" % (
+                c.get("elapsed_sec", 0),
+                "当时答对" if c.get("correct") else "当时答错"))
+        A("| 候选数 | %s |" % d.get("n_candidates"))
+        A("| 逐候选票型 | %s |" % verdict_line(d.get("verdicts")))
+        A("| AuditGate | %s |" % safe(audit_summary(d.get("audit_gate")), 200))
+        A("| LeanGate | %s |" % safe(lean_summary(d.get("lean_gate")), 200))
+        A("| 结构化错误标签 | %s |" % (
+            "、".join("%s×%d" % (k, v) for k, v in
+                      sorted((d.get("error_types") or {}).items(),
+                             key=lambda x: -x[1])) or "（无）"))
+        A("| 判错票数 | %s |" % (d.get("n_reject_votes") or 0))
+        A("| 带推理复核 | %s |" % safe(deep_review_summary(d), 160))
+        A("| LLM 调用 | %s |" % safe(llm_calls_text(r), 80))
+        A("| 工具调用（Lean MCP） | %s |" % safe(tool_calls_text(r), 110))
+        _sr = stage_rows(d)
+        A("| 阶段耗时合计 | %.0f 秒（共 %d 个阶段计时点）|" % (
+            sum(x[1] for x in _sr), len(_sr)))
+        A("| 事件流条数 | %d |" % len(r.get("trace") or []))
+        A("")
+        A("**诊断**：" + auto_diag(r, d.get("verdicts")))
+        A("")
+        # 阶段耗时（前 5）
+        st = d.get("stage_timers") or {}
+        if st:
+            top = sorted(st.items(), key=lambda x: -x[1])[:5]
+            A("主要阶段耗时：" + "、".join(
+                "%s %.0fs" % (safe(k), v) for k, v in top))
+            A("")
+
+
+def _render_difficulty_table(A, rows, bank, core):
+    """四、难度分布段（2026-10-08 从 build_gen_test_report 逐字搬出）。"""
+    # ---------- 四、难度分布 ----------
+    A("## 四、难度分布")
+    A("")
+
+    def _tier(r):
+        return safe((r.get("diag") or {}).get("tier")) or "未知"
+
+    def _qtype(r):
+        return safe((r.get("diag") or {}).get("question_type")) or "未知"
+
+    def _domain(r):
+        return pick_domain(r, bank.get(r.get("id")) or {}, core.get(r.get("id")) or {})
+
+    for name, keyfn in (("难度档", _tier), ("题型", _qtype), ("领域", _domain)):
+        cnt = collections.Counter(keyfn(r) for r in rows)
+        A("| %s | 题数 | 正确 | 正确率 |" % name)
+        A("|---|---|---|---|")
+        for k, v in cnt.most_common():
+            ok = sum(1 for r in rows if keyfn(r) == k and r.get("correct"))
+            A("| %s | %d | %d | %.0f%% |" % (k, v, ok, 100.0 * ok / v if v else 0))
+        A("")
+    A("> 难度代理指标：本报告以「档位（standard/deep）+ 题型的客观/主观」为主口径；")
+    A("> 历史耗时仅作参考（同一题不同批次耗时差异可达数倍，受 LLM 服务延迟与预算配速影响）。")
+    A("")
+
+
+def _render_appendix_a(A, rows):
+    """附录 A 逐题详细过程段（2026-10-08 从 build_gen_test_report 逐字搬出）。"""
+    # ---------- 附录 A：逐题详细过程 ----------
+    # 用户 2026-09-16 要求「极为详细的数据：大模型的解答过程 / 时间消耗 / 各环节效果」。
+    # 正文保持可读，重过程数据全部收进附录。
+    A("## 附录 A · 逐题详细过程")
+    A("")
+    A("说明：本附录逐题给出①**最终回答全文** ②**时间消耗**（全部阶段，按耗时降序）"
+      "③**各环节效果**（事件流按 agent/step 聚合）④**每个候选的解答过程**"
+      "（含模型原始 reasoning，超长已截断并标注）。")
+    A("")
+    for i, r in enumerate(rows, 1):
+        d = r.get("diag") or {}
+        A("### A.%d · %s（%s）" % (
+            i, r.get("id"), "✅ 正确" if r.get("correct") else "❌ 错误"))
+        A("")
+        A("**最终回答（全文）**")
+        A("")
+        A(code(r.get("response_full") or r.get("response") or "（空）", 2000))
+        A("")
+        # ---- 时间消耗 ----
+        A("**时间消耗**")
+        A("")
+        _sr = stage_rows(d)
+        if _sr:
+            A("| 阶段 | 秒 | 占比 |")
+            A("|---|---|---|")
+            _tot = sum(x[1] for x in _sr) or 1.0
+            for name, sec in _sr:
+                A("| %s | %.1f | %.0f%% |" % (name, sec, 100.0 * sec / _tot))
+            A("| **合计（阶段计时）** | **%.1f** | 100%% |" % _tot)
+            A("")
+        else:
+            A("（无阶段计时记录）")
+            A("")
+        A("单题墙钟耗时：**%.0f 秒**；LLM 调用：%s。" % (
+            r.get("elapsed_sec", 0), safe(llm_calls_text(r), 80)))
+        A("")
+        # ---- 各环节效果 ----
+        A("**各环节效果（事件流）**")
+        A("")
+        _ts = trace_summary(r.get("trace"))
+        if _ts:
+            A("| 执行者 | 环节 | 次数 | 首条内容摘要 |")
+            A("|---|---|---|---|")
+            for agent, step, n, sample in _ts:
+                A("| %s | %s | %d | %s |" % (agent, step, n, sample or ""))
+            A("")
+        else:
+            A("（无事件流记录：可能来自旧结果文件）")
+            A("")
+        # ---- 候选解答过程 ----
+        A("**候选解答过程**")
+        A("")
+        A(candidate_blocks(r))
+        A("")
+
+
 def build_gen_test_report(results_path, testset_path, core_path, out_md, title):
     rows = load_jsonl(results_path)
     bank = {r.get("id"): r for r in load_jsonl(testset_path) if r.get("id")}
@@ -357,85 +501,9 @@ def build_gen_test_report(results_path, testset_path, core_path, out_md, title):
     A("> ⚠ 题单为**历史错题**，不是随机抽样，因此本正确率**不能**与 112 题全量基线直接比较。")
     A("")
 
-    # ---------- 三、逐题详情 ----------
-    A("## 三、逐题详情")
-    A("")
-    for i, r in enumerate(rows, 1):
-        qid = r.get("id")
-        d = r.get("diag") or {}
-        b = bank.get(qid) or {}
-        c = core.get(qid) or {}
-        q = b.get("question") or r.get("question") or ""
-        A("### 第 %d 题 · %s" % (i, qid))
-        A("")
-        A("**题目**（原文，已截断保护）")
-        A("")
-        A(code(q, 600))
-        A("")
-        A("| 项 | 值 |")
-        A("|---|---|")
-        A("| 领域 | %s |" % pick_domain(r, b, c))
-        A("| 题型 | %s |" % safe(d.get("question_type") or "（未记录）"))
-        A("| 难度档 | %s |" % safe(d.get("tier") or "（未记录）"))
-        A("| 标准答案 | %s |" % code(r.get("gold"), 160))
-        A("| 模型答案 | %s |" % code(r.get("predicted"), 160))
-        A("| 判定 | %s |" % ("✅ 正确" if r.get("correct") else "❌ 错误"))
-        A("| 本次耗时 | %.0f 秒 |" % r.get("elapsed_sec", 0))
-        if c:
-            A("| 历史（0910 批） | %.0f 秒 · %s |" % (
-                c.get("elapsed_sec", 0),
-                "当时答对" if c.get("correct") else "当时答错"))
-        A("| 候选数 | %s |" % d.get("n_candidates"))
-        A("| 逐候选票型 | %s |" % verdict_line(d.get("verdicts")))
-        A("| AuditGate | %s |" % safe(audit_summary(d.get("audit_gate")), 200))
-        A("| LeanGate | %s |" % safe(lean_summary(d.get("lean_gate")), 200))
-        A("| 结构化错误标签 | %s |" % (
-            "、".join("%s×%d" % (k, v) for k, v in
-                      sorted((d.get("error_types") or {}).items(),
-                             key=lambda x: -x[1])) or "（无）"))
-        A("| 判错票数 | %s |" % (d.get("n_reject_votes") or 0))
-        A("| 带推理复核 | %s |" % safe(deep_review_summary(d), 160))
-        A("| LLM 调用 | %s |" % safe(llm_calls_text(r), 80))
-        A("| 工具调用（Lean MCP） | %s |" % safe(tool_calls_text(r), 110))
-        _sr = stage_rows(d)
-        A("| 阶段耗时合计 | %.0f 秒（共 %d 个阶段计时点）|" % (
-            sum(x[1] for x in _sr), len(_sr)))
-        A("| 事件流条数 | %d |" % len(r.get("trace") or []))
-        A("")
-        A("**诊断**：" + auto_diag(r, d.get("verdicts")))
-        A("")
-        # 阶段耗时（前 5）
-        st = d.get("stage_timers") or {}
-        if st:
-            top = sorted(st.items(), key=lambda x: -x[1])[:5]
-            A("主要阶段耗时：" + "、".join(
-                "%s %.0fs" % (safe(k), v) for k, v in top))
-            A("")
+    _render_question_details(A, rows, bank, core)
 
-    # ---------- 四、难度分布 ----------
-    A("## 四、难度分布")
-    A("")
-
-    def _tier(r):
-        return safe((r.get("diag") or {}).get("tier")) or "未知"
-
-    def _qtype(r):
-        return safe((r.get("diag") or {}).get("question_type")) or "未知"
-
-    def _domain(r):
-        return pick_domain(r, bank.get(r.get("id")) or {}, core.get(r.get("id")) or {})
-
-    for name, keyfn in (("难度档", _tier), ("题型", _qtype), ("领域", _domain)):
-        cnt = collections.Counter(keyfn(r) for r in rows)
-        A("| %s | 题数 | 正确 | 正确率 |" % name)
-        A("|---|---|---|---|")
-        for k, v in cnt.most_common():
-            ok = sum(1 for r in rows if keyfn(r) == k and r.get("correct"))
-            A("| %s | %d | %d | %.0f%% |" % (k, v, ok, 100.0 * ok / v if v else 0))
-        A("")
-    A("> 难度代理指标：本报告以「档位（standard/deep）+ 题型的客观/主观」为主口径；")
-    A("> 历史耗时仅作参考（同一题不同批次耗时差异可达数倍，受 LLM 服务延迟与预算配速影响）。")
-    A("")
+    _render_difficulty_table(A, rows, bank, core)
 
     # ---------- 五、错误分析 ----------
     A("## 五、错误分析")
@@ -509,60 +577,7 @@ def build_gen_test_report(results_path, testset_path, core_path, out_md, title):
     A("4. 基础设施抖动（限流/超时）会污染单次结果，结论需多轮复核。")
     A("")
 
-    # ---------- 附录 A：逐题详细过程 ----------
-    # 用户 2026-09-16 要求「极为详细的数据：大模型的解答过程 / 时间消耗 / 各环节效果」。
-    # 正文保持可读，重过程数据全部收进附录。
-    A("## 附录 A · 逐题详细过程")
-    A("")
-    A("说明：本附录逐题给出①**最终回答全文** ②**时间消耗**（全部阶段，按耗时降序）"
-      "③**各环节效果**（事件流按 agent/step 聚合）④**每个候选的解答过程**"
-      "（含模型原始 reasoning，超长已截断并标注）。")
-    A("")
-    for i, r in enumerate(rows, 1):
-        d = r.get("diag") or {}
-        A("### A.%d · %s（%s）" % (
-            i, r.get("id"), "✅ 正确" if r.get("correct") else "❌ 错误"))
-        A("")
-        A("**最终回答（全文）**")
-        A("")
-        A(code(r.get("response_full") or r.get("response") or "（空）", 2000))
-        A("")
-        # ---- 时间消耗 ----
-        A("**时间消耗**")
-        A("")
-        _sr = stage_rows(d)
-        if _sr:
-            A("| 阶段 | 秒 | 占比 |")
-            A("|---|---|---|")
-            _tot = sum(x[1] for x in _sr) or 1.0
-            for name, sec in _sr:
-                A("| %s | %.1f | %.0f%% |" % (name, sec, 100.0 * sec / _tot))
-            A("| **合计（阶段计时）** | **%.1f** | 100%% |" % _tot)
-            A("")
-        else:
-            A("（无阶段计时记录）")
-            A("")
-        A("单题墙钟耗时：**%.0f 秒**；LLM 调用：%s。" % (
-            r.get("elapsed_sec", 0), safe(llm_calls_text(r), 80)))
-        A("")
-        # ---- 各环节效果 ----
-        A("**各环节效果（事件流）**")
-        A("")
-        _ts = trace_summary(r.get("trace"))
-        if _ts:
-            A("| 执行者 | 环节 | 次数 | 首条内容摘要 |")
-            A("|---|---|---|---|")
-            for agent, step, n, sample in _ts:
-                A("| %s | %s | %d | %s |" % (agent, step, n, sample or ""))
-            A("")
-        else:
-            A("（无事件流记录：可能来自旧结果文件）")
-            A("")
-        # ---- 候选解答过程 ----
-        A("**候选解答过程**")
-        A("")
-        A(candidate_blocks(r))
-        A("")
+    _render_appendix_a(A, rows)
 
     md = "\n".join(L) + "\n"
     os.makedirs(os.path.dirname(os.path.abspath(out_md)) or ".", exist_ok=True)
