@@ -474,6 +474,70 @@ def bind_field(field: str, value: Any) -> None:
     _overrides[field] = value
 
 
+def apply_env_to_config(cfg) -> None:
+    """把**环境变量里确实存在**的开关写回 config，兑现「env > config > 默认值」。
+
+    为什么必须有这一层（2026-10-09 缺陷复现）
+    =========================================
+    本模块白纸黑字承诺读取优先级 **env > AgentConfig 覆盖 > 默认值**，但此前只做了
+    两段接线：
+      · `kwargs → config`   （`ReasoningAgent.__init__`）
+      · `config → registry` （`bind_config`）
+    **缺 env → config 这一段** ⇒ 对**只被 `getattr(self.config, X)` 读取的开关**，
+    env 完全无效（注册表认了 env，消费方却读 config 的旧值）：
+        env DIVERSITY_RESAMPLE=0 → 注册表 False、`config.diversity_resample_enabled` True
+    连带的第二处缺陷：`agent/param_usage.py::_SPEC` 的 cap_fn 全是
+    `getattr(cfg, _f, _d)` ⇒ 上报的是 **config 值而非生效值**（同一份 diag 内
+    `switch_snapshot` 与 `param_usage` 自相矛盾）。
+
+    本函数即补上缺失的那一层：env 存在时把值写回 config 字段，使
+    `getattr(config, 字段)` 恒等于注册表的生效值（两层缺陷一并消解）。
+
+    ★ 只写 env 里**真实存在**的项 ⇒ env 缺失时 config 的显式值原样保留，
+      不破坏「config > 默认值」这一半语义。
+    ★ 必须**直接读 os.environ**，不走 `get_bool/get_num/get_str` —— 后者会先看
+      进程级 `_overrides`，而在 `__post_init__` 时 `bind_config` 还没跑，残留的
+      `_overrides`（同一进程内多次构造 AgentConfig 时会串味）会污染结果。
+    ★ 整段 try/except 包住，**绝不抛异常** —— 构造 AgentConfig 绝不能因 env 脏而失败。
+    ★ 按 kind 做**类型正确**的转换；`str` 型字段若当前值是 list/tuple（如
+      `lemma_domains`），按逗号切分为列表，否则 `list("A,B")` 会退化成逐字符列表。
+    """
+    try:
+        for field, meta in SWITCHES.items():
+            env_key, kind = meta[0], meta[1]
+            raw = os.environ.get(env_key)
+            if raw is None:
+                continue
+            if not hasattr(cfg, field):
+                continue
+            try:
+                if kind == "bool":
+                    # 与 get_bool 同口径：0/false/no/off/""（忽略大小写）= 关。
+                    val: Any = str(raw).strip().lower() not in _OFF
+                elif kind == "int":
+                    val = int(float(str(raw).strip()))
+                elif kind == "num":
+                    val = float(str(raw).strip())
+                else:  # "str"
+                    s = str(raw)
+                    if not s:
+                        # 与 get_str 一致：空串视作「未设置」，保留 config 现值。
+                        continue
+                    cur = getattr(cfg, field)
+                    if isinstance(cur, (list, tuple)):
+                        val = [p.strip() for p in s.split(",") if p.strip()]
+                    else:
+                        val = s
+            except (TypeError, ValueError):
+                continue
+            try:
+                setattr(cfg, field, val)
+            except Exception:  # noqa: BLE001  单个字段写失败不影响其余
+                continue
+    except Exception:  # noqa: BLE001  桥整体失败绝不冒泡
+        return
+
+
 def _raw(field: str) -> Optional[str]:
     env_key = SWITCHES[field][0]
     v = os.environ.get(env_key)

@@ -574,3 +574,27 @@ class AgentConfig(_AgentConfigBase):
             #   调度侧已不再有任何按剩余时间降级的逻辑（soft_budget/gen_deadline/verify_only 触发路径已删）。
             # 查阅：CHANGES_2026-09-29.md §0.2
             self.tier_budget = {"deep": 86400.0}
+
+        # ============================================================
+        # env → config 桥（2026-10-09 修复「env 对 getattr 开关静默失效」）
+        # ------------------------------------------------------------
+        # `contracts/switch_registry.py` 承诺读取优先级「env > AgentConfig 覆盖 >
+        # 默认值」，但此前**缺 env→config 这一段** ⇒ 只被
+        # `getattr(self.config, X)` 读取的开关**完全无视 env**（注册表认了 env、
+        # 消费方读的却是 config 的旧值）。本调用把**环境变量里确实存在**的开关值
+        # 写回本对象的同名字段，使 `getattr(config, 字段)` 恒等于注册表生效值
+        # （`param_usage` 因读 `getattr(cfg, ...)` 也随之自动纠正）。
+        #
+        # ★ 只写 env 里真实存在的项 ⇒ env 缺失时本对象的显式值原样保留，
+        #   不破坏「config > 默认值」这一半语义。
+        # ★ 必须放在 `__post_init__` **末尾**：前面是档位表初始化，不改动其逻辑。
+        # ★ 懒导入（非模块级）：本模块对外契约是「只依赖 stdlib」，模块级 import
+        #   contracts 会破坏 user_agent 的降级导入契约 ⇒ 仅在构造时按需导入。
+        # ★ import 与调用**双重 try/except**：桥失败绝不使 AgentConfig 构造失败。
+        #   import 方向：`contracts/` 是最底层（零依赖），根层向下 import 合法；
+        #   已核 `contracts/switch_registry.py` 不反向 import user_agent。
+        try:
+            from contracts.switch_registry import apply_env_to_config
+            apply_env_to_config(self)
+        except Exception:  # noqa: BLE001  桥失败不得影响配置构造
+            pass
