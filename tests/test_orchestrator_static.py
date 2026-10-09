@@ -72,6 +72,10 @@ _EXTRACTED_MAIN_FLOW = [
     # 2026-10-09 批13：兜底/应急簇（_emergency_direct_solve / _fallback_direct /
     # _fallback）已逐字搬到 agent/orchestrator__fallback.py。
     "agent/orchestrator__fallback.py",
+    # 2026-10-09 批14：阶段预算/计时簇（_self_improve_applicable / _phase_budget /
+    # _phase_deadline_guard / _phase_deadline_restore）已逐字搬到
+    # agent/orchestrator__budget.py。
+    "agent/orchestrator__budget.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
