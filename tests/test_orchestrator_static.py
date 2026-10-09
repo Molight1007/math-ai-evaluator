@@ -93,6 +93,9 @@ _EXTRACTED_MAIN_FLOW = [
     "agent/verifier__lemma.py",
     "agent/verifier__report.py",
     "agent/verifier__vote.py",
+    # 2026-10-09 阶段S4：深复核簇（_deep_final_review / _deep_review_finalize）
+    # 逐字搬到 agent/verifier__deep.py。同上，须在 pyflakes 下无未定义名称。
+    "agent/verifier__deep.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]

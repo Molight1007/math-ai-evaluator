@@ -238,6 +238,17 @@ _SHIM_SPECS = (
     ("_vote_one", "agent.verifier__vote"),
     ("_vote", "agent.verifier__vote"),
     ("_vote_profile", "agent.verifier__vote"),
+    # S4（2026-10-09）：深复核 / 反馈 / 投票三簇续搬（新增 verifier__deep）。
+    ("_deep_final_review", "agent.verifier__deep"),
+    ("_deep_review_finalize", "agent.verifier__deep"),
+    ("_extract_feedback", "agent.verifier__report"),
+    ("_oracle_sanity_feedback", "agent.verifier__report"),
+    ("_extract_revise_feedback", "agent.verifier__report"),
+    ("_is_correct_vote", "agent.verifier__vote"),
+    ("_vote_one_scoring", "agent.verifier__vote"),
+    ("_vote_rubric", "agent.verifier__vote"),
+    ("_error_type_dist", "agent.verifier__vote"),
+    ("_record_error_types", "agent.verifier__vote"),
 )
 
 

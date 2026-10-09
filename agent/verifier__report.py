@@ -16,6 +16,8 @@ import logging
 from prompts.verifier import (
     VERIFIER_BUGREPORT_SYSTEM,
     VERIFIER_BUGREPORT_TEMPLATE,
+    VERIFIER_FEEDBACK_SYSTEM,
+    VERIFIER_FEEDBACK_TEMPLATE,
 )
 from utils.prefill import prefill_messages, stitch
 
@@ -173,3 +175,90 @@ def structured_report_for(owner, ctx, problem: str, candidate,
     except Exception as e:  # noqa: BLE001
         logger.warning("structured_report_for 失败（返回空）: %s", str(e)[:120])
         return ""
+
+
+def _extract_feedback(owner, ctx, problem: str, candidate) -> str:
+    text = owner._candidate_text(candidate)
+    messages = [
+        {"role": "system", "content": VERIFIER_FEEDBACK_SYSTEM},
+        {"role": "user", "content": VERIFIER_FEEDBACK_TEMPLATE.format(
+            problem=problem, candidate_answer=text
+        )},
+    ]
+    try:
+        # v2.4.1：prefill「错因：」抑制 CoT，直接输出错因定位
+        raw = owner.llm(ctx, prefill_messages(messages, "错因："), 0.0, 32768)
+        return stitch("错因：", raw) if raw else "无法提取失败原因。"
+    except Exception as e:
+        logger.error(f"Feedback extraction failed: {e}")
+        return "无法提取失败原因。"
+
+
+def _oracle_sanity_feedback(candidate) -> str:
+    """用 AnswerOracle 做客观 sanity check（纯本地），返回客观反馈。"""
+    answer = getattr(candidate, "answer", "") or ""
+    if not answer:
+        return "候选答案为空，需重新求解。"
+    try:
+        from .answer_oracle import AnswerOracle
+        if not AnswerOracle.is_parseable(answer):
+            return "候选答案无法解析为有效数学表达式，可能为幻觉或格式错误。"
+    except Exception as exc:  # noqa: BLE001
+        # 2026-09-04 审核：异常吞掉 = "可解析性检查"静默跳过 → 全部放行
+        # （与 lean_gate 吞 AttributeError 历史同型）。留证据。
+        logger.debug("verifier 可解析检查异常（跳过放行）: %s: %s",
+                     type(exc).__name__, exc)
+    return ""
+
+
+def _extract_revise_feedback(owner, ctx, problem: str,
+                             candidates: list, best_cluster) -> str:
+    """恢复 Reflexion 反馈：仅在需要 revise 时提取错因（受预算约束）。
+
+        触发条件：best_cluster 存在且置信度 < 0.5（正确票未过半，验证器自身
+        都不确定）。此时提取 LLM 错因定位，并叠加 AnswerOracle 的客观
+        sanity check（纯本地、不消耗预算）。
+
+        返回空串表示无需 revise 或预算不足。
+        """
+    if best_cluster is None:
+        return ""
+    if getattr(best_cluster, "confidence", 0.0) >= 0.5:
+        return ""
+    if ctx.is_time_critical():
+        return ""
+
+    # 取 best_cluster 的代表候选（共识簇内第一个候选）
+    rep_candidate = None
+    cids = getattr(best_cluster, "candidate_ids", []) or []
+    if cids and candidates:
+        idx = cids[0] if cids[0] < len(candidates) else 0
+        rep_candidate = candidates[idx]
+    if rep_candidate is None and candidates:
+        rep_candidate = candidates[0]
+    if rep_candidate is None:
+        return ""
+
+    parts = []
+    # 1) LLM 错因提取（消耗 1 次预算）
+    #    优先用结构化 bug report（分类 + 原文定位，修正时有的放矢）；
+    #    解析不出 findings 时回退到原来的一句话错因。二者都只花 1 次调用，
+    #    所以这是替换不是叠加。
+    llm_feedback = ""
+    if getattr(owner.config, "use_bug_report_feedback", True):
+        report = owner._extract_bug_report(ctx, problem, rep_candidate)
+        llm_feedback = owner._format_bug_report(report)
+    if not llm_feedback:
+        llm_feedback = owner._extract_feedback(ctx, problem, rep_candidate)
+        if llm_feedback == "无法提取失败原因。":
+            llm_feedback = ""
+    if llm_feedback:
+        parts.append(llm_feedback)
+    # 2) AnswerOracle 客观 sanity check（纯本地，不消耗预算）
+    oracle_fb = owner._oracle_sanity_feedback(rep_candidate)
+    if oracle_fb:
+        parts.append(oracle_fb)
+
+    if parts:
+        return "\n".join(parts)
+    return "所有候选均未获验证通过，请重新审题并纠正推理错误。"

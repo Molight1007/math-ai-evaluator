@@ -14,32 +14,26 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 
 from .base import BaseAgent, TaskContext, Verdict
 from prompts.verifier import (
-    VERIFIER_SCORING_SYSTEM,
-    VERIFIER_SCORING_TEMPLATE,
-    VERIFIER_FEEDBACK_SYSTEM,
-    VERIFIER_FEEDBACK_TEMPLATE,
     VERIFIER_RUBRIC_SYSTEM,
     VERIFIER_RUBRIC_TEMPLATE,
     VERIFIER_CHALLENGE_SYSTEM,
     VERIFIER_CHALLENGE_TEMPLATE,
-    # 2026-09-15：带推理复核的专用提示词（强制写出检查过程）
-    VERIFIER_DEEP_REVIEW_SYSTEM,
-    VERIFIER_DEEP_REVIEW_TEMPLATE,
 )
 from prompts.proof import PROOF_VERIFY_SYSTEM, PROOF_VERIFY_TEMPLATE
 from utils.extract import smart_fallback_answer
 from utils.prefill import prefill_messages, stitch
-# ★ 2026-10-09 拆分（S3）：VerifierAgent 的 4 个职责簇已搬到 agent/verifier__*.py，
-# 类上 11 个方法改为一行委托跳板。A 步已消掉 verifier ↔ verifier__cluster 的
-# 模块级循环（AnswerCluster 已随簇搬到 verifier__cluster），故此处可放模块顶部。
+# ★ 2026-10-09 拆分（S3/S4）：VerifierAgent 的职责簇已搬到 agent/verifier__*.py
+# （cluster / lemma / report / vote / deep），类上只留**一行委托跳板** +
+# 编排面 + 客观探测 + 4 个 patch 靶点。此处可放模块顶部（S3 已消掉
+# verifier ↔ verifier__cluster 的模块级循环）。
 from . import verifier__cluster as _vc
 from . import verifier__lemma as _vl
 from . import verifier__report as _vr
 from . import verifier__vote as _vv
+from . import verifier__deep as _vd
 
 logger = logging.getLogger("MathPilot.Verifier")
 
@@ -92,54 +86,8 @@ class VerifierAgent(BaseAgent):
     # 投票与解析
     # ==================================================================
 
-    # VERDICT 行解析（2026-09-11）：放宽带换行 / \boxed{} 壳的写法。
-    # 此前拒绝词表里写死 `VERDICT\s*:\s*B`，模型输出 `VERDICT: \n\n\boxed{B}`
-    # 时被换行 + 壳打断 → 落入"无法解析" → 判错（实测 9 次）。
-    _VERDICT_LINE_RE = re.compile(
-        r"VERDICT\s*[:：]\s*(?:\\boxed\s*\{\s*)?([AB])", re.IGNORECASE)
-
     def _is_correct_vote(self, text: str) -> bool | None:
-        """解析 VERDICT 行 → True(判对) / False(判错) / None(弃权)。
-
-        2026-09-11 三态化（依据 `Bug清单_团队提交de90cedc_0911.md` §3）：
-        LLM 调用失败（text is None）与输出无法解析，语义上是**基础设施/格式
-        故障 = 弃权**，不是"答案错误"。此前一律 `return False`，把 36 张故障票
-        （27 次 None 输入 + 9 次解析失败，占票池 ~30%）当成反证计入：
-        既压低簇置信度触发无谓 revise（单题白烧 96–158s），也把本可通过的
-        候选直接投死。返回 None 的票在聚合时剔出 total_votes 分母。
-        """
-        if text is None:
-            logger.warning("_is_correct_vote 收到 None 输入（LLM 调用失败）→ 弃权")
-            return None
-        text_upper = text.upper()
-
-        # 0) VERDICT 行优先（权威信号，含换行/壳变体）。
-        #    注意：在**原文**上做 IGNORECASE 匹配，不能在 text_upper 上匹配——
-        #    upper() 会把 `\boxed` 变成 `\BOXED`，导致壳形态正则失配。
-        m = self._VERDICT_LINE_RE.search(text)
-        if m:
-            return m.group(1).upper() == "A"
-
-        # 1) 拒绝词优先——规避"不正确"包含"正确"的误判
-        reject_patterns = [
-            r'\bINCORRECT\b', r'\bWRONG\b', r'\bFALSE\b',
-            r'不\s*正\s*确', r'错\s*误', r'\bNO\b(?!\s*CHANGE|TE)',
-        ]
-        for pat in reject_patterns:
-            if re.search(pat, text_upper):
-                return False
-
-        # 2) 接受词
-        accept_patterns = [
-            r'\bCORRECT\b', r'\bTRUE\b', r'正\s*确', r'\bYES\b',
-        ]
-        for pat in accept_patterns:
-            if re.search(pat, text_upper):
-                return True
-
-        # 3) 无法判断 → 弃权（既不判对也不判错，不参与分母）
-        logger.warning("无法从文本中解析 VERDICT，计为弃权票: %s", text[:100])
-        return None
+        return _vv._is_correct_vote(self, text)
 
     # ==================================================================
     # 答案归一化与等价判定
@@ -183,164 +131,10 @@ class VerifierAgent(BaseAgent):
     #   原注释写「默认关（False）」与代码相反，2026-10-04 修正注释（不改行为）。
     # ==================================================================
     def _deep_final_review(self, ctx, problem: str, best_cluster) -> str:
-        """对最终选定答案做一次带推理的复核；返回原始文本（未启用/失败返回空串）。"""
-        cfg = self.config
-        if not getattr(cfg, "verifier_deep_final_enabled", False):
-            return ""
-        if best_cluster is None:
-            return ""
-        # 预算护栏：剩余时间不足则不做（复核本身要几十秒）
-        # ⚠ TaskContext **没有** remaining_time()，只有 is_time_critical()/is_timed_out()；
-        #   剩余秒数须由 deadline 自行推算（写 hasattr 兜底会静默失效，已踩）。
-        need = float(getattr(cfg, "verifier_deep_final_min_remaining", 150.0) or 0)
-        try:
-            _dl = getattr(ctx, "deadline", None)
-            remain = (float(_dl) - time.time()) if _dl else None
-            if ctx.is_time_critical() or (need and remain is not None and remain < need):
-                self.record(ctx, "deep_review",
-                            "剩余 %s < %.0fs，跳过带推理复核" % (
-                                "?" if remain is None else "%.0fs" % remain, need))
-                return ""
-        except Exception:  # noqa: BLE001
-            pass
-
-        answer = getattr(best_cluster, "answer_norm", "") or ""
-        if not answer:
-            return ""
-        messages = [
-            {"role": "system", "content": VERIFIER_DEEP_REVIEW_SYSTEM},
-            {"role": "user", "content": VERIFIER_DEEP_REVIEW_TEMPLATE.format(
-                problem=problem,
-                candidate_answer=f"【最终答案】{answer}",
-                theorem_context=(getattr(ctx, "_leansearch_ctx", "") or "(无)"),
-            )},
-        ]
-        try:
-            # ★ 不 prefill：允许完整思维流，这才是"独立重算"。
-            # ★ 必须走**流式**（见 `_deep_llm`）：实测两例"允许推理"的调用均在
-            #   全局 120s 超时（`LLM_TIMEOUT`）处失败、输出 0 字 —— 非流式路径
-            #   对"要跑完整推理"的调用必然失败，功能等于不可用。
-            raw = self._deep_llm(
-                ctx, messages,
-                float(getattr(cfg, "verifier_deep_review_temperature", 0.0) or 0.0),
-                int(getattr(cfg, "verifier_deep_review_max_tokens", 16384) or 16384))
-        except Exception as e:  # noqa: BLE001
-            logger.warning("带推理复核调用失败（不影响其余流程）: %s", e)
-            return ""
-        if not raw:
-            return ""
-        # ★ 2026-09-15 实测教训：用投票模板时模型只吐 **12 个字**（就是一行
-        #   `VERDICT: A`），一个字的检查过程都没有。**短于阈值一律视为未完成复核**，
-        #   绝不能当成"检查通过"——否则"没做检查"与"检查通过"无法区分，
-        #   正是本项目反复踩的"机制触发 ≠ 效果提升"。
-        min_chars = int(getattr(cfg, "verifier_deep_review_min_chars", 200) or 0)
-        if min_chars and len(raw) < min_chars:
-            self.record(ctx, "deep_review",
-                        "复核未按要求输出检查过程（仅 %d 字 < %d），视为未完成"
-                        % (len(raw), min_chars),
-                        chars=len(raw))
-            return ""
-        verdict = _last_verdict_ab(raw)
-        # ★★★ 2026-09-16 修复（实测驱动的第二段收敛调用）：
-        #   诊断落盘（`results/deep_review_samples.jsonl`）8/8 样本显示——
-        #     首行 = "We need to verify the answer to the problem: ..."
-        #     **VERDICT 出现 0 次**、chars = 26,749 ~ 42,545
-        #   ⇒ 模型**完全无视系统提示的格式要求**，直接用英文自由推理，
-        #     不写 VERDICT、不按四步写。故"把 VERDICT 置顶"的提示词改动**无效**。
-        #   且样本 [4]/[6] 的 chars **完全相同（26749）**、尾部是
-        #   `a_{a_1} = a_{a_1} = ...` **无限重复** ⇒ 模型陷入**复读退化循环**。
-        #   修法：**两段式**——
-        #     ① 第一段保留原样（自由推理，"独立重算"的价值在这里，不 prefill）；
-        #     ② 首段没给出可解析判定时，追加一次**廉价收敛调用**：把推理尾部喂回，
-        #        要求只输出一行 `VERDICT: A/B（标签）`。成本极小（max_tokens=64），
-        #        但把"4 万字符作废"变成"拿到判定"。
-        # ★ 2026-10-04 修复（判定被丢弃，机制空转）：
-        #   收敛段一旦补出判定，必须把**含 `VERDICT:` 的那段原文**带回给调用方。
-        #   否则调用方对**第一段 raw** 重新解析（`_last_verdict_ab(raw)`）恒为 None
-        #   （首段恰恰是「没有 VERDICT」才会走到收敛调用），于是
-        #   「判 B ⇒ 压制置信度 ⇒ 触发 revise」整条机制**静默失效**，
-        #   而每次仍白付 1 段 16384 自由推理 + 0~1 段 8192 收敛调用的成本。
-        _conv_text = ""
-        if verdict is None and (raw or "").strip():
-            try:
-                # ★ 2026-09-17 改进：收敛调用改用 **prefill** 强制以 `VERDICT: ` 开头。
-                #   首版（昨天）只靠提示词要求"只输出一行"，实测**11 次只成功 2 次** ——
-                #   模型仍可能用英文复述而不是写 `VERDICT:` 字面量。
-                #   本仓库在其它"必须单行输出"的场合（如 value_attack 的 JSON 提取）
-                #   一直用 `prefill_messages(..., prefix)` + `stitch(prefix, raw)`：
-                #   服务端会把 prefix 作为 assistant 回复的开头，**结构性地**保证格式。
-                #   这里同样处理：prefix=`VERDICT: `。
-                _msgs = [{"role": "system",
-                          "content": _DEEP_VERDICT_CONDENSE_SYS},
-                         {"role": "user",
-                          "content": "【你此前的分析（末尾节选）】\n"
-                                     + raw[-6000:]
-                                     + "\n\n请只输出一行判定，不要任何其它文字。"}]
-                try:
-                    from utils.prefill import prefill_messages, stitch
-                    _msgs = prefill_messages(_msgs, _DEEP_VERDICT_PREFIX)
-                    # 2026-10-02 DeepSeek 适配：原 64 ⇒ 8192。原值基于「输出很短（只一行
-                    # VERDICT）+ prefill 抑制思维块」的 Intern-S 时代假设；对 reasoning
-                    # 模型（如 deepseek thinking）思维块先吃满预算 ⇒ 正文为空、必截断。
-                    _conv = self._deep_llm(ctx, _msgs, 0.0, 8192)
-                    _conv = stitch(_DEEP_VERDICT_PREFIX, _conv) if _conv is not None else ""
-                except Exception:  # noqa: BLE001  prefill 不可用则退回原提示词路径
-                    # 2026-10-02 DeepSeek 适配：原 64 ⇒ 8192（同上）。
-                    _conv = self._deep_llm(ctx, _msgs, 0.0, 8192)
-                _v2 = _last_verdict_ab(_conv or "")
-                if _v2 is not None:
-                    verdict = _v2
-                    # 收敛段命中判定 → 记下含 VERDICT 的原文，函数末尾回传（见下方 return）。
-                    _conv_text = _conv or ""
-                    self.record(ctx, "deep_review",
-                                "收敛调用补出判定: %s（首段 %d 字符未给 VERDICT）"
-                                % ("A" if _v2 else "B", len(raw)),
-                                chars=len(_conv or ""))
-            except Exception as _e:  # noqa: BLE001
-                logger.debug("深复核收敛调用失败（不影响主流程）: %s", _e)
-        return self._deep_review_finalize(ctx, raw, verdict, _conv_text)
+        return _vd._deep_final_review(self, ctx, problem, best_cluster)
 
     def _deep_review_finalize(self, ctx, raw: str, verdict, _conv_text: str) -> str:
-        """复核收尾：样本落盘 + diag 埋点 + 返回文本组装（收敛段命中时拼尾部）。
-
-        纯搬迁自 ``_deep_final_review`` 尾部（2026-10-08 批7 原地拆分），语句逐字不变。
-        """
-        # ★★ 2026-09-16 诊断落盘（用户要求）：把每次复核输出的**头部样本**存成
-        #   jsonl。为什么必须落盘：`diag.deep_review` 只存 `chars`，
-        #   于是"输出 4 万字符却解析不到 VERDICT"这件事**只能靠猜**。
-        #   实测 003 的 6 次复核里 5 次"无法解析"，而看不到模型到底写了什么，
-        #   无法判断是"没写 VERDICT"还是"写法不在解析器覆盖范围内"。
-        #   不落全文（会很大），只存前 1200 字符 + 尾部 400 字符 —— 判定通常在首尾。
-        try:
-            _dump_deep_review_sample(ctx, raw, verdict)
-        except Exception:  # noqa: BLE001
-            pass
-        self.record(
-            ctx, "deep_review",
-            "带推理复核: %s" % ("A(通过)" if verdict is True
-                               else "B(否决)" if verdict is False else "无法解析"),
-            verdict=("A" if verdict is True else "B" if verdict is False else "?"),
-            error_type=(_extract_error_type(raw) if verdict is False else ""),
-            chars=len(raw))
-        # ★ 2026-10-04：收敛段命中判定时，回传**含 VERDICT 的原文**（供调用方
-        #   `_last_verdict_ab` 正确解析，从而真正触发「判 B ⇒ revise」）；
-        #   否则维持原行为返回首段 raw（无 VERDICT 时调用方解析为 None，语义不变）。
-        # ★★ 2026-10-05 修（**推理被整段丢弃** —— 三步论第 2 步"反馈要准确"）：
-        #   原写法 `return _conv_text if _conv_text else raw` 在收敛段命中时
-        #   **只回一行 VERDICT**，把首段那 **5.5万–7.1万字符的完整推理整个丢掉**
-        #   ⇒ 实测 feedback 最终只剩 **44 字符**，模型拿不到"为什么判错"。
-        #   现改为 **「首段推理（尾部）+ 收敛判定」** 一起回传：
-        #     · `_last_verdict_ab` 取**最后一个** VERDICT ⇒ 仍解析到收敛段的判定 ✓
-        #     · 反馈里保留推理 ⇒ 模型能看到判错依据、才知道该怎么改 ✓
-        #   ⚠ 顺序不可反：判定必须在**最后**，否则会被推理中的假设性 VERDICT 覆盖。
-        if _conv_text:
-            _tail = (raw or "").strip()
-            if len(_tail) > 6000:
-                # 首段过长时保留**尾部**（最贴近结论的部分）——
-                # 否则被下游截断后只剩与结论无关的开头，等于没留。
-                _tail = "…（推理前段省略）…\n" + _tail[-6000:]
-            return (_tail + "\n\n" + _conv_text) if _tail else _conv_text
-        return raw
+        return _vd._deep_review_finalize(self, ctx, raw, verdict, _conv_text)
 
     def _deep_llm(self, ctx, messages: list, temperature: float,
                   max_tokens: int) -> str:
@@ -401,36 +195,7 @@ class VerifierAgent(BaseAgent):
         return _vv._vote_one(self, ctx, problem, candidate_text, temperature, full_reasoning)
 
     def _vote_one_scoring(self, ctx, problem: str, candidate_text: str) -> dict | None:
-        """评分模式投票（返回 JSON 或 None）。
-
-        v2.4.1：prefill「{"」引导直接输出 JSON，抑制 CoT 前置长推理。
-        """
-        messages = [
-            {"role": "system", "content": VERIFIER_SCORING_SYSTEM},
-            {"role": "user", "content": VERIFIER_SCORING_TEMPLATE.format(
-                problem=problem, candidate_answer=candidate_text
-            )},
-        ]
-        raw = self.llm(ctx, prefill_messages(messages, '{"'), 0.0, 32768)
-        if raw:
-            raw = stitch('{"', raw)
-        # 2026-09-20 修复：self.llm 可能返回 None（_is_correct_vote 已自述该情形）。
-        # 原实现直接 `json.loads(None)` 抛 TypeError，而这里只捕 JSONDecodeError，
-        # 只能靠外层 `except Exception` 兜住 ⇒ 异常被静默吞掉、语义不清。
-        # 同函数族其它 5 处均有 `if not raw` 守卫，此处补齐。
-        if not raw:
-            return None
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            # 尝试提取 JSON 块
-            m = re.search(r'\{[^{}]*\}', raw, re.DOTALL)
-            if m:
-                try:
-                    return json.loads(m.group())
-                except json.JSONDecodeError:
-                    pass
-            return None
+        return _vv._vote_one_scoring(self, ctx, problem, candidate_text)
 
     # ==================================================================
     # v3 P2（2026-09-06 移植自 sq 分支）：rubric 结构化判分 + 反例挑战
@@ -467,85 +232,7 @@ class VerifierAgent(BaseAgent):
     def _vote_rubric(self, ctx, problem: str, candidate,
                      use_deterministic: bool = True,
                      temperature: float = 0.0) -> list[Verdict]:
-        """rubric 判分路径：结构化判分 + 确定性旁证（多证据汇审）。
-
-        - rubric: verdict A/B + confidence + 错因定位（error_type/step_index/reason）
-        - 确定性 fail → 硬否决（rubric 票全翻错，绕过 LLM 误判，0 LLM、可复现）
-        - 确定性 pass → 追加一张独立正确票（deterministic_pass，非 LLM 客观票）
-        - 确定性 unknown → 只挂证据，不改判
-        """
-        # 超时保护：deadline 已过 → 不判分（与 _vote 路径口径一致，空 verdicts 由上层走兜底）
-        if ctx.is_timed_out():
-            self.record(ctx, "vote_timeout",
-                        "rubric 判分路径：单题 deadline 已过，跳过判分（返回空票）")
-            logger.warning("Verifier: 单题 deadline 已过，跳过 rubric 判分")
-            return []
-        text = self._candidate_text(candidate)
-        votes: list[Verdict] = []
-
-        # 1) rubric 判分（1 次 JSON prefill）
-        rub = self._vote_one_rubric(ctx, problem, text)
-        if rub is None:
-            # 2026-09-11 三态化：判分调用/解析失败 = 基础设施故障 → 弃权。
-            # 此前记 `correct=True`（"保守放行"）会凭空制造一张**正确票**、
-            # 虚抬簇置信度——与"故障计成错票"是同一枚硬币的两面。
-            # 改为弃权后既不判对也不判错，不参与 total_votes 分母；若该候选
-            # 最终零有效票，orchestrator 的 5.5 低置信度通道仍会兜底复核。
-            votes.append(Verdict(correct=False, abstain=True,
-                                 raw="rubric_parse_failed",
-                                 feedback="rubric 判分解析失败（弃权，不计票）"))
-        else:
-            correct = str(rub.get("verdict", "B")).upper() == "A"
-            feedback = ""
-            if not correct:
-                parts = []
-                step = rub.get("step_index")
-                if step is not None:
-                    parts.append(f"步骤{step}")
-                err = rub.get("error_type", "")
-                if err and err != "无":
-                    parts.append(err)
-                reason = rub.get("reason", "")
-                if reason:
-                    parts.append(reason)
-                feedback = "；".join(parts)
-            try:
-                conf = float(rub.get("confidence", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                conf = 0.0
-            votes.append(Verdict(
-                correct=correct,
-                raw=json.dumps(rub, ensure_ascii=False),
-                feedback=feedback,
-                score=rub,
-                confidence=(conf if correct else 0.0),
-                # ★ 2026-09-15：rubric 路径也回带结构化错误类型，口径与
-                #   二元投票一致（同样走封闭标签集，认不出即空串）。
-                error_type=(_extract_error_type(
-                    f"{rub.get('error_type', '')}；{feedback}") if not correct else ""),
-            ))
-
-        # 2) 确定性旁证（0 LLM 预算）：fail 硬否决 / pass 独立正确票 / unknown 挂证据
-        if use_deterministic:
-            det = self._deterministic_check(ctx, problem, candidate)
-            if det.get("verdict") == "fail":
-                logger.warning("确定性验证失败 → 硬否决候选: %s",
-                               det.get("evidence", "")[:80])
-                for v in votes:
-                    v.correct = False
-                    v.confidence = 0.0
-                votes.append(Verdict(correct=False, raw="deterministic_fail",
-                                     feedback=f"确定性验证否决: {det.get('evidence', '')[:120]}",
-                                     deterministic=det))
-            elif det.get("verdict") == "pass":
-                votes.append(Verdict(correct=True, raw="deterministic_pass",
-                                     deterministic=det))
-            else:
-                # unknown：只挂证据，不追加票
-                for v in votes:
-                    v.deterministic = det
-
-        return votes
+        return _vv._vote_rubric(self, ctx, problem, candidate, use_deterministic, temperature)
 
     def _challenge_counterexample(self, ctx, problem: str,
                                   candidate_text: str, answer: str) -> dict:
@@ -640,53 +327,18 @@ class VerifierAgent(BaseAgent):
     # ------------------------------------------------------------------
     @staticmethod
     def _error_type_dist(verdicts) -> dict:
-        """统计判 B 票的结构化错误标签分布。返回 {标签: 出现票数}。"""
-        dist: dict = {}
-        for v in (verdicts or []):
-            et = getattr(v, "error_type", "") or ""
-            if not et:
-                continue
-            for tag in et.split(","):
-                tag = tag.strip()
-                if tag:
-                    dist[tag] = dist.get(tag, 0) + 1
-        return dist
+        return _vv._error_type_dist(verdicts)
 
     def _record_error_types(self, ctx, verdicts,
                             step: str = "vote_error_types") -> dict:
-        """把结构化错误类型分布写进 trace，返回该分布字典。"""
-        dist = self._error_type_dist(verdicts)
-        n_reject = sum(1 for v in (verdicts or [])
-                       if v.correct is False and not getattr(v, "abstain", False))
-        if n_reject:
-            ordered = sorted(dist.items(), key=lambda kv: -kv[1])
-            self.record(
-                ctx, step,
-                "错误类型分布: " + (", ".join(f"{k}×{n}" for k, n in ordered)
-                                    or "(模型未回带标签)"),
-                error_types=dist, n_reject=n_reject,
-            )
-        return dist
+        return _vv._record_error_types(self, ctx, verdicts, step)
 
     # ==================================================================
     # 反馈提取（自纠错用）
     # ==================================================================
 
     def _extract_feedback(self, ctx, problem: str, candidate) -> str:
-        text = self._candidate_text(candidate)
-        messages = [
-            {"role": "system", "content": VERIFIER_FEEDBACK_SYSTEM},
-            {"role": "user", "content": VERIFIER_FEEDBACK_TEMPLATE.format(
-                problem=problem, candidate_answer=text
-            )},
-        ]
-        try:
-            # v2.4.1：prefill「错因：」抑制 CoT，直接输出错因定位
-            raw = self.llm(ctx, prefill_messages(messages, "错因："), 0.0, 32768)
-            return stitch("错因：", raw) if raw else "无法提取失败原因。"
-        except Exception as e:
-            logger.error(f"Feedback extraction failed: {e}")
-            return "无法提取失败原因。"
+        return _vr._extract_feedback(self, ctx, problem, candidate)
 
     # ------------------------------------------------------------------
     # 结构化 Bug Report（依据 IMO 2025 验证-精炼流水线论文）
@@ -744,72 +396,11 @@ class VerifierAgent(BaseAgent):
 
     def _extract_revise_feedback(self, ctx, problem: str,
                                  candidates: list, best_cluster) -> str:
-        """恢复 Reflexion 反馈：仅在需要 revise 时提取错因（受预算约束）。
-
-        触发条件：best_cluster 存在且置信度 < 0.5（正确票未过半，验证器自身
-        都不确定）。此时提取 LLM 错因定位，并叠加 AnswerOracle 的客观
-        sanity check（纯本地、不消耗预算）。
-
-        返回空串表示无需 revise 或预算不足。
-        """
-        if best_cluster is None:
-            return ""
-        if getattr(best_cluster, "confidence", 0.0) >= 0.5:
-            return ""
-        if ctx.is_time_critical():
-            return ""
-
-        # 取 best_cluster 的代表候选（共识簇内第一个候选）
-        rep_candidate = None
-        cids = getattr(best_cluster, "candidate_ids", []) or []
-        if cids and candidates:
-            idx = cids[0] if cids[0] < len(candidates) else 0
-            rep_candidate = candidates[idx]
-        if rep_candidate is None and candidates:
-            rep_candidate = candidates[0]
-        if rep_candidate is None:
-            return ""
-
-        parts = []
-        # 1) LLM 错因提取（消耗 1 次预算）
-        #    优先用结构化 bug report（分类 + 原文定位，修正时有的放矢）；
-        #    解析不出 findings 时回退到原来的一句话错因。二者都只花 1 次调用，
-        #    所以这是替换不是叠加。
-        llm_feedback = ""
-        if getattr(self.config, "use_bug_report_feedback", True):
-            report = self._extract_bug_report(ctx, problem, rep_candidate)
-            llm_feedback = self._format_bug_report(report)
-        if not llm_feedback:
-            llm_feedback = self._extract_feedback(ctx, problem, rep_candidate)
-            if llm_feedback == "无法提取失败原因。":
-                llm_feedback = ""
-        if llm_feedback:
-            parts.append(llm_feedback)
-        # 2) AnswerOracle 客观 sanity check（纯本地，不消耗预算）
-        oracle_fb = self._oracle_sanity_feedback(rep_candidate)
-        if oracle_fb:
-            parts.append(oracle_fb)
-
-        if parts:
-            return "\n".join(parts)
-        return "所有候选均未获验证通过，请重新审题并纠正推理错误。"
+        return _vr._extract_revise_feedback(self, ctx, problem, candidates, best_cluster)
 
     @staticmethod
     def _oracle_sanity_feedback(candidate) -> str:
-        """用 AnswerOracle 做客观 sanity check（纯本地），返回客观反馈。"""
-        answer = getattr(candidate, "answer", "") or ""
-        if not answer:
-            return "候选答案为空，需重新求解。"
-        try:
-            from .answer_oracle import AnswerOracle
-            if not AnswerOracle.is_parseable(answer):
-                return "候选答案无法解析为有效数学表达式，可能为幻觉或格式错误。"
-        except Exception as exc:  # noqa: BLE001
-            # 2026-09-04 审核：异常吞掉 = "可解析性检查"静默跳过 → 全部放行
-            # （与 lean_gate 吞 AttributeError 历史同型）。留证据。
-            logger.debug("verifier 可解析检查异常（跳过放行）: %s: %s",
-                         type(exc).__name__, exc)
-        return ""
+        return _vr._oracle_sanity_feedback(candidate)
 
     # ==================================================================
     # P1-1: Python/SymPy 独立验证通道 + 确定性复算（playoff）
