@@ -128,21 +128,7 @@ def main() -> int:
     from agent.theorem_hint import (retrieve_theorems_for_question,
                                     match_against_ground_truth)
 
-    # ---- 断点续跑：读回已有结果，跳过已完成的题 ----
-    # 背景：本脚本全量约 12 分钟（112 题 × ~6.5s），而宿主对单次命令有硬时限，
-    # 跑到一半会被 SIGTERM。没有续跑就只能从头再烧一遍，白等十几分钟。
-    done_map: dict = {}
-    if args.resume and os.path.isfile(args.out):
-        try:
-            with io.open(args.out, encoding="utf-8") as f:
-                prev = json.load(f)
-            for rec in (prev.get("per_question") or []):
-                if rec.get("id"):
-                    done_map[str(rec["id"])] = rec
-            print(f"[resume] 已载入 {len(done_map)} 题既有结果，将跳过")
-        except Exception as exc:  # noqa: BLE001
-            print(f"[resume] 读取 {args.out} 失败，按全新跑：{exc}")
-            done_map = {}
+    done_map = _load_resume(args)
 
     def _flush() -> None:
         """落盘（中途也调用，保证被杀后能续）。"""
@@ -236,6 +222,37 @@ def main() -> int:
     if n_skipped:
         print(f"[resume] 本次跳过 {n_skipped} 题（沿用既有结果）")
 
+    summary = _finalize(args, per_q, t_all)
+
+    _print_summary(summary, args)
+
+    if args.report:
+        _write_report(args.report, summary, per_q)
+        print(f"已写出: {args.report}")
+    return 0
+
+
+# ---- 断点续跑：读回已有结果，跳过已完成的题 ----
+# 背景：本脚本全量约 12 分钟（112 题 × ~6.5s），而宿主对单次命令有硬时限，
+# 跑到一半会被 SIGTERM。没有续跑就只能从头再烧一遍，白等十几分钟。
+def _load_resume(args) -> dict:
+    done_map: dict = {}
+    if args.resume and os.path.isfile(args.out):
+        try:
+            with io.open(args.out, encoding="utf-8") as f:
+                prev = json.load(f)
+            for rec in (prev.get("per_question") or []):
+                if rec.get("id"):
+                    done_map[str(rec["id"])] = rec
+            print(f"[resume] 已载入 {len(done_map)} 题既有结果，将跳过")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[resume] 读取 {args.out} 失败，按全新跑：{exc}")
+            done_map = {}
+    return done_map
+
+
+# ---- 汇总（默认只统计有 required 的题 —— 空标注不可评） ----
+def _finalize(args, per_q: list, t_all: float) -> dict:
     # ---- 汇总（默认只统计有 required 的题 —— 空标注不可评） ----
     summary = _summarize(per_q, args)
     summary["elapsed_total_s"] = round(time.time() - t_all, 1)
@@ -244,7 +261,10 @@ def main() -> int:
     with io.open(args.out, "w", encoding="utf-8") as f:
         json.dump({"summary": summary, "per_question": per_q},
                   f, ensure_ascii=False, indent=2)
+    return summary
 
+
+def _print_summary(summary: dict, args) -> None:
     print("\n" + "=" * 66)
     print("汇总")
     print("=" * 66)
@@ -265,10 +285,7 @@ def main() -> int:
               f"(总 {summary['elapsed_total_s']}s)")
     print(f"\n已写出: {args.out}")
 
-    if args.report:
-        _write_report(args.report, summary, per_q)
-        print(f"已写出: {args.report}")
-    return 0
+
 
 
 def _write_report(path: str, summary: dict, per_q: list) -> None:
