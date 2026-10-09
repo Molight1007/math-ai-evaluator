@@ -255,6 +255,16 @@ _SPEC = (
      None, "bool",
      "REQUIRE_ANSWER_IN_POOL — 候选入池前要求真含最终答案"
      "（默认 True；实测 59% 候选是推理句/元话语，2026-10-06 上游缺口修复）", None),
+    # ---- agent/orchestrator.py（门全拒的处置策略，2026-10-06 新增）----
+    # ★ 2026-10-08 补登：此前已登记 ①注册表 ②AgentConfig ③白名单，**漏本表** ⇒
+    #   四处不同源。消费点 agent/orchestrator__audit_filter.py:66 / :110
+    #   （Lean/Audit 门全拒时；置 True 进一步清空候选池触发下游兜底/重生成）。
+    ("strict_all_rejected",
+     lambda cfg, tier, _f="strict_all_rejected", _d=False: getattr(cfg, _f, _d),
+     None, "bool",
+     "STRICT_ALL_REJECTED — Lean/Audit 门把候选全部拒掉时的处置"
+     "（默认 False = 只显式留痕，不静默保留；置 True = 清空候选池触发下游"
+     "兜底/重生成链）；消费点 agent/orchestrator__audit_filter.py:66 / :110", None),
     # ★ 2026-10-07（问题 2.4 第二轮 / 2.9）开关注册制四件套（入池门槛 v2 + check 协议守卫）
     ("pool_gate_v2",
      lambda cfg, tier, _f="pool_gate_v2", _d=True: getattr(cfg, _f, _d),
