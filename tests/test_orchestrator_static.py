@@ -85,6 +85,14 @@ _EXTRACTED_MAIN_FLOW = [
     # _merge_review_into_feedback / _collect_tool_findings）已搬到
     # agent/orchestrator__helpers.py（_load_lean_modules 带惰性 _orch 引用 shim）。
     "agent/orchestrator__helpers.py",
+    # 2026-10-09 阶段S2：VerifierAgent 真语义重构——答案聚类 / 引理检索 /
+    # bug report / 投票执行 4 个职责簇已逐字搬到 agent/verifier__*.py
+    # （原 self 作为第一参数 owner）。守卫意图不变：这些模块承载主流程代码，
+    # 同样必须在 pyflakes 下无未定义名称（不存在则自动跳过）。
+    "agent/verifier__cluster.py",
+    "agent/verifier__lemma.py",
+    "agent/verifier__report.py",
+    "agent/verifier__vote.py",
 ]
 GUARDED += [p for p in _EXTRACTED_MAIN_FLOW
             if os.path.exists(os.path.join(ROOT, p))]
