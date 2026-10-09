@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import os
 import posixpath
 import re
@@ -39,13 +40,31 @@ ENV_FILE = ROOT / ".env"
 # 只推这些（代码 + 小脚本）。目录会递归；含 * 的按 glob 展开。
 PUSH_ITEMS = [
     "agent",
+    # ★★ 2026-10-09 补：`contracts/` 与 `cli/` 是 2026-10-07/08 架构解耦新建的两个包，
+    #    此前漏在白名单外 ⇒ **云端根本没有 contracts/** ⇒
+    #      · `agent/switch_registry.py`（shim）import 失败 → `agent/base.py:9` 的兜底
+    #        `from switch_registry import …` 也失败 ⇒ `run_eval` 三级兜底全崩；
+    #      · `agent/base.py:22` 的 `from contracts.types import Budget, Finding, BugReport`
+    #        是**无兜底的硬依赖**，缺 contracts 时整链直接 ImportError。
+    #    ⚠ 更隐蔽的是：`tools/cloud.py verify` 与 push **共用这份白名单**，
+    #      所以漏包时 verify 仍报“服务器版本 == 本地版本（逐字节一致）” —— **假绿**。
+    #    教训：往仓库新增**顶层包**时，必须同步这里，否则云端的“一致”是假的。
+    "contracts",
+    # ★★ 2026-10-09 补：原 `tools/` 下的 12 个「调用 agent 的 CLI 入口」已迁入 `cli/`。
+    #    不补它 → 云端残留旧的 `tools/*.py`，且 `cli/*` 缺失（本地/远端分叉）。
+    "cli",
     "prompts",
     "utils",
     "tools",
     "tests",
-    "run_eval.py",
-    "run_research.py",
-    "user_agent.py",
+    # ★★ 2026-10-09 修：原为精确文件名 `run_eval.py` / `run_research.py` / `user_agent.py`，
+    #    导致**根目录的 `__` 拆分模块全部漏传**（`run_eval__scoring.py` / `run_eval__engine.py`
+    #    / `run_eval__classify.py` / `user_agent__config.py` / `user_agent__config_base.py`），
+    #    云端报 `ModuleNotFoundError: No module named 'user_agent__config'`。
+    #    改成 glob，覆盖主文件 + 其全部拆分模块（不会误匹配 `.pytmp_*`，它们以点开头）。
+    "run_eval*.py",
+    "run_research*.py",
+    "user_agent*.py",
     "requirements.txt",
     "lean-toolchain",
     "SETUP.md",
@@ -68,6 +87,10 @@ NEVER_PUSH = {
     ".env", ".git", ".venv", "__pycache__", ".pytest_cache", ".workbuddy", ".codebuddy",
     "data", "vendor", "lean下载版", "node_modules", "results", "测试结果", "output",
     "docs", "论文实践", "与lean相关的插件", "题库备份", "papers", "superhuman",
+    # ★ 2026-10-09：`scripts/` 是开发用一次性分析脚本（analyze_timeout_0915 / attribution_0915），
+    #    全仓**无任何运行时引用**，同名的旧副本还留在 tools/ 里 ⇒ 不必参与代码同步。
+    #    显式排除它，好让 `_whitelist_coverage_gaps()` 保持"零告警"的判别力。
+    "scripts",
     "ripgrep-14.1.1-x86_64-pc-windows-msvc",
     # 大资产 / 生成物
     "mathlib-olean", "lean-cache", "closure-full",
@@ -481,6 +504,42 @@ def _remote_filelist_cmd(remote: str) -> str:
     return f"cd {remote} && {{ " + "; ".join(parts) + "; } | sort"
 
 
+def _whitelist_coverage_gaps() -> list[str]:
+    """本地顶层包 / 根目录 .py 里，有哪些**没被 `PUSH_ITEMS` 覆盖**。
+
+    ★ 为什么必须有这道检查（2026-10-09 实测教训）：`verify` 与 `push` **共用同一份
+      白名单**，所以白名单漏了东西时，verify 仍会报「服务器版本 == 本地版本（逐字节一致）」
+      —— **假绿**。同一类问题当天连踩两次：
+        ① 架构解耦新建的 `contracts/` 与 `cli/` 两个包没进白名单 →
+           云端 `import contracts` 失败、`run_eval` 三级兜底全崩；
+        ② 白名单写的是精确文件名 `user_agent.py`/`run_eval.py` →
+           根目录的 `__` 拆分模块（`user_agent__config.py` 等 5 个）全漏 →
+           云端 `ModuleNotFoundError: No module named 'user_agent__config'`。
+      ⇒ 新增顶层包或拆分模块时，这里会立刻把它们报出来。
+    """
+    globs = [i for i in PUSH_ITEMS if any(c in i for c in "*?[")]
+    items = set(PUSH_ITEMS)
+
+    def covered(rel: str) -> bool:
+        return rel in items or any(fnmatch.fnmatch(rel, g) for g in globs)
+
+    gaps: list[str] = []
+    for d in sorted(p for p in ROOT.iterdir() if p.is_dir()):
+        if d.name.startswith(".") or d.name in NEVER_PUSH:
+            continue
+        if not any(d.rglob("*.py")):
+            continue
+        # 目录被覆盖，或该目录下的 .py 被 glob（如 deploy/*.py）覆盖，都算已覆盖
+        if not (covered(d.name) or covered(d.name + "/x.py")):
+            gaps.append("%s/（顶层包，不在白名单）" % d.name)
+    for f in sorted(ROOT.glob("*.py")):
+        if f.name.startswith("."):  # 跳过 .pytmp_* 之类临时文件
+            continue
+        if not covered(f.name):
+            gaps.append(f.name)
+    return gaps
+
+
 def cmd_verify(cfg: dict, args) -> int:
     """校验「服务器上的代码 == 本地代码」。push 后必跑。"""
     remote = cfg["MATH_SERVER_REMOTE_DIR"]
@@ -520,6 +579,16 @@ def cmd_verify(cfg: dict, args) -> int:
             info(f"   …还有 {len(extra)-30} 个")
     else:
         info("✅ 无多余文件")
+
+    head("白名单覆盖自检（防「verify 假绿」）")
+    gaps = _whitelist_coverage_gaps()
+    if gaps:
+        info(f"⚠️ {len(gaps)} 处未被 PUSH_ITEMS 覆盖 —— 这些内容**根本不会被推送**，"
+             f"云端缺它们时上面第 2 节仍会报「一致」（假绿）：")
+        for g in gaps[:20]:
+            info("   " + g)
+    else:
+        info("✅ 所有顶层包与根 .py 均已被白名单覆盖")
 
     head("结论")
     if not bad and not missing:
@@ -586,7 +655,7 @@ def cmd_run(cfg: dict, args) -> int:
            f"&& sleep 3 && tmux ls && ls -l logs/ 2>/dev/null | tail -5")
     r = ssh_run(cfg, cmd)
     print((r.stdout or "").rstrip())
-    info(f"✅ 已启动。进度：python tools/cloud.py stat")
+    info("✅ 已启动。进度：python tools/cloud.py stat")
     info(f"    看日志：ssh … \"tmux attach -t {name}\"（Ctrl-b w 切窗口，Ctrl-b d 脱离）")
     return 0
 
