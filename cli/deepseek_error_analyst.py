@@ -857,54 +857,7 @@ def main() -> int:
     print("[载入] 结果 %d 条 | core %d 条 | 已完成 %d 条"
           % (len(rows), len(core), len(done)))
 
-    todo = []
-    skipped = {"correct": 0, "invalid": 0, "degraded": 0, "degraded_kept": 0, "dup": 0}
-    for r in rows:
-        rid = str(r.get("id"))
-        if wanted and rid not in wanted:
-            continue
-        if not args.include_correct and r.get("correct"):
-            skipped["correct"] += 1
-            continue
-        level, reason = classify_validity(r)
-        if level == "invalid" and not args.include_invalid:
-            skipped["invalid"] += 1
-            continue
-        if level == "degraded":
-            if args.skip_degraded:
-                skipped["degraded"] += 1
-                continue
-            skipped["degraded_kept"] += 1
-        bad = reason if level == "invalid" else None
-        try:
-            ev = build_evidence(r, core.get(rid), src, args.mode)
-        except Exception as e:  # noqa: BLE001
-            print("    证据包构建失败，跳过：%s" % str(e)[:160], flush=True)
-            continue
-        ev_text = render_evidence(ev)
-        if len(ev_text) > args.evidence_budget:
-            raw = len(ev_text)
-            ev = fit_evidence(ev, args.evidence_budget)
-            ev_text = render_evidence(ev)
-            tail = ""
-            if len(ev_text) > args.evidence_budget:
-                # 分析师模式下 `candidate_reasoning` 是**分析对象**，收缩阶梯
-                # 保护它不被删除 ⇒ 可能仍超预算。此处显式标注，不静默超限。
-                tail = "（★仍超预算：推理属分析对象，受保护不删）"
-            print("    [收缩] %s 证据包 %d → %d 字符（预算 %d）%s"
-                  % (rid, raw, len(ev_text), args.evidence_budget, tail), flush=True)
-        sha = _sha(ev_text)
-        if sha in done:
-            skipped["dup"] += 1
-            continue
-        ev_small = render_evidence(_ev_levels(ev)[-1])
-        todo.append((r, ev, ev_text, sha, bad, ev_small))
-    if args.limit:
-        todo = todo[:args.limit]
-    print("[筛选] 待分析 %d 题 | 跳过：做对 %d / 无效 %d / 退化 %d / 已完成 %d"
-          " | 含退化数据 %d 题"
-          % (len(todo), skipped["correct"], skipped["invalid"], skipped["degraded"],
-             skipped["dup"], skipped["degraded_kept"]))
+    todo = _build_todo(rows, core, src, args, done, wanted)
     if not todo:
         print("[完成] 没有需要分析的题。")
         return 0
@@ -973,6 +926,59 @@ def main() -> int:
     print("[落盘] %s" % out_jsonl)
     print("[汇总] %s" % sum_path)
     return 0
+
+
+def _build_todo(rows: List[Dict[str, Any]], core: Dict[str, Dict[str, Any]],
+                src: str, args, done: set, wanted: set) -> List:
+    todo = []
+    skipped = {"correct": 0, "invalid": 0, "degraded": 0, "degraded_kept": 0, "dup": 0}
+    for r in rows:
+        rid = str(r.get("id"))
+        if wanted and rid not in wanted:
+            continue
+        if not args.include_correct and r.get("correct"):
+            skipped["correct"] += 1
+            continue
+        level, reason = classify_validity(r)
+        if level == "invalid" and not args.include_invalid:
+            skipped["invalid"] += 1
+            continue
+        if level == "degraded":
+            if args.skip_degraded:
+                skipped["degraded"] += 1
+                continue
+            skipped["degraded_kept"] += 1
+        bad = reason if level == "invalid" else None
+        try:
+            ev = build_evidence(r, core.get(rid), src, args.mode)
+        except Exception as e:  # noqa: BLE001
+            print("    证据包构建失败，跳过：%s" % str(e)[:160], flush=True)
+            continue
+        ev_text = render_evidence(ev)
+        if len(ev_text) > args.evidence_budget:
+            raw = len(ev_text)
+            ev = fit_evidence(ev, args.evidence_budget)
+            ev_text = render_evidence(ev)
+            tail = ""
+            if len(ev_text) > args.evidence_budget:
+                # 分析师模式下 `candidate_reasoning` 是**分析对象**，收缩阶梯
+                # 保护它不被删除 ⇒ 可能仍超预算。此处显式标注，不静默超限。
+                tail = "（★仍超预算：推理属分析对象，受保护不删）"
+            print("    [收缩] %s 证据包 %d → %d 字符（预算 %d）%s"
+                  % (rid, raw, len(ev_text), args.evidence_budget, tail), flush=True)
+        sha = _sha(ev_text)
+        if sha in done:
+            skipped["dup"] += 1
+            continue
+        ev_small = render_evidence(_ev_levels(ev)[-1])
+        todo.append((r, ev, ev_text, sha, bad, ev_small))
+    if args.limit:
+        todo = todo[:args.limit]
+    print("[筛选] 待分析 %d 题 | 跳过：做对 %d / 无效 %d / 退化 %d / 已完成 %d"
+          " | 含退化数据 %d 题"
+          % (len(todo), skipped["correct"], skipped["invalid"], skipped["degraded"],
+             skipped["dup"], skipped["degraded_kept"]))
+    return todo
 
 
 if __name__ == "__main__":
