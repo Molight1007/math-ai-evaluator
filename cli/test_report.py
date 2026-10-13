@@ -194,17 +194,21 @@ def make_judge():
 #     不新造判据（避免与既有分表出现两套口径 —— 本项目已踩过多次）。
 _STAGE_DASHBOARD = [
     # (阶段键, 显示名, 达标判据说明, 达标信号取值函数名)
-    ("1_classify", "① 题型领域识别", "分类结果非空", "classify"),
+    # ★★ 2026-10-14（五道审核链定案）：旧链阶段行（1_classify /
+    #   3.6_audit_filter / 4_verify / 4.5_oracle / 4.6_adv / 5.5_low_conf /
+    #   5_revise_or_fallback）已随机制整体删除；本表改为现行链：
+    #   1.1 判题 + 2.6/2.7/3.x 生成段 + **五道审核 4.0 → 4.5**。
+    ("1.1_type_understanding", "① 题型判题", "type_decision 非空", "type"),
     ("2.6_pre_audit", "② Lean 前置理解", "verdict != fail", "preverify"),
     ("2.7_subgoal_main", "③ 子目标主链", "子目标未被判失败", "subgoal"),
     ("3_solve", "④ 求解生成", "产出 ≥1 个可用候选", "solve"),
     ("3.3_improve", "⑤ 无条件自改进", "有候选被改进", "self_improve"),
-    ("3.6_audit_filter", "⑥ 候选审核闸门", "无 reject", "audit_gate"),
-    ("4_verify", "⑦ 多票验证", "获得 ≥1 张正确票", "verify"),
-    ("4.5_oracle", "⑧ Oracle 客观复核", "未判错", "oracle"),
-    ("4.6_adv", "⑨ 对抗式验证", "未检出错误", "adv"),
-    ("5.5_low_conf", "⑩ 低置信度复核", "未触发（已高置信）", "low_conf"),
-    ("5_revise_or_fallback", "⑪ 修订/兜底", "未走兜底", "revise"),
+    ("4.0_normalize", "⑥ 答案规范化", "answer_normalize 非空（归一+形态分流完成）", "normalize"),
+    ("4.1_self_audit", "⑦ AI 自审", "self_audit 非空（自审执行完成；淘汰数见结果列）", "self_audit"),
+    ("4.2_falsify", "⑧ 对抗证伪", "adversarial_gate 非空（证伪执行完成）", "falsify"),
+    ("4.3_lean_check", "⑨ Lean 代回", "lean_backcheck 非空（代回判定执行完成）", "lean_check"),
+    ("4.4_math_check", "⑩ 计算检测", "math_check 非空（计算检测执行完成）", "math_check"),
+    ("4.5_vote", "⑪ 投票", "best 簇获得 ≥1 张正确票", "vote"),
 ]
 
 
@@ -242,8 +246,9 @@ def _stage_dashboard_rows(recs):
     # 各阶段的"结果"取值（尽量取既有的、信息量最大的字段）
     def _raw_for(stage, r):
         d = _as_dict(r.get("diag"))
-        if stage == "1_classify":
-            return str(r.get("domain") or "")
+        if stage == "1.1_type_understanding":
+            td = _as_dict(d.get("type_decision"))
+            return "type=%s" % (td.get("final") or "—")
         if stage == "2.6_pre_audit":
             pv = _as_dict(d.get("preverify_trace"))
             return str(pv.get("verdict") or "")
@@ -259,35 +264,32 @@ def _stage_dashboard_rows(recs):
             return "cands=%d" % len(_as_list(r.get("candidates")))
         if stage == "3.3_improve":
             return "improved=%s" % _num_or_zero(d.get("n_self_improved"))
-        if stage == "3.6_audit_filter":
-            ag = _as_list(d.get("audit_gate"))
-            _vs = collections.Counter(str(_as_dict(x).get("verdict") or "") for x in ag)
-            return "reject=%d accept=%d" % (_vs.get("reject", 0), _vs.get("accept", 0))
-        if stage == "4_verify":
-            vs = _as_list(d.get("verdicts"))
-            _cv = sum(1 for x in vs if _num_or_zero(_as_dict(x).get("correct_votes")) > 0)
-            return "有正确票=%d/%d" % (_cv, len(vs))
-        if stage in ("4.5_oracle", "4.6_adv"):
-            # ★ 2026-10-12 修（判读失真 #3）：真键是 `*_events`（list），不是
-            #   `oracle_review` / `adversarial`（这两个键**根本不存在**）⇒ 旧实现恒得
-            #   `found=—`，再被 `_pass_for` 判成「未触发」，把**正在工作的验证环节
-            #   报成没跑**（且与「六、机制触发普查」里 100% 非空自相矛盾）。
-            key = "oracle_review_events" if stage == "4.5_oracle" else "adversarial_events"
-            evs = [str(x) for x in _as_list(d.get(key))]
-            if not evs:
-                return "events=0"
-            joined = " ".join(evs)
-            if stage == "4.5_oracle":
-                return "复核 %d 次%s" % (len(evs), "（判错）" if "incorrect" in joined else "")
-            return "审查 %d 次%s" % (len(evs), "（检出）" if "检出" in joined else "")
-        if stage == "5.5_low_conf":
-            bc = _as_dict(d.get("best_cluster"))
-            return "conf=%s" % (bc.get("confidence") if bc else "—")
-        if stage == "5_revise_or_fallback":
-            # ★ 2026-10-12 修（判读失真 #2）：真值在 **`diag.revise_round`**；
-            #   顶层 `r["revise_round"]` **不存在** ⇒ 旧实现恒得 0.0，把全轮最大耗时
-            #   阶段（本轮合计 33.9%）谎报成「未触发」。
-            return "revise_round=%s" % fmt(_num_or_zero(d.get("revise_round")), 0)
+        # ★ 2026-10-14（五道链定案）：⑥~⑪ 改为五道链阶段（数据源 = 各家 diag 键）
+        if stage == "4.0_normalize":
+            an = _as_dict(d.get("answer_normalize"))
+            return "n=%s 抢救=%s" % (an.get("n", "—"), an.get("n_salvaged", "—"))
+        if stage == "4.1_self_audit":
+            sa = _as_dict(d.get("self_audit"))
+            return "淘汰=%s/%s" % (sa.get("n_rejected", "—"), sa.get("n", "—"))
+        if stage == "4.2_falsify":
+            ag = _as_dict(d.get("adversarial_gate"))
+            return "淘汰=%s（机检%s/LLM%s）" % (
+                ag.get("n_rejected", "—"), ag.get("n_machine", "—"),
+                ag.get("n_llm", "—"))
+        if stage == "4.3_lean_check":
+            lb = _as_dict(d.get("lean_backcheck"))
+            return "通过=%s/%s" % (lb.get("n_kept", "—"), lb.get("n", "—"))
+        if stage == "4.4_math_check":
+            mc = _as_dict(d.get("math_check"))
+            return "淘汰=%s（无法判定%s）" % (
+                mc.get("n_rejected", "—"), mc.get("n_unknown", "—"))
+        if stage == "4.5_vote":
+            vg = _as_dict(d.get("vote_gate"))
+            bc = _as_dict(vg.get("best_cluster"))
+            return "多答案=%s best=%s（%s/%s票）" % (
+                vg.get("multi_answer", "—"),
+                str(bc.get("answer_norm") or "—")[:24],
+                bc.get("vote_correct", "—"), bc.get("vote_total", "—"))
         return ""
 
     def _pass_for(stage, r):
@@ -298,12 +300,11 @@ def _stage_dashboard_rows(recs):
         """
         d = _as_dict(r.get("diag"))
         # 先判"本题到底跑到这一阶段没有"：耗时 0 ⇒ 视为没跑到 ⇒ 不计入分母。
-        # 例外：`1_classify` 这类每題必过且可能 0 秒的阶段，用其自身字段判（见下）。
         _t = _num_or_zero(_as_dict(d.get("stage_timers")).get(stage))
-        if stage == "1_classify":
-            return bool(str(r.get("domain") or "").strip()), "分类非空"
         if _t <= 0:
             return None, "未跑到（耗时 0）"
+        if stage == "1.1_type_understanding":
+            return bool(_as_dict(d.get("type_decision"))), "type 非空"
         if stage == "2.6_pre_audit":
             v = str(_as_dict(d.get("preverify_trace")).get("verdict") or "")
             if not v:
@@ -331,36 +332,24 @@ def _stage_dashboard_rows(recs):
         if stage == "3_solve":
             nc = len(_as_list(r.get("candidates")))
             return nc > 0, "候选 %d 个" % nc
-        if stage == "3.6_audit_filter":
-            ag = _as_list(d.get("audit_gate"))
-            if not ag:
+        # ★ 2026-10-14（五道链定案）：⑥~⑪ 改为五道链阶段；旧链阶段分支已删。
+        if stage == "4.0_normalize":
+            return bool(_as_dict(d.get("answer_normalize"))), "规范化完成"
+        if stage == "4.1_self_audit":
+            return bool(_as_dict(d.get("self_audit"))), "自审完成"
+        if stage == "4.2_falsify":
+            return bool(_as_dict(d.get("adversarial_gate"))), "证伪完成"
+        if stage == "4.3_lean_check":
+            return bool(_as_dict(d.get("lean_backcheck"))), "代回完成"
+        if stage == "4.4_math_check":
+            return bool(_as_dict(d.get("math_check"))), "计算检测完成"
+        if stage == "4.5_vote":
+            vg = _as_dict(d.get("vote_gate"))
+            if not vg:
                 return None, "未触发"
-            nr = sum(1 for x in ag if str(_as_dict(x).get("verdict")) == "reject")
-            return nr == 0, "reject=%d" % nr
-        if stage == "4_verify":
-            vs = _as_list(d.get("verdicts"))
-            if not vs:
-                return None, "未触发"
-            cv = sum(_num_or_zero(_as_dict(x).get("correct_votes")) for x in vs)
-            return cv > 0, "总正确票=%d" % cv
-        # ★ 2026-10-12 新增（判读失真 #2/#3 的配套）：以下三阶段此前**在 `_pass_for`
-        #   里没有分支** ⇒ 恒返回 None ⇒ 表里恒显示「未触发」，与它们各自的耗时、
-        #   事件埋点自相矛盾（如 `5_revise_or_fallback` 占全轮 33.9% 却报「未触发」）。
-        if stage == "4.5_oracle":
-            evs = [str(x) for x in _as_list(d.get("oracle_review_events"))]
-            if not evs:
-                return None, "未触发"
-            return (not any("incorrect" in e for e in evs)), "复核 %d 次" % len(evs)
-        if stage == "4.6_adv":
-            evs = [str(x) for x in _as_list(d.get("adversarial_events"))]
-            if not evs:
-                return None, "未触发"
-            return (not any("检出" in e for e in evs)), "审查 %d 次" % len(evs)
-        if stage == "5_revise_or_fallback":
-            # 达标判据 =「未走兜底」：走的是**修订**路径（`diag.revise_round` > 0），
-            # 而不是直接兜底。此前无分支 ⇒ 恒「未触发」（真值本轮为 4/2/5）。
-            rn = _num_or_zero(d.get("revise_round"))
-            return rn > 0, "修订 %s 轮" % fmt(rn, 0)
+            bc = _as_dict(vg.get("best_cluster"))
+            return (_num_or_zero(bc.get("vote_correct")) > 0,
+                    "正确票=%s" % bc.get("vote_correct", "—"))
         return None, "—"
 
     out = []
@@ -374,7 +363,7 @@ def _stage_dashboard_rows(recs):
         _reached = []
         for _r in recs:
             _t = _num_or_zero(_as_dict(_as_dict(_r.get("diag")).get("stage_timers")).get(key))
-            if key == "1_classify" or _t > 0:
+            if _t > 0:
                 _reached.append(_r)
         raws = [_raw_for(key, r) for r in _reached]
         raws = [x for x in raws if x]

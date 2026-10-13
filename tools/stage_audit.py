@@ -44,6 +44,11 @@ STAGES_stage_audit = [
     #   供**历史 jsonl** 兼容渲染。
     # ★ 2026-10-02 补登 `1.2_theorem_hint`（现行阶段，此前审计清单漏登 ⇒ 其耗时从未进
     #   审计/报告）；其 `_stage_start` 无条件执行 ⇒ 预期态 run。
+    # ★ 2026-10-14 补登 `1.1_type_understanding`（v4 新增阶段，此前审计清单漏登
+    #   ⇒ 其耗时从未进审计/报告）；`_stage_start` 无条件执行 ⇒ 预期态 run。
+    ("1.1_type_understanding", "题型判题",
+     "LLM 判题型 + 规则交叉校验，产出 ctx.type_path 指导后续路径分流",
+     "type_decision 非空", "run"),
     ("1.2_theorem_hint", "定理检索提示",
      "leansearch 到 Mathlib 检索定理并写入 ctx，供 2.6/3_solve 提示词使用"
      "（超时可跳过，失败不阻断主流程）",
@@ -68,50 +73,80 @@ STAGES_stage_audit = [
     ("3.4_collab", "三 Agent 协作",
      "deep 档难题：协作（解题→审查→整合→反复验证）",
      "control_events 含「三Agent协作」记录", "cond"),
+    # ★★★ 2026-10-14 五道审核链（用户定案）：规范化前置 → ①自审 → ②对抗证伪
+    #   → ③Lean 代回 → ④计算检测 → ⑤投票。以下 6 行为现行验证链。
+    ("4.0_normalize", "答案规范化前置（五道链第 0 道）",
+     "候选进验证链前统一归一（answer_norm/answer_kind），供 Lean/计算工具/投票消费",
+     "answer_normalize 非空", "run"),
+    ("4.1_self_audit", "AI 自审逻辑错误（第 1 道）",
+     "逐候选 LLM 逻辑自审（只审逻辑不审数值），能指出具体逻辑错误者淘汰",
+     "self_audit 非空", "run"),
+    ("4.2_falsify", "AI 对抗证伪（第 2 道）",
+     "逐存活候选两层对抗验证：机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错",
+     "adversarial_gate 非空", "run"),
+    ("4.3_lean_check", "Lean 代回题目（第 3 道）",
+     "候选级 LeanGate.apply：题目+答案翻译为 Lean 命题编译判定（答案带回题目）",
+     "lean_backcheck 非空", "run"),
+    ("4.4_math_check", "数学工具计算检测（第 4 道）",
+     "候选级 SymPy 精确判定（等式回带/函数方程回代/反例搜索）；fail 淘汰",
+     "math_check 非空", "run"),
+    ("4.5_vote", "投票（第 5 道）",
+     "先多答案判断（ctx.vote_multi_answer）→ 大模型对存活候选逐候选投票",
+     "vote_gate 非空 或 verdicts 非空", "run"),
     ("3.5_subgoal_sup", "子目标补充候选",
      "非 deep 档候选不足时补一轮子目标分解（**已被 2.7 取代**）",
      "control_events 含「子目标分解补充候选」", "off"),
-    ("3.6_audit_filter", "候选客观审核",
-     "Lean 双通道 + AuditGate 串行审核候选，淘汰 proof_invalid",
-     "lean_gate 非空", "run"),
-    ("4_verify", "验证器投票",
-     "多候选投票定对错（投票数按档位）",
-     "verdicts 非空", "run"),
-    ("4.5_oracle", "Oracle 客观复核",
-     "deep 档用 AnswerOracle 客观复核 best_cluster（区别于同源自评）",
-     "control/oracle 记录 或 stage 耗时 > 0", "cond"),
-    ("4.6_adv", "对抗式证伪",
-     "正向通过后主动证伪，抓漏检（仅当确有候选被正向判对时）",
-     "stage 耗时 > 0", "cond"),
-    ("5_revise_or_fallback", "修订/兜底",
-     "全部 0 正确票时：deep 走 revise 回环，其他档直接兜底求解",
-     "revise_round > 0 或兜底记录", "cond"),
-    ("5.5_low_conf", "低置信强制复核",
-     "best_cluster 置信度 < 0.5 且时间宽裕时，不接受低共识，触发 revise 提升共识",
-     "stage 耗时 > 0", "cond"),
+    # ★★ 2026-10-14（五道链定案）：以下 7 行为**已删阶段的历史行**（预期态 off）
+    #   —— 阶段名是稳定契约，保留行供历史 jsonl 兼容渲染；新 run 中渲染为「设计如此」。
+    ("3.6_audit_filter", "候选客观审核（已删 2026-10-14）",
+     "Lean 双通道 + AuditGate 串行审核候选（职责拆入 4.3_lean_check / 4.4_math_check）",
+     "lean_gate 非空", "off"),
+    ("4_verify", "验证器投票（已删 2026-10-14）",
+     "多候选投票定对错（投票并入 4.5_vote；P1 硬信号重解已删）",
+     "verdicts 非空", "off"),
+    ("4.5_oracle", "Oracle 客观复核（已删 2026-10-14）",
+     "deep 档 AnswerOracle 客观复核 best_cluster（用户口径：其余都删）",
+     "control/oracle 记录 或 stage 耗时 > 0", "off"),
+    ("4.6_adv", "对抗式证伪（升级为 4.2_falsify）",
+     "正向通过后主动证伪（原只探最佳簇一次；现逐候选化）",
+     "stage 耗时 > 0", "off"),
+    ("5_revise_or_fallback", "修订/兜底（已删 2026-10-14）",
+     "全 0 票时 revise 回环（用户决策②：重解循环全删，全灭走 emergency 直答）",
+     "revise_round > 0 或兜底记录", "off"),
+    ("5.5_low_conf", "低置信强制复核（已删 2026-10-14）",
+     "best_cluster 置信度 < 0.5 时强制复核（随 5_revise 一并删除）",
+     "stage 耗时 > 0", "off"),
     ("6_format", "格式化输出",
      "最终响应格式化（纯字符串处理，本身极快 ⇒ 耗时必然≈0）",
      "response_full 非空", "run"),
-    ("6.5_audit_gate", "最终答案闸门",
-     "最终答案过 Lean/AuditGate 双后端；proof_invalid/unknown → 拒绝换候选",
-     "audit_gate 含 final 记录", "run"),
+    ("6.5_audit_gate", "最终答案闸门（已删 2026-10-14）",
+     "最终答案过 Lean/AuditGate 双后端（Lean 判断统一在投票前的 4.3；"
+     "emergency 直答兜底保留在 formatter）",
+     "audit_gate 含 final 记录", "off"),
 ]
 
 # ---------------------------------------------------------------- 机制意图表
 # (diag 字段, 中文名, 原定目的, 预期态)
 MECHS = [
+    # ★ 2026-10-14 五道审核链新增机制键（与 diag_export 导出键逐字一致）
+    ("answer_normalize", "答案规范化前置", "4.0：候选归一与形态分流（含不可判形态剔除）", "run"),
+    ("self_audit", "AI 自审", "4.1：逐候选逻辑自审（淘汰+反馈）", "run"),
+    ("adversarial_gate", "对抗证伪", "4.2：机检证伪 + LLM 对抗生成（逐候选）", "run"),
+    ("lean_backcheck", "Lean 代回", "4.3：候选级 Lean 命题编译判定", "run"),
+    ("math_check", "计算检测", "4.4：SymPy 精确判定（fail 淘汰）", "run"),
+    ("vote_gate", "五道链投票", "4.5：多答案判断 + LLM 投票（票数 tier_votes）", "run"),
     ("lean_gate", "Lean 硬验证闸门", "编译验证候选/答案，淘汰 proof_invalid 并收 revise 反馈", "cond"),
-    ("audit_gate", "审计闸门", "候选与最终答案的客观审核（Level0 数值代回等）", "run"),
+    ("audit_gate", "审计闸门", "客观审核（随旧链删除后仅剩 2.6 复核路径；候选级 Level0 已并入 4.4）", "cond"),
     ("control_events", "流程控制事件", "记录兜底/协作/触发等控制流决策", "run"),
-    ("revise_events", "修订事件", "验证不过时的定向修正记录", "cond"),
+    ("revise_events", "修订事件（已删）", "验证不过时的定向修正记录（随 5_revise 删除）", "off"),
     ("skeleton_review_events", "骨架评审", "对蓝图骨架做多轮评审（arm2 专用）", "off"),
     ("dag_replan_events", "DAG 重规划", "依赖图变化时重规划（arm2 专用）", "off"),
     ("subgoal_trace", "子目标轨迹", "子目标分解的执行轨迹", "run"),
     ("answer_form_events", "答案形式检查", "答案格式/形式合规检查", "run"),
-    ("p1_check_events", "P1 检查", "候选质量一级检查", "cond"),
+    ("p1_check_events", "P1 检查（已删）", "候选质量一级检查（随 4_verify 删除）", "off"),
     ("phase_budget_events", "阶段预算事件", "各阶段预算的收紧/恢复记录", "run"),
     ("toolcall_text_detected", "伪工具调用检测", "模型在正文里「假装」调用工具的检测", "run"),
-    ("revise_feedback", "修订反馈", "喂给修订的反馈文本", "cond"),
+    ("revise_feedback", "修订反馈（已删）", "喂给修订的反馈文本（随 5_revise 删除）", "off"),
     ("value_attack", "数值攻击", "对候选做数值反例攻击（C-lite）", "cond"),
     ("exhaust_diag", "穷尽性诊断", "枚举/穷尽性搜索的可行性诊断", "cond"),
     ("deep_review", "深度评审", "验证器的深度复核（deep_final）", "cond"),
@@ -243,6 +278,21 @@ def judge_stage(key, rows, ts, logtxt):
         extra = "(最终响应非空)"
     elif key == "6.5_audit_gate":
         ok = cnt(lambda r: bool(d(r).get("audit_gate")))
+    # ★ 2026-10-14 五道审核链（新增阶段判据；1.1 为 v4 补登）
+    elif key == "1.1_type_understanding":
+        ok = cnt(lambda r: bool(d(r).get("type_decision")))
+    elif key == "4.0_normalize":
+        ok = cnt(lambda r: bool(d(r).get("answer_normalize")))
+    elif key == "4.1_self_audit":
+        ok = cnt(lambda r: bool(d(r).get("self_audit")))
+    elif key == "4.2_falsify":
+        ok = cnt(lambda r: bool(d(r).get("adversarial_gate")))
+    elif key == "4.3_lean_check":
+        ok = cnt(lambda r: bool(d(r).get("lean_backcheck")))
+    elif key == "4.4_math_check":
+        ok = cnt(lambda r: bool(d(r).get("math_check")))
+    elif key == "4.5_vote":
+        ok = cnt(lambda r: bool(d(r).get("vote_gate")) or bool(r.get("verdicts")))
     else:
         ok = nz
 
@@ -330,7 +380,8 @@ def main() -> int:
     W("")
 
     # ---------------- 阶段表 ----------------
-    W("## 一、19 个阶段（判据基于**产出物**，非耗时）")
+    W("## 一、%d 个阶段（判据基于**产出物**，非耗时；含已删阶段的历史行）"
+      % len(STAGES_stage_audit))
     W("")
     W("| 阶段 | 原定目的 | 完成判据 | 实测 | 结论 |")
     W("|---|---|---|---|---|")

@@ -51,10 +51,17 @@ def is_subgoal_failed(result_text):
 # ================================================================
 # 阶段显示顺序（未列出的按字母序追加）
 # ★ 2026-10-02 移除 `0_paper_pacer` / `1_classify` / `2.5_difficulty`（阶段已删）；此前报告仍含之。
+# ★ 2026-10-14（五道链定案）：新增 1.1 与五道链 4.0~4.5；旧链阶段（3.6/4_verify/
+#   4.5_oracle/4.6_adv/4.7_lean/5.5/5_revise）已删，保留在清单里仅为历史 jsonl 渲染顺序。
 STAGE_ORDER_test_report = [
     # ★ 2026-10-02 移除 `2.65_calc_prewarm`（calc 板块删除时漏网残留）；此前报告仍含之。
+    "1.1_type_understanding",
     "2.6_pre_audit",
     "2.7_subgoal_main", "3_solve", "3.2_complete", "3.3_improve", "3.4_collab",
+    # 五道审核链（现行）
+    "4.0_normalize", "4.1_self_audit", "4.2_falsify",
+    "4.3_lean_check", "4.4_math_check", "4.5_vote",
+    # 已删阶段（历史 jsonl 兼容渲染）
     "3.5_subgoal_sup", "3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv", "4.7_lean",
     "5.5_low_conf", "5_revise_or_fallback",
 ]
@@ -62,12 +69,21 @@ STAGE_ORDER_test_report = [
 
 # 机制埋点普查表：键 → （期望触发强度，说明）
 MECH_EXPECT = [
+    # ★ 2026-10-14（五道链定案）：新增五道链机制键；旧链键（revise_events /
+    #   oracle_review_events / adversarial_events / lean_feedback_revise_events）
+    #   置「已删」保留供历史 jsonl 渲染（不参与新 run 的期望判定）。
+    ("answer_normalize", "必", "4.0 答案规范化（五道链）"),
+    ("self_audit", "必", "4.1 AI 自审（五道链）"),
+    ("adversarial_gate", "必", "4.2 对抗证伪（五道链）"),
+    ("lean_backcheck", "必", "4.3 Lean 代回（五道链）"),
+    ("math_check", "必", "4.4 计算检测（五道链）"),
+    ("vote_gate", "必", "4.5 投票（五道链）"),
     ("subgoal_stats", "必", "子目标统计"),
     ("subgoal_trace", "必", "子目标轨迹"),
     ("exhaust_diag", "必", "穷尽性检查触发记录"),
     ("value_attack", "常", "数值攻击证伪"),
     ("leansearch", "必", "Lean 定理检索"),
-    ("audit_gate", "必", "候选审核闸门"),
+    ("audit_gate", "常", "客观审核（旧链已删，仅 2.6 复核路径）"),
     ("preverify_trace", "常", "预验证轨迹"),
     ("lean_gate", "必", "Lean 候选闸门"),
     ("pick_diag", "必", "选答诊断"),
@@ -81,13 +97,13 @@ MECH_EXPECT = [
     ("toolcall_text_detected", "异常", "工具调用被文本通道吞掉（>0 即异常）"),
     ("dag_review", "常", "DAG 评审"),
     ("skeleton_review_events", "常", "骨架评审"),
-    ("revise_events", "必", "重解事件"),
+    ("revise_events", "已删", "重解事件（随 5_revise 删除）"),
     ("answer_form_events", "常", "答案形态闸门"),
-    ("oracle_review_events", "常", "AnswerOracle 复核"),
-    ("adversarial_events", "条件", "对抗检查"),
+    ("oracle_review_events", "已删", "AnswerOracle 复核（随 4.5_oracle 删除）"),
+    ("adversarial_events", "已删", "对抗检查（升级为 4.2 adversarial_gate）"),
     ("subgoal_replan_needed_events", "条件", "子目标重规划"),
     ("symbolic_crosscheck_events", "条件", "符号交叉校验"),
-    ("lean_feedback_revise_events", "条件", "Lean 反馈重解"),
+    ("lean_feedback_revise_events", "已删", "Lean 反馈重解（随 5_revise 删除）"),
     ("final_postprocess_change_events", "异常", "终答被后处理改写（>0 需查）"),
     ("subgoal_recover_events", "条件", "子目标恢复"),
 ]

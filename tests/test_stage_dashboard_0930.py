@@ -158,11 +158,16 @@ class NeverRaisesTest(unittest.TestCase):
         self.assertTrue(isinstance(L, list))
 
     def test_all_stages_present_in_output(self):
-        """11 个阶段必须在表里出现（否则读者会以为漏了环节）。"""
+        """现行链阶段必须在表里出现（否则读者会以为漏了环节）。
+
+        ★ 2026-10-14（五道链定案）：预期清单改为现行链 —— 1.1 判题 +
+        2.6/2.7/3_solve/3.3 + 五道 4.0~4.5；旧链阶段行已随机制删除。
+        """
         recs = [_rec(st={"3_solve": 10.0}, candidates=[{"answer": "1"}])]
         text = "\n".join(sec_stage_dashboard(recs))
-        for key in ("1_classify", "2.6_pre_audit", "2.7_subgoal_main", "3_solve",
-                    "3.3_improve", "3.6_audit_filter", "4_verify"):
+        for key in ("1.1_type_understanding", "2.6_pre_audit", "2.7_subgoal_main",
+                    "3_solve", "3.3_improve", "4.0_normalize", "4.1_self_audit",
+                    "4.2_falsify", "4.3_lean_check", "4.4_math_check", "4.5_vote"):
             self.assertIn(key, text, f"四维表缺少阶段 {key}")
 
 
