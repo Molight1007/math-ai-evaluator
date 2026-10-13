@@ -269,6 +269,13 @@ def _diag_blueprint_review(ctx, config) -> dict:
                              for t in (getattr(ctx, "trace", None) or [])
                              if isinstance(t, dict)
                              and t.get("step") == "vote_gate"],
+        # ★ 2026-10-14（用户定案·重写通道）：4.6 池空重写（汇总 + 逐轮事件 + 诊断）
+        "rewrite_gate": dict(getattr(ctx, "rewrite_gate", None) or {}),
+        "rewrite_context": str(getattr(ctx, "rewrite_context", None) or "")[:800],
+        "rewrite_gate_events": [str(t.get("content", ""))[:200]
+                                for t in (getattr(ctx, "trace", None) or [])
+                                if isinstance(t, dict)
+                                and t.get("step") == "rewrite"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),

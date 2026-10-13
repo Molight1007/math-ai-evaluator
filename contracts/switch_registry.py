@@ -548,6 +548,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.5 投票（五道审核链第 5 道）：先多答案判断（规则+LLM，写 "
         "ctx.vote_multi_answer 单一来源）→ 大模型对存活候选逐候选投票"
         "（票数锁定 tier_votes 多票口径，绝不降为 1）；=0 关闭做 A/B"),
+    "five_gate_rewrite": (
+        "FIVE_GATE_REWRITE", "bool", True,
+        "4.6 重写通道（五道审核链配套，2026-10-14 用户定案）：池空 ⇒ 汇总错误"
+        "情况交大模型诊断根因 → 重建蓝图和子目标（rewrite_context 注入题目"
+        "占位符内部）→ 重写 → 新候选重过五道链；轮数上限 rewrite_max_rounds；"
+        "**取代「池空直接要答案」**；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

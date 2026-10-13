@@ -135,6 +135,21 @@ def extract_json(text: str) -> Optional[dict]:
     return None
 
 
+def _effective_problem(ctx) -> str:
+    """题目文本（含「重写通道」注入）。★ 2026-10-14（五道链定案）：
+
+    仅当 ``ctx.rewrite_context`` 存在（4.6_rewrite 池空重写时写入「错误情况 +
+    诊断」）才在**"题目"占位符内部**追加；默认无该字段 ⇒ 逐字返回
+    ``ctx.problem``（行为零变化）。注入位置遵循 `objective_injection` 纪律：
+    拼在题目内部，不追加到提示词末尾。
+    """
+    p = getattr(ctx, "problem", "") or ""
+    _rw = getattr(ctx, "rewrite_context", None)
+    if _rw:
+        p = p + "\n\n" + str(_rw)[:2500]
+    return p
+
+
 def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
     """从 LLM 输出 dict 构造 BlueprintDAG（宽容字段名），非法返回 None。
 
@@ -268,7 +283,7 @@ class BlueprintPlannerAgent(BaseAgent):
             self.record(ctx, "blueprint", "预算耗尽，跳过蓝图生成")
             return None
 
-        problem_text = ctx.problem
+        problem_text = _effective_problem(ctx)
         # v2.9 遗留：原 Lean 前置形式化/leansearch/跨题定理记忆注入
         # （formal_spec/formal_gaps/theorem_memory）已随 2026-09-06 去 Lean 化
         # 全部移除（theorem_memory 为 lean_gate"编译验证通过"定理的复用缓存，
@@ -406,7 +421,7 @@ class BlueprintPlannerAgent(BaseAgent):
             f"  - {line}" for line in feedback_block_lines) or "  （无明确反馈，请自行审视）"
 
         user_msg = BLUEPRINT_REPLAN_USER_TEMPLATE.format(
-            problem=ctx.problem,
+            problem=_effective_problem(ctx),
             feedback_block=feedback_block,
         )
         # ★ 2026-09-29：重规划路径同样注入定理线索（独立于首次生成的调用点）
@@ -521,7 +536,7 @@ class BlueprintPlannerAgent(BaseAgent):
             f"  - {line}" for line in feedback_block_lines) or "  （无明确反馈，请自行审视）"
 
         user_msg = BLUEPRINT_SUBTREE_USER_TEMPLATE.format(
-            problem=(ctx.problem or "")[:2000],
+            problem=_effective_problem(ctx)[:2000],
             root_id=lca,
             target_statement=lca_node.statement,
             feedback_block=feedback_block,

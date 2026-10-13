@@ -91,6 +91,7 @@ from .adversarial_gate import adversarial_gate_stage  # noqa: F401
 from .lean_backcheck import lean_backcheck_stage  # noqa: F401
 from .math_check_gate import math_check_stage  # noqa: F401
 from .vote_gate import vote_stage  # noqa: F401
+from .rewrite_gate import rewrite_stage  # noqa: F401
 # ★ 2026-10-14：5.5_low_conf 段已删（五道链定案）⇒ 不再 import。
 # 2026-10-07 阶段C3c：3.4_collab 段已抽到 agent/orchestrator__collab.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
@@ -598,6 +599,18 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.5_vote")
         vote_stage(self, ctx, tier)
 
+        # ★★ 2026-10-14（用户定案·重写通道）：**4.6_rewrite —— 池空重写**。
+        #   用户原话：「不要这个东西（池空直答）！没有答案了就讲错误情况返回给
+        #   大模型，让大模型找到问题出在哪里，重新构建蓝图和子目标，重写」。
+        #   触发=池空；流程=错误汇总 → LLM 诊断根因 → 重建蓝图/子目标
+        #   （rewrite_context 注入题目占位符内部）→ 重写 → 新候选重过五道链；
+        #   轮数上限 rewrite_max_rounds（默认 2）。**取代「池空直接要答案」**。
+        if getattr(ctx, "candidates", None):
+            self.record(ctx, "rewrite", "4.6 重写：候选池非空，无需重写")
+        else:
+            self._stage_start(ctx, "4.6_rewrite")
+            rewrite_stage(self, ctx, tier)
+
         # ★★ 2026-10-14（五道审核链定案 · 用户决策「旧链一步到位直接删」）：
         #   以下旧链阶段已**整段删除**，职责去向：
         #     · 3.6_audit_filter（Lean 双通道 + AuditGate 串行）
@@ -608,9 +621,10 @@ class Orchestrator(BaseAgent):
         #     · 4.6_adv（只探最佳簇一次）→ 升级为 **4.2_falsify**（逐候选证伪）；
         #     · 4.7_lean（投票前 Lean，曾为实验开关）→ 并入 **4.3_lean_check**；
         #     · 5_revise_or_fallback / 5.5_low_conf → 删（用户决策②：
-        #       全灭走 emergency 直答兜底）；
+        #       重解回环删除；★ 后续用户再定案：池空走 **4.6_rewrite**
+        #       「错误诊断 → 重建蓝图/子目标 → 重写」，而非直答）；
         #     · 6.5_audit_gate（答案级 Lean/AuditGate 终审 + rework）→ 删
-        #       （Lean 判断统一在投票前的 4.3；emergency 直答兜底保留在 formatter）。
+        #       （Lean 判断统一在投票前的 4.3）。
         #       其内 «calc_inconsistent 判据在当前配置下不可达» 的历史留痕
         #       （`<calc>` 板块删除后所留）随段体一并移除（机制已不在主链）。
         #   阶段名保留于 stage_audit 审计清单作历史记录（阶段名是稳定契约）。
@@ -638,6 +652,7 @@ class Orchestrator(BaseAgent):
                      "4.3_lean_check",
                      "4.4_math_check",
                      "4.5_vote",
+                     "4.6_rewrite",
                      "6_format"):
             self._stage_stop(ctx, _stg)
 

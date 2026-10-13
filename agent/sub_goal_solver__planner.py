@@ -306,6 +306,12 @@ def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
     # v2.9 遗留：原 Lean 前置形式化注入（formal_spec/formal_gaps/leansearch
     # 定理检索）已随 2026-09-06 去 Lean 化移除——平台无 Lean，注入恒为空。
     problem_text = ctx.problem
+    # ★ 2026-10-14（五道链·4.6_rewrite 重写通道）：仅当 ctx.rewrite_context
+    #   存在（池空重写时写入「错误情况 + 诊断」）才追加进**"题目"占位符内部**；
+    #   默认无该字段 ⇒ 行为逐字不变（注入位置遵循 objective_injection 纪律）。
+    _rw_ctx = getattr(ctx, "rewrite_context", None)
+    if _rw_ctx:
+        problem_text = problem_text + "\n\n" + str(_rw_ctx)[:2500]
     # 2026-09-12 客观题特化（三处同源注入之①：规划阶段）：
     # 子目标主路径 2.7 对**所有档位默认先行**（enable_subgoal_main_path 默认
     # True），客观题的答案完全可能由本路径产出——只在 solver 里注入等于没注入。
