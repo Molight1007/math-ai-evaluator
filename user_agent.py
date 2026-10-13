@@ -231,9 +231,9 @@ _CONFIG_OVERRIDE_KEYS = (
     "enable_type_llm",
     "theorem_hint_block_max_chars",
     "theorem_hint_top_k_by_stage",
-    # 2026-10-14 五道审核链（0 规范化 / 1 自审 / 2 对抗证伪 / 3 Lean 代回 / 4 计算检测）
+    # 2026-10-14 五道审核链（0 规范化 / 1 自审 / 2 对抗证伪 / 3 Lean 代回 / 4 计算检测 / 5 投票）
     "five_gate_normalize", "five_gate_self_audit", "five_gate_falsify",
-    "five_gate_lean_check", "five_gate_math_check",
+    "five_gate_lean_check", "five_gate_math_check", "five_gate_vote",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。
     # tier_* 六键保留（仍被 solver / orchestrator 以 .get(tier) 读取，见

@@ -262,6 +262,13 @@ def _diag_blueprint_review(ctx, config) -> dict:
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
                               and t.get("step") == "math_check"],
+        # ★ 2026-10-14（五道审核链第 5 道）：投票（多答判断 + 票型表 + best 簇）
+        "vote_gate": dict(getattr(ctx, "vote_gate", None) or {}),
+        "vote_multi_answer": getattr(ctx, "vote_multi_answer", None),
+        "vote_gate_events": [str(t.get("content", ""))[:200]
+                             for t in (getattr(ctx, "trace", None) or [])
+                             if isinstance(t, dict)
+                             and t.get("step") == "vote_gate"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),

@@ -543,6 +543,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "（DeterministicChecker：等式回带/函数方程回代/反例搜索）；"
         "fail ⇒ 淘汰、unknown ⇒ 放行、全拒 ⇒ 回退保留（宁 unknown 不误杀）；"
         "=0 关闭做 A/B"),
+    "five_gate_vote": (
+        "FIVE_GATE_VOTE", "bool", True,
+        "4.5 投票（五道审核链第 5 道）：先多答案判断（规则+LLM，写 "
+        "ctx.vote_multi_answer 单一来源）→ 大模型对存活候选逐候选投票"
+        "（票数锁定 tier_votes 多票口径，绝不降为 1）；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

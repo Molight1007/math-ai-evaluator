@@ -474,6 +474,9 @@ class AgentConfig(_AgentConfigBase):
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——
     #     SymPy 精确判定；fail 淘汰 / unknown 放行 / 全拒回退保留。
     five_gate_math_check: bool = True
+    #   ★ 2026-10-14 第 5 道（4.5_vote）：先多答案判断（ctx.vote_multi_answer
+    #     单一来源）→ 大模型投票（票数锁定 tier_votes 多票口径）。
+    five_gate_vote: bool = True
     lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
     lean_gate_nonproof: bool = True         # 非证明题候选级 Lean（2026-09-10 打开：用户要求全卷过 Lean，按题适用性豁免客观/概念题）
     lean_gate_nonproof_deep_only: bool = False  # True=非证明题 Lean 仅 deep 档（时间墙护栏；默认 False=全档）

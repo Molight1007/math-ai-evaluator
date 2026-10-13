@@ -91,6 +91,7 @@ from .self_auditor import self_audit_stage  # noqa: F401
 from .adversarial_gate import adversarial_gate_stage  # noqa: F401
 from .lean_backcheck import lean_backcheck_stage  # noqa: F401
 from .math_check_gate import math_check_stage  # noqa: F401
+from .vote_gate import vote_stage  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
@@ -604,6 +605,12 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.4_math_check")
         math_check_stage(self, ctx)
 
+        # ★ 2026-10-14（五道审核链第 5 道）：**4.5_vote —— 投票**。
+        #   用户口径：「大模型根据还存活的答案投票，先判断会不会是多个答案，
+        #   再投票选择答案」。修完这五道后才进 3.6/4_verify 旧链（Step7 删）。
+        self._stage_start(ctx, "4.5_vote")
+        vote_stage(self, ctx, tier)
+
         self._stage_start(ctx, "3.6_audit_filter")
         audit_filter_candidates(self, ctx, tier)
 
@@ -675,6 +682,7 @@ class Orchestrator(BaseAgent):
                      "4.2_falsify",
                      "4.3_lean_check",
                      "4.4_math_check",
+                     "4.5_vote",
                      "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                      "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
             self._stage_stop(ctx, _stg)
