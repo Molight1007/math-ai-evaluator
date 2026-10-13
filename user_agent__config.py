@@ -465,6 +465,9 @@ class AgentConfig(_AgentConfigBase):
     #   ★ 2026-10-14 第 1 道（4.1_self_audit）：AI 自审逻辑错误 → 淘汰；
     #     输出不可解析/LLM 故障一律保留候选（防误杀）。
     five_gate_self_audit: bool = True
+    #   ★ 2026-10-14 第 2 道（4.2_falsify）：对抗证伪逐候选化 ——
+    #     机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰。
+    five_gate_falsify: bool = True
     lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
     lean_gate_nonproof: bool = True         # 非证明题候选级 Lean（2026-09-10 打开：用户要求全卷过 Lean，按题适用性豁免客观/概念题）
     lean_gate_nonproof_deep_only: bool = False  # True=非证明题 Lean 仅 deep 档（时间墙护栏；默认 False=全档）

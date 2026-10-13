@@ -88,6 +88,7 @@ from .orchestrator__final_gate import final_answer_gate, format_stage  # noqa: F
 from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
 from .answer_normalizer import normalize_stage  # noqa: F401
 from .self_auditor import self_audit_stage  # noqa: F401
+from .adversarial_gate import adversarial_gate_stage  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
@@ -580,6 +581,13 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.1_self_audit")
         self_audit_stage(self, ctx)
 
+        # ★ 2026-10-14（五道审核链第 2 道）：**4.2_falsify —— AI 对抗证伪**。
+        #   用户口径：「让 ai 对还存活的答案生成对应的对抗性验证，来验证
+        #   能不能证伪，证伪就判错」。机检证伪（SymPy 反例）+ LLM 对抗生成
+        #   两层；跳过/故障一律保留候选（防误杀）。
+        self._stage_start(ctx, "4.2_falsify")
+        adversarial_gate_stage(self, ctx, tier)
+
         self._stage_start(ctx, "3.6_audit_filter")
         audit_filter_candidates(self, ctx, tier)
 
@@ -648,6 +656,7 @@ class Orchestrator(BaseAgent):
                      "3.4_collab",
                      "4.0_normalize",
                      "4.1_self_audit",
+                     "4.2_falsify",
                      "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                      "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
             self._stage_stop(ctx, _stg)

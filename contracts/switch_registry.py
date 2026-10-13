@@ -527,6 +527,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.1 AI 自审逻辑错误（五道审核链第 1 道）：逐候选 LLM 逻辑自审"
         "（只审逻辑不审数值），能指出具体逻辑错误者淘汰并反馈；"
         "输出不可解析/LLM 故障一律保留候选（防误杀）；=0 关闭做 A/B"),
+    "five_gate_falsify": (
+        "FIVE_GATE_FALSIFY", "bool", True,
+        "4.2 AI 对抗证伪（五道审核链第 2 道）：逐存活候选两层对抗验证——"
+        "机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰；"
+        "跳过/故障一律保留候选（防误杀）；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

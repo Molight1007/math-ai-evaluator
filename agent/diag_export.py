@@ -240,6 +240,14 @@ def _diag_blueprint_review(ctx, config) -> dict:
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
                               and t.get("step") == "self_audit"],
+        # ★ 2026-10-14（五道审核链第 2 道）：对抗证伪（汇总 + 淘汰清单 + 逐候选事件）
+        "adversarial_gate": dict(getattr(ctx, "adversarial_gate", None) or {}),
+        "adversarial_gate_rejected": list(
+            getattr(ctx, "adversarial_gate_rejected", None) or []),
+        "adversarial_gate_events": [str(t.get("content", ""))[:200]
+                                    for t in (getattr(ctx, "trace", None) or [])
+                                    if isinstance(t, dict)
+                                    and t.get("step") == "adversarial_gate"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),
