@@ -209,6 +209,7 @@ _STAGE_DASHBOARD = [
     ("4.3_lean_check", "⑨ Lean 代回", "lean_backcheck 非空（代回判定执行完成）", "lean_check"),
     ("4.4_math_check", "⑩ 计算检测", "math_check 非空（计算检测执行完成）", "math_check"),
     ("4.5_vote", "⑪ 投票", "best 簇获得 ≥1 张正确票", "vote"),
+    ("4.6_rewrite", "⑫ 池空重写", "重写后候选存活（池空触发时；未触发不计分母）", "rewrite"),
 ]
 
 
@@ -290,6 +291,13 @@ def _stage_dashboard_rows(recs):
                 vg.get("multi_answer", "—"),
                 str(bc.get("answer_norm") or "—")[:24],
                 bc.get("vote_correct", "—"), bc.get("vote_total", "—"))
+        if stage == "4.6_rewrite":
+            rg = _as_dict(d.get("rewrite_gate"))
+            if not rg:
+                return "未触发（池空才跑）"
+            return "轮=%s 存活=%s（诊断 %s 次）" % (
+                rg.get("rounds", "—"), rg.get("survived", "—"),
+                rg.get("n_diag_ok", "—"))
         return ""
 
     def _pass_for(stage, r):
@@ -350,6 +358,11 @@ def _stage_dashboard_rows(recs):
             bc = _as_dict(vg.get("best_cluster"))
             return (_num_or_zero(bc.get("vote_correct")) > 0,
                     "正确票=%s" % bc.get("vote_correct", "—"))
+        if stage == "4.6_rewrite":
+            rg = _as_dict(d.get("rewrite_gate"))
+            if not rg:
+                return None, "未触发（池空才跑）"
+            return bool(rg.get("survived")), "轮=%s" % rg.get("rounds", "—")
         return None, "—"
 
     out = []

@@ -61,6 +61,8 @@ STAGE_ORDER_test_report = [
     # 五道审核链（现行）
     "4.0_normalize", "4.1_self_audit", "4.2_falsify",
     "4.3_lean_check", "4.4_math_check", "4.5_vote",
+    # 池空重写（2026-10-14 二次定案：池空不再直答）
+    "4.6_rewrite",
     # 已删阶段（历史 jsonl 兼容渲染）
     "3.5_subgoal_sup", "3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv", "4.7_lean",
     "5.5_low_conf", "5_revise_or_fallback",
@@ -78,6 +80,7 @@ MECH_EXPECT = [
     ("lean_backcheck", "必", "4.3 Lean 代回（五道链）"),
     ("math_check", "必", "4.4 计算检测（五道链）"),
     ("vote_gate", "必", "4.5 投票（五道链）"),
+    ("rewrite_gate", "条件", "4.6 池空重写（仅池空触发；错误诊断→重建→重写）"),
     ("subgoal_stats", "必", "子目标统计"),
     ("subgoal_trace", "必", "子目标轨迹"),
     ("exhaust_diag", "必", "穷尽性检查触发记录"),

@@ -93,6 +93,12 @@ STAGES_stage_audit = [
     ("4.5_vote", "投票（第 5 道）",
      "先多答案判断（ctx.vote_multi_answer）→ 大模型对存活候选逐候选投票",
      "vote_gate 非空 或 verdicts 非空", "run"),
+    # ★ 2026-10-14 二次定案（用户）：「不要池空直答！没有答案了就讲错误情况返回
+    #   给大模型，让它找到问题出在哪里，重新构建蓝图和子目标，重写」。
+    ("4.6_rewrite", "池空重写（用户定案）",
+     "池空 ⇒ 错误情况汇总 → LLM 诊断根因 → 重建蓝图和子目标（rewrite_context "
+     "注入题目占位符内部）→ 重写 → 新候选重过五道链（轮数上限 rewrite_max_rounds）",
+     "rewrite_gate 非空（池空才触发）", "off"),
     ("3.5_subgoal_sup", "子目标补充候选",
      "非 deep 档候选不足时补一轮子目标分解（**已被 2.7 取代**）",
      "control_events 含「子目标分解补充候选」", "off"),
@@ -135,6 +141,7 @@ MECHS = [
     ("lean_backcheck", "Lean 代回", "4.3：候选级 Lean 命题编译判定", "run"),
     ("math_check", "计算检测", "4.4：SymPy 精确判定（fail 淘汰）", "run"),
     ("vote_gate", "五道链投票", "4.5：多答案判断 + LLM 投票（票数 tier_votes）", "run"),
+    ("rewrite_gate", "池空重写", "4.6：错误诊断 → 重建蓝图/子目标 → 重写（池空触发）", "cond"),
     ("lean_gate", "Lean 硬验证闸门", "编译验证候选/答案，淘汰 proof_invalid 并收 revise 反馈", "cond"),
     ("audit_gate", "审计闸门", "客观审核（随旧链删除后仅剩 2.6 复核路径；候选级 Level0 已并入 4.4）", "cond"),
     ("control_events", "流程控制事件", "记录兜底/协作/触发等控制流决策", "run"),
@@ -219,6 +226,14 @@ def judge_stage(key, rows, ts, logtxt):
     ★ jsonl 判不出时用**日志侧痕迹**兜底（见 `_log_evidence`）。
     """
     n = len(rows)
+    # ★ 2026-10-14：4.6_rewrite 为**条件阶段**（仅池空才启动 ⇒ 多数题无 stage_timer）。
+    #   无计时不代表未完成 ⇒ 按 diag.rewrite_gate 判：有产出=完成，无产出=设计如此。
+    if key == "4.6_rewrite" and not ts:
+        _wg = sum(1 for r in rows
+                  if (r.get("diag") or {}).get("rewrite_gate"))
+        return ("未触发（池空才跑）；diag.rewrite_gate 命中 %d/%d 题"
+                % (_wg, n),
+                "完成（diag 有产出）" if _wg else "设计如此")
     if not ts:
         return "无该阶段埋点", "未完成"
     med, mx, nz = st.median(ts), max(ts), sum(1 for x in ts if x > 0.05)

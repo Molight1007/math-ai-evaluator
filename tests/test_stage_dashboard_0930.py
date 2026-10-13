@@ -167,7 +167,8 @@ class NeverRaisesTest(unittest.TestCase):
         text = "\n".join(sec_stage_dashboard(recs))
         for key in ("1.1_type_understanding", "2.6_pre_audit", "2.7_subgoal_main",
                     "3_solve", "3.3_improve", "4.0_normalize", "4.1_self_audit",
-                    "4.2_falsify", "4.3_lean_check", "4.4_math_check", "4.5_vote"):
+                    "4.2_falsify", "4.3_lean_check", "4.4_math_check", "4.5_vote",
+                    "4.6_rewrite"):
             self.assertIn(key, text, f"四维表缺少阶段 {key}")
 
 
