@@ -202,48 +202,6 @@ def _llm_text(llm: Callable, ctx, system: str, user: str,
     return str(resp)
 
 
-def _objective_survivors(uniq: List[Tuple[str, str, Any]], ctx) -> Tuple[List, dict]:
-    """步③：客观验证淘汰。返回 (幸存列表, diag)。
-
-    客观信号（**只做淘汰、不做证实**，不确定一律放行）：
-      ① `ctx._falsified_answers`（orchestrator 证伪器已用 SymPy/Lean 判错的答案）
-         —— 数值回带 / 符号反例，等价即淘汰；
-      ② `AnswerOracle` 可解析性 —— 明显非法表达式淘汰
-         （**仅当还有别的候选可解析**时才淘汰，否则等于全军覆没，放行）。
-    """
-    diag = {"n_in": len(uniq), "falsified": 0, "unparseable": 0}
-    # ① 已证伪
-    _fal = list(getattr(ctx, "_falsified_answers", None) or [])
-    keep = list(uniq)
-    if _fal:
-        try:
-            from agent.answer_oracle import AnswerOracle
-            _k2 = []
-            for a, r, c in keep:
-                if any(AnswerOracle.answers_equivalent(a, x) for x in _fal):
-                    diag["falsified"] += 1
-                else:
-                    _k2.append((a, r, c))
-            if _k2:
-                keep = _k2
-        except Exception:  # noqa: BLE001
-            pass
-    # ② 可解析性（只在"仍有可比对象"时淘汰不可解析者）
-    try:
-        from agent.answer_oracle import AnswerOracle
-        _parseable = [i for i, (a, _, _) in enumerate(keep)
-                      if AnswerOracle.is_parseable(a)]
-        if _parseable and len(_parseable) < len(keep):
-            _k3 = [keep[i] for i in _parseable]
-            diag["unparseable"] = len(keep) - len(_k3)
-            keep = _k3
-    except Exception:  # noqa: BLE001
-        pass
-    diag["n_out"] = len(keep)
-    diag["n_eliminated"] = len(uniq) - len(keep)
-    return keep, diag
-
-
 def _vote(survivors: List[Tuple[str, str, Any]],
           verified=None, verify_aware: bool = False
           ) -> Tuple[str, Any, dict]:
@@ -385,15 +343,24 @@ def select_final_answer(ctx, candidates, llm: Callable,
         problem = str(getattr(ctx, "problem", "") or "")
 
         # ================= ② 多答案判断 =================
+        # ★ 2026-10-14（五道链定案·单一来源）：优先复用 4.5_vote 的结果
+        #   （`ctx.vote_multi_answer`）——「先判断会不会是多个答案，再投票」
+        #   的判定在投票阶段已完成，此处不再重复问一次 LLM。
         steps.append("2_multi_answer")
-        answers_block = "\n".join("- " + a for a, _, _ in
-                                  uniq[:_MAX_CANDIDATES_IN_PROMPT])
-        # 2026-10-02 DeepSeek 适配：原 768 ⇒ 8192。原值基于「判一条 JSON + 思维块被
-        # 抑制」的假设，对 reasoning 模型必然截断（reasoning 先吃满预算、正文为空）。
-        raw2 = _llm_text(llm, ctx, MULTI_ANSWER_JUDGE_SYSTEM,
-                         MULTI_ANSWER_JUDGE_USER.format(
-                             problem=problem, answers=answers_block), 8192)
-        multi = _parse_multiple(raw2)
+        multi = getattr(ctx, "vote_multi_answer", None)
+        if multi is None:
+            answers_block = "\n".join("- " + a for a, _, _ in
+                                      uniq[:_MAX_CANDIDATES_IN_PROMPT])
+            # 2026-10-02 DeepSeek 适配：原 768 ⇒ 8192。原值基于「判一条 JSON + 思维块被
+            # 抑制」的假设，对 reasoning 模型必然截断（reasoning 先吃满预算、正文为空）。
+            raw2 = _llm_text(llm, ctx, MULTI_ANSWER_JUDGE_SYSTEM,
+                             MULTI_ANSWER_JUDGE_USER.format(
+                                 problem=problem, answers=answers_block), 8192)
+            multi = _parse_multiple(raw2)
+            diag["multi_answer_source"] = "select_llm"
+        else:
+            diag["multi_answer_source"] = "vote_gate"
+            _rec(f"五层选择②：复用 4.5_vote 多答案判定 ⇒ multiple={multi}")
         diag["multi_answer"] = multi
         if multi is True:
             # 2026-10-04 修（fix-a1）：原实现直接 `", ".join(a for a, _, _ in uniq)`，
@@ -421,10 +388,10 @@ def select_final_answer(ctx, candidates, llm: Callable,
             ans = ", ".join(_items) if _items else ", ".join(a for a, _, _ in uniq)
             diag["branch"] = "multi_answer"
             _rec(f"五层选择②：判为多答案题 ⇒ 展平去重后输出 {len(_items)} 项终答，"
-                 f"跳过 ③④⑤：{ans[:80]}")
+                 f"跳过 ⑤：{ans[:80]}")
             return {"answer": ans, "branch": "multi_answer", "skipped": False,
                     "steps": steps, "diag": diag, "cand": None}
-        _rec("五层选择②：判为单一答案 ⇒ 进入客观验证（③）"
+        _rec("五层选择②：判为单一答案 ⇒ 进入投票（⑤）"
              + ("" if multi is False else "（判不出，按单一处理）"))
 
         return _select_from_survivors(
@@ -442,48 +409,34 @@ def select_final_answer(ctx, candidates, llm: Callable,
 
 def _select_from_survivors(ctx, uniq, problem, llm, steps, diag, _rec,
                            verify_aware, _vstat) -> dict:
-    """五层 ③客观验证 / ④模型对比 / ⑤投票（原 select_final_answer 的 518-605 段逐字搬出）。
+    """五层 ⑤ 投票（2026-10-14 五道链定案：③客观验证 / ④模型对比已删）。
 
-    2026-10-08 批 F1：原地拆以使 select_final_answer ≤150。段内每个出口本就 `return`
-    一个五层结果 dict ⇒ 拆出后返回契约不变。`steps` / `diag` / `_rec` 由调用方传入
-    （前者被 append、后两者被原地更新，与拆出前同一对象）。
+    用户口径：「先判断会不会是多个答案，再投票选择答案」——
+      · ②多答案判断在调用方完成（优先复用 4.5_vote 的 ctx.vote_multi_answer）；
+      · 客观验证（原③）职责已由五道链前四道承担（自审/证伪/Lean/计算）；
+      · 模型对比（原④）按用户决策删除；
+      · 本段 = **归一化频次投票**（last-resort 兜底）。
+    verify-aware 过滤（2026-10-07 问题 2.2 修复）保留：有已验证候选时不选
+    未验证者（实测 007 未验证 `\boxed{0}` 曾靠更长推理胜出）。
     """
-    # ================= ③ 客观验证 =================
-    steps.append("3_objective")
-    surv, o_diag = _objective_survivors(uniq, ctx)
-    diag["objective"] = o_diag
-    if not surv:
-        surv = uniq          # 全被淘汰 ⇒ 不敢下结论，退回全体（放行）
-        diag["objective"]["fallback_all"] = True
-    if len(surv) == 1:
-        a, r, c = surv[0]
-        diag["branch"] = "objective_single"
-        _rec(f"五层选择③：客观验证后仅剩 1 个幸存候选 ⇒ 直接采用、不进④⑤：{a[:80]}")
-        return {"answer": a, "branch": "objective_single", "skipped": False,
-                "steps": steps, "diag": diag, "cand": c}
-    _rec(f"五层选择③：客观验证后仍剩 {len(surv)} 个 ⇒ 进入模型对比（④）")
-
-    # ★ 2026-10-07（问题 2.2）：④⑤ 的候选池 = **已验证候选**（"跳过"未验证者）。
-    #   依据：④模型对比 / ⑤投票是"在候选间择优"的动作；一个**没有任何验证
-    #   记录**的候选不应仅凭"参与"就胜出（实测 007：未验证的 `\boxed{0}` 在
-    #   1:1 平票后靠更长推理胜出）。
+    # ★ 2026-10-07（问题 2.2）：投票池 = **已验证候选**（"跳过"未验证者）。
     #   · 有 ≥1 个已验证候选 ⇒ 池 = 已验证者（未验证者记入 diag 但不参与胜出）；
     #   · 全部未验证 ⇒ 保留全体（否则"必得 0 分"），但显式留痕 all_unverified。
-    pool = surv
-    _pool_diag = {"n_surv": len(surv), "restricted": False, "all_unverified": False,
+    pool = uniq
+    _pool_diag = {"n_surv": len(uniq), "restricted": False, "all_unverified": False,
                   "excluded_unverified": []}
     if verify_aware:
-        _ver_pool = [t for t in surv if _vstat.get(_norm(t[0]), ("verified",))[0]
+        _ver_pool = [t for t in uniq if _vstat.get(_norm(t[0]), ("verified",))[0]
                      == "verified"]
-        if _ver_pool and len(_ver_pool) < len(surv):
+        if _ver_pool and len(_ver_pool) < len(uniq):
             _pool_diag["restricted"] = True
             _pool_diag["excluded_unverified"] = [
                 {"answer": t[0][:60], "reason": _vstat.get(
                     _norm(t[0]), ("unverified", {}))[1].get("reason", "")}
-                for t in surv if t not in _ver_pool][:8]
+                for t in uniq if t not in _ver_pool][:8]
             pool = _ver_pool
-            _rec(f"五层选择：④⑤ 仅在 {len(_ver_pool)} 个**已验证**候选里选，"
-                 f"跳过 {len(surv) - len(_ver_pool)} 个无验证记录者")
+            _rec(f"五层选择：⑤ 仅在 {len(_ver_pool)} 个**已验证**候选里选，"
+                 f"跳过 {len(uniq) - len(_ver_pool)} 个无验证记录者")
         elif not _ver_pool:
             _pool_diag["all_unverified"] = True
             _rec("五层选择：⚠ 全部候选**均无有效验证记录** ⇒ 保留全体但不得"
@@ -495,39 +448,12 @@ def _select_from_survivors(ctx, uniq, problem, llm, steps, diag, _rec,
         _rec(f"五层选择：验证过滤后仅剩 1 个候选 ⇒ 直接采用：{a[:80]}")
         return {"answer": a, "branch": "verified_only_single", "skipped": False,
                 "steps": steps, "diag": diag, "cand": c}
-    surv = pool
 
-    # ================= ④ 模型对比 =================
-    steps.append("4_model_compare")
-    _in = surv[:_MAX_CANDIDATES_IN_PROMPT]
-    blocks = []
-    for i, (a, r, _c) in enumerate(_in, 1):
-        _r = r[:_MAX_REASONING_CHARS] or "（无推理原文）"
-        blocks.append(f"【候选 {i}】最终答案：{a}\n推理原文：\n{_r}")
-    sg_block, sg_diag = _build_sg_evidence(ctx)
-    diag["sg_evidence"] = sg_diag
-    # 2026-10-02 DeepSeek 适配：原 1024 ⇒ 8192。原值基于「判一个候选号 + 思维块被
-    # 抑制」的假设，对 reasoning 模型必然截断（reasoning 先吃满预算、正文为空）。
-    raw4 = _llm_text(llm, ctx, COMPARE_JUDGE_SYSTEM,
-                     COMPARE_JUDGE_USER.format(
-                         problem=problem,
-                         candidates_block="\n\n".join(blocks),
-                         sg_evidence=sg_block), 8192)
-    pick = _parse_compare_pick(raw4, len(_in))
-    diag["model_compare_pick"] = pick
-    if pick is not None:
-        a, r, c = _in[pick]
-        diag["branch"] = "model_compare"
-        _rec(f"五层选择④：模型对比后选中 候选 {pick + 1} ⇒ 采用：{a[:80]}")
-        return {"answer": a, "branch": "model_compare", "skipped": False,
-                "steps": steps, "diag": diag, "cand": c}
-    _rec("五层选择④：模型无法判定 ⇒ 进入投票兜底（⑤）")
-
-    # ================= ⑤ 投票兜底 =================
+    # ================= ⑤ 投票（末层兜底） =================
     steps.append("5_vote")
-    _verified_norms = {_norm(t[0]) for t in surv
+    _verified_norms = {_norm(t[0]) for t in pool
                        if _vstat.get(_norm(t[0]), ("verified",))[0] == "verified"}
-    a, c, v_diag = _vote(surv, verified=_verified_norms,
+    a, c, v_diag = _vote(pool, verified=_verified_norms,
                          verify_aware=verify_aware)
     diag["vote"] = v_diag
     diag["branch"] = "vote"

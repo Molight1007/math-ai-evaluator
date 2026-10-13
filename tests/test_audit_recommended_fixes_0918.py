@@ -77,11 +77,14 @@ def test_36_filter_keeps_legit_candidates():
 
 
 def test_36_filter_uses_single_source_of_truth():
-    src = _src("agent/orchestrator.py")
-    assert "from .formatter import _looks_like_non_answer as _nma36" in src
-    assert "_keep_cand" in src
-    # 全被滤掉时不得清空池（与 M2 同原则）
-    assert "候选池 %d 个全部呈非答案形态（未清空" in src
+    # ★ 2026-10-14（五道链定案）：3.6 过滤器职责已并入 4.0 规范化阶段
+    #   （`agent/answer_normalizer.py`）—— 守卫改读新家；判据不变：
+    #   ① 复用 `_looks_like_non_answer` 单一来源；② 全不可判形态时的清池
+    #   受 `pool_empty_clear` 控制（用户 Q32 口径）。
+    src = _src("agent/answer_normalizer.py")
+    assert "from .formatter__nonanswer import _looks_like_non_answer" in src
+    assert "pool_empty_clear" in src
+    assert "已清空" in src and "保留原池" in src
 
 
 # ============ ③ 提示词 ============

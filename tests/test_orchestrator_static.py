@@ -168,18 +168,20 @@ def _orch_union_src() -> str:
 
 
 def test_is_proof_still_defined_before_verifier_call():
-    """针对性回归：`is_proof` 必须在 orchestrator.run 内被赋值后再传给 verifier。
+    """针对性回归：`is_proof` 必须在投票前被赋值后再传给 verifier。
 
     只查源码文本，不依赖 pyflakes。即便将来有人再次删掉赋值行，
     这个断言会先于 pyflakes 给出人话解释。
-    （2026-10-07 阶段C5：4_verify 段搬走后改读「主文件 + 抽出模块」并集；
-      被查字面量与「赋值早于使用」的守卫意图均不变，非放宽判据。）
+    （2026-10-14 五道链定案：投票调用点从旧 4_verify（已删）迁到
+      `agent/vote_gate.py`（4.5_vote）—— 本守卫改读该模块；断言字面量与
+      「赋值早于使用」的守卫意图均不变，非放宽判据。）
     """
-    src = _orch_union_src()
+    src = open(os.path.join(ROOT, "agent", "vote_gate.py"),
+               encoding="utf-8").read()
 
     assert "is_proof=is_proof" in src, (
-        "orchestrator（含抽取模块）里已找不到 `is_proof=is_proof`"
-        "（verifier.run 的入参）。若是有意重构，请同步更新本测试。"
+        "vote_gate 里已找不到 `is_proof=is_proof`（verifier.run 的入参）。"
+        "若是有意重构，请同步更新本测试。"
     )
     # `is_proof = ` 必须出现（赋值），且出现在调用之前
     assign_idx = src.find("is_proof = (")
@@ -187,7 +189,7 @@ def test_is_proof_still_defined_before_verifier_call():
         assign_idx = src.find("is_proof = getattr")
     call_idx = src.find("is_proof=is_proof")
     assert assign_idx >= 0, (
-        "orchestrator 使用了 is_proof 但没有赋值 —— "
+        "vote_gate 使用了 is_proof 但没有赋值 —— "
         "2026-08-31 的 NameError 就是这样产生的"
     )
     assert assign_idx < call_idx, (

@@ -131,6 +131,6 @@ def test_stage_wired_in_orchestrator():
                      "agent", "orchestrator.py"), encoding="utf-8").read()
     i_lc = src.index('self._stage_start(ctx, "4.3_lean_check")')
     i_mc = src.index('self._stage_start(ctx, "4.4_math_check")')
-    i_36 = src.index('self._stage_start(ctx, "3.6_audit_filter")')
-    assert i_lc < i_mc < i_36
+    i_fmt = src.index('self._stage_start(ctx, "6_format")')
+    assert i_lc < i_mc < i_fmt
     assert '"4.4_math_check",' in src

@@ -74,7 +74,7 @@ COUNT_FLOOR = 120
 # 白名单：(相对路径, 跳板名)。覆盖两种形态与 5 个主要拆分文件。
 WHITELIST = {
     ("agent/orchestrator.py", "_has_usable_candidate"),      # def 式
-    ("agent/orchestrator.py", "_deep_revise_loop"),          # def 式（带默认值）
+    ("agent/orchestrator.py", "_verdicts_from_ver_result"),  # def 式（带默认值）
     ("agent/orchestrator.py", "_looks_like_answer"),         # def 式 @staticmethod
     ("agent/sub_goal_solver.py", "_merge_results"),          # 赋值式（普通）
     ("agent/sub_goal_solver.py", "_is_value_choice"),        # 赋值式 staticmethod

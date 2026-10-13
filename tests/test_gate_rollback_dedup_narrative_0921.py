@@ -79,77 +79,10 @@ def test_hard_cases_left_unblocked_on_purpose():
 # ---------------------------------------------------------------------------
 # ③ Z6 去重键
 # ---------------------------------------------------------------------------
-class _Cfg:
-    deep_revise_rounds = 1
-    max_revise_rounds = 5
-
-
-class _State:
-    emergency = False
-
-
-class _Ctx:
-    def __init__(self, final_response: str, revise_round: int = 0):
-        self.final_response = final_response
-        self.revise_round = revise_round
-        self.state = _State()
-        self.events = []
-
-
-def _make_orch():
-    """绕过 __init__ 造一个只够跑 _deep_revise_loop 去重分支的对象。"""
-    from agent.orchestrator import Orchestrator
-
-    orch = Orchestrator.__new__(Orchestrator)
-    orch.config = _Cfg()
-    orch.events = []
-
-    def _record(ctx, key, content, **kw):
-        orch.events.append((key, str(content)))
-
-    orch.record = _record
-    return orch
-
-
-def _call(orch, ctx, force=False):
-    """返回去重结果；若越过去重进入回环主体则会抛异常（说明未被去重）。"""
-    try:
-        return orch._deep_revise_loop(ctx, {}, 3, force=force)
-    except Exception as exc:  # noqa: BLE001
-        return "ENTERED_BODY:" + type(exc).__name__
-
-
-def test_dedup_hits_regardless_of_revise_round():
-    """★ 核心：同一答案在**任意** revise_round 下都必须命中去重。"""
-    orch = _make_orch()
-    ctx = _Ctx("\\boxed{1}", revise_round=0)
-    ctx._revise_pass_keys = {"\\boxed{1}"}       # 本趟已跑过该答案
-    ctx.revise_round = 3                        # 5) 段已把它推进到 3
-    assert _call(orch, ctx) is False
-    assert any("已 revise 过" in c for _k, c in orch.events), orch.events
-
-
-def test_dedup_key_is_not_tuple_with_round():
-    """旧键形态 `(round, answer)` 必须**不再**命中（证明键已改）。"""
-    orch = _make_orch()
-    ctx = _Ctx("\\boxed{1}", revise_round=3)
-    ctx._revise_pass_keys = {(3, "\\boxed{1}")}   # 旧实现的键
-    assert str(_call(orch, ctx)).startswith("ENTERED_BODY:")
-
-
-def test_dedup_does_not_block_a_changed_answer():
-    """答案变了 ⇒ 不得被去重拦住（否则会漏掉真正该跑的 revise）。"""
-    orch = _make_orch()
-    ctx = _Ctx("\\boxed{2026}", revise_round=1)
-    ctx._revise_pass_keys = {"\\boxed{1}"}
-    assert str(_call(orch, ctx)).startswith("ENTERED_BODY:")
-
-
-def test_force_bypasses_dedup():
-    orch = _make_orch()
-    ctx = _Ctx("\\boxed{1}", revise_round=1)
-    ctx._revise_pass_keys = {"\\boxed{1}"}
-    assert str(_call(orch, ctx, force=True)).startswith("ENTERED_BODY:")
+# ★ 2026-10-14（五道链定案）：Z6 去重测试簇（test_dedup_hits_regardless_of_revise_round /
+#   test_dedup_key_is_not_tuple_with_round / test_dedup_does_not_block_a_changed_answer /
+#   test_force_bypasses_dedup，及 _Cfg/_State/_Ctx/_make_orch/_call 桩）已删 ——
+#   其目标 `_deep_revise_loop` 随 revise 回环整体删除（用户决策②）。
 
 
 # ---------------------------------------------------------------------------
@@ -178,17 +111,9 @@ def _src_diag() -> str:
         return fh.read()
 
 
-def test_gate_rollback_branch_present():
-    """① 未过审核时必须存在回滚分支（且用统一写入口并置标志位）。"""
-    src = _src()
-    assert "_pre_rework_final = ctx.final_response" in src
-    m = re.search(r"if not g_ok:(.{0,1400})?gate_rejected = True(.*?)\n\s+except",
-                  src, re.S)
-    assert m, "未找到 6.5 闸门终态分支"
-    seg = m.group(2)
-    assert "gate_rollback" in seg, "缺少回滚调用"
-    assert "ctx._gate_rollback = True" in seg, "缺少回滚标志位"
-    assert "_set_final_response(" in seg, "回滚必须走统一写入口"
+# ★ 2026-10-14（五道链定案）：`test_gate_rollback_branch_present` 已删 ——
+#   其目标（6.5 审核闸门未过时回滚 `gate_rollback` 分支）随 6.5_audit_gate
+#   整体删除。回滚机制本身已无消费场景（终答在 6_format 之后不再被审核改写）。
 
 
 def test_diag_exports_oracle_and_adversarial_events():

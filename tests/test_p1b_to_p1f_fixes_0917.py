@@ -106,9 +106,10 @@ def test_audit2_agentconfig_default_matches_declaration():
 
 
 # ============================ Audit-4 ============================
-def test_audit4_inert_guard_is_documented():
-    src = _src("agent/orchestrator.py")
-    assert "当前恒为真分支（守卫无效）" in src
+# ============================ Audit-4 ============================
+# ★ 2026-10-14（五道链定案）：`test_audit4_inert_guard_is_documented` 已删 ——
+#   其目标注释（`_p1_triggered` 幂等守卫「当前恒为真分支（守卫无效）」）随
+#   4_verify 段（agent/orchestrator__verify.py 的 verify_stage）整体删除。
 
 
 # ============================ L1 ============================

@@ -7,8 +7,10 @@
   · 归一**算法**全部复用 ``utils/extract.normalize_pool_answer`` 的
     「先抢救、再判定」纯函数内核（句子形态含明确最终值 ⇒ 抽出该值），
     本模块**不新写第二个归一实现**；
-  · 本模块只做三件事：**分类**（answer_kind）→ **挂载**（answer_norm /
-    answer_kind 写到候选对象上，**不改 ``c.answer``** ⇒ 旧链行为零变化）
+  · 本模块只做四件事：**分类**（answer_kind）→ **挂载**（answer_norm /
+    answer_kind 写到候选对象上，**不改 ``c.answer``**）→ **剔除不可判形态**
+    （``unparseable``：Markdown 标记/过程叙述/空答案 —— 承接旧链 4_verify
+    ``_verify_filter_candidates`` 的过滤职责，2026-10-14 五道链定案收编）
     → **留痕**（trace step=``answer_normalize``，diag 键
     ``answer_normalize`` / ``answer_normalize_events``）。
 
@@ -155,6 +157,37 @@ def normalize_stage(self, ctx) -> None:
             self.record(ctx, "answer_normalize",
                         "cid=%s kind=%s norm=%s"
                         % (getattr(c, "id", "?"), kind, str(norm)[:120]))
+
+        # ---- 剔除「不可判形态」（承接旧链 4_verify `_verify_filter_candidates`
+        #      的过滤职责；2026-10-14 五道链定案收编到 4.0）----
+        # 背景（旧判据实证）：096 候选 answer 混入 Markdown 标题污染投票；
+        #   032 的过程叙述候选（「步骤11：搜索已知结论」）同样污染票型。
+        # 语义（与旧链逐字一致）：
+        #   · 部分剔除 ⇒ 落池；
+        #   · **全部**不可判 ⇒ 由 `pool_empty_clear` 决定：True（默认）清空池
+        #     交下游兜底（用户 Q32）；False 保留脏候选（2026-09-18 旧行为）。
+        try:
+            _kept_c = [c for c in cands
+                       if str(getattr(c, "answer_kind", "") or "") != "unparseable"]
+            if _kept_c and len(_kept_c) < len(cands):
+                ctx.candidates = _kept_c
+                self.record(ctx, "answer_normalize",
+                            "剔除不可判形态候选 %d → %d（Markdown/过程叙述/空答案）"
+                            % (len(cands), len(_kept_c)))
+            elif not _kept_c:
+                if bool(getattr(self.config, "pool_empty_clear", True)):
+                    ctx.candidates = []
+                    self.record(ctx, "answer_normalize",
+                                "候选池 %d 个全部呈不可判形态 ⇒ **已清空**"
+                                "（pool_empty_clear=True，走下游兜底）" % len(cands))
+                else:
+                    self.record(ctx, "answer_normalize",
+                                "候选池 %d 个全部呈不可判形态（pool_empty_clear=False，"
+                                "保留原池）" % len(cands))
+        except Exception as _e_f:  # noqa: BLE001  过滤失败不影响已挂载的归一结果
+            self.record(ctx, "answer_normalize",
+                        f"不可判形态剔除失败（{type(_e_f).__name__}: "
+                        f"{str(_e_f)[:120]}）→ 脏候选可能进入后续环节")
 
         # 汇总挂 ctx（diag_export 导出为 diag["answer_normalize"]）
         ctx.answer_normalize = {

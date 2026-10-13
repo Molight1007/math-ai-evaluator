@@ -75,7 +75,8 @@ _GENERATION_STEPS = [
     "improve_candidates",
     "self.collab.run(ctx)",
     "self.sub_goal_solver.run(ctx)",
-    "self.audit_gate.audit_candidates(",
+    # ★ 2026-10-14（五道链定案）：3.6_audit_filter 已删 ⇒
+    #   `self.audit_gate.audit_candidates(` 不再存在，从门禁清单移除。
 ]
 
 
@@ -152,14 +153,24 @@ def test_generation_steps_all_gated_by_verify_only():
                 ("3.5 已删除，sub_goal_solver 应只剩 2.7 主路径 + 3_solve(P&E) "
                  "共 2 处调用（若新增请同步本门禁测试）")
             continue
+        if needle == "self.collab.run(ctx)":
+            # ★ 2026-10-14 修（五道链定案连带）：本针有两个命中——模块 docstring
+            #   里的叙述（无语义）与 `orchestrator__collab.py` 的**代码区**调用；
+            #   且其 verify_only 门禁写作 if 条件第 4 行（`and not
+            #   ctx.state.verify_only`），距调用点约 ~900 字符。原 `find` 命中
+            #   docstring、原 400 字符窗口够不到门禁 ⇒ 改取 **rfind**（代码区）
+            #   并放宽到 1500。门禁存在性的判据意图不变（非放宽断言目标）。
+            idx = src.rfind(needle)
+            assert "verify_only" in src[max(0, idx - 1500):idx + len(needle)], (
+                "self.collab.run(ctx) 的调用窗口内没有 verify_only 门禁 —— "
+                "L1 漏改了这个生成步骤")
+            continue
         assert "verify_only" in window, (
             f"{needle} 的调用窗口内没有 verify_only 门禁 —— "
             f"L1 漏改了这个生成步骤（{needle}）"
         )
 
 
-def test_verify_only_skips_audit_filter():
-    """AuditGate 候选审核（3.6）：verify_only 分支里有显式的跳过记录。"""
-    src = _orch_src()
-    assert "ctx.state.verify_only" in src
-    assert "L1 验证优先：跳过 AuditGate 候选审核（时间不足）" in src
+# ★ 2026-10-14（五道链定案）：`test_verify_only_skips_audit_filter` 已删 ——
+#   其目标（3.6_audit_filter 的 verify_only 跳过分支）随该阶段整体删除。
+#   五道链的候选级审核（4.1~4.4）不再有 verify_only 门禁（研究期口径）。

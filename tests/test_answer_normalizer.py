@@ -54,6 +54,7 @@ def test_classify_proof():
 class _Stub:
     def __init__(self):
         self.events = []
+        self.config = type("_C", (), {"pool_empty_clear": True})()
 
     def record(self, ctx, kind, msg, **kw):
         self.events.append((kind, msg))
@@ -108,6 +109,36 @@ def test_normalize_stage_empty_pool():
     assert any("候选池为空" in m for _, m in stub.events)
 
 
+def test_unparseable_candidates_removed():
+    # 2026-10-14：不可判形态（Markdown/过程叙述/空答案）在 4.0 即剔除
+    # （承接旧链 4_verify `_verify_filter_candidates` 的过滤职责）
+    stub, ctx = _Stub(), _Ctx([
+        Candidate(id=1, answer="### 选项A分析", reasoning="r"),
+        Candidate(id=2, answer="48", reasoning="r"),
+    ])
+    normalize_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [2]
+    assert any("剔除不可判形态候选" in m for _, m in stub.events)
+
+
+def test_all_unparseable_pool_cleared_by_default():
+    stub, ctx = _Stub(), _Ctx([
+        Candidate(id=1, answer="### 标题", reasoning="r"),
+        Candidate(id=2, answer="步骤11：搜索已知结论", reasoning="r"),
+    ])
+    normalize_stage(stub, ctx)
+    assert ctx.candidates == []          # pool_empty_clear=True（默认）⇒ 清空
+    assert any("已清空" in m for _, m in stub.events)
+
+
+def test_all_unparseable_kept_when_switch_off():
+    stub, ctx = _Stub(), _Ctx([Candidate(id=1, answer="### 标题", reasoning="r")])
+    stub.config.pool_empty_clear = False
+    normalize_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [1]
+    assert any("保留原池" in m for _, m in stub.events)
+
+
 def test_normalize_stage_switch_off(monkeypatch):
     monkeypatch.setenv("FIVE_GATE_NORMALIZE", "0")
     stub, ctx = _Stub(), _Ctx([Candidate(id=1, answer="48", reasoning="r")])
@@ -133,10 +164,10 @@ def test_stage_wired_in_orchestrator():
     src = open(
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "agent", "orchestrator.py"), encoding="utf-8").read()
-    # 阶段序列：3.4_collab 之后、3.6 之前调用（规范化先于一切检测）
+    # 阶段序列：3.4_collab 之后、6_format 之前调用（规范化先于一切检测）
     i_collab = src.index('self._stage_start(ctx, "3.4_collab")')
     i_norm = src.index('self._stage_start(ctx, "4.0_normalize")')
-    i_36 = src.index('self._stage_start(ctx, "3.6_audit_filter")')
-    assert i_collab < i_norm < i_36
+    i_fmt = src.index('self._stage_start(ctx, "6_format")')
+    assert i_collab < i_norm < i_fmt
     # 收尾清单同样登记（否则阶段计时永不 stop）
     assert '"4.0_normalize",' in src

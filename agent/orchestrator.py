@@ -80,21 +80,18 @@ from .diag_metrics import (  # noqa: F401
     _parse_exhaust_result, _diag_completeness, _summarize_deep_review,
     _summarize_leansearch)
 from .diag_export import collect_diag  # noqa: F401  （供 _collect_diag 委托）
-# 2026-10-07 阶段C2：6.5_audit_gate 段已抽到 agent/orchestrator__final_gate.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__final_gate import final_answer_gate, format_stage  # noqa: F401
-# 2026-10-07 阶段C3a：3.6_audit_filter 段已抽到 agent/orchestrator__audit_filter.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
+# 2026-10-07 阶段C2：6.5_audit_gate 段已抽到 agent/orchestrator__final_gate.py。
+# ★ 2026-10-14：6.5_audit_gate 阶段已删（五道链定案）；本 import 仅剩 `format_stage`
+#   （6_format 段体，含终答后处理：数值化 + 客观题自检）。
+from .orchestrator__final_gate import format_stage  # noqa: F401
+# ★ 2026-10-14：3.6_audit_filter 段已删（职责并入 4.3/4.4）⇒ 不再 import。
 from .answer_normalizer import normalize_stage  # noqa: F401
 from .self_auditor import self_audit_stage  # noqa: F401
 from .adversarial_gate import adversarial_gate_stage  # noqa: F401
 from .lean_backcheck import lean_backcheck_stage  # noqa: F401
 from .math_check_gate import math_check_stage  # noqa: F401
 from .vote_gate import vote_stage  # noqa: F401
-# 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
+# ★ 2026-10-14：5.5_low_conf 段已删（五道链定案）⇒ 不再 import。
 # 2026-10-07 阶段C3c：3.4_collab 段已抽到 agent/orchestrator__collab.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
@@ -111,12 +108,8 @@ from .orchestrator__solve import self_improve_step  # noqa: F401
 # 由 run 以「哨兵 + 解包」方式委托（阶段打点原位保留，契约不变）。
 # ⚠ 非纯逐字搬：段体末尾新增哨兵 return，调用点由裸段改为解包透传。
 from .orchestrator__solve import solve_stage, _SOLVE_CONTINUE  # noqa: F401
-# 2026-10-07 阶段C4d：4.5_oracle 段已抽到 agent/orchestrator__verify.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__verify import oracle_review_stage  # noqa: F401
-# 2026-10-07 阶段C5：4_verify 段已抽到 agent/orchestrator__verify.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__verify import verify_stage  # noqa: F401
+# ★ 2026-10-14：4.5_oracle / 4_verify / 4.6_adv 段已删（五道链定案：
+#   oracle 删、投票并入 4.5_vote、对抗升级为 4.2_falsify）⇒ 不再 import。
 # 2026-10-07 阶段C6：1.2_theorem_hint 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import prep_tier_budget  # noqa: F401
@@ -125,13 +118,9 @@ from .orchestrator__prep import type_understanding_stage  # noqa: F401
 # 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import pre_audit_stage  # noqa: F401
-# 2026-10-07 阶段C6：4.6_adv 段已抽到 agent/orchestrator__verify.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__verify import adversarial_stage  # noqa: F401
-from . import orchestrator__oracle as _orch_oracle
+# ★ 2026-10-14：4.6_adv 段已删 ⇒ 不再 import adversarial_stage。
 from . import orchestrator__numeric as _orch_numeric
 from . import orchestrator__select as _orch_select
-from . import orchestrator__revise as _orch_revise
 from . import orchestrator__fallback as _orch_fallback
 from . import orchestrator__budget as _orch_budget
 from . import orchestrator__lean as _orch_lean
@@ -145,9 +134,7 @@ from .orchestrator__helpers import (  # noqa: F401
     _sw_bool_or, _sw_num_or, _emergency_direct_max_tokens,
     _load_lean_modules, _answer_fingerprint, _merge_review_into_feedback,
     _collect_tool_findings)
-# 2026-10-07 阶段C6：5_revise_or_fallback 段已抽到 agent/orchestrator__low_conf.py，
-# 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from .orchestrator__low_conf import revise_or_fallback_stage  # noqa: F401
+# ★ 2026-10-14：5_revise_or_fallback 段已删（用户决策②「全删」）⇒ 不再 import。
 
 # ---- Lean 双通道（2026-09-06 晚恢复）----
 # lean 系工具随 P2 去 Lean 化迁到 tools/lean_local/（归档），lean-toolchain
@@ -611,58 +598,25 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.5_vote")
         vote_stage(self, ctx, tier)
 
-        self._stage_start(ctx, "3.6_audit_filter")
-        audit_filter_candidates(self, ctx, tier)
-
-        self._stage_start(ctx, "4_verify")
-        ver_result, tier_votes = verify_stage(self, ctx, tier)
-
-        self._stage_start(ctx, "4.5_oracle")
-        oracle_review_stage(self, ctx, tier, ver_result, tier_votes)
-
-        self._stage_start(ctx, "4.6_adv")
-        adversarial_stage(self, ctx, tier, ver_result, tier_votes)
-
-        # ★ 2026-10-13（方案 v3.9 / 用户 Q30）：**4.7_lean —— Lean 检测前移到投票之前**。
-        #   起因（审核实测）：答案级 Lean（`6.5_audit_gate` 的 final_gate）在**投票之后**才做
-        #   ⇒ 等 Lean 判完，答案早已被选出 ⇒ "淘汰"失去意义（§3.9 E-2）。
-        #   本阶段把**候选级 Lean 硬验证**显式前移到投票之前：不通过的候选在投票前即被淘汰。
-        #   ⚠ 默认 **False**：这是**主链改动**，按纪律先 A/B、专项回归后再考虑翻默认。
-        #   ⚠ 与 3.6 / 4_verify 既有的 Lean 通道可能重叠 ⇒ 只在开关开时启用，并留痕淘汰数。
-        if getattr(self.config, "enable_lean_before_vote", False):
-            self._stage_start(ctx, "4.7_lean")
-            try:
-                from tools.lean_local.lean_gate import LeanGate as _LG47
-                _gate47 = getattr(self, "lean_gate", None) or _LG47(
-                    self.client, self.config)
-                _n_in47 = len(ctx.candidates or [])
-                _kept47, _fbs47 = _gate47.apply(ctx, tier, list(ctx.candidates or []))
-                if _kept47:
-                    ctx.candidates = _kept47
-                if _fbs47:
-                    ctx.audit_reject_feedback = list(
-                        getattr(ctx, "audit_reject_feedback", None) or []) + list(_fbs47)
-                self.record(ctx, "4.7_lean",
-                            "投票前 Lean 淘汰 %d/%d 个候选（保留 %d）"
-                            % (_n_in47 - len(_kept47), _n_in47, len(_kept47)))
-                ctx._lean_prechecked = True
-                from .orchestrator__verify import _pool_empty_fallback as _pef47
-                _pef47(self, ctx, "4.7_lean")
-            except Exception as _e_47:  # noqa: BLE001  增益环节，绝不阻断主链
-                self.record(ctx, "4.7_lean",
-                            f"投票前 Lean 检查异常（跳过，不阻断）: "
-                            f"{type(_e_47).__name__}: {str(_e_47)[:120]}")
-
-        self._stage_start(ctx, "5_revise_or_fallback")
-        revise_or_fallback_stage(self, ctx, tier, ver_result, tier_votes)
-
-        self._stage_start(ctx, "5.5_low_conf")
-        low_confidence_recheck(self, ctx, ver_result, tier_votes)
+        # ★★ 2026-10-14（五道审核链定案 · 用户决策「旧链一步到位直接删」）：
+        #   以下旧链阶段已**整段删除**，职责去向：
+        #     · 3.6_audit_filter（Lean 双通道 + AuditGate 串行）
+        #         → 拆分吸收进 **4.3_lean_check**（LeanGate.apply）与
+        #           **4.4_math_check**（DeterministicChecker Level0）；
+        #     · 4_verify（验证+投票一体，耗时单点 51.3%）→ **4.5_vote**（LLM 投票）；
+        #     · 4.5_oracle（同源自评复核）→ 删（用户口径：其余都删）；
+        #     · 4.6_adv（只探最佳簇一次）→ 升级为 **4.2_falsify**（逐候选证伪）；
+        #     · 4.7_lean（投票前 Lean，曾为实验开关）→ 并入 **4.3_lean_check**；
+        #     · 5_revise_or_fallback / 5.5_low_conf → 删（用户决策②：
+        #       全灭走 emergency 直答兜底）；
+        #     · 6.5_audit_gate（答案级 Lean/AuditGate 终审 + rework）→ 删
+        #       （Lean 判断统一在投票前的 4.3；emergency 直答兜底保留在 formatter）。
+        #       其内 «calc_inconsistent 判据在当前配置下不可达» 的历史留痕
+        #       （`<calc>` 板块删除后所留）随段体一并移除（机制已不在主链）。
+        #   阶段名保留于 stage_audit 审计清单作历史记录（阶段名是稳定契约）。
 
         self._stage_start(ctx, "6_format")
         format_stage(self, ctx)
-        self._stage_start(ctx, "6.5_audit_gate")
-        final_answer_gate(self, ctx, tier)
         return _SOLVE_CONTINUE
 
     def _run_finalize(self, ctx: TaskContext) -> dict:
@@ -673,7 +627,8 @@ class Orchestrator(BaseAgent):
         # 阶段耗时收尾（2026-09-03）：统一 stop 全部阶段（start 在阶段开始）
         # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty` / `0_paper_pacer`（阶段均已删）；
         #   此前报告仍含这些阶段名（留痕，阶段名是契约）。
-        for _stg in ("1.2_theorem_hint",
+        for _stg in ("1.1_type_understanding",
+                     "1.2_theorem_hint",
                      "2.6_pre_audit",
                      "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
                      "3.4_collab",
@@ -683,8 +638,7 @@ class Orchestrator(BaseAgent):
                      "4.3_lean_check",
                      "4.4_math_check",
                      "4.5_vote",
-                     "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
-                     "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
+                     "6_format"):
             self._stage_stop(ctx, _stg)
 
         # 构建返回
@@ -758,46 +712,18 @@ class Orchestrator(BaseAgent):
     # 不再有未定义名风险。
     # ----------------------------------------------------------
 
-    def _review_bug_feedback(self, ctx: TaskContext, feedback: str) -> str:
-        return _orch_revise._review_bug_feedback(self, ctx, feedback)
-
-    def _deep_revise_loop(self, ctx: TaskContext, ver_result: dict,
-                          tier_votes: int, force: bool = False) -> bool:
-        return _orch_revise._deep_revise_loop(self, ctx, ver_result, tier_votes, force)
-
-    def _deep_revise_loop_inner(self, ctx: TaskContext, ver_result: dict,
-                                tier_votes: int, force: bool = False) -> bool:
-        return _orch_revise._deep_revise_loop_inner(self, ctx, ver_result, tier_votes, force)
-
-    def _build_revise_feedback(self, ctx: TaskContext, ver_result: dict,
-                               force: bool) -> str:
-        return _orch_revise._build_revise_feedback(self, ctx, ver_result, force)
-
-    def _revise_rounds(self, ctx: TaskContext, max_rounds: int,
-                       feedback: str, force: bool, tier_votes: int) -> bool:
-        return _orch_revise._revise_rounds(self, ctx, max_rounds, feedback, force, tier_votes)
-
-    def _update_accept_gate(self, ctx: TaskContext, is_proof: bool = False) -> str:
-        return _orch_revise._update_accept_gate(self, ctx, is_proof)
-
-    def _enhance_window_ok(self, ctx: TaskContext, tag: str) -> bool:
-        return _orch_oracle._enhance_window_ok(self, ctx, tag)
-
-    def _adversarial_probe(self, ctx: TaskContext, tier: str) -> bool:
-        return _orch_oracle._adversarial_probe(self, ctx, tier)
+    # ★★ 2026-10-14（五道审核链定案 · 用户决策「旧链一步到位直接删」）：
+    #   revise 回环簇（_review_bug_feedback / _deep_revise_loop[_inner] /
+    #   _build_revise_feedback / _revise_rounds / _update_accept_gate）与
+    #   oracle/对抗/证伪簇（_enhance_window_ok / _adversarial_probe /
+    #   _falsify_candidates / _falsify_rejects / _oracle_review_best）已随
+    #   5_revise_or_fallback / 4.5_oracle / 5.5_low_conf 三阶段一并**整段删除**
+    #   （用户决策②：重解循环全删，全灭走 emergency 直答兜底）。
+    #   对应模块 agent/orchestrator__revise.py 与 agent/orchestrator__oracle.py
+    #   已删除；机检证伪能力由 4.2_falsify（agent/adversarial_gate.py）承接。
 
     def _mathlib_adoption(self, ctx: TaskContext) -> dict:
         return _orch_select._mathlib_adoption(self, ctx)
-
-    def _falsify_candidates(self, ctx: TaskContext) -> tuple:
-        return _orch_oracle._falsify_candidates(self, ctx)
-
-    def _falsify_rejects(self, ctx: TaskContext, answer: str) -> bool:
-        return _orch_oracle._falsify_rejects(self, ctx, answer)
-
-    def _oracle_review_best(self, ctx: TaskContext, ver_result: dict,
-                            tier_votes: int) -> None:
-        return _orch_oracle._oracle_review_best(self, ctx, ver_result, tier_votes)
 
     def _verdicts_from_ver_result(self, ver_result: dict, candidates: list = None) -> list:
         return _orch_select._verdicts_from_ver_result(self, ver_result, candidates)

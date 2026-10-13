@@ -106,7 +106,13 @@ def test_set_final_response_accepts_legit():
 
 
 def test_all_final_response_writes_are_guarded():
-    """6 个赋值点里，3 个原先无校验的必须已改用 `_set_final_response`。"""
+    """终答写点必须走统一入口。
+
+    ★ 2026-10-14（五道链定案）更新：原 4 个 `self._set_final_response(` 调用点
+    随 6.5_audit_gate / revise 链整体删除 ⇒ 计数断言改为「统一入口仍被消费」：
+    formatter 的 finalize 链（adopt_single）与 orchestrator__select 的委托仍在。
+    防的是「删阶段把统一入口也删了」——那会让终答写点失去校验。
+    """
     src = _src("agent/orchestrator.py")
     # 不得再有裸写
     for bare in ("ctx.final_response = _fresh.answer",
@@ -115,4 +121,5 @@ def test_all_final_response_writes_are_guarded():
         assert bare not in src, "仍有未过闸门的裸写：%s" % bare
     # 且必须存在单一入口
     assert "def _set_final_response" in src
-    assert src.count("self._set_final_response(") >= 4
+    assert "adopt_single(" in _src("agent/formatter.py")
+    assert "adopt_single(" in _src("agent/orchestrator__select.py")

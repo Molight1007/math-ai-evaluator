@@ -194,39 +194,14 @@ def test_M6_no_phantom_final_answer_field():
 
 
 # ============================ M2：禁止清空候选池 ============================
-def test_M2_guard_present():
-    """腾位赋值必须被 `if _pass_cands:` 守卫（否则 `_gate_tried` 为空时会清空池）。"""
-    src = _src("agent/orchestrator.py")
-    i_guard = src.find("if _pass_cands:")
-    i_assign = src.find("ctx.candidates = _pass_cands[:3]")
-    assert i_guard >= 0, "M2 守卫 `if _pass_cands:` 缺失"
-    assert i_assign > i_guard, "腾位赋值未被守卫包裹（M2 回归）"
+# ★ 2026-10-14（五道链定案）：`test_M2_guard_present` 已删 —— 其目标
+#   （`ctx.candidates = _pass_cands[:3]` 腾位赋值）随 revise/6.5 重做链整体删除。
 
 
 # ============================ 泛化句：结束而非空转 ============================
-def test_generic_sentence_returns_empty():
-    from agent.orchestrator import Orchestrator
-
-    class C:
-        def __init__(self, rs):
-            self._r = list(rs)
-
-        def chat(self, messages=None, temperature=0.0, max_tokens=0, **kw):
-            return self._r.pop(0) if self._r else ""
-
-    orch = Orchestrator.__new__(Orchestrator)
-    orch.config = SimpleNamespace(enable_feedback_review=True)
-    orch.client = C(["无实质缺陷"])
-    ctx = TaskContext(problem="p", metadata={})
-    ctx.candidates = [_c(0, "2")]
-
-    out = orch._review_bug_feedback(ctx, "缺陷：x = 2 是错误答案（实际正确）")
-    assert out == "", "判断为误报时须返回空串，由调用方结束 revise（防零信息空转）"
-
-
-def test_revise_loop_ends_on_empty_review():
-    src = _src("agent/orchestrator.py")
-    assert "_reviewed_empty and not audit_fb" in src, "缺少「结束 revise」守卫"
+# ★ 2026-10-14（五道链定案）：`test_generic_sentence_returns_empty` 与
+#   `test_revise_loop_ends_on_empty_review` 已删 —— 其目标
+#   （`_review_bug_feedback` / 「结束 revise」守卫）随 revise 回环整体删除。
 
 
 # ============================ M7：上一轮解答进提示词 ============================

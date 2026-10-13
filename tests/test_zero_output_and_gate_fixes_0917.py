@@ -92,50 +92,15 @@ def test_gate_final_answer_consults_cache():
 
 
 # ============================ Audit-3：口径统一 ============================
-def test_no_gen_time_up_on_verification_side():
-    """4.5 Oracle 与 5)段全0票重解不得再用生成侧软截止。
-
-    2026-10-07 阶段C4：4.5 Oracle 段已**整段**搬到 `agent/orchestrator__verify.py`
-    （结构性去 8 空格缩进）⇒ 读「主文件 + 抽出模块」并集，并忽略空白比较
-    （去缩进只是排版变化）。断言的字面量（token 序列）与守卫意图**均不变**，
-    仍要求两行精确相邻 —— **非放宽判据**。
-    """
-    src = _orch_src()
-    flat = re.sub(r"\s+", "", src)          # 忽略空白（仅消去排版/缩进差异）
-    # 两处已换成 is_time_critical
-    assert re.sub(r"\s+", "", 'and not ctx.is_time_critical()\n'
-                              '                    and self._enhance_window_ok(ctx, "oracle")') in flat, \
-        "4.5 Oracle 未换 is_time_critical"
-    assert re.sub(r"\s+", "", "if (tier == 'deep' and not ctx.state.emergency\n"
-                              "                        and not ctx.is_time_critical()):") in flat, \
-        "5)段全0票重解未换 is_time_critical"
-    # 且这两处不得再出现生成侧软截止
-    assert re.sub(r"\s+", "", 'and not ctx.gen_time_up()\n'
-                              '                    and self._enhance_window_ok(ctx, "oracle")') not in flat
-    assert re.sub(r"\s+", "", "and not ctx.gen_time_up()):\n"
-                              "                    revised_ok = self._deep_revise_loop") not in flat
+# ★ 2026-10-14（五道链定案）：`test_no_gen_time_up_on_verification_side` 已删 ——
+#   其目标（4.5 Oracle 与 5)段全0票重解的时钟口径）随 4.5_oracle / 5_revise
+#   两阶段整体删除。
 
 
 # ============================ Z6：同答案不重复 revise ============================
-def test_z6_dedup_guard_present():
-    # 2026-10-09 批12：Z6 去重键代码（`_revise_pass_keys` 与"同一答案…已 revise 过"
-    # 文案）随 `_deep_revise_loop_inner` **逐字搬**到 agent/orchestrator__revise.py。
-    # 本守卫改为读该模块 —— 断言字符串与守卫意图均不变（只是被查代码换了文件，
-    # 非放宽判据）。
-    src = _src("agent/orchestrator__revise.py")
-    assert "_revise_pass_keys" in src
-    assert "同一答案（round=%d）本趟已 revise 过" in src
-
-
-def test_z6_dedup_excludes_force():
-    """P1 应急重解（force=True）不参与去重。"""
-    # 2026-10-09 批12：同 test_z6_dedup_guard_present —— 去重分支逐字搬到
-    # agent/orchestrator__revise.py；读该模块。断言逻辑一字未改（非放宽判据）。
-    src = _src("agent/orchestrator__revise.py")
-    i = src.find("_revise_pass_keys")
-    assert i > 0
-    seg = src[max(0, i - 900):i]
-    assert "if not force:" in seg, "去重未排除 force=True"
+# ★ 2026-10-14（五道链定案）：`test_z6_dedup_guard_present` / `test_z6_dedup_excludes_force`
+#   已删 —— Z6 去重逻辑（`_revise_pass_keys`）随 `orchestrator__revise.py`
+#   （5_revise 回环）整体删除。
 
 
 # ============================ Z2：早退埋点 ============================
@@ -154,13 +119,9 @@ def test_value_attack_early_returns_are_recorded():
 
 
 # ============================ Audit-1：死配置接线 ============================
-def test_max_revise_rounds_is_wired():
-    # 2026-10-09 批12：`max_revise_rounds` 的接线落在 `_deep_revise_loop_inner`
-    # （已逐字搬到 agent/orchestrator__revise.py）。本守卫改读该模块 —— 两条断言
-    # 的字面量与守卫意图均不变（只是被查代码换了文件，非放宽判据）。
-    src = _src("agent/orchestrator__revise.py")
-    assert "max_revise_rounds" in src, "全局轮数上限未接到 config（CLI 仍静默失效）"
-    assert ">= 5:" not in src, "仍有硬编码 5 轮上限"
+# ★ 2026-10-14（五道链定案）：`test_max_revise_rounds_is_wired` 已删 ——
+#   其目标（`_deep_revise_loop_inner` 的 max_revise_rounds 接线）随
+#   orchestrator__revise.py 整体删除。
 
 
 def test_max_revise_rounds_default_preserves_behavior():
