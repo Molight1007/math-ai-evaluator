@@ -537,6 +537,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "
         "LeanGate.apply 硬验证（题目+答案翻译为 Lean 命题编译判定）；"
         "部分淘汰落池、全拒标记不静默清池、不适用题豁免；=0 关闭做 A/B"),
+    "five_gate_math_check": (
+        "FIVE_GATE_MATH_CHECK", "bool", True,
+        "4.4 数学工具计算检测（五道审核链第 4 道）：候选级 SymPy 精确判定"
+        "（DeterministicChecker：等式回带/函数方程回代/反例搜索）；"
+        "fail ⇒ 淘汰、unknown ⇒ 放行、全拒 ⇒ 回退保留（宁 unknown 不误杀）；"
+        "=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

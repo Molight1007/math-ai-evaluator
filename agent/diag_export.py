@@ -254,6 +254,14 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                   for t in (getattr(ctx, "trace", None) or [])
                                   if isinstance(t, dict)
                                   and t.get("step") == "lean_backcheck"],
+        # ★ 2026-10-14（五道审核链第 4 道）：数学工具计算检测
+        "math_check": dict(getattr(ctx, "math_check", None) or {}),
+        "math_check_rejected": list(
+            getattr(ctx, "math_check_rejected", None) or []),
+        "math_check_events": [str(t.get("content", ""))[:200]
+                              for t in (getattr(ctx, "trace", None) or [])
+                              if isinstance(t, dict)
+                              and t.get("step") == "math_check"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),

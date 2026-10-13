@@ -90,6 +90,7 @@ from .answer_normalizer import normalize_stage  # noqa: F401
 from .self_auditor import self_audit_stage  # noqa: F401
 from .adversarial_gate import adversarial_gate_stage  # noqa: F401
 from .lean_backcheck import lean_backcheck_stage  # noqa: F401
+from .math_check_gate import math_check_stage  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
@@ -596,6 +597,13 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.3_lean_check")
         lean_backcheck_stage(self, ctx, tier)
 
+        # ★ 2026-10-14（五道审核链第 4 道）：**4.4_math_check —— 数学工具计算检测**。
+        #   用户口径：「利用数学工具进行计算检测，看看计算步骤有没有问题」。
+        #   后端 = DeterministicChecker（SymPy 精确判定，可机检非自评）；
+        #   fail ⇒ 淘汰、unknown ⇒ 放行、全拒 ⇒ 回退保留（宁 unknown 不误杀）。
+        self._stage_start(ctx, "4.4_math_check")
+        math_check_stage(self, ctx)
+
         self._stage_start(ctx, "3.6_audit_filter")
         audit_filter_candidates(self, ctx, tier)
 
@@ -666,6 +674,7 @@ class Orchestrator(BaseAgent):
                      "4.1_self_audit",
                      "4.2_falsify",
                      "4.3_lean_check",
+                     "4.4_math_check",
                      "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                      "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
             self._stage_stop(ctx, _stg)
