@@ -87,6 +87,7 @@ from .orchestrator__final_gate import final_answer_gate, format_stage  # noqa: F
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
 from .answer_normalizer import normalize_stage  # noqa: F401
+from .self_auditor import self_audit_stage  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
@@ -572,6 +573,13 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "4.0_normalize")
         normalize_stage(self, ctx)
 
+        # ★ 2026-10-14（五道审核链第 1 道）：**4.1_self_audit —— AI 自审逻辑错误**。
+        #   用户口径：「先让 ai 自己审核一遍逻辑错误，然后排除错题」。
+        #   只审逻辑不审数值（数值归第 4 道计算检测）；输出不可解析/LLM 故障
+        #   一律保留候选（防误杀）；淘汰反馈入 audit_reject_feedback。
+        self._stage_start(ctx, "4.1_self_audit")
+        self_audit_stage(self, ctx)
+
         self._stage_start(ctx, "3.6_audit_filter")
         audit_filter_candidates(self, ctx, tier)
 
@@ -639,6 +647,7 @@ class Orchestrator(BaseAgent):
                      "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
                      "3.4_collab",
                      "4.0_normalize",
+                     "4.1_self_audit",
                      "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                      "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
             self._stage_stop(ctx, _stg)

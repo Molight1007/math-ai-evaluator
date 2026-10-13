@@ -522,6 +522,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.0 答案规范化前置（五道审核链第 0 道）：候选进验证链前统一归一，"
         "挂 answer_norm/answer_kind 供 Lean/计算工具/投票消费；"
         "不改 c.answer（旧链行为零变化）；=0 关闭做 A/B"),
+    "five_gate_self_audit": (
+        "FIVE_GATE_SELF_AUDIT", "bool", True,
+        "4.1 AI 自审逻辑错误（五道审核链第 1 道）：逐候选 LLM 逻辑自审"
+        "（只审逻辑不审数值），能指出具体逻辑错误者淘汰并反馈；"
+        "输出不可解析/LLM 故障一律保留候选（防误杀）；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

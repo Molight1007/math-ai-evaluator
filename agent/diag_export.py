@@ -231,6 +231,15 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                     for t in (getattr(ctx, "trace", None) or [])
                                     if isinstance(t, dict)
                                     and t.get("step") == "answer_normalize"],
+        # ★ 2026-10-14（五道审核链第 1 道）：AI 自审逻辑错误（汇总 + 逐候选事件 +
+        #   被淘汰清单，供「自审是否误杀」逐题复核）
+        "self_audit": dict(getattr(ctx, "self_audit", None) or {}),
+        "self_audit_rejected": list(
+            getattr(ctx, "self_audit_rejected", None) or []),
+        "self_audit_events": [str(t.get("content", ""))[:200]
+                              for t in (getattr(ctx, "trace", None) or [])
+                              if isinstance(t, dict)
+                              and t.get("step") == "self_audit"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),
