@@ -73,7 +73,11 @@ class AgentConfig(_AgentConfigBase):
     #   ⚠ 历史证据：smoke6_v3 实测条件化前「无条件」正确定 1/6 不变、耗时 +34%，
     #   且 098 被从正确答案改错。用户已知悉，要求在新配置（统一 deep 档 +
     #   原版保留 + 下游投票择优）下重新验证 —— 本开关即为该验证的 A/B 抓手。
-    self_improve_rounds: int = 1
+    # ★ 2026-10-13（用户 E24 明确：「让大模型反复写一道题」）：默认 1 → **3**。
+    #   语义见上：3.3 环节对同一批候选**无条件**连做 3 遍自改进（不看有无增益）。
+    #   ⚠ 成本随之上升（每遍都是一次全候选 LLM 调用）⇒ 由 `n_self_improved`
+    #     与 `self_improve_rounds_used` 可观测；=1 可一键回退旧行为。
+    self_improve_rounds: int = 3
     self_improve_conditional: bool = False
     # ---- 2026-09-30 用户决策（截图 #8）：子目标多 agent 求解 ----
     # 用户原话：「多 agent 拿子目标的求解能不能换成多 agent？那样是不是能提高
@@ -331,7 +335,10 @@ class AgentConfig(_AgentConfigBase):
     # 截断点 agent/sub_goal_solver.py:298 `subgoals = subgoals[:_max_sg]`——砍的是**拓扑序尾部**，
     # 可能正好丢掉 merge 所需的收尾子目标。6 是比赛期"少而精"口径；
     # 放开该值是验证「子目标冗余是否必要」的前置条件。
-    max_subgoals: int = 6               # 子目标规划数上限（比赛口径 6；0/负 = 不截断）
+    # ★ 2026-10-12 用户决策 D22：「子目标上限太低了……先把上限直接修改为100，
+    #   看看正常的子目标数量是多少再设」。留 100 而非 0（不截断）是刻意的：
+    #   0 完全无界，若规划失控会放大成本；100 事实上不会撞到、但保留一个上界。
+    max_subgoals: int = 100             # 子目标规划数上限（0/负 = 不截断）
     # 2026-09-06 老师建议（子目标独立性/最小上下文）：子目标上下文注入模式。
     # "deps"（默认）= 按 depends_on 只注入直接依赖结果，无依赖子目标零前序上下文
     # （可独立、可并行校验、不被无关中间量污染）；"all" = 旧行为全量前序注入。
@@ -409,6 +416,52 @@ class AgentConfig(_AgentConfigBase):
     lean_preverify_tiers: tuple = ("deep",)  # preverify 适用档位
     preverify_max_rounds: int = 2           # preverify 编译失败重试上限（强制重新审题）
     preverify_timeout: float = 60.0         # preverify 单次编译/转化超时（秒）
+    # 2026-10-12 补齐（原为裸 getattr，读取点 tools/lean_local/lean_pre_verifier.py:169）：
+    #   预验证阶段的**骨架 Lean 审核**。与 2.7 的 DAG 整树审核功能重叠，故默认关；
+    #   需要「骨架也过一遍 Lean 语法」时置 True。
+    enable_preverify_sketch_audit: bool = False
+    # ---- 2026-10-12 批次 1：题意理解链（用户设计 D1–D4，方案 v4 §3.5）----
+    #   默认 **True**（用户 2026-10-12 决策：本轮直接启用以便「全开测 10 题」）。
+    #   缺省语义与既有 `lean_pre_verifier.run` **互不影响**（后者行为不变）。
+    enable_understanding_chain: bool = True
+    understanding_refine_rounds: int = 3      # 无条件复推轮数
+    understanding_chain_lean_check: bool = True
+    understanding_no_gain_stop: bool = True
+    # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式）+ 自审（用户 Q11–Q13/Q18）----
+    #   1 次初始生成 + (N-1) 次在上一轮基础上无条件自改进；采用**最后一轮**；
+    #   第 4 次交 LLM 自审（DagReviewer），拒收比例 ≥0.4 才重写 1 轮。
+    blueprint_multi_gen_rounds: int = 3
+    blueprint_self_review: bool = True
+    blueprint_self_review_reject_ratio: float = 0.4
+    # ---- 2026-10-12 批次 3：子目标 inputs 机械校验（用户 D19–D21）----
+    subgoal_inputs_validation: bool = True
+    # ---- 2026-10-12 批次 4：验证链重排（用户 Q29–Q33）----
+    #   任一淘汰环节池空 ⇒ 汇总错误点交下游「先找错点 → 再生成」（该部分保留）。
+    #   ★★ 2026-10-13 **语义更正**（根因：official112-008 由对变错）：
+    #     本开关现在 = 「4_verify 的**候选判定强度**」——
+    #       True（默认）= 多票（tier_votes=3，强度与基线一致）；
+    #       False = 单票（**A/B 对照组**，已知会削弱兜底）。
+    #     ⚠ 票数**不参与终选**（终选由 final_selector 独立完成，只看证伪结果与可解析性）
+    #       ⇒ 「投票是最后的检测」由终选层保证，**无需降票数**；
+    #       2026-10-12 曾把票数降为 1，真实后果是削弱验证强度：单票易出现
+    #       `correct_votes>0` ⇒ `orchestrator__revise.py:466` 的「全 0 票 ⇒ 强制重解」
+    #       不再触发（5_revise 5805s → 306s）⇒ 少了多轮修正与证伪机会
+    #       ⇒ 终选由 `objective_single` 退化为 `vote` ⇒ 选错。
+    # ★ 2026-10-13：**4.7_lean**（投票前 Lean 淘汰，用户 Q30）—— 默认关，先 A/B。
+    # ★ 2026-10-13：**LLM 辅助 query**（用户 A1）—— 默认开（研究期用全部手段）。
+    # ★ 2026-10-13：子目标级无条件自改进轮数（用户 E24）；=0 关闭。
+    # ★ 2026-10-13（§3 方案 A）：题型 LLM 判题；False ⇒ 完全回退规则判定。
+    enable_type_llm: bool = True
+    subgoal_self_improve_rounds: int = 3
+    enable_theorem_query_llm: bool = True
+    enable_lean_before_vote: bool = False
+    enable_verify_chain_reorder: bool = True
+    pool_empty_clear: bool = True
+    # ★ 2026-10-14 五道审核链（用户定案）：规范化前置 → ①AI 自审 → ②对抗证伪
+    #   → ③Lean 代回 → ④计算检测 → ⑤投票（先判多答案再投票）。
+    #   本字段 = 第 0 道（4.0_normalize）开关；默认值与
+    #   contracts/switch_registry.py 同名条目逐字一致（门禁强制比对）。
+    five_gate_normalize: bool = True
     lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
     lean_gate_nonproof: bool = True         # 非证明题候选级 Lean（2026-09-10 打开：用户要求全卷过 Lean，按题适用性豁免客观/概念题）
     lean_gate_nonproof_deep_only: bool = False  # True=非证明题 Lean 仅 deep 档（时间墙护栏；默认 False=全档）
@@ -442,8 +495,28 @@ class AgentConfig(_AgentConfigBase):
     #   明确锁定此默认值 —— 它是本项目「**未验证不上**」纪律 + 2026-10-01 的
     #   显式范围决策（"LeanSearch 未在本次清单内"），不是逻辑错误。
     #   要启用请显式 `USE_LEANSEARCH=1` 或走 A/B，**不要**改默认值。
-    use_leansearch: bool = False            # LeanSearch 总开关（默认关，未验证不上）
-    leansearch_top_k: int = 5               # 每次检索返回条数（老师 #46 要求扫 {3,5,10}）
+    # ★ 2026-10-12（用户决策 Q3：「必须使用 leansearch，改为 true」）：
+    #   默认值 False → True。与 `contracts/switch_registry.py` 的同名条目
+    #   **必须一致**（两处默认值打架 = 项目最忌讳的"第二个事实来源"）。
+    #   注：实际评测入口（deploy/run_112.py:274 / run_research.py:69）本就显式传
+    #   `--use_leansearch true` ⇒ 对云端评测无行为变化；本改动让「裸跑 run_eval」
+    #   也默认开启，并消除「默认关」的误读。守卫测试已同步更新（决策变更，非放宽判据）。
+    use_leansearch: bool = True             # LeanSearch 总开关（2026-10-12 起默认开）
+    # ★ 2026-10-12（批次 5，用户 A1：「定理数定为 25」）：
+    #   **检索取回 25 条**（池子够大才能覆盖多方向），注入侧再由
+    #   `theorem_hint_block_max_chars` 控块长（超限按相关度截断并标注剩余条数）。
+    #   ⚠ 分环节条数（前置理解 3–5 / 蓝图 10–15 / 主求解 10–25）尚未实现 ——
+    #     需把「渲染」从检索期后移到各注入点，属下一批（见 CHANGES 未完成项）。
+    leansearch_top_k: int = 25              # 每次检索返回条数（2026-10-12: 5 → 25）
+    theorem_hint_block_max_chars: int = 2500   # 注入块字符上限（2026-10-12 批次 5）
+    # ★ 2026-10-12（用户 §5.2「不同环节的定理量可能不同」）：分环节注入条数。
+    #   前置理解少（读题对标不该被定理淹没）、主求解/修订多（要拿全量线索）。
+    #   ⚠ 注册表只支持 bool/int/num/str ⇒ 这里用 **JSON 字符串**承载；
+    #     空串表示「用注册表默认表」（读取侧解析失败也回退默认表）。
+    #   ⚠ 默认值必须与 `contracts/switch_registry.py::SWITCHES` 的**逐字一致**
+    #     （门禁 `test_60_registry_default_matches_config_default` 强制比对 87 个字段）。
+    theorem_hint_top_k_by_stage: str = (
+        '{"pre_audit": 4, "blueprint": 12, "subgoal": 8, "solve": 25, "revise": 25}')
     leansearch_max_calls_per_q: int = 2     # 单题检索次数上限（护栏：防时间膨胀）
     # ⚠ 原 `leansearch_timeout` 已**删除**（2026-09-15 上线审计）：
     #   检索器把官方 API 超时**硬编码为 10 秒**（`lean_search.py` 的
@@ -487,6 +560,12 @@ class AgentConfig(_AgentConfigBase):
     #   `deploy/run_112.py` 的 `arm2`（= 蓝图结构修复 + 评审链恢复，理由与本条完全一致）。
     #   翻默认值会让 arm2 与基线重合、毁掉 A/B 对照。**复测请用 `--arm arm2`。**
     dag_replan_gate: bool = False
+    # 2026-10-12 补齐（原为裸 getattr，读取点 agent/sub_goal_solver__lean.py:41/65
+    #   与 agent/sub_goal_solver__review.py:261）—— 这两个键是「Lean 检查蓝图逻辑」
+    #   的实际执行开关与节点上限，此前不可配置、diag 也读不到。
+    dag_replan_lean_check: bool = True
+    #   ★ 2026-10-13：6 → **50**（覆盖全图；原 6 是省资源型抽样，与研究期口径冲突）。
+    dag_lean_max_nodes: int = 50
     # 2026-09-13 补上**显式声明**（此前**未在 dataclass 声明**，而读取处是
     # `sub_goal_solver.py:693` 的 `getattr(config, "enable_dag_replan", True)`
     # ⇒ **恒为 True、恒开且无法配置**，是典型的"静默恒开"）。

@@ -192,6 +192,52 @@ def _diag_blueprint_review(ctx, config) -> dict:
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
                               and t.get("step") == "dag_replan"],
+        # ★ 2026-10-12（判读失真 #5 治本）：自改进的结构化观测。
+        #   此前报告读 `n_self_improved` 而无人写 ⇒ 恒 0 ⇒ 假「未触发」。
+        # ★ 2026-10-12 批次 1：题意理解链（终态 + 链 + 缺口 A/B + 复推一致性）
+        "understanding_chain": dict(
+            getattr(ctx, "understanding_chain", None) or {}),
+        "understanding_gaps": list(
+            getattr(ctx, "understanding_gaps", None) or []),
+        "understanding_rounds": int(
+            getattr(ctx, "understanding_rounds", 0) or 0),
+        # ★ 2026-10-12 批次 2：蓝图的多次生成轮数与逐轮差异（结构层 + 语义层）
+        "blueprint_diffs": list(getattr(ctx, "blueprint_diffs", None) or []),
+        "blueprint_gen_rounds": int(
+            getattr(ctx, "blueprint_gen_rounds", 0) or 0),
+        # ★ 2026-10-12 批次 3：子目标链 inputs 校验缺口（A=题面没给 / B=题面给了没读到）
+        "subgoal_chain_gaps": list(
+            getattr(ctx, "subgoal_chain_gaps", None) or []),
+        # ★ 2026-10-12 批次 4：池空兜底汇总的错误点（用户 Q33：字段全含）
+        "pool_empty_errors": list(
+            getattr(ctx, "pool_empty_errors", None) or []),
+        # ★ 2026-10-13 观测补齐（审核时这两项被判「无法判定」）：
+        #   ① 蓝图自审事件（此前只写 trace、未导出 diag）
+        "blueprint_self_review_events": [str(t.get("content", ""))[:200]
+                                         for t in (getattr(ctx, "trace", None) or [])
+                                         if isinstance(t, dict)
+                                         and t.get("step") == "blueprint_self_review"],
+        #   ② 分环节定理注入条数（stage → 实际条数）
+        "theorem_hint_stage_usage": dict(
+            getattr(ctx, "theorem_hint_stage_usage", None) or {}),
+        # ★ 2026-10-13（§3 方案 A）：题型判题决策（rule/llm/overrides）+ 路径分流
+        "type_decision": dict(getattr(ctx, "type_decision", None) or {}),
+        "type_path": dict(getattr(ctx, "type_path", None) or {}),
+        # ★ 2026-10-14（五道审核链第 0 道）：答案规范化前置的汇总 + 逐候选事件。
+        #   汇总含形态分布（kinds）/ 抢救改写数（n_salvaged）/ 是否证明题。
+        "answer_normalize": dict(
+            getattr(ctx, "answer_normalize", None) or {}),
+        "answer_normalize_events": [str(t.get("content", ""))[:200]
+                                    for t in (getattr(ctx, "trace", None) or [])
+                                    if isinstance(t, dict)
+                                    and t.get("step") == "answer_normalize"],
+        "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
+        "self_improve_rounds_used": int(
+            getattr(ctx, "self_improve_rounds_used", 0) or 0),
+        "self_improve_events": [str(t.get("content", ""))[:200]
+                                for t in (getattr(ctx, "trace", None) or [])
+                                if isinstance(t, dict)
+                                and t.get("step") == "self_improve"],
         # ★ 本轮优化埋点（2026-09-11，用户要求"一次评测即可逐项审查"）
         #   P2 数值化 / P5 客观题自检 / P4 阶段预算（control 中的预算记录）
         "numericize_events": [str(t.get("content", ""))[:200]

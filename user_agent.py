@@ -214,6 +214,25 @@ _CONFIG_OVERRIDE_KEYS = (
     "dag_replan_gate",
     # 骨架编排层评审（老师 9/2 建议：求解前规划质量门，2026-09-02）
     "enable_skeleton_review", "skeleton_review_max_rounds",
+    # 2026-10-12 补齐（原裸 getattr ⇒ CLI/kwargs 传参被静默丢弃）
+    "dag_replan_lean_check", "dag_lean_max_nodes",
+    "enable_preverify_sketch_audit",
+    # 2026-10-12 批次 1：题意理解链
+    "enable_understanding_chain", "understanding_refine_rounds",
+    "understanding_chain_lean_check", "understanding_no_gain_stop",
+    # 2026-10-12 批次 2：蓝图多次生成 + 自审
+    "blueprint_multi_gen_rounds", "blueprint_self_review",
+    "blueprint_self_review_reject_ratio",
+    "subgoal_inputs_validation",
+    "enable_verify_chain_reorder", "pool_empty_clear",
+    "enable_lean_before_vote",
+    "enable_theorem_query_llm",
+    "subgoal_self_improve_rounds",
+    "enable_type_llm",
+    "theorem_hint_block_max_chars",
+    "theorem_hint_top_k_by_stage",
+    # 2026-10-14 五道审核链（第 0 道：答案规范化前置）
+    "five_gate_normalize",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。
     # tier_* 六键保留（仍被 solver / orchestrator 以 .get(tier) 读取，见

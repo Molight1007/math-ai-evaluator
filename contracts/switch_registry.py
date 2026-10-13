@@ -226,9 +226,10 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "子目标内部多采样取多数（2026-10-04 默认 True；=0 取回单次调用旧基线）"),
     # ---- user_agent.py / agent/solver.py（LeanSearch 引理检索）----
     "use_leansearch": (
-        "USE_LEANSEARCH", "bool", False,
-        "LeanSearch 检索总开关（**默认关**：本项目「未验证不上」纪律 + "
-        "2026-10-01 显式范围决策，非缺陷；要开请显式设 env 或走 A/B）"),
+        "USE_LEANSEARCH", "bool", True,
+        "LeanSearch 检索总开关（★ 2026-10-12 用户决策 Q3：**纳入研究期必用清单，默认由 False 改为 True**）。"
+        "注：实际评测入口（deploy/run_112.py:274 / run_research.py:69）此前已显式传 `--use_leansearch true`，"
+        "故对云端评测**无行为变化**；本改动的作用是让「裸跑 run_eval」也默认开启，并消除「默认关」的误读。"),
     # ---- agent/dag_reviewer.py（求解前 DAG 强制评审门）----
     "dag_replan_gate": (
         "DAG_REPLAN_GATE", "bool", False,
@@ -236,6 +237,91 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "此设专臂 `deploy/run_112.py::arm2`，翻默认会与对照臂重合；复测请走 `--arm arm2`。"
         "旧负面结论「拦得住修不好」是在时间墙 + 重生成未写回 bug 下得出的，两条均已修复："
         "置 True 复测、置 False 取回旧基线做 A/B）"),
+    # ---- 2026-10-12 补齐：以下 3 个此前只被裸 `getattr` 读取 —— 未声明、
+    #      不在白名单、不在注册表 ⇒「假开关」（传参被静默丢弃）。现登记为注册制。
+    "dag_replan_lean_check": (
+        "DAG_REPLAN_LEAN_CHECK", "bool", True,
+        "求解前 Lean 逻辑检查：把 DAG 节点陈述翻译为 Lean Prop 编译，"
+        "失败节点硬升级 reject（**只判逻辑/形式层，不判方向**；=0 关闭）"),
+    "dag_lean_max_nodes": (
+        "DAG_LEAN_MAX_NODES", "num", 50,
+        "求解前 Lean 逻辑检查的节点数上限。★ 2026-10-13：6 → **50**（= MAX_DAG_NODES，"
+        "事实上覆盖全图）—— 原 6 是「省资源」型抽样，与研究期「不裁剪能力」冲突；"
+        "用户口径：每题都跑、耗时不用愁。=6 可一键回退旧行为"),
+    "enable_preverify_sketch_audit": (
+        "ENABLE_PREVERIFY_SKETCH_AUDIT", "bool", False,
+        "预验证阶段的骨架 Lean 审核（与 2.7 DAG 整树审核功能重叠，默认关）"),
+    # ---- 2026-10-12 批次 1：题意理解链（终态 + 逻辑链 + 一致性复推）----
+    "enable_understanding_chain": (
+        "ENABLE_UNDERSTANDING_CHAIN", "bool", True,
+        "题意理解链：终态构建 + 逻辑链 + Lean 自检 + 无条件反复理解"
+        "（用户 2026-10-12 决策：本轮直接启用以便测试；=0 回退）"),
+    "understanding_refine_rounds": (
+        "UNDERSTANDING_REFINE_ROUNDS", "num", 3,
+        "题意理解链的**无条件**复推轮数（每轮带上一轮成果重推）"),
+    "understanding_chain_lean_check": (
+        "UNDERSTANDING_CHAIN_LEAN_CHECK", "bool", True,
+        "题意理解链的 Lean 自检（把链编译一次，只判形式自洽）"),
+    "understanding_no_gain_stop": (
+        "UNDERSTANDING_NO_GAIN_STOP", "bool", True,
+        "题意理解链的无增益早停（链与上一轮相同即停）"),
+    # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式自改进）+ 自审 ----
+    "blueprint_multi_gen_rounds": (
+        "BLUEPRINT_MULTI_GEN_ROUNDS", "num", 3,
+        "蓝图生成轮数：1 次初始 + (N-1) 次在上一轮基础上的无条件自改进"
+        "（=1 等价于单次生成；用户 Q11 决策默认 3）"),
+    "blueprint_self_review": (
+        "BLUEPRINT_SELF_REVIEW", "bool", True,
+        "第 4 次自审：LLM 审一遍蓝图（DagReviewer），按建议重写 1 轮即停"),
+    "blueprint_self_review_reject_ratio": (
+        "BLUEPRINT_SELF_REVIEW_REJECT_RATIO", "num", 0.4,
+        "自审触发重写的拒收比例阈值（与 dag_replan_gate 同口径 40%）"),
+    # ---- 2026-10-12 批次 3：子目标 inputs 机械校验（R1/R2）----
+    "subgoal_inputs_validation": (
+        "SUBGOAL_INPUTS_VALIDATION", "bool", True,
+        "子目标 inputs 机械校验（R1 叶子判据 / R2 断链检测；零 LLM）"),
+    # ---- 2026-10-12 批次 4：验证链重排（用户 Q29–Q33）----
+    "enable_type_llm": (
+        "ENABLE_TYPE_LLM", "bool", True,
+        "**题型 LLM 判题**（§3 方案 A）：阶段 `1.1_type_understanding` 用 LLM 判题型，"
+        "**与规则基线交叉校验**（规则强信号优先、低置信不覆盖）；失败完全回退规则"),
+    "subgoal_self_improve_rounds": (
+        "SUBGOAL_SELF_IMPROVE_ROUNDS", "num", 3,
+        "子目标级**无条件**自改进轮数（用户 E24：「让大模型反复写一道题」）；"
+        "同轮产出与上轮相同/为空即提前停；=0 关闭"),
+    "enable_theorem_query_llm": (
+        "ENABLE_THEOREM_QUERY_LLM", "bool", True,
+        "**LLM 辅助 query**（用户 A1）：先让大模型给出 2–3 条检索方向（只给关键词、"
+        "不给定理名，防幻觉），再交检索器出事实；失败自动回退纯规则 query"),
+    "enable_lean_before_vote": (
+        "ENABLE_LEAN_BEFORE_VOTE", "bool", False,
+        "**4.7_lean**：把候选级 Lean 硬验证前移到投票之前（用户 Q30）。"
+        "默认 False —— 主链改动，先 A/B 验证再考虑翻默认；开时会把不通过者投票前淘汰，"
+        "并把淘汰反馈注入 revise"),
+    "enable_verify_chain_reorder": (
+        "ENABLE_VERIFY_CHAIN_REORDER", "bool", True,
+        "4_verify 的**候选判定强度**：True（默认）= 多票（tier_votes=3，强度=基线）；"
+        "False = 单票（**A/B 对照组**）。"
+        "⚠ 2026-10-13 更正：票数**不参与终选**（终选由 final_selector 独立完成，"
+        "它只看证伪结果与可解析性）⇒ 2026-10-12「降为 1 票」的默认已回滚 —— "
+        "实测该降法让「全 0 票 ⇒ 强制重解」不再触发（5_revise 5805s→306s），"
+        "致 official112-008 由对变错"),
+    "pool_empty_clear": (
+        "POOL_EMPTY_CLEAR", "bool", True,
+        "候选全被滤掉时**清空池并走兜底**（用户 Q32）；=0 回退 2026-09-18 "
+        "「不清空池」旧行为"),
+    # ---- 2026-10-12 批次 5：定理注入块长上限 ----
+    "theorem_hint_block_max_chars": (
+        "THEOREM_HINT_BLOCK_MAX_CHARS", "num", 2500,
+        "定理注入块的字符上限（超限按相关度截断并标注未展开条数；"
+        "用户 §5.3「注意力预算」）"),
+    # ---- 2026-10-12 批次 5 剩余：「分环节条数」（用户 §5.2）----
+    #   ⚠ 注册表**只支持 bool/int/num/str**（无 dict）⇒ 用 **JSON 字符串**承载；
+    #     读取侧 `orchestrator__lean` 解析为 dict 后写入 `ctx._theorem_topk_by_stage`。
+    "theorem_hint_top_k_by_stage": (
+        "THEOREM_HINT_TOP_K_BY_STAGE", "str",
+        '{"pre_audit": 4, "blueprint": 12, "subgoal": 8, "solve": 25, "revise": 25}',
+        "分环节定理注入条数（JSON：前置理解 4 / 蓝图 12 / 子目标 8 / 主求解 25 / 修订 25）"),
     # ---- agent/skeleton_reviewer.py（骨架编排层评审循环）----
     "enable_skeleton_review": (
         "ENABLE_SKELETON_REVIEW", "bool", False,
@@ -428,6 +514,14 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "6.5 审核重做的候选数上限（deep 档）。**-1 = 无上限**（研究期默认；比赛期曾为 3）。"
         "standard 档恒为 2，不受本开关影响。"
         "读取处 agent/orchestrator.py:2508；param_usage.gate_max_rework 亦消费本开关"),
+    # ---- 2026-10-14 五道审核链（用户定案：规范化前置→①自审→②证伪→③Lean
+    #      代回→④计算检测→⑤投票；旧审核链同批删除）----
+    #      每道独立子开关 ⇒ 评测后可逐道 A/B 归因（「一次只改一项」纪律）。
+    "five_gate_normalize": (
+        "FIVE_GATE_NORMALIZE", "bool", True,
+        "4.0 答案规范化前置（五道审核链第 0 道）：候选进验证链前统一归一，"
+        "挂 answer_norm/answer_kind 供 Lean/计算工具/投票消费；"
+        "不改 c.answer（旧链行为零变化）；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"

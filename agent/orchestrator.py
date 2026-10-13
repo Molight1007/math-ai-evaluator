@@ -86,6 +86,7 @@ from .orchestrator__final_gate import final_answer_gate, format_stage  # noqa: F
 # 2026-10-07 阶段C3a：3.6_audit_filter 段已抽到 agent/orchestrator__audit_filter.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__audit_filter import audit_filter_candidates  # noqa: F401
+from .answer_normalizer import normalize_stage  # noqa: F401
 # 2026-10-07 阶段C3b：5.5_low_conf 段已抽到 agent/orchestrator__low_conf.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__low_conf import low_confidence_recheck  # noqa: F401
@@ -115,6 +116,7 @@ from .orchestrator__verify import verify_stage  # noqa: F401
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import prep_tier_budget  # noqa: F401
 from .orchestrator__prep import theorem_hint_stage  # noqa: F401
+from .orchestrator__prep import type_understanding_stage  # noqa: F401
 # 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import pre_audit_stage  # noqa: F401
@@ -504,6 +506,16 @@ class Orchestrator(BaseAgent):
         纯搬迁自 ``run``（2026-10-08 批8 原地拆分），**阶段名顺序与 record 步序逐字不变**。
         返回 ``_SOLVE_CONTINUE`` 表示「继续往下走」；其余值（含 3_solve 的早退产物）由调用方透传。
         """
+        # ★ 2026-10-13（§3 方案 A）：**1.1_type_understanding** 置于检索之前 ——
+        #   先判题型（LLM + 规则交叉校验），产出 `ctx.type_path` 指导后续路径。
+        self._stage_start(ctx, "1.1_type_understanding")
+        try:
+            type_understanding_stage(self, ctx)
+        except Exception as _e_tu:  # noqa: BLE001  判题失败不得阻断主链
+            self.record(ctx, "type_understanding",
+                        f"题型判题阶段异常（跳过，沿用规则判定）: "
+                        f"{type(_e_tu).__name__}: {str(_e_tu)[:120]}")
+
         self._stage_start(ctx, "1.2_theorem_hint")
         theorem_hint_stage(self, ctx)
 
@@ -552,6 +564,14 @@ class Orchestrator(BaseAgent):
         # 完全重叠（2.7 已对所有题先跑一遍并把 `_subgoal_main_done` 置位）。
         # 该阶段已于 2026-09-29 删除；阶段名保留于审计清单（stage_audit）作历史记录。
 
+        # ★ 2026-10-14（五道审核链第 0 道）：**4.0_normalize —— 答案规范化前置**。
+        #   用户口径（原话）：「既然会用到 lean 和计算工具，就要提前把答案规范化」。
+        #   纯增量：只挂 answer_norm / answer_kind（形态分流：numeric/symbolic/
+        #   multi/proof/text/unparseable），**不改 c.answer** ⇒ 旧链行为零变化。
+        #   五道全貌：4.0 规范化 → ①自审 → ②证伪 → ③Lean 代回 → ④计算 → ⑤投票。
+        self._stage_start(ctx, "4.0_normalize")
+        normalize_stage(self, ctx)
+
         self._stage_start(ctx, "3.6_audit_filter")
         audit_filter_candidates(self, ctx, tier)
 
@@ -563,6 +583,36 @@ class Orchestrator(BaseAgent):
 
         self._stage_start(ctx, "4.6_adv")
         adversarial_stage(self, ctx, tier, ver_result, tier_votes)
+
+        # ★ 2026-10-13（方案 v3.9 / 用户 Q30）：**4.7_lean —— Lean 检测前移到投票之前**。
+        #   起因（审核实测）：答案级 Lean（`6.5_audit_gate` 的 final_gate）在**投票之后**才做
+        #   ⇒ 等 Lean 判完，答案早已被选出 ⇒ "淘汰"失去意义（§3.9 E-2）。
+        #   本阶段把**候选级 Lean 硬验证**显式前移到投票之前：不通过的候选在投票前即被淘汰。
+        #   ⚠ 默认 **False**：这是**主链改动**，按纪律先 A/B、专项回归后再考虑翻默认。
+        #   ⚠ 与 3.6 / 4_verify 既有的 Lean 通道可能重叠 ⇒ 只在开关开时启用，并留痕淘汰数。
+        if getattr(self.config, "enable_lean_before_vote", False):
+            self._stage_start(ctx, "4.7_lean")
+            try:
+                from tools.lean_local.lean_gate import LeanGate as _LG47
+                _gate47 = getattr(self, "lean_gate", None) or _LG47(
+                    self.client, self.config)
+                _n_in47 = len(ctx.candidates or [])
+                _kept47, _fbs47 = _gate47.apply(ctx, tier, list(ctx.candidates or []))
+                if _kept47:
+                    ctx.candidates = _kept47
+                if _fbs47:
+                    ctx.audit_reject_feedback = list(
+                        getattr(ctx, "audit_reject_feedback", None) or []) + list(_fbs47)
+                self.record(ctx, "4.7_lean",
+                            "投票前 Lean 淘汰 %d/%d 个候选（保留 %d）"
+                            % (_n_in47 - len(_kept47), _n_in47, len(_kept47)))
+                ctx._lean_prechecked = True
+                from .orchestrator__verify import _pool_empty_fallback as _pef47
+                _pef47(self, ctx, "4.7_lean")
+            except Exception as _e_47:  # noqa: BLE001  增益环节，绝不阻断主链
+                self.record(ctx, "4.7_lean",
+                            f"投票前 Lean 检查异常（跳过，不阻断）: "
+                            f"{type(_e_47).__name__}: {str(_e_47)[:120]}")
 
         self._stage_start(ctx, "5_revise_or_fallback")
         revise_or_fallback_stage(self, ctx, tier, ver_result, tier_votes)
@@ -588,6 +638,7 @@ class Orchestrator(BaseAgent):
                      "2.6_pre_audit",
                      "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
                      "3.4_collab",
+                     "4.0_normalize",
                      "3.6_audit_filter","4_verify","4.5_oracle","4.6_adv",
                      "5_revise_or_fallback","5.5_low_conf","6_format","6.5_audit_gate"):
             self._stage_stop(ctx, _stg)
