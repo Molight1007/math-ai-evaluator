@@ -38,6 +38,7 @@ def _lean_dag_logic_check(self, ctx: TaskContext, dag,
           返回 {}（记一条事件后静默放行，绝不阻断、绝不误判整图）。
         """
     try:
+        _t0 = time.perf_counter()
         if not getattr(self.config, "dag_replan_lean_check", True):
             # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return {}。
             self.record(ctx, "dag_replan",
@@ -62,7 +63,7 @@ def _lean_dag_logic_check(self, ctx: TaskContext, dag,
             self.record(ctx, "dag_replan",
                         "求解前 Lean 逻辑检查跳过（无 lake 工程）")
             return {}
-        cap = max(1, int(getattr(self.config, "dag_lean_max_nodes", 6) or 6))
+        cap = max(1, int(getattr(self.config, "dag_lean_max_nodes", 50) or 50))
         targets = [nid for nid in node_ids
                    if nid in dag.nodes][:cap]
         if not targets:
@@ -91,6 +92,7 @@ def _lean_dag_logic_check(self, ctx: TaskContext, dag,
         # + 每节点一行 example（匿名声明）；行号即节点映射。
         head_lines = [ln for ln in _mathlib_import_block().split("\n")]
         code_lines = list(head_lines)
+        _chain_merged = [False]   # 合并标记（只并一次）
         if code_lines and code_lines[-1].strip():
             code_lines.append("")
         line_of: dict = {}
@@ -101,6 +103,14 @@ def _lean_dag_logic_check(self, ctx: TaskContext, dag,
             expr = expr.strip()
             if not expr:
                 continue
+            # ★ 2026-10-13（§3.6.4 **合并编译**）：把「终态链 Lean」并入同一文件 ——
+            #   一次编译既查节点，也查「蓝图是否偏离终态链」。只并一次，且去重防重名。
+            if not _chain_merged[0]:
+                _chain_merged[0] = True
+                _uc = _extract_chain_lean_lines(ctx)
+                if _uc:
+                    code_lines.extend(_uc)
+                    code_lines.append("")
             code_lines.append(f"example : ({expr}) := by sorry")
             line_of[nid] = len(code_lines)
         if not line_of:
@@ -118,8 +128,13 @@ def _lean_dag_logic_check(self, ctx: TaskContext, dag,
             # 编译全过（节点均可良构形式化）也留痕，便于评测区分
             # "Lean 检查已执行但无逻辑错误" 与 "检查根本没触发"
             self.record(ctx, "dag_replan",
-                        f"求解前 Lean 逻辑检查通过 {len(line_of)} 节点（无编译错误）")
+                        f"求解前 Lean 逻辑检查通过 {len(line_of)} 节点"
+                        f"（无编译错误，耗时 {time.perf_counter() - _t0:.1f}s）")
             return {}
+        self.record(ctx, "dag_replan",
+                    f"求解前 Lean 逻辑检查：{len(line_of)} 节点编译，"
+                    f"耗时 {time.perf_counter() - _t0:.1f}s"
+                    f"（含把陈述翻译成 Lean 的 LLM 调用 + 编译）")
         err_text = str(result.get("error", ""))
         return self._map_lean_errors(err_text, line_of)
     except Exception as exc:  # noqa: BLE001  任何异常：降级放行，绝不阻断
@@ -586,3 +601,30 @@ def _fix_lean_mul(expr: str) -> str:
     e = re.sub(r"\*\s*\*", "*", e)
     e = re.sub(r"\(\s*\*\s*\(", "(", e)
     return e.strip()
+
+def _extract_chain_lean_lines(ctx) -> list:
+    """抽出「题意理解链」的 Lean 片段（去 import、防重名），供**合并编译**用（§3.6.4）。
+
+    合并目的：一次编译同时检查 ① 蓝图节点陈述是否 well-typed；② 蓝图是否**偏离**理解链。
+    安全处理（否则合并会**破坏**原有检查）：
+      · 去掉片段里的 import 行（本文件已 import Mathlib）；
+      · 顶层声明加 uchain_ 前缀，避免与蓝图节点重名；
+      · 上限 60 行（防爆）。
+    """
+    import re as _re_uc
+    uc = getattr(ctx, "understanding_chain", None)
+    if not isinstance(uc, dict):
+        return []
+    code = str(uc.get("lean_code") or "").strip()
+    if not code:
+        return []
+    out = []
+    for ln in code.split("\n"):
+        t = ln.strip()
+        if not t or t.startswith("import "):
+            continue
+        m = _re_uc.match(r"^(lemma|theorem|def|example)\s+([A-Za-z_][A-Za-z0-9_'.]*)", t)
+        if m and not m.group(2).startswith("uchain_"):
+            t = t.replace(m.group(2), "uchain_" + m.group(2).split(".")[-1], 1)
+        out.append(t)
+    return out[:60]

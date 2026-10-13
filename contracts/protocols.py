@@ -37,6 +37,22 @@ class TaskContext(Protocol):
     formal_spec: str
     formal_gaps: list
     preverify_trace: dict
+    # 2026-10-12 批次 1：题意理解链（终态 + 逻辑链 + 一致性复推）
+    understanding_chain: dict
+    understanding_gaps: list
+    understanding_rounds: int
+    # 2026-10-12 批次 2：蓝图多次生成
+    blueprint_diffs: list
+    blueprint_gen_rounds: int
+    # 2026-10-12 批次 3：子目标链的 inputs 校验缺口
+    subgoal_chain_gaps: list
+    # 2026-10-12 批次 4：池空时汇总的全部错误点（交下游先找错点再生成）
+    pool_empty_errors: list
+    # 2026-10-13：分环节定理注入条数（stage → 实际条数，观测用）
+    theorem_hint_stage_usage: dict
+    # 2026-10-13（§3 方案 A）：题型判题决策与路径分流
+    type_decision: dict
+    type_path: dict
     sketch: str
     sketch_audit: dict
     sketch_tree: dict

@@ -13,6 +13,7 @@
 re-export，且为**同一对象** `is`）；本模块**不反向导入**主文件（无环）。
 """
 import logging
+import re                     # 2026-10-12 批次 3：`_as_id_list` 归一化模型给的 inputs
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -58,6 +59,31 @@ def cap_subgoals_keep_last(items: list, max_n) -> tuple:
     if max_n == 1:
         return seq[-1:], seq[:-1]
     return seq[:max_n - 1] + seq[-1:], seq[max_n - 1:-1]
+
+
+def _as_id_list(value) -> list:
+    """把模型给的 `inputs` 归一化为 id 字符串列表（宽容形态）。
+
+    为什么需要（2026-10-12 批次 3）：`inputs` 由模型自由生成，实测有
+    `["n1","n2"]` / `"n1"` / `"n1, n2"` / `[{"id": "n1"}]` 等形态，
+    直接 `list()` 会得到脏数据 ⇒ 下游 R1/R2 校验失真。统一在此归一化（单一来源）。
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        out = []
+        for v in value:
+            # ⚠ 必须先判 None：`str(None)` == "None" 会造出垃圾 id 污染下游校验
+            #   （2026-10-12 单测实测抓到）。
+            if v is None:
+                continue
+            if isinstance(v, dict):
+                v = v.get("id") or v.get("node") or v.get("ref") or ""
+            s = str(v).strip()
+            if s and s.lower() != "none":
+                out.append(s)
+        return out
+    return [p.strip() for p in re.split(r"[,\s、;；]+", str(value)) if p.strip()]
 
 
 def _flatten_produces(value) -> str:
@@ -120,6 +146,13 @@ class BlueprintNode:
     #   ⇒ 模型没有"该产出什么"的约束 ⇒ 64/73（88%）交付 <120 字。
     #   本字段即该缺口的落点：解析 → 下传 → `expected_output`。
     produces: str = ""
+    # ★ 2026-10-12 批次 3（用户 D19/S4）：`inputs` + `method` **真正落到节点上**。
+    #   背景：`prompts/blueprint.py:88-106` **早就要求**模型输出 `inputs`（消费哪些
+    #   前序节点的结论）与 `produces`，但 `parse_blueprint` 从不读 `inputs`、
+    #   `to_subgoal_plan` 也不透传 ⇒ 求解侧拿不到「这一步需要什么」⇒
+    #   **断链（inputs 对不上 produces）无法机械检测**（项目铁律早就要求）。
+    inputs: list = field(default_factory=list)   # 消费的前序节点 id 列表
+    method: str = ""                            # 怎么求（公式/手段），可空
 
     @property
     def is_anticipatory(self) -> bool:
@@ -316,6 +349,13 @@ class BlueprintDAG:
                 #   59 个（81%）该字段为空、64 个（88%）交付 <120 字。
                 #   现取节点声明的 `produces`（可核验对象）；模型没写时才为空。
                 "expected_output": str(node.produces or "").strip(),
+                # ★ 2026-10-12 批次 3：把节点声明的 `inputs`（节点 id）映射为**子目标
+                #   序号**后下传 —— 求解侧由此知道「这一步需要哪些前序结论」，
+                #   断链才可被机械检测（`validate_inputs` 的求解侧对应物）。
+                "inputs": sorted(_pos[d] for d in (getattr(node, "inputs", None) or [])
+                                 if d in _pos and _pos[d] != idx),
+                "inputs_raw": [str(d) for d in (getattr(node, "inputs", None) or [])],
+                "method": str(getattr(node, "method", "") or "").strip(),
                 "result": "",
             })
         return {
@@ -324,6 +364,35 @@ class BlueprintDAG:
             "merge_strategy": self.merge_strategy,
             "anticipatory_lemmas": anticipatory,   # ★ 前瞻引理（供引理记忆消费）
         }
+
+    def validate_inputs(self, selected=None) -> dict:
+        """R1/R2 机械校验（零 LLM，2026-10-12 批次 3）：`inputs` 引用是否有效。
+
+        - **R2 断链**：`inputs` 里的 id 必须**存在**于本图，且必须是本节点的
+          **祖先或已枚举的旁挂引理**（即它得先被求出来）——否则该步所需的前置
+          结论无人提供，链路断裂。
+        - **R1 叶子判据**：叶子节点的 `inputs` 若引用非空 ⇒ 说明它其实依赖前序
+          结论，**不应是叶子**（形态学上正是 K11「子目标空壳」的成因）。
+
+        返回 ``{"ok": bool, "broken": [...], "leaky_leaves": [...], "n": int}``。
+        只报告、不阻断（上层据 `gap_kind` 分流处置，见 sub_goal_solver__planner）。
+        """
+        broken, leaky = [], []
+        for nid, nd in (self.nodes or {}).items():
+            refs = [str(r) for r in (getattr(nd, "inputs", None) or []) if str(r)]
+            for r in refs:
+                if r not in self.nodes:
+                    broken.append({"id": nid, "ref": r, "reason": "引用不存在的节点"})
+                elif r == nid:
+                    broken.append({"id": nid, "ref": r, "reason": "自引用"})
+            # R1：真叶子（无 children）却声明了非自引用的 inputs ⇒ 形态可疑
+            if not nd.children:
+                ext = [r for r in refs if r != nid and r in self.nodes]
+                if ext:
+                    leaky.append({"id": nid, "refs": ext[:5],
+                                  "reason": "叶子节点依赖前序结论（应继续分解）"})
+        return {"ok": not broken and not leaky, "broken": broken,
+                "leaky_leaves": leaky, "n": len(self.nodes or {})}
 
     def _preceding_leaves(self, nid: str, selected: set) -> set:
         """依赖锥：必须在 `nid` **之前**求解的叶子节点集合（2026-09-15 新增）。

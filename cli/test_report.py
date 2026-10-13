@@ -84,12 +84,19 @@ def discover(results_path):
         p = os.path.join(d, stem + suf)
         if os.path.exists(p):
             out[key] = p
+    # ★ 2026-10-12 修（判读失真 #6）：原来**只**从 `results/_cloud/logs/` 找 monitor CSV
+    #   ⇒ 结果一旦放在别处（只读快照目录 / 直接在仓库根跑），监控曲线就丢，
+    #   报告谎报「（无监控 CSV）」。改为**先看结果文件所在目录及其 ../logs**，
+    #   再退原有的 `results/_cloud/logs/` 位置。
     for cand in [
+        os.path.join(d, "monitor_%s.csv" % stem),
+        os.path.join(d, os.pardir, "logs", "monitor_%s.csv" % stem),
+        os.path.join(d, os.pardir, "logs", "logs", "monitor_%s.csv" % stem),
         os.path.join(ROOT, "results", "_cloud", "logs", "logs", "monitor_%s.csv" % stem),
         os.path.join(ROOT, "results", "_cloud", "logs", "monitor_%s.csv" % stem),
     ]:
         if os.path.exists(cand):
-            out["monitor"] = cand
+            out["monitor"] = os.path.normpath(cand)
             break
     audit_dir = os.path.join(ROOT, "results", "_deepseek_audit")
     if os.path.isdir(audit_dir):
@@ -261,16 +268,26 @@ def _stage_dashboard_rows(recs):
             _cv = sum(1 for x in vs if _num_or_zero(_as_dict(x).get("correct_votes")) > 0)
             return "有正确票=%d/%d" % (_cv, len(vs))
         if stage in ("4.5_oracle", "4.6_adv"):
-            k = "oracle_review" if stage == "4.5_oracle" else "adversarial"
-            v = _as_dict(d.get(k))
-            return "found=%s" % (v.get("found") if v else "—")
+            # ★ 2026-10-12 修（判读失真 #3）：真键是 `*_events`（list），不是
+            #   `oracle_review` / `adversarial`（这两个键**根本不存在**）⇒ 旧实现恒得
+            #   `found=—`，再被 `_pass_for` 判成「未触发」，把**正在工作的验证环节
+            #   报成没跑**（且与「六、机制触发普查」里 100% 非空自相矛盾）。
+            key = "oracle_review_events" if stage == "4.5_oracle" else "adversarial_events"
+            evs = [str(x) for x in _as_list(d.get(key))]
+            if not evs:
+                return "events=0"
+            joined = " ".join(evs)
+            if stage == "4.5_oracle":
+                return "复核 %d 次%s" % (len(evs), "（判错）" if "incorrect" in joined else "")
+            return "审查 %d 次%s" % (len(evs), "（检出）" if "检出" in joined else "")
         if stage == "5.5_low_conf":
             bc = _as_dict(d.get("best_cluster"))
             return "conf=%s" % (bc.get("confidence") if bc else "—")
         if stage == "5_revise_or_fallback":
-            # ⚠ `r` 是 dict（records），不是对象 —— 必须用 r.get 而非 getattr。
-            return "revise_round=%s" % _num_or_zero(
-                (r.get("revise_round") if isinstance(r, dict) else None))
+            # ★ 2026-10-12 修（判读失真 #2）：真值在 **`diag.revise_round`**；
+            #   顶层 `r["revise_round"]` **不存在** ⇒ 旧实现恒得 0.0，把全轮最大耗时
+            #   阶段（本轮合计 33.9%）谎报成「未触发」。
+            return "revise_round=%s" % fmt(_num_or_zero(d.get("revise_round")), 0)
         return ""
 
     def _pass_for(stage, r):
@@ -326,6 +343,24 @@ def _stage_dashboard_rows(recs):
                 return None, "未触发"
             cv = sum(_num_or_zero(_as_dict(x).get("correct_votes")) for x in vs)
             return cv > 0, "总正确票=%d" % cv
+        # ★ 2026-10-12 新增（判读失真 #2/#3 的配套）：以下三阶段此前**在 `_pass_for`
+        #   里没有分支** ⇒ 恒返回 None ⇒ 表里恒显示「未触发」，与它们各自的耗时、
+        #   事件埋点自相矛盾（如 `5_revise_or_fallback` 占全轮 33.9% 却报「未触发」）。
+        if stage == "4.5_oracle":
+            evs = [str(x) for x in _as_list(d.get("oracle_review_events"))]
+            if not evs:
+                return None, "未触发"
+            return (not any("incorrect" in e for e in evs)), "复核 %d 次" % len(evs)
+        if stage == "4.6_adv":
+            evs = [str(x) for x in _as_list(d.get("adversarial_events"))]
+            if not evs:
+                return None, "未触发"
+            return (not any("检出" in e for e in evs)), "审查 %d 次" % len(evs)
+        if stage == "5_revise_or_fallback":
+            # 达标判据 =「未走兜底」：走的是**修订**路径（`diag.revise_round` > 0），
+            # 而不是直接兜底。此前无分支 ⇒ 恒「未触发」（真值本轮为 4/2/5）。
+            rn = _num_or_zero(d.get("revise_round"))
+            return rn > 0, "修订 %s 轮" % fmt(rn, 0)
         return None, "—"
 
     out = []
@@ -505,7 +540,8 @@ def build_test_report(args):
         ended = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(results)))
     except Exception:  # noqa: BLE001
         pass
-    meta = {"run": run, "arm": arm, "ended_at": ended}
+    # ★ 2026-10-12：把日志 overrides（`ov`）一并交给 sec_overview，供表1 与表14/16 对账。
+    meta = {"run": run, "arm": arm, "ended_at": ended, "overrides": ov}
 
     n = len(recs)
     ok = sum(1 for r in recs if r.get("correct"))

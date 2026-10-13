@@ -105,7 +105,9 @@ class TheoremRetrieval:
     #   `angle_add_angle_add_angle_eq_pi` 一眼就是三角形内角和），
     #   全名**完整保留在 `ctx.theorem_hint_trace` 埋点里**供 Lean 侧/A-B 归因使用。
     #   实测压缩后 5 条从 798 → 约 250 字符（−69%），语义不减。
-    def render_hint_block(self, max_items: int = 5) -> str:
+    def render_hint_block(self, max_items: int = 5,
+                          max_chars: int = 0,
+                          include_premises: bool = True) -> str:
         """渲染成注入提示词的文本块（无命中返回空串 ⇒ 下游零成本）。
 
         ★ 2026-10-04 修（**采用率 1% 的直接病因**）：
@@ -118,19 +120,43 @@ class TheoremRetrieval:
         hits = [h for h in self.hits if (h.short or h.name)][:max(0, max_items)]
         if not hits:
             return ""
+        # ★ 2026-10-12（批次 5，用户 §5/§6）两处升级：
+        #   ① **前提行**：定理的「前提」正是用户要的**警戒线** ——
+        #      引用前必须逐条核对是否被本题满足（此前只给名字+陈述，模型无从核对）；
+        #   ② 尾注由单向「优先采用」改为**双作用说明**（警戒线 + 路标）。
+        #   ⚠ 仍保留「以你的判断为准」——检索是**线索不是裁决**（有测试锚定，不得删）。
         lines = ["【本题可能在 Mathlib 中用到的定理（leansearch 自动检索，供参考）】"]
         for i, h in enumerate(hits, 1):
             _nm = h.short or h.name
             _sn = " ".join(str(getattr(h, "snippet", "") or "").split())
-            if _sn:
-                lines.append(f"{i}. {_nm} —— {_sn[:200]}")
-            else:
-                lines.append(f"{i}. {_nm}")
+            lines.append(f"{i}. {_nm} —— {_sn[:200]}" if _sn else f"{i}. {_nm}")
+            if include_premises and _sn and "→" in _sn:
+                _pre = _sn.split("→", 1)[0].strip()
+                if _pre and len(_pre) > 3:
+                    lines.append(f"     前提：{_pre[:160]}")
+        # ⚠ 尾注**必须压成单行**：`tests/test_theorem_hint_injection.py` 的守卫测试
+        #   锁定「块形状 = 标题 + N 项 + 尾注」且「块要显著短于全名版」——
+        #   多行尾注会同时破坏这两条（= 真实的 token 噪音回归，不是测试过时）。
         lines.append(
-            "（以上为检索到的**候选定理及其陈述**：若与本题相关，"
-            "**请优先采用并在推理中标注**它体现在哪一步；"
+            # ⚠ 措辞受两份守卫共同约束（不得删任一侧）：
+            #   ① `请优先采用` —— 2026-10-04 的正向引导修复（提高采用率，历史仅 1%）；
+            #   ② 双作用说明 —— 2026-10-12 批次 5（警戒线 + 路标）。
+            "（以上为检索到的候选定理及陈述：**请优先采用**与本题相关者、并标注它用在哪一步。"
+            "两种作用：【警戒线】引用前先核对前提是否被本题满足，结论若与之矛盾须先排查"
+            "自己哪一步错了、禁止无视；【路标】可由其前提→结论反推证明框架或中间量。"
             "若确实不适用，以题意与你自己的判断为准。）")
-        return "\n".join(lines)
+        _txt = "\n".join(lines)
+        if max_chars and len(_txt) > max_chars:
+            _keep, _n = [], 0
+            for _ln in lines:
+                if _n + len(_ln) > max_chars - 60 and _keep and not _ln.startswith("（"):
+                    break
+                _keep.append(_ln)
+                _n += len(_ln) + 1
+            _omit = len(hits) - sum(1 for x in _keep if x[:2].rstrip(".").isdigit())
+            _keep.append(f"（另有 {max(0, _omit)} 条候选，因篇幅未展开）")
+            _txt = "\n".join(_keep)
+        return _txt
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +407,116 @@ def build_queries(problem: str, domain: str = "",
 # 主入口：agent/ 侧唯一的定理检索接口
 # ---------------------------------------------------------------------------
 
+# 分环节注入条数的**默认表**（2026-10-12，用户 §5.2）：前置理解少、主求解/修订多。
+# 为什么前置理解只给 4：读题对标阶段给多了反而干扰审题；主求解/修订要全量线索。
+DEFAULT_TOPK_BY_STAGE = {
+    "pre_audit": 4, "blueprint": 12, "subgoal": 8,
+    "solve": 25, "revise": 25,
+}
+
+
+def render_for_stage(ctx, stage: str = "solve", max_items: int = 0) -> str:
+    """按环节渲染定理线索块（**分环节条数**，用户 §5.2/§5.3）。
+
+    为什么需要：`ctx.theorem_hint_block` 是**检索期渲染一次**的字符串，被 8 个
+    注入点共用 ⇒ 无法做到「前置理解只给 3–5 条、蓝图 10–15 条、主求解 10–25 条」。
+    本函数从 `ctx.theorem_hint_result`（检索**全量**，含陈述与前提）按环节重新渲染。
+
+    · 无检索结果 / 数量 ≤0 ⇒ 返回空串（下游零成本）；
+    · 条数优先级：显式 `max_items` > `theorem_hint_top_k_by_stage[stage]` > 1/2 全量。
+    """
+    res = getattr(ctx, "theorem_hint_result", None)
+    if not isinstance(res, dict) or not res.get("ok"):
+        return ""
+    raw_hits = res.get("hits") or []
+    if not raw_hits:
+        return ""
+    n = int(max_items or 0)
+    if n <= 0:
+        by_stage = getattr(ctx, "_theorem_topk_by_stage", None) or {}
+        try:
+            n = int(by_stage.get(stage) or 0)
+        except (TypeError, ValueError):
+            n = 0
+    if n <= 0:
+        n = max(1, len(raw_hits) // 2)
+    hits = []
+    for h in raw_hits[:max(1, n)]:
+        if not isinstance(h, dict):
+            continue
+        hits.append(TheoremHit(
+            name=str(h.get("name") or ""), short=str(h.get("short") or ""),
+            source=str(h.get("source") or ""),
+            rank=int(h.get("rank") or 0),
+            snippet=str(h.get("snippet") or "")))
+    if not hits:
+        return ""
+    # ★ 2026-10-13 观测补齐：把「本环节实际注入几条」写进 ctx
+    #   （此前无法判定分环节裁剪是否生效 —— 审核时被列为「无法判定」）。
+    try:
+        _usage = getattr(ctx, "theorem_hint_stage_usage", None)
+        if not isinstance(_usage, dict):
+            _usage = {}
+            ctx.theorem_hint_stage_usage = _usage
+        _usage[str(stage)] = len(hits)
+    except Exception:  # noqa: BLE001  纯观测，绝不影响主流程
+        pass
+    return TheoremRetrieval(ok=True, hits=hits).render_hint_block(
+        max_items=max(1, n))
+
+
+THEOREM_QUERY_LLM_SYSTEM = """你是 Mathlib 检索助手。给你一道数学题，请给出 **2–3 条**
+用于检索 Mathlib 定理的**英文关键词串**。
+
+要求：
+1. 只写**数学概念 / 结构的英文词**（如 "prime number infinite"、"Euclid theorem"），
+   **不要写定理名**（写定理名会诱发幻觉，检索器只用它做关键词匹配）；
+2. 每条 3–6 个词，覆盖**不同方向**（不要三条同义）；
+3. 只输出一个 JSON 数组，例如 ["prime number infinitely many", "Euclid proof"]；
+   不要解释、不要 markdown 围栏。"""
+
+
+def parse_llm_queries(raw) -> list:
+    """把 LLM 输出的 query 解析成字符串列表（**容错**：JSON 数组 / 逗号分隔 / 逐行）。
+
+    为什么要容错：本项目实测「要求 JSON 但模型给了别的东西」很常见
+    （题意理解链曾因四合一输出被截断而整体不可解析）⇒ 解析失败必须**降级**而不是丢弃。
+    返回去重后的列表；无法解析 ⇒ 空列表（下游用规则 query 兜底）。
+    """
+    if not raw:
+        return []
+    txt = str(raw).strip()
+    out = []
+    # ① 优先按 JSON 数组解析
+    try:
+        import json as _json_q
+        _m = txt[txt.find("["):txt.rfind("]") + 1] if "[" in txt else ""
+        if _m:
+            _arr = _json_q.loads(_m)
+            if isinstance(_arr, list):
+                out = [str(x).strip() for x in _arr if str(x).strip()]
+    except Exception:  # noqa: BLE001
+        out = []
+    # ② 退化为按行 / 逗号切分
+    if not out:
+        import re as _re_q
+        for _ln in _re_q.split(r"[\n,;；]+", txt):
+            _s = _ln.strip().strip("").strip('').strip("[]").strip()
+            # ⚠ 必须剥掉**列表符号与序号**（实测模型常输出 ' - prime' / '1. Euclid' 这种形态）
+            _s = _s.lstrip("-•*·").strip()
+            _s = _s.lstrip("0123456789").lstrip(".)、 ").strip()
+            if _s and len(_s) <= 120 and not _s.lower().startswith(("```", "json")):
+                out.append(_s)
+    # ③ 去重保序 + 上限 3 条
+    seen, uniq = set(), []
+    for q in out:
+        k = q.lower()
+        if k not in seen:
+            seen.add(k)
+            uniq.append(q)
+    return uniq[:3]
+
+
 def retrieve_theorems_for_question(
     problem: str,
     domain: str = "",
@@ -388,6 +524,7 @@ def retrieve_theorems_for_question(
     config=None,
     max_queries: int = 2,
     top_k: int = 5,
+    extra_queries=None,
 ) -> TheoremRetrieval:
     """题目 + 领域 → Mathlib 定理候选（**永不抛异常**）。
 
@@ -424,7 +561,18 @@ def retrieve_theorems_for_question(
         out.reason = "题干为空"
         return out
 
-    queries = build_queries(problem, domain, question_type)[:max(0, max_queries)]
+    # ★ 2026-10-13（用户 A1「借大模型的力量找定理」）：**LLM 出的 query 前置**，
+    #   规则 query 兜底；合并后**放宽上限**（LLM 2–3 条 + 规则 max_queries 条）。
+    #   为什么放宽：原实现 `[:max_queries]` 会把 LLM 刚给出的方向直接截掉（静默无效）。
+    _rule_q = build_queries(problem, domain, question_type)
+    _llm_q = [str(x).strip() for x in (extra_queries or []) if str(x).strip()]
+    _seen_q, queries = set(), []
+    for _q in list(_llm_q) + list(_rule_q):
+        _k = _q.lower()
+        if _k not in _seen_q:
+            _seen_q.add(_k)
+            queries.append(_q)
+    queries = queries[:max(0, max_queries) + len(_llm_q)]
     if not queries:
         out.reason = "未能构造检索 query（题干无英文实词且领域未收录）"
         return out
@@ -574,4 +722,5 @@ __all__ = [
     "TheoremHit", "TheoremRetrieval",
     "domain_keywords", "question_keywords", "build_queries",
     "retrieve_theorems_for_question", "match_against_ground_truth",
+    "render_for_stage", "DEFAULT_TOPK_BY_STAGE",
 ]

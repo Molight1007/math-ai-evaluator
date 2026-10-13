@@ -496,6 +496,10 @@ class SubGoalReviewReplanTest(unittest.TestCase):
             use_leansearch=False,
             theorem_memory_enable=False,
             enable_dag_replan=True,    # 开启评审+replan
+            # 2026-10-12 批次 2：新增「蓝图自审」步骤会额外发起 LLM 调用、
+            # 改变调用序列 ⇒ 显式隔离（**非放宽判据**）
+            blueprint_self_review=False,
+            subgoal_self_improve_rounds=0,  # 4.2 隔离：新接线会多跑 LLM
             dag_replan_max_rounds=2,
         )
         ctx = make_ctx()
@@ -586,6 +590,8 @@ class SubtreeRewriteTest(unittest.TestCase):
         cfg = SimpleNamespace(
             use_blueprint=True, use_blueprint_dag=True,
             enable_dag_replan=True, dag_replan_max_rounds=2,
+            blueprint_self_review=False,   # 批次 2 隔离：新增自审会改调用序列
+            subgoal_self_improve_rounds=0,  # 4.2 隔离
             use_leansearch=False, theorem_memory_enable=False,
         )
         new_dag_json = json.dumps({
@@ -624,6 +630,8 @@ class SubtreeRewriteTest(unittest.TestCase):
         cfg = SimpleNamespace(
             use_blueprint=True, use_blueprint_dag=True,
             enable_dag_replan=True, dag_replan_max_rounds=2,
+            blueprint_self_review=False,   # 批次 2 隔离：新增自审会改调用序列
+            subgoal_self_improve_rounds=0,  # 4.2 隔离
             use_leansearch=False, theorem_memory_enable=False,
         )
         new_dag_json = json.dumps({

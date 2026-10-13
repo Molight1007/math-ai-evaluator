@@ -188,6 +188,21 @@ def improve_candidates(self, ctx: TaskContext) -> int:
     if total:
         self.record(ctx, "self_improve",
                     f"Step2 自改进累计 {total} 个候选（{rounds} 轮上限）")
+    # ★ 2026-10-12 观测补齐（判读失真 #5 的**治本**修法）：
+    #   `cli/test_report.py` 一直读 `diag.n_self_improved`，但该键
+    #   **全仓无人写入** ⇒ 报告里 3.3_improve 恒显示 improved=0、
+    #   被 `_pass_for` 判成「未触发」，把**正在工作的自改进报成没跑**。
+    #   这里改为**落结构化字段**（累计，因为 3.3 与 revise 后可能各调一次）：
+    #   · n_self_improved      —— 本题累计被改进成功的候选次数
+    #   · self_improve_rounds_used —— 实际消耗的轮数（含 total=0 的情况，
+    #     用于区分「没跑」与「跑了但没改进成功」）
+    try:
+        ctx.n_self_improved = int(
+            getattr(ctx, "n_self_improved", 0) or 0) + total
+        ctx.self_improve_rounds_used = int(
+            getattr(ctx, "self_improve_rounds_used", 0) or 0) + rounds
+    except Exception:  # noqa: BLE001  纯观测，绝不影响主流程
+        pass
     return total
 
 

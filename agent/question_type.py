@@ -572,3 +572,129 @@ def objective_injection(problem: str, qtype: str, tactic_on: bool = True) -> str
         if hint:
             parts.append(hint)
     return "".join(parts)
+
+# ---------------------------------------------------------------------------
+# §3 方案 A（2026-10-13）：题型 LLM 判题 + 交叉校验 + 路径分流表
+# ---------------------------------------------------------------------------
+
+TYPE_LLM_SYSTEM = """你是数学题**题型判定**专家。请判断题目属于下列哪一类，并只输出一个 JSON 对象。
+
+类别（必须选其一）：
+- "proof"      ：证明题（要求证明某命题）
+- "solution"   ：解答题（求解某个结果：数值/表达式/最值/个数/构造）
+- "choice"     ：选择题（给了 A/B/C/D 等选项）
+- "boolean"    ：判断题（要求判断对错/是否成立）
+- "fill_blank" ：填空题（要求填写数值或表达式）
+
+输出格式（严格）：
+{"type": "<类别>", "confidence": 0.0~1.0, "evidence": "判定依据（引用题面特征，一句）"}
+
+⚠ 只输出 JSON，不要解释、不要 markdown。拿不准时 confidence 给低值（<0.6）。"""
+
+TYPE_LLM_USER = """## 题目
+{problem}
+
+## 规则基线的判定（供参考，可能不准）
+{rule_guess}
+
+请输出题型判定 JSON。"""
+
+# 路径分流表（§3.4）：不同题型走不同路径。
+# ★ 保守设计：未知题型一律按"全走"（与接线前一致），**不得因判题而降低任何题型的处理质量**。
+TYPE_PATH_PLAN = {
+    "proof": {"lean": True, "options": False, "answer_form": "proof"},
+    "solution": {"lean": True, "options": False, "answer_form": "value"},
+    "choice": {"lean": False, "options": True, "answer_form": "option"},
+    "boolean": {"lean": False, "options": False, "answer_form": "yesno"},
+    "fill_blank": {"lean": False, "options": False, "answer_form": "value"},
+}
+_TYPE_PATH_DEFAULT = {"lean": True, "options": False, "answer_form": ""}
+
+# 规则基线的**强信号**（§3.3）：命中即视为"规则可信"，LLM 不得覆盖。
+_STRONG_SIGNAL_MARKERS = ("选项", "A.", "（A）", "(A)", "判断", "对错", "是否")
+
+
+_ANSWER_FORM_HINT = {
+    "proof": "本题是**证明题**：必须给出完整、逐步的证明，不得只给结论或写「显然」。",
+    "value": "本题要求**求出具体结果**：结论写成可核验对象（数值/表达式/构造），并说明推导。",
+    "option": "本题是**选择题**：最终必须明确给出所选**选项字母**，并简述排除依据。",
+    "yesno": "本题是**判断题**：先明确「成立 / 不成立」，再给理由（若不成立须给反例）。",
+}
+
+
+def render_type_path_hint(type_path) -> str:
+    """把路径分流表渲染成「答题形态提示」（§3.4 的**消费者**，2026-10-13）。
+
+    ★ 设计纪律：分流 = **针对性增强**，**不是裁剪** —— 项目铁律
+    「『不研究某类』≠『降低其处理质量』」⇒ 本提示只**增加**针对性要求
+    （如选择题必须给选项字母），**绝不**用题型去关闭任何验证 / 检索环节。
+
+    返回空串表示无提示（未知题型/表为空）⇒ 下游零成本。
+    """
+    if not isinstance(type_path, dict):
+        return ""
+    _h = _ANSWER_FORM_HINT.get(str(type_path.get("answer_form") or ""))
+    return ("【答题形态（依题型分流）】" + _h) if _h else ""
+
+
+def type_path_plan(qtype: str) -> dict:
+    """题型 → 路径计划（§3.4）。未知题型按默认（全走）⇒ 行为与接线前一致。"""
+    return dict(TYPE_PATH_PLAN.get(str(qtype or "").strip().lower(),
+                                  _TYPE_PATH_DEFAULT))
+
+
+def parse_type_json(raw) -> dict:
+    """解析 LLM 判题输出（容错）。返回 {} 表示无法解析（调用方回退规则）。"""
+    if not raw:
+        return {}
+    txt = str(raw).strip()
+    try:
+        import json as _json_t
+        _m = txt[txt.find("{"):txt.rfind("}") + 1] if "{" in txt else ""
+        if _m:
+            d = _json_t.loads(_m)
+            if isinstance(d, dict) and d.get("type"):
+                return d
+    except Exception:  # noqa: BLE001
+        pass
+    low = txt.lower()
+    for k in TYPE_PATH_PLAN:
+        if k in low:
+            return {"type": k, "confidence": 0.5,
+                    "evidence": "正则兜底（JSON 不可解析）"}
+    return {}
+
+
+def merge_type_decision(rule_type: str, llm_type: str,
+                        llm_conf: float = 0.0) -> dict:
+    """**交叉校验**（§3.3）：规则强信号优先；否则采纳 LLM，但记录分歧。
+
+    为什么必须保守：`question_type` 被 130+ 处读取（含 7 次以上历史误判修复：
+    PB 39/60、009、045、086、087/098/102/103/106/107）⇒ 让 LLM 无条件覆盖会**误伤**
+    本来能答对的题（code-audit 路线 C：「不研究某类」≠「降低其处理质量」）。
+
+    返回 ``{"final","rule","llm","confidence","overrides","reason"}``；
+    `overrides` 非空 = 发生了"LLM 覆盖规则"或"规则否决 LLM"，供 diag 审计。
+    """
+    r = str(rule_type or "").strip().lower()
+    l = str(llm_type or "").strip().lower()
+    out = {"final": r, "rule": r, "llm": l,
+           "confidence": float(llm_conf or 0.0), "overrides": [], "reason": ""}
+    if not l or l == r:
+        out["reason"] = "一致或无 LLM 结果"
+        return out
+    # 规则**强信号**（选择题/判断题的形态标记）⇒ 规则优先，拒绝 LLM 覆盖
+    if r in ("choice", "boolean") and l != r:
+        out["overrides"].append({"by": "rule", "from": l, "to": r,
+                                 "reason": "规则命中强信号（选项/判断形态）"})
+        out["reason"] = "规则强信号优先"
+        return out
+    # 其余：采纳 LLM（但低置信不覆盖，避免抖动）
+    if out["confidence"] >= 0.6:
+        out["final"] = l
+        out["overrides"].append({"by": "llm", "from": r, "to": l,
+                                 "reason": "置信 %.2f ≥ 0.6" % out["confidence"]})
+        out["reason"] = "LLM 覆盖（高置信）"
+    else:
+        out["reason"] = "LLM 置信不足（<0.6）⇒ 保留规则判定"
+    return out

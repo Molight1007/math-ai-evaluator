@@ -100,8 +100,8 @@ def main() -> int:
     ap.add_argument("--out", default=DEFAULT_OUT, help="输出 JSON 路径")
     ap.add_argument("--report", default="", help="额外输出 markdown 小结路径")
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 题（0=全量）")
-    ap.add_argument("--top-k", type=int, default=5, help="每次检索取回条数")
-    ap.add_argument("--max-queries", type=int, default=2, help="每题最多发几次检索")
+    ap.add_argument("--top-k", type=int, default=25, help="每次检索取回条数")
+    ap.add_argument("--max-queries", type=int, default=3, help="每题最多发几次检索")
     ap.add_argument("--include-empty-gt", action="store_true",
                     help="把预标注为空（模型没给出定理）的题也计入统计")
     ap.add_argument("--resume", action="store_true",

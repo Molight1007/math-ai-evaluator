@@ -55,7 +55,7 @@ STAGE_ORDER_test_report = [
     # ★ 2026-10-02 移除 `2.65_calc_prewarm`（calc 板块删除时漏网残留）；此前报告仍含之。
     "2.6_pre_audit",
     "2.7_subgoal_main", "3_solve", "3.2_complete", "3.3_improve", "3.4_collab",
-    "3.5_subgoal_sup", "3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv",
+    "3.5_subgoal_sup", "3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv", "4.7_lean",
     "5.5_low_conf", "5_revise_or_fallback",
 ]
 
@@ -153,22 +153,49 @@ def hhmmss(sec):
     return "%d:%02d:%02d" % (sec // 3600, (sec % 3600) // 60, sec % 60)
 
 
+def selection_pool_answers(rec):
+    """返回 (选择池答案列表, 来源标签)。
+
+    ★★ 2026-10-12 修（判读失真 #1）：**选择池 ≠ 导出字段 `candidates`**。
+      · 导出 `candidates`（`run_eval__engine` 落盘）是「终裁后剩余」，且**不含**终选真正
+        面对的池；真实池在 `diag.pick_diag.divergent_clusters`，其 size 之和 ==
+        `diag.counts_reconciliation.selection_pool_size`（选择池口径，见其 note）。
+      · 实测 `official112-010`：导出 candidates 全为 `\\boxed{0}`、**无 gold `\\boxed{2}`**，
+        但 `divergent_clusters` 里**有** `\\boxed{2}`（size=1）且 `final_selection.branch=model_compare`
+        ⇒ 旧实现把**选答失败误报成求解失败**（本报告的核心失真，会引错优化方向）。
+    优先取 `divergent_clusters`，取不到再退导出字段（老结果文件兼容）。
+    """
+    diag = _as_dict(rec.get("diag"))
+    clusters = _as_list(_as_dict(diag.get("pick_diag")).get("divergent_clusters"))
+    ans = [c.get("answer") for c in clusters
+           if isinstance(c, dict) and c.get("answer")]
+    if ans:
+        return ans, "diag.pick_diag.divergent_clusters"
+    ans = [c.get("answer") for c in _as_list(rec.get("candidates"))
+           if isinstance(c, dict) and c.get("answer")]
+    return ans, "导出 candidates"
+
+
 def local_attribution(rec, judge):
-    """本地启发式归因（不依赖 DeepSeek）：返回 (环节, 类型, 依据)。"""
+    """本地启发式归因（不依赖 DeepSeek）。
+
+    返回 `(环节, 类型, 依据, gold_in_pool)`；`gold_in_pool` 为 `True/False/None`，
+    供报告「gold 在候选池」列直接使用（此前该列恒为 `—`，等于**用空值下结论**）。
+    """
     diag = _as_dict(rec.get("diag"))
     gold = rec.get("gold")
     pred = rec.get("predicted")
     if str(pred or "").strip() in PLACEHOLDERS:
-        return ("—", "无效数据", "落盘占位符，未产出真实解答")
-    cands = _as_list(rec.get("candidates"))
+        return ("—", "无效数据", "落盘占位符，未产出真实解答", None)
     picked = _as_dict(diag.get("pick_diag")).get("picked")
-    pool_hit = any(judge(c.get("answer") if isinstance(c, dict) else c, gold) for c in cands)
+    pool, pool_src = selection_pool_answers(rec)
+    pool_hit = any(judge(a, gold) for a in pool)
     if not pool_hit:
         st = "3_solve"
         sig = _as_dict(diag.get("blueprint_merge")) or diag.get("blueprint_merge")
         if sig:
             st = "2.7_subgoal_main"
-        return (st, "求解失败", "候选池内无与 gold 等价的答案")
+        return (st, "求解失败", "选择池（%s）内无与 gold 等价的答案" % pool_src, False)
     if picked and judge(picked, gold) and not judge(pred, gold):
-        return ("终答落定", "终答改写", "pick_diag 已选对，predicted 被改写")
-    return ("选答", "选答失败", "候选池有正解但未被选中")
+        return ("终答落定", "终答改写", "pick_diag 已选对，predicted 被改写", True)
+    return ("选答", "选答失败", "选择池（%s）有正解但未被选中" % pool_src, True)

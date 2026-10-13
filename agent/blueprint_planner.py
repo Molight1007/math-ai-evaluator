@@ -38,6 +38,7 @@ from .blueprint_planner__dag import (  # noqa: F401
     MAX_SUBGOALS,
     cap_subgoals_keep_last,
     _flatten_produces,
+    _as_id_list,
     BlueprintNode,
     BlueprintDAG,
 )
@@ -186,6 +187,8 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             #   解析器不读 ⇒ 静默丢弃 ⇒ to_subgoal_plan 的 expected_output 恒空）。
             #   兼容别名 `output` / `expected_output`，且把 `produces` 里模型
             #   偶尔写成 dict（{object, use}）的形态摊平为文本。
+            inputs=_as_id_list(nd.get("inputs", nd.get("needs", []))),
+            method=str(nd.get("method", nd.get("how", "")) or ""),
             produces=_flatten_produces(
                 nd.get("produces", nd.get("output",
                        nd.get("expected_output", "")))),
@@ -249,10 +252,16 @@ class BlueprintPlannerAgent(BaseAgent):
         return ctx
 
     def generate_blueprint(self, ctx: TaskContext,
-                           max_attempts: int = 3) -> Optional[BlueprintDAG]:
+                           max_attempts: int = 3,
+                           prior_dag_json: str = "") -> Optional[BlueprintDAG]:
         """调用 LLM 生成 AND-OR DAG 并校验；成功返回 DAG，失败返回 None。
 
         结果同时写入 ctx.blueprint（dict 序列化），供后续阶段消费。
+
+        ★ 2026-10-12（批次 2，用户 Q11）：新增可选参数 `prior_dag_json` ——
+          非空时走**「在上一轮蓝图基础上改进」**模板（BLUEPRINT_IMPROVE_USER_TEMPLATE），
+          而不是从头构建。**其余逻辑（prefill/解析重试/校验/留痕）一字未改**，
+          故本参数不改变原有调用方的任何行为（默认空串）。
         """
         # 预算闸门
         if ctx.is_time_critical():
@@ -274,7 +283,24 @@ class BlueprintPlannerAgent(BaseAgent):
         except Exception:  # noqa: BLE001
             pass
 
-        user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
+        if prior_dag_json:
+            # 迭代式自改进轮（2026-10-12 批次 2）：把上一轮 DAG 原样喂回，要求改进。
+            try:
+                from prompts.blueprint import BLUEPRINT_IMPROVE_USER_TEMPLATE as _BUIT
+            except ImportError:
+                from submit.prompts.blueprint import BLUEPRINT_IMPROVE_USER_TEMPLATE as _BUIT
+            user_msg = _BUIT.format(problem=problem_text,
+                                    prior_dag=str(prior_dag_json)[:8000])
+        else:
+            user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
+            # ★ 2026-10-13 **接线**（方案 v4 §3.5.6）：把题意理解链的「终态 + 逻辑链」
+            #   作为**目标锚**注入蓝图 prompt —— 蓝图须覆盖链上每个中间结论、不得偏离终态。
+            #   为什么：`ctx.understanding_chain` 此前**只落盘、无消费者**（审核报告点名）；
+            #   蓝图是它的第一顺位消费者。
+            #   ⚠ 终态里的答案槽是**假设**：本块显式标注"不得当作已证结论"（K11 红线）。
+            _anchor = _render_understanding_anchor(ctx)
+            if _anchor:
+                user_msg = user_msg + "\n\n" + _anchor
         # ★ 2026-09-29（截图 #6）：蓝图规划决定"需要推理出哪些中间结论"，
         # 正是 Mathlib 定理线索最该起作用的地方（用户原话："子目标的设立有没有
         # 帮助大模型简化题目"）。注入到 user 侧（不污染 JSON 输出的 system 契约）。
@@ -560,3 +586,169 @@ class BlueprintPlannerAgent(BaseAgent):
         self.record(ctx, "blueprint_subtree",
                     f"子树重写 {max_attempts} 次尝试均失败, LCA={lca}")
         return None
+
+# ---------------------------------------------------------------------------
+# 批次 2（2026-10-12 用户 Q11–Q18）：蓝图的多次生成 / 自审 / 差异观测
+# ---------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 批次 2（2026-10-12，用户 Q11–Q18）：多次生成 + 自审
+    # ------------------------------------------------------------------
+    def generate_blueprint_iterative(self, ctx: TaskContext,
+                                     max_attempts: int = 3) -> Optional[BlueprintDAG]:
+        """**迭代式**多次生成：1 次初始生成 + (N-1) 次在上一轮基础上无条件自改进。
+
+        ★ 用户 Q11 原话：「反复三次就是让大模型生成三次，生成完成后再重新生成，
+          就是无条件自改进，让大模型自己再改进两次」⇒ 语义是**迭代精化**，
+          **不是**独立重采样（后者会把差异当噪声）。
+        ★ 采用策略（Q13）：**以最后一轮为准**（"最后一份应该是最好的一份"）。
+        ★ 每轮差异写入 `ctx.blueprint_diffs`（结构层 + 语义层），只记录不裁决（Q15）。
+
+        轮数由 `blueprint_multi_gen_rounds` 控制（默认 3，=1 时等价于单次生成）。
+        任一改进轮未产出 ⇒ **保留上一轮**（不因一次失败丢掉已得蓝图）。
+        """
+        rounds = max(1, int(getattr(self.config, "blueprint_multi_gen_rounds", 3) or 3))
+        dag = self.generate_blueprint(ctx, max_attempts=max_attempts)
+        if dag is None:
+            return None
+        diffs = []
+        for r in range(1, rounds):
+            if ctx.is_time_critical():
+                self.record(ctx, "blueprint",
+                            f"多次生成在第 {r + 1}/{rounds} 轮前因时间紧迫停止"
+                            f"（保留第 {r} 轮蓝图）")
+                break
+            import json as _json
+            new_dag = self.generate_blueprint(
+                ctx, max_attempts=max_attempts,
+                prior_dag_json=_json.dumps(dag.to_dict(), ensure_ascii=False))
+            if new_dag is None:
+                self.record(ctx, "blueprint",
+                            f"第 {r + 1}/{rounds} 轮自改进未产出 ⇒ 保留第 {r} 轮蓝图")
+                break
+            diffs.append(_dag_diff(dag, new_dag))
+            self.record(
+                ctx, "blueprint",
+                f"第 {r + 1}/{rounds} 轮自改进：节点 "
+                f"{diffs[-1]['struct_prev']['nodes']}→{diffs[-1]['struct_new']['nodes']}、"
+                f"陈述变化 {diffs[-1]['stmt_changed']}、新增 {len(diffs[-1]['stmt_added'])}、"
+                f"删除 {len(diffs[-1]['stmt_removed'])}")
+            dag = new_dag
+        ctx.blueprint = dag.to_dict()
+        ctx.blueprint_diffs = diffs
+        ctx.blueprint_gen_rounds = 1 + len(diffs)
+        return dag
+
+    def self_review_blueprint(self, ctx: TaskContext,
+                              dag: "BlueprintDAG") -> "BlueprintDAG":
+        """第 4 次自审（用户 Q12）：LLM 审一遍蓝图，**按建议重写 1 轮即停**。
+
+        复用既有 `DagReviewerAgent`（判「子目标是否真的简化父问题」—— 正是 LEAP 论文
+        「LLM reviewer 语义过滤」的角色，见方案 v4 §3.6.7）。
+        失败/无 reject/重写未产出 ⇒ 原样返回（**绝不阻断**）。
+        """
+        try:
+            from .dag_reviewer import DagReviewerAgent
+        except ImportError:
+            from agent.dag_reviewer import DagReviewerAgent
+        try:
+            if ctx.is_time_critical():
+                return dag
+            reviewer = DagReviewerAgent(self.client, self.config)
+            report = reviewer.review(ctx, dag, results_map={})
+            rejected = [nid for nid in report.rejected_nodes()
+                        if nid in dag.nodes] if hasattr(report, "rejected_nodes") else []
+            total = max(1, len(getattr(dag, "nodes", {}) or {}))
+            ratio = len(rejected) / float(total)
+            self.record(ctx, "blueprint_self_review",
+                        f"蓝图自审：{len(rejected)}/{total} 节点被拒（{ratio:.0%}）")
+            threshold = float(getattr(self.config,
+                                      "blueprint_self_review_reject_ratio", 0.4) or 0.4)
+            if not rejected or ratio < threshold:
+                return dag
+            lines = []
+            for nid in rejected[:10]:
+                node = dag.nodes.get(nid)
+                lines.append("节点 %s（%s）应改进：" % (
+                    nid, (getattr(node, "statement", "") or "")[:80]))
+            new_dag = self.regenerate_with_feedback(
+                ctx, dag, lines, extra_context="【自审（第 4 次）】",
+                max_attempts=1)
+            if new_dag is None:
+                self.record(ctx, "blueprint_self_review",
+                            "自审建议重写但未产出 ⇒ 采用自审前的蓝图")
+                return dag
+            ctx.blueprint = new_dag.to_dict()
+            self.record(ctx, "blueprint_self_review", "自审后重写 1 轮完成（采用新蓝图）")
+            return new_dag
+        except Exception as e:  # noqa: BLE001  自审是增益，不是门禁
+            self.record(ctx, "blueprint_self_review",
+                        f"蓝图自审异常（跳过，不阻断）: {type(e).__name__}: {str(e)[:120]}")
+            return dag
+
+def _dag_diff(prev, new) -> dict:
+    """结构层 + 语义层的蓝图差异（**只记录、不裁决** —— 用户 Q15）。
+
+    结构层：节点数 / AND 数 / OR 数 / 叶子数；
+    语义层：statement 文本集合的增删 + 同 id 下 statement 变化数。
+    """
+    def _stat(d):
+        nodes = getattr(d, "nodes", None) or {}
+        return {
+            "nodes": len(nodes),
+            "and": sum(1 for n in nodes.values()
+                       if getattr(n, "node_type", "") == "and"),
+            "or": sum(1 for n in nodes.values()
+                      if getattr(n, "node_type", "") == "or"),
+            "leaves": sum(1 for n in nodes.values()
+                          if not getattr(n, "children", None)),
+        }
+    st1 = {k: (getattr(n, "statement", "") or "").strip()
+           for k, n in (getattr(prev, "nodes", None) or {}).items()}
+    st2 = {k: (getattr(n, "statement", "") or "").strip()
+           for k, n in (getattr(new, "nodes", None) or {}).items()}
+    s1, s2 = set(st1.values()), set(st2.values())
+    return {
+        "struct_prev": _stat(prev), "struct_new": _stat(new),
+        "stmt_added": sorted(s2 - s1)[:10],
+        "stmt_removed": sorted(s1 - s2)[:10],
+        "stmt_changed": sum(1 for k in (set(st1) & set(st2))
+                            if st1[k] != st2[k]),
+    }
+
+
+def _render_understanding_anchor(ctx) -> str:
+    """把题意理解链渲染成蓝图 prompt 的「目标锚」块（2026-10-13 接线）。
+
+    为什么需要：`ctx.understanding_chain` 在批次 1 之后**只落盘、无消费者**
+    （改动效果审核报告点名"三处新产物没有下游消费者"）。蓝图是它的第一顺位消费者 ——
+    链上的每个中间结论都应成为蓝图的必备节点，否则蓝图可能偏离终态。
+
+    ⚠ **红线（K11）**：终态里的答案槽是**假设**，本块显式标注"不得当作已证结论"，
+    绝不把假设值下传成结论。
+
+    无理解链 / 链为空 ⇒ 返回空串（下游零成本，行为与接线前一致）。
+    """
+    uc = getattr(ctx, "understanding_chain", None)
+    if not isinstance(uc, dict) or not uc.get("chain"):
+        return ""
+    lines = ["【题意理解链（目标锚：仅供对齐思路；其中答案槽是**假设**，不得当作已证结论）】"]
+    _ts = str(uc.get("terminal_state") or "").strip()
+    if _ts:
+        lines.append("终态（题目完成后的情形）：" + _ts[:400])
+    _as = str(uc.get("answer_slot") or "").strip()
+    if _as:
+        lines.append("答案槽（**符号形式、待定**）：" + _as[:200])
+    for _i, _c in enumerate(uc.get("chain") or [], 1):
+        if not isinstance(_c, dict):
+            continue
+        _prem = "；".join(str(p) for p in (_c.get("premises") or []))
+        lines.append("%d) [%s] ⇒ %s" % (_i, _prem[:150],
+                                       str(_c.get("conclusion") or "")[:200]))
+    _gb = uc.get("gaps_b") or []
+    if _gb:
+        lines.append("⚠ 上一轮理解时**没读到**的题面条件（务必纳入本次分解）："
+                     + "；".join(str(g.get("detail") or "")[:80]
+                                 for g in _gb[:5] if isinstance(g, dict)))
+    lines.append("要求：蓝图必须覆盖上述链上的每个中间结论（可细化、**不得遗漏**）；"
+                 "若你认为某节推理有误，请在有依据的前提下修正它。")
+    return "\n".join(lines)

@@ -384,7 +384,10 @@ def main() -> int:
     # 归档兼容：lean 系配置字段已从 AgentConfig 移除（2026-09-06 去 Lean 化），
     # 归档工具需要时经 setattr 挂载（下游均 getattr 读取，行为与移除前一致）。
     for _k, _v in (("use_blueprint", True),
-                   ("enable_sketch_audit", True),
+                   # ★ 2026-10-13 **删除**「enable_sketch_audit」汇报项：
+                   #   该键全仓**已无任何读取点**（死开关），继续汇报会让报告显示
+                   #   「整树审核已开」= **假绿**（code-audit 路线 C「账外开关/隐形门控」）。
+                   #   若将来真要做整树审核，请走注册制新增开关，不要复活这个键。
                    ("use_leansearch", args.leansearch),
                    ("use_refiner", not args.no_refiner)):
         setattr(cfg, _k, _v)

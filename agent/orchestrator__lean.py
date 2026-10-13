@@ -127,6 +127,25 @@ def _retrieve_theorem_hints(self, ctx) -> None:
         logger.warning("[1.6_theorem_hint] 模块导入失败，跳过: %s", e)
         return
 
+    # ★ 2026-10-13（用户 A1）：**LLM 辅助 query** —— 让大模型先给出检索方向，
+    #   再交检索器出事实（LLM 不直接吐定理名，防幻觉）。失败 ⇒ 完全回退规则 query。
+    _extra_q = []
+    if getattr(self.config, "enable_theorem_query_llm", True):
+        try:
+            from .theorem_hint import (THEOREM_QUERY_LLM_SYSTEM as _QS,
+                                       parse_llm_queries as _PQ)
+            _raw_q = self.llm(ctx, [
+                {"role": "system", "content": _QS},
+                {"role": "user", "content": "题目：%s\n领域：%s" % (
+                    ctx.problem or "", getattr(ctx, "domain", "") or "未知")},
+            ], 0.2, 512)
+            _extra_q = _PQ(_raw_q)
+            self.record(ctx, "theorem_hint",
+                        "LLM 辅助 query：%s" % (_extra_q or "（空，回退规则 query）"))
+        except Exception as _e_q:  # noqa: BLE001  检索是增益，绝不阻断
+            self.record(ctx, "theorem_hint",
+                        "LLM 辅助 query 失败（回退规则 query）: %s" % str(_e_q)[:100])
+
     try:
         res = retrieve_theorems_for_question(
             ctx.problem or "",
@@ -136,6 +155,7 @@ def _retrieve_theorem_hints(self, ctx) -> None:
             max_queries=int(getattr(
                 self.config, "theorem_hint_max_queries", 2) or 2),
             top_k=int(getattr(self.config, "leansearch_top_k", 5) or 5),
+            extra_queries=_extra_q,
         )
     except Exception as e:  # noqa: BLE001  # 兜底：接口内已 try，此处再保险
         self.record(ctx, "theorem_hint",
@@ -158,6 +178,27 @@ def _retrieve_theorem_hints(self, ctx) -> None:
         except Exception as e:  # noqa: BLE001
             md["gt_match"] = {"error": f"{type(e).__name__}: {e}"}
     ctx.theorem_hint_trace = md
+    # ★ 2026-10-12（批次 5 剩余，用户 §5.2）：保留**全量**检索结果，
+    #   供 `render_for_stage()` 按环节重新渲染（分环节条数）。
+    ctx.theorem_hint_result = md
+    # 分环节条数：config 里是 **JSON 字符串**（注册表无 dict 类型）⇒ 在此解析。
+    # 解析失败/为空 ⇒ 用 `theorem_hint` 模块内的默认表（避免「配置写错就静默失效」）。
+    try:
+        import json as _json_th
+        from .theorem_hint import DEFAULT_TOPK_BY_STAGE as _DEF_TOPK
+        _raw_topk = str(getattr(
+            self.config, "theorem_hint_top_k_by_stage", "") or "").strip()
+        _parsed = _json_th.loads(_raw_topk) if _raw_topk else {}
+        ctx._theorem_topk_by_stage = (dict(_parsed) if isinstance(_parsed, dict)
+                                      else dict(_DEF_TOPK))
+        if not ctx._theorem_topk_by_stage:
+            ctx._theorem_topk_by_stage = dict(_DEF_TOPK)
+    except Exception:  # noqa: BLE001  解析失败 ⇒ 回退默认表，绝不阻断
+        try:
+            from .theorem_hint import DEFAULT_TOPK_BY_STAGE as _DEF_TOPK2
+            ctx._theorem_topk_by_stage = dict(_DEF_TOPK2)
+        except Exception:  # noqa: BLE001
+            ctx._theorem_topk_by_stage = {}
 
     # 注入块：★ 2026-09-29 改为调用 `TheoremRetrieval.render_hint_block()`。
     # 原先在此处**内联拼装**「短名 + 全名」两列，实测 5 条命中即 798 字符，
@@ -167,7 +208,9 @@ def _retrieve_theorem_hints(self, ctx) -> None:
     # 全名仍完整保留在 `ctx.theorem_hint_trace` 里（见下），供 Lean 侧/A-B 归因。
     try:
         ctx.theorem_hint_block = res.render_hint_block(
-            max_items=int(getattr(self.config, "leansearch_top_k", 5) or 5))
+            max_items=int(getattr(self.config, "leansearch_top_k", 5) or 5),
+            max_chars=int(getattr(
+                self.config, "theorem_hint_block_max_chars", 2500) or 0))
     except Exception as e:  # noqa: BLE001  渲染失败不阻断
         logger.warning("[1.6_theorem_hint] 渲染注入块失败，跳过注入: %s", e)
         ctx.theorem_hint_block = ""

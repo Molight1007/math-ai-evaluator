@@ -144,6 +144,29 @@ def _deep_revise_loop_inner(self, ctx: TaskContext, ver_result: dict,
         每轮 solver 走 _generate_revise 重解 + verifier 重新验证。
         返回是否在回环中获得至少 1 个候选获得正确票。
         """
+    # ★ 2026-10-13 **接线 C**（方案 v4 §3.9.5）：把「池空错误总账」转成重解反馈。
+    #   为什么：`ctx.pool_empty_errors`（批次 4）此前**只落盘、无消费者**（审核报告点名）。
+    #   走**既有** `audit_reject_feedback` 管道（`_generate_revise` 会读取它）——
+    #   不新增管道、不改 `_generate_revise` 签名。
+    #   目的（用户 Q32/Q33）：让模型**先看到全部错误点 → 再重新生成**。
+    try:
+        _pe = list(getattr(ctx, "pool_empty_errors", None) or [])
+        if _pe and not getattr(ctx, "_pool_empty_feedback_used", False):
+            _lines = ["【候选池为空 —— 各环节淘汰原因汇总"
+                      "（请先据此定位自己的错误点，再重解）】"]
+            for _it in _pe[:12]:
+                if isinstance(_it, dict):
+                    _lines.append("- [%s] %s" % (
+                        _it.get("stage") or "?", str(_it.get("error") or "")[:200]))
+            ctx.audit_reject_feedback = list(
+                getattr(ctx, "audit_reject_feedback", None) or []) + _lines
+            ctx._pool_empty_feedback_used = True
+            self.record(ctx, "pool_empty",
+                        "池空错误总账已转成重解反馈（%d 条，经 audit_reject_feedback 管道）"
+                        % len(_pe))
+    except Exception as _e_c:  # noqa: BLE001  接线是增益，绝不阻断
+        self.record(ctx, "pool_empty",
+                    "池空反馈接线异常（已忽略）: %s" % str(_e_c)[:100])
     from .orchestrator import _merge_review_into_feedback  # noqa: F401 （惰性；单一来源仍在 orchestrator）
     max_rounds = getattr(self.config, 'deep_revise_rounds', 1)
     if max_rounds <= 0 or ctx.state.emergency:

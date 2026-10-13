@@ -34,6 +34,38 @@ except ImportError:
 logger = logging.getLogger("MathPilot")
 
 
+def _improve_subgoal_result(self, ctx, sg, prev_result):
+    """子目标结果的**无条件**自改进一轮（2026-10-13，用户 E24）。
+
+    与 `solver__fallback.improve_candidates`（主求解**候选列表**）不同：
+    本函数作用于**单个子目标的文本结果**，用于「让大模型反复写一步」。
+    返回新结果；失败/空 ⇒ 返回空串（调用方据此保留原结果）。
+    """
+    try:
+        from prompts.sub_goal import (SUBGOAL_IMPROVE_SYSTEM as _IS,
+                                     SUBGOAL_IMPROVE_USER_TEMPLATE as _IU)
+    except ImportError:
+        try:
+            from submit.prompts.sub_goal import (  # type: ignore
+                SUBGOAL_IMPROVE_SYSTEM as _IS,
+                SUBGOAL_IMPROVE_USER_TEMPLATE as _IU)
+        except ImportError:
+            return ""
+    _sg_title = str(sg.get("description") or sg.get("title") or "")
+    try:
+        raw = self.llm(ctx, [
+            {"role": "system", "content": _IS},
+            {"role": "user", "content": _IU.format(
+                problem=getattr(ctx, "problem", "") or "",
+                subgoal=_sg_title[:500],
+                prev_result=str(prev_result)[:6000])},
+        ], 0.2, 8192)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[subgoal_improve] LLM 异常: %s", str(e)[:120])
+        return ""
+    return str(raw or "").strip()
+
+
 def _solve_subgoal(self, ctx: TaskContext, sg: dict,
                    plan_summary: str, prev_results: str,
                    extra_hint: str = "") -> str:
@@ -56,6 +88,32 @@ def _solve_subgoal(self, ctx: TaskContext, sg: dict,
     # **必须放在提示词中部（最终指令之前），不能追加在末尾**——
     # 2026-08-29 A/B 实测：追加在末尾会改变提示词收尾结构，使模型
     # 进入"续写模式"，答案泄漏 `[续写]` 占位符（algebra-075 因此从对变错）。
+    # ★ 2026-10-13 **接线 B**（方案 v4 §3.5.6）：把「题意缺口」并入 extra_hint。
+    #   一次对**所有**子目标生效（缺口来自 ctx、与具体子目标无关）⇒ 无需改各调用方。
+    #   为什么：`ctx.subgoal_chain_gaps`（批次 3）与 `ctx.understanding_gaps`（批次 1）
+    #   此前**只落盘、无消费者**（改动效果审核报告点名）。
+    _gap_block = _render_gap_block(ctx)
+    if _gap_block:
+        extra_hint = ((extra_hint + "\n\n" + _gap_block)
+                      if extra_hint else _gap_block)
+    # ★ 2026-10-13（§3.4 的**消费者**）：把题型分流转成「答题形态提示」注入求解。
+    #   分流是**针对性增强**（如选择题必须给选项字母），**不裁剪**任何环节。
+    try:
+        from agent.question_type import render_type_path_hint as _rtp
+    except ImportError:
+        try:
+            from question_type import render_type_path_hint as _rtp  # type: ignore
+        except ImportError:
+            _rtp = None
+    if _rtp is not None:
+        try:
+            _tph = _rtp(getattr(ctx, "type_path", None))
+            if _tph:
+                extra_hint = ((extra_hint + "\n\n" + _tph)
+                              if extra_hint else _tph)
+        except Exception:  # noqa: BLE001  提示是增益，绝不阻断
+            pass
+
     user_msg = self._prepare_step_prompt(
         ctx, sg, plan_summary, prev_results, extra_hint)
 
@@ -537,3 +595,41 @@ def _pick_consensus_sample(samples: list) -> tuple:
     # 组内选最长（推理最完整）；并列时取先出现的，保证确定性
     picked = max(best, key=lambda x: len(str(x)))
     return picked, best_key, n_distinct
+
+
+def _render_gap_block(ctx) -> str:
+    """渲染「题意缺口」块（2026-10-13 接线 B）。
+
+    来源：`ctx.subgoal_chain_gaps`（批次 3 的 inputs 校验）+ `ctx.understanding_gaps`（批次 1）。
+    两类缺口的处置语义不同（用户 Q33 的 A/B 分流）：
+      · **B 类**（题面已给、前序环节没读到）⇒ 要求"求解时必须先检查并纳入"；
+      · **A 类**（题面确实没给）⇒ 要求"若解法需要，必须显式写出「依赖假设：…」，
+        **不得静默补入**"（反 K11：不得凭空补条件冒充已知）。
+
+    无缺口 ⇒ 返回空串（下游零成本，行为与接线前一致）。
+    """
+    gaps = list(getattr(ctx, "subgoal_chain_gaps", None) or [])
+    gaps += list(getattr(ctx, "understanding_gaps", None) or [])
+    b_items, a_items = [], []
+    for g in gaps:
+        if not isinstance(g, dict):
+            continue
+        detail = str(g.get("detail") or "").strip()
+        if not detail:
+            continue
+        if str(g.get("kind") or "").upper() == "B":
+            b_items.append(detail)
+        else:
+            a_items.append(detail)
+    if not b_items and not a_items:
+        return ""
+    lines = ["【题意缺口清单（来自前置理解与蓝图 inputs 校验）】"]
+    if b_items:
+        lines.append("以下条件**题面已经给出、但前序环节没有用上** —— "
+                     "求解前必须逐一检查并纳入：")
+        lines.extend("  · " + d[:120] for d in b_items[:6])
+    if a_items:
+        lines.append("以下内容**题面确实没有提供** —— 若你的解法需要它们，必须显式写出"
+                     "「依赖假设：…」并说明依据，**不得静默补入**：")
+        lines.extend("  · " + d[:120] for d in a_items[:6])
+    return "\n".join(lines)

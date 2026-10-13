@@ -28,6 +28,60 @@ def theorem_hint_stage(self, ctx) -> None:
         self._retrieve_theorem_hints(ctx)
 
 
+def type_understanding_stage(self, ctx) -> None:
+    """阶段 `1.1_type_understanding`（§3 方案 A）：LLM 判题 + **交叉校验** + 路径分流。
+
+    设计（逐条对应方案）：
+      · §3.1 置于 `1.2_theorem_hint` **之前**（判题结果可供检索与后续环节用）；
+      · §3.2 结构化输出契约（`TYPE_LLM_SYSTEM`，禁自由文本）；
+      · §3.3 **与规则基线交叉校验** —— 规则强信号优先、低置信不覆盖（防抖动误伤）；
+      · §3.4 产出 `ctx.type_path`（路径分流表）。
+
+    ⚠ 安全：LLM 失败/开关关 ⇒ **完全回退**规则判定（行为与接线前逐字一致）。
+    """
+    if not getattr(self.config, "enable_type_llm", True):
+        return
+    try:
+        from agent.question_type import (classify_question_type as _cq,
+                                        type_path_plan as _tpp,
+                                        parse_type_json as _ptj,
+                                        merge_type_decision as _mtd,
+                                        TYPE_LLM_SYSTEM as _TS,
+                                        TYPE_LLM_USER as _TU)
+    except ImportError:
+        from question_type import (  # type: ignore
+            classify_question_type as _cq, type_path_plan as _tpp,
+            parse_type_json as _ptj, merge_type_decision as _mtd,
+            TYPE_LLM_SYSTEM as _TS, TYPE_LLM_USER as _TU)
+    _rule = ""
+    try:
+        _rule = str(_cq(getattr(ctx, "problem", "") or "") or "").strip().lower()
+    except Exception:  # noqa: BLE001
+        _rule = str(getattr(ctx, "question_type", "") or "").strip().lower()
+    _llm_d = {}
+    try:
+        _raw = self.llm(ctx, [
+            {"role": "system", "content": _TS},
+            {"role": "user", "content": _TU.format(
+                problem=(getattr(ctx, "problem", "") or "")[:4000],
+                rule_guess=_rule or "（未知）")},
+        ], 0.1, 512)
+        _llm_d = _ptj(_raw)
+    except Exception as _e_t:  # noqa: BLE001  判题是增益，绝不阻断
+        self.record(ctx, "type_understanding",
+                    "LLM 判题失败（回退规则）: %s" % str(_e_t)[:100])
+    _dec = _mtd(_rule, _llm_d.get("type", ""), _llm_d.get("confidence", 0.0))
+    if _dec.get("final"):
+        ctx.question_type = _dec["final"]
+    ctx.type_decision = _dec
+    ctx.type_path = _tpp(ctx.question_type or _rule)
+    self.record(ctx, "type_understanding",
+                "题型判定：规则=%s LLM=%s ⇒ 最终=%s（%s；分流=%s）"
+                % (_dec.get("rule") or "-", _dec.get("llm") or "-",
+                   _dec.get("final") or "-", _dec.get("reason") or "",
+                   ctx.type_path))
+
+
 def pre_audit_stage(self, ctx, tier: str) -> None:
     """2.6 题意理解确认（Lean 前置形式化校验 / AuditGate 可选 LLM 复核）。
 
@@ -57,6 +111,22 @@ def pre_audit_stage(self, ctx, tier: str) -> None:
         else:
             self.audit_gate.confirm_understanding(ctx)
     
+    # ★ 2026-10-12（批次 1，用户设计 D1–D4）：题意理解链 ——
+    #   先建「题目完成后的终态」（答案用符号槽）→ 写成逻辑链 → Lean 自检形式自洽 →
+    #   **无条件反复理解**（带着上一轮结论重推并报告是否一致，Q7）。
+    #   缺口 A/B 写入 ctx.understanding_gaps，供蓝图/子目标消费（§3.5.6）。
+    #   独立于既有 `lean_pre_verifier.run`（后者保持原行为不变），异常一律降级。
+    # ⚠ 兜底值必须与 `AgentConfig.enable_understanding_chain`(=True) **一致**：
+    #   若写成 False，则任何"字段缺失"的旧 config/测试桩都会**静默关闭**本机制，
+    #   与「配置默认开」矛盾 ⇒ 典型的"两套默认值"缺陷（code-audit 路线 C「隐形门控」）。
+    if getattr(self.config, "enable_understanding_chain", True):
+        try:
+            self.lean_pre_verifier.run_understanding_chain(ctx)
+        except Exception as _e_uc:  # noqa: BLE001
+            self.record(ctx, "understanding_chain",
+                        f"题意理解链异常（跳过，不阻断）: "
+                        f"{type(_e_uc).__name__}: {str(_e_uc)[:120]}")
+
     # ★ 2026-10-02 hook 01：题意理解确认后落盘（2.6_pre_audit → 01_understanding）。
     _artifact_put(ctx, "01_understanding", {
         "question_type": getattr(ctx, "question_type", ""),

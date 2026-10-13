@@ -152,13 +152,29 @@ def verify_stage(self, ctx, tier: str):
         use_deterministic=getattr(self.config, 'enable_deterministic', True),
         use_rubric=getattr(self.config, 'use_rubric', False),
         use_challenge=getattr(self.config, 'use_challenge', False),
-        voting_times=tier_votes,
+        # ★★ 2026-10-13 **修正**（根因：008 由对变错）：
+        #   2026-10-12 曾把此处票数降为 1，理由是"投票交给终选层 ⇒ 这里不再是投票"。
+        #   **该推理有误** —— 票数**根本不参与终选**（终选由 `final_selector` 独立完成，
+        #   见 `final_selector._objective_survivors`，它只看证伪结果与可解析性，不看票数）。
+        #   降票数的真实后果是**削弱验证强度**，实测证据链（official112-008，两轮对比）：
+        #     票数 3→1 ⇒ 单票极易出现 `correct_votes > 0`
+        #       ⇒ `orchestrator__revise.py:466` 的「全 0 票 ⇒ 强制重解」不再成立
+        #       ⇒ `5_revise_or_fallback` 由 5805 s 掉到 306 s（少了多轮修正）
+        #       ⇒ 客观证伪机会变少（`_falsified_answers` 变少）
+        #       ⇒ 终选拿不到「唯一幸存者」⇒ `branch` 由 `objective_single` 退化为 `vote`
+        #       ⇒ 选中 `\boxed{1207458}`（gold = 603729）—— 由对变错。
+        #   ⇒ 修正：**票数恢复 `tier_votes`**。开关语义随之更正为「A/B 对照用」：
+        #       True（默认）= 多票判定（强度 = 基线）；False = 单票（对照组，已知会削弱兜底）。
+        voting_times=(tier_votes if getattr(
+            self.config, "enable_verify_chain_reorder", True) else 1),
     )
     ctx.verdicts = self._verdicts_from_ver_result(ver_result, ctx.candidates)
     ctx._best_cluster = ver_result.get("best_cluster")
     ctx._cluster_data = ver_result.get("cluster_data", [])
 
     _verify_artifact_verdicts(self, ctx, ver_result)
+    # ★ 2026-10-12 批次 4（用户 Q32/Q33）：**每个淘汰环节后都检查池是否为空**。
+    _pool_empty_fallback(self, ctx, "4_verify")
     return ver_result, tier_votes
 
 
@@ -262,10 +278,19 @@ def _verify_filter_candidates(self, ctx) -> None:
                         "2026-09-18）".format(len(_before36), len(_clean)))
             ctx.candidates = _clean
         elif not _clean and _before36:
-            # 全被滤掉时不清空池（保持与 M2 同一原则），只记录
-            self.record(ctx, "control",
-                        "候选池 %d 个全部呈非答案形态（未清空，保持 M2 原则，"
-                        "2026-09-18）" % len(_before36))
+            # ★ 2026-10-12 批次 4（用户 Q32）：「池空就重新生成」——
+            #   与 2026-09-18 的「全滤掉也不清空池」**语义相反**，故做成开关：
+            #   默认 True = 清空并交下游兜底（用户口径）；
+            #   False = 保留脏候选（2026-09-18 旧行为，便于 A/B 与回退）。
+            if getattr(self.config, "pool_empty_clear", True):
+                ctx.candidates = []
+                self.record(ctx, "control",
+                            "候选池 %d 个全部呈非答案形态 ⇒ **已清空**"
+                            "（批次 4：池空即走兜底）" % len(_before36))
+            else:
+                self.record(ctx, "control",
+                            "候选池 %d 个全部呈非答案形态（未清空，保持 M2 原则）"
+                            % len(_before36))
     except Exception as _e_f36:  # noqa: BLE001
         # ★ 2026-10-07 观测补齐（问题总账 §2.6「纯空吞异常」A 类）：原为裸 `pass`。
         #   本块负责「过滤非答案形态候选（Markdown 标题/过程叙述）」，是 096 实测
@@ -274,6 +299,41 @@ def _verify_filter_candidates(self, ctx) -> None:
         self.record(ctx, "control",
                     f"非答案形态候选过滤失败（{type(_e_f36).__name__}: "
                     f"{str(_e_f36)[:120]}）→ 脏候选可能进入投票")
+
+
+def _pool_empty_fallback(self, ctx, stage: str) -> None:
+    """池空兜底（2026-10-12 批次 4，用户 Q32/Q33）：
+    任一淘汰环节把候选池清空 ⇒ 汇总该环节的**全部错误点**，供下游
+    「先让模型找错点、再重新生成答案」。
+
+    ⚠ 本轮**只做汇总 + 留痕**（不在此处直接重解）：重解仍由既有的
+      `5_revise_or_fallback` / `_deep_revise_loop` 承担 —— 遵循
+      code-audit 路线 C 的五步处置「**先可观测 → 后改逻辑**」，
+      避免在没有观测基线的情况下改动判分主链的控制流。
+    """
+    try:
+        if getattr(ctx, "candidates", None):
+            return
+        errs = []
+        for v in (getattr(ctx, "verdicts", None) or []):
+            fb = str(getattr(v, "feedback", "") or "").strip()
+            if fb:
+                errs.append({"stage": stage,
+                             "id": getattr(v, "id", None),
+                             "answer": str(getattr(v, "answer", ""))[:120],
+                             "error": fb[:300]})
+        for g in (getattr(ctx, "audit_gate", None) or []):
+            if isinstance(g, dict) and (g.get("verdict") or "") == "reject":
+                errs.append({"stage": stage, "kind": "audit_reject",
+                             "error": str(g.get("reason") or "")[:300]})
+        ctx.pool_empty_errors = list(
+            getattr(ctx, "pool_empty_errors", None) or []) + errs
+        self.record(ctx, "pool_empty",
+                    "⚠ 候选池为空（%s 之后）：汇总 %d 条错误点交下游"
+                    "「先找错点 → 再生成」" % (stage, len(errs)))
+    except Exception as e:  # noqa: BLE001  观测逻辑绝不阻断主流程
+        self.record(ctx, "pool_empty",
+                    f"池空检查异常（已忽略）: {type(e).__name__}: {str(e)[:100]}")
 
 
 def _verify_artifact_verdicts(self, ctx, ver_result) -> None:
@@ -346,3 +406,5 @@ def adversarial_stage(self, ctx, tier: str, ver_result, tier_votes) -> None:
         # 死循环由 revise_round 全局上限 5 + 时间检查防护。
         if self._adversarial_probe(ctx, tier):
             self._deep_revise_loop(ctx, ver_result, tier_votes)
+    # ★ 批次 4：对抗环节同样可能在淘汰后把池清空 ⇒ 同样检查
+    _pool_empty_fallback(self, ctx, "4.6_adv")

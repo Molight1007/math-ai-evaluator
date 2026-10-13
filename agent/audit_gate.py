@@ -147,9 +147,32 @@ class AuditGate(BaseAgent):
                      "指出缺失。输出 JSON：{\"understood\":true|false,"
                      "\"restatement\":\"...\",\"gaps\":[\"...\"]}")
             from utils.prefill import prefill_messages, stitch
+            # ★ 2026-10-13（§3.4 消费 + §6 用定理）：题意复核时也带上
+            #   「答题形态提示」与「检索到的定理线索」—— 此前本阶段**看不到**它们，
+            #   导致复核只能凭题面判断（与下游注入的信息不一致）。
+            _ctx_extra = ""
+            try:
+                _parts = []
+                try:
+                    from agent.question_type import (
+                        render_type_path_hint as _rtp_ag)
+                    _tp = _rtp_ag(getattr(ctx, "type_path", None))
+                    if _tp:
+                        _parts.append(_tp)
+                except Exception:  # noqa: BLE001
+                    pass
+                _th = str(getattr(ctx, "theorem_hint_block", "") or "").strip()
+                if _th:
+                    _parts.append(_th)
+                _ctx_extra = "\n\n".join(_parts)
+            except Exception:  # noqa: BLE001  注入是增益，绝不阻断
+                _ctx_extra = ""
+            _user_content = ctx.problem[:1500]
+            if _ctx_extra:
+                _user_content = _user_content + "\n\n" + _ctx_extra
             raw = self.llm(ctx, prefill_messages(
                 [{"role": "system", "content": sys_p},
-                 {"role": "user", "content": ctx.problem[:1500]}], '{"'),
+                 {"role": "user", "content": _user_content}], '{"'),
                            # ★ 2026-10-02：4096→8192（DeepSeek 适配方案 A，统一上限）。
                            #   本处输出为小 JSON，抬上限只增安全余量、不改行为。
                            0.0, 8192)

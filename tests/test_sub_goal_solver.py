@@ -29,6 +29,7 @@ def _ctx(max_calls: int = 50) -> TaskContext:
 
 def make_agent(client=None) -> SubGoalSolverAgent:
     config = SimpleNamespace(
+        subgoal_self_improve_rounds=0,  # 2026-10-13 隔离：新接线（子目标自改进）会多跑 LLM 调用
         max_total_calls=20,
         max_time_per_question=300,
         max_total_time_seconds=21000,
@@ -239,6 +240,7 @@ class StageBudgetTest(unittest.TestCase):
         agent = make_agent()
         agent.config = _NS(
             max_total_calls=20, max_time_per_question=300,
+            subgoal_self_improve_rounds=0,  # 4.2 隔离
             max_total_time_seconds=21000, policy_max_tokens=2048,
             subgoal_stage_budget_sec=0.0,  # 放弃固定预算
         )
@@ -255,6 +257,7 @@ class StageBudgetTest(unittest.TestCase):
         agent = make_agent()
         agent.config = _NS(
             max_total_calls=20, max_time_per_question=300,
+            subgoal_self_improve_rounds=0,  # 4.2 隔离
             max_total_time_seconds=21000, policy_max_tokens=2048,
             subgoal_stage_budget_sec=0.0,
             subgoal_tail_reserve_sec=0.0,
@@ -422,6 +425,7 @@ class SubgoalLightCheckTest(unittest.TestCase):
     @staticmethod
     def _make_agent() -> SubGoalSolverAgent:
         config = SimpleNamespace(
+            subgoal_self_improve_rounds=0,  # 2026-10-13 隔离：新接线（子目标自改进）会多跑 LLM 调用
             max_total_calls=20,
             max_time_per_question=300,
             max_total_time_seconds=21000,

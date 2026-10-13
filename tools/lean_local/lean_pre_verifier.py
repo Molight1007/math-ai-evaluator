@@ -17,9 +17,19 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 依赖：
 - agent/lean_bridge.py（LeanBridge.formalize_problem 声明模式编译）
 - agent/base.py（BaseAgent / TaskContext）
+
+2026-10-12 新增（用户设计 D1–D4，方案 v4 §3.5）：
+- `run_understanding_chain()` —— 与 `run()` **并列**的另一条前置理解通道：
+  先建「题目完成后的终态」（答案用**符号槽**，禁写具体值）→ 写成**逻辑链** →
+  Lean 自检（全 `sorry` 占位，只判形式自洽）→ **无条件反复理解**
+  （每轮把上一轮成果回灌，要求"在已知该结果的前提下重推一遍"并报告是否一致，
+  用户 Q7 明确定义为**一致性复推**）；缺口强制二分 A（题面没给）/ B（题面给了没读到）。
+- ⚠ `run()` 的既有行为**一字未改**（两条通道互不影响，可分别 A/B）。
 """
 
 import logging
+import os
+import time
 
 # ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
 # `contracts/protocols.py`（Protocol）导入。`BaseAgent` 保留（本类**真继承**它）。
@@ -261,3 +271,295 @@ class LeanPreVerifier(BaseAgent):
         self.record(ctx, "lean_sketch_audit",
                     f"骨架 Lean 审核: verdict={result.get('verdict')}; 缺口 {len(sg)} 个")
         return ctx
+
+    # ------------------------------------------------------------------
+    # 题意前置理解升级：终态逻辑链 + Lean 自检 + 一致性复推
+    # （2026-10-12 用户设计 D1–D4，见方案 v4 §3.5）
+    # ------------------------------------------------------------------
+    def run_understanding_chain(self, ctx: TaskContext) -> None:
+        """构建「题目完成后的终态 + 逻辑链」→ Lean 自检 → **无条件反复理解**。
+
+        与 `run()` 的区别（`run()` 是"声明 well-typed 即当理解正确"）：
+          · 先建**终态**（答案用符号槽，**禁写具体值**），再建**逻辑链**，链尾须等价终态；
+          · **无条件多轮**：每轮把上一轮成果回灌，要求"在已知该结果的前提下重推一遍"，
+            报告是否一致、差异在哪（用户 Q7 明确定义为**一致性复推**，不是泛泛加深）；
+          · 缺口强制二分：A = 题面没给；B = 题面给了但本轮没读到。
+
+        产出：`ctx.understanding_chain` / `ctx.understanding_gaps` / `ctx.understanding_rounds`。
+        失败 / 超时 / Lean 不可用一律降级，**绝不阻断主流程**。
+        """
+        cfg = self.config
+        # ⚠ 兜底值须与 AgentConfig 声明（True）一致 —— 见 orchestrator__prep.py 同名说明。
+        if not getattr(cfg, "enable_understanding_chain", True):
+            ctx.understanding_chain = {"enabled": False}
+            return
+        if not str(getattr(ctx, "problem", "") or "").strip():
+            ctx.understanding_chain = {"verdict": "unknown", "reason": "题目为空"}
+            return
+
+        rounds = max(1, int(getattr(cfg, "understanding_refine_rounds", 3) or 3))
+        no_gain_stop = bool(getattr(cfg, "understanding_no_gain_stop", True))
+        lean_on = bool(getattr(cfg, "understanding_chain_lean_check", True))
+
+        out = {"verdict": "unknown", "rounds": 0, "consistent": None,
+               "terminal_state": "", "answer_slot": "", "chain": [],
+               "gaps_a": [], "gaps_b": [], "diffs": [],
+               "lean_verdict": "skipped", "lean_error": "", "reason": ""}
+        prev, prev_canon = None, ""
+        for r in range(rounds):
+            out["rounds"] = r + 1
+            if ctx.is_time_critical():
+                out["reason"] = "时间紧迫，提前结束"
+                break
+            payload = self._understanding_round(ctx, prev)
+            if payload is None:
+                # ★ 2026-10-13 修正（实测 2/3 题首轮即不可解析、却已烧 613–716 s）：
+                #   首轮失败**不允许直接 break** —— 用更严格的 JSON 指令**降级重试 1 次**。
+                out["retry_used"] = True
+                payload = self._understanding_round(ctx, prev, force_json=True)
+            if payload is None:
+                out["reason"] = "LLM 输出不可解析（含降级重试）"
+                break
+            canon = _canonical_chain(payload.get("chain"))
+            out["terminal_state"] = str(payload.get("terminal_state") or "")
+            out["answer_slot"] = str(payload.get("answer_slot") or "")
+            out["chain"] = (payload.get("chain")
+                            if isinstance(payload.get("chain"), list) else [])
+            out["diffs"] = (payload.get("diffs")
+                            if isinstance(payload.get("diffs"), list) else [])
+            if payload.get("consistent") is not None:
+                out["consistent"] = bool(payload.get("consistent"))
+            a_gaps, b_gaps = split_gaps(payload.get("gaps"))
+            out["gaps_a"], out["gaps_b"] = a_gaps, b_gaps
+            ctx.understanding_gaps = a_gaps + b_gaps
+            if lean_on:
+                # ★ 2026-10-13：主输出已不含 lean_code（拆分，见 `_understanding_make_lean_code`）
+                #   ⇒ 若模型仍给了就直接用；否则**单独一步**生成。
+                _lc = str(payload.get("lean_code") or "").strip()
+                if not _lc:
+                    _lc = self._understanding_make_lean_code(ctx, payload)
+                if _lc:
+                    # ★ 2026-10-13（§3.6.4 合并编译）:**保存**该片段 ——
+                    #   蓝图阶段的 Lean 检查要把它与节点陈述**并入同一文件**一起编译，
+                    #   从而一次编译同时回答「节点对不对」与「蓝图是否偏离终态链」。
+                    out["lean_code"] = _lc
+                    out["lean_verdict"], out["lean_error"] = (
+                        self._understanding_lean_check(ctx, _lc))
+            self.record(
+                ctx, "understanding_chain",
+                f"题意链 第 {r + 1}/{rounds} 轮：链 {len(out['chain'])} 节、"
+                f"缺口 A{len(a_gaps)}/B{len(b_gaps)}、Lean={out['lean_verdict']}"
+                + (f"、一致={out['consistent']}" if out["consistent"] is not None else ""))
+            if no_gain_stop and canon and canon == prev_canon:
+                self.record(ctx, "understanding_chain",
+                            f"链在第 {r + 1} 轮与前一轮无变化 ⇒ 无增益早停")
+                break
+            prev_canon, prev = canon, payload
+
+        out["verdict"] = "ok" if out["chain"] else "unknown"
+        ctx.understanding_chain = out
+        ctx.understanding_rounds = out["rounds"]
+        self.record(ctx, "understanding_chain",
+                    f"题意理解链结束：{out['rounds']} 轮、链 {len(out['chain'])} 节、"
+                    f"Lean={out['lean_verdict']}"
+                    f"{'（' + out['reason'] + '）' if out['reason'] else ''}")
+
+    def _understanding_round(self, ctx, prev, force_json: bool = False):
+        """单轮：首轮建终态+链；后续轮回灌上一轮成果，要求「重推并报告一致性」。
+
+        ★ 2026-10-13：新增 `force_json` —— 降级重试用。实测首轮有 2/3 题产出不可解析
+          （疑因四合一契约复杂 + 模型先吐大段解释）⇒ 重试时**把 JSON 要求前置并加硬约束**。
+        """
+        try:
+            from tools.lean_local.prompts.lean_pre_verify import (
+                UNDERSTANDING_TERMINAL_SYSTEM as _SYS,
+                UNDERSTANDING_TERMINAL_USER as _U0,
+                UNDERSTANDING_REFINE_USER as _U1)
+        except ImportError:
+            from .prompts.lean_pre_verify import (  # type: ignore
+                UNDERSTANDING_TERMINAL_SYSTEM as _SYS,
+                UNDERSTANDING_TERMINAL_USER as _U0,
+                UNDERSTANDING_REFINE_USER as _U1)
+        domain = getattr(ctx, "domain", "") or "未知"
+        if prev is None:
+            user_msg = _U0.format(problem=ctx.problem, domain=domain)
+        else:
+            chain = [c for c in (prev.get("chain") or []) if isinstance(c, dict)]
+            chain_text = "\n".join(
+                "%d) [%s] ⇒ %s" % (
+                    i + 1,
+                    "；".join(str(p) for p in (c.get("premises") or [])),
+                    c.get("conclusion") or "")
+                for i, c in enumerate(chain))
+            user_msg = _U1.format(
+                problem=ctx.problem, domain=domain,
+                terminal_state=prev.get("terminal_state") or "",
+                answer_slot=prev.get("answer_slot") or "",
+                chain_text=chain_text or "（上一轮未给出链）")
+        # ★ 2026-10-12（批次 5 剩余，用户 A4）：**2.6 题意前置理解真正用上定理**。
+        #   此处按环节取少量条数（默认 4）—— 定理在「读题对标」阶段只做线索，
+        #   给多了反而干扰审题（用户 §5.2）。异常一律忽略（检索是增益不是门禁）。
+        try:
+            from agent.theorem_hint import render_for_stage as _rfs
+        except ImportError:
+            try:
+                from theorem_hint import render_for_stage as _rfs  # type: ignore
+            except ImportError:
+                _rfs = None
+        if _rfs is not None:
+            try:
+                _th = _rfs(ctx, "pre_audit")
+                if _th:
+                    user_msg = user_msg + "\n\n" + _th
+            except Exception:  # noqa: BLE001
+                pass
+        if force_json:
+            user_msg = (
+                "⚠ 只输出**一个 JSON 对象**，不要任何解释、推导过程或 markdown 围栏。\n"
+                "必需字段：terminal_state / answer_slot / chain / lean_code / gaps。\n"
+                "chain 是数组，每项 {\"premises\": [...], \"conclusion\": \"...\"}。\n\n"
+                + user_msg)
+        try:
+            raw = self.llm(ctx, [
+                {"role": "system", "content": _SYS},
+                {"role": "user", "content": user_msg},
+            ], 0.2, 32768)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[understanding_chain] LLM 调用异常: %s", str(e)[:120])
+            return None
+        if not raw:
+            self.record(ctx, "understanding_chain", "本轮 LLM 返回空")
+            return None
+        parsed = _parse_analysis_json(raw)
+        if not isinstance(parsed, dict):
+            # ★ 2026-10-13：把**原始响应片段**留痕 —— 否则「不可解析」无法定位
+            #   （是 JSON 被截断？还是模型先输出大段解释？）
+            self.record(ctx, "understanding_chain",
+                        "本轮输出不可解析（原始片段）：" + str(raw)[:300])
+            return None
+        return parsed
+
+    def _understanding_make_lean_code(self, ctx, payload):
+        """**单独一步**生成 Lean 骨架（2026-10-13 拆分）。
+
+        为什么拆：原实现把「终态 + 答案槽 + 逻辑链 + 完整 Lean 骨架」压在**一次**调用里，
+        实测输出撞 32768 token 上限被截断（`finish_reason=length`）⇒ JSON 不完整 ⇒
+        整体不可解析 ⇒ 该阶段空转（008/013 两题各烧 613/716 s）。
+        拆开后这一步的输出只有 lean_code，长度与 chain 同量级，不再撞顶。
+        失败返回空串（Lean 自检随即 skipped，**不影响**理解链本身）。
+        """
+        try:
+            from tools.lean_local.prompts.lean_pre_verify import (
+                UNDERSTANDING_LEAN_CODE_SYSTEM as _LS,
+                UNDERSTANDING_LEAN_CODE_USER as _LU)
+        except ImportError:
+            from .prompts.lean_pre_verify import (  # type: ignore
+                UNDERSTANDING_LEAN_CODE_SYSTEM as _LS,
+                UNDERSTANDING_LEAN_CODE_USER as _LU)
+        chain = [c for c in (payload.get("chain") or []) if isinstance(c, dict)]
+        chain_text = "\n".join(
+            "%d) [%s] ⇒ %s" % (i + 1,
+                               "；".join(str(p) for p in (c.get("premises") or [])),
+                               c.get("conclusion") or "")
+            for i, c in enumerate(chain)) or "（无链）"
+        try:
+            raw = self.llm(ctx, [
+                {"role": "system", "content": _LS},
+                {"role": "user", "content": _LU.format(
+                    problem=ctx.problem, chain_text=chain_text,
+                    terminal_state=payload.get("terminal_state") or "")},
+            ], 0.2, 16384)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[understanding_chain] Lean 骨架生成异常: %s", str(e)[:120])
+            return ""
+        if not raw:
+            return ""
+        parsed = _parse_analysis_json(raw)
+        if isinstance(parsed, dict):
+            return str(parsed.get("lean_code") or "")
+        # 解析失败时退一步：从原文里直接抠 ```lean ... ``` 或 import Mathlib 起的片段
+        _txt = str(raw)
+        if "import Mathlib" in _txt:
+            return _txt[_txt.index("import Mathlib"):][:4000]
+        return ""
+
+    def _understanding_lean_check(self, ctx, lean_code):
+        """编译逻辑链的 Lean 骨架（全 sorry 占位）⇒ **只判形式自洽**。
+
+        返回 ``(verdict, error)``，verdict ∈ {"ok","fail","skipped"}。
+        Lean 不可用 / 无工程目录 / 代码为空 → "skipped"（**不算失败**）。
+        """
+        code = str(lean_code or "").strip()
+        if not code:
+            return "skipped", "无 lean_code"
+        if ctx.is_time_critical():
+            return "skipped", "时间紧迫"
+        bridge = self._build_bridge(ctx)
+        if bridge is None or not bridge.lean_available:
+            return "skipped", "Lean 环境不可用"
+        work_dir = bridge._lean_project_dir or ""
+        if not work_dir:
+            return "skipped", "无 lake 工程"
+        fname = "uchain_%d_%d.lean" % (os.getpid(),
+                                       int(time.time() * 1000) % 1000000)
+        try:
+            res = bridge._compile(code, work_dir, lean_filename=fname,
+                                  allow_sorry=True)
+        except Exception as e:  # noqa: BLE001
+            return "skipped", "编译异常: %s" % str(e)[:120]
+        finally:
+            try:
+                from tools.lean_local.lean_bridge import _trash_lean_file
+                _trash_lean_file(work_dir, fname)
+            except Exception:  # noqa: BLE001
+                pass
+        if not res:
+            return "skipped", "编译无返回"
+        if res.get("ok"):
+            return "ok", ""
+        return "fail", str(res.get("error", ""))[:300]
+
+
+# ---------------------------------------------------------------------------
+# 题意前置理解升级（2026-10-12 用户设计 D1–D4，见方案 v4 §3.5）
+# ---------------------------------------------------------------------------
+
+def _canonical_chain(chain) -> str:
+    """把逻辑链归一化为可比较字符串（用于「无增益早停」判定）。
+
+    只保留 (premises, conclusion) 的**去空白文本**，忽略顺序外的一切差异
+    （JSON 字段顺序/多余空格不该被当成"理解有进展"）。
+    """
+    if not isinstance(chain, list):
+        return ""
+    parts = []
+    for item in chain:
+        if not isinstance(item, dict):
+            continue
+        prem = item.get("premises")
+        if isinstance(prem, (list, tuple)):
+            prem_txt = "|".join("".join(str(x).split()) for x in prem)
+        else:
+            prem_txt = "".join(str(prem or "").split())
+        parts.append("%s=>%s" % (prem_txt, "".join(str(item.get("conclusion") or "").split())))
+    return "\n".join(parts)
+
+
+def split_gaps(gaps) -> tuple:
+    """把缺口清单按 kind 二分：返回 ``(A 类, B 类)``。
+
+    - **A 类**：题面确实没有给（需假设才能推进）⇒ 进蓝图作风险项；
+    - **B 类**：题面给了但本轮没提取到（"我没读到"）⇒ 下一轮复推要消除。
+    kind 缺失/非法一律归 A（保守：宁可标成"需假设"，不要谎称"已给"）。
+    """
+    a, b = [], []
+    for g in (gaps or []):
+        if isinstance(g, dict):
+            kind = str(g.get("kind") or "").strip().upper()
+            detail = str(g.get("detail") or "").strip()
+        else:
+            kind, detail = "", str(g or "").strip()
+        if not detail:
+            continue
+        (b if kind == "B" else a).append({"kind": kind or "A", "detail": detail})
+    return a, b

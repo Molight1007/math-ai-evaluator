@@ -276,7 +276,11 @@ def _set_run_eval_argv(args, out) -> None:
         #   `unique` 亦恒等于 5 ⇒ 100% 饱和。饱和说明条数是被"截"出来的，
         #   而不是"恰好只有 5 条相关"。代码默认 5；
         #   run_eval.py:1515 载「老师 #46 要求扫 3/5/10」⇒ 本轮取 10。
-        "--leansearch_top_k", "10",
+        # ★ 2026-10-12（用户要求「定理数定为 25」）：10 → 25。
+        #   这一行才是评测的实际覆盖源 —— 它**优先于** `user_agent__config.py`
+        #   里的 `leansearch_top_k`（CLI 传参走 overrides，优先于类默认值），
+        #   所以只改 config 时云端仍看到 10（2026-10-12 实测确认）。
+        "--leansearch_top_k", "25",
         "--enable_web_search", "true",
         "--verbose",
     ]

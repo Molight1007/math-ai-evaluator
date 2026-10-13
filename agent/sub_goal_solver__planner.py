@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 from .base import TaskContext
 
@@ -398,7 +399,14 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
         logger.warning("BlueprintPlanner 导入失败: %s", e)
         return None
     planner = BlueprintPlannerAgent(self.client, self.config)
-    dag = planner.generate_blueprint(ctx)
+    # ★ 2026-10-12（批次 2，用户 Q11–Q13）：迭代式多次生成 + 第 4 次自审。
+    #   轮数=1 时等价于原行为（零差异），故可由开关精确回退。
+    if int(getattr(self.config, "blueprint_multi_gen_rounds", 3) or 3) > 1:
+        dag = planner.generate_blueprint_iterative(ctx)
+    else:
+        dag = planner.generate_blueprint(ctx)
+    if dag is not None and getattr(self.config, "blueprint_self_review", True):
+        dag = planner.self_review_blueprint(ctx, dag)
     if dag is None:
         # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
         self.record(ctx, "blueprint",
@@ -424,7 +432,14 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
     # 门代码与 Lean 升级逻辑保留（_dag_replan_gate / _lean_dag_logic_check），
     # 不开时不产生任何调用开销。
     if getattr(self.config, "dag_replan_gate", True):
+        # ★ 2026-10-12 观测补齐：本门此前**无耗时记录** ⇒ 无法回答
+        #   「蓝图检查到底烧了多少」（实测整个 2.7 段 430.7 s/题，但拆不出
+        #   蓝图生成 / 逐节点评审 / Lean 检查各占多少）。
+        _drg_t0 = time.time()
         dag = self._dag_replan_gate(ctx, dag)
+        self.record(ctx, "dag_replan",
+                    f"求解前评审门总耗时 {time.time() - _drg_t0:.1f}s"
+                    f"（DagReviewer 逐节点 LLM 评审 + Lean 逻辑检查）")
         if dag is None:
             self.record(ctx, "blueprint",
                         "Blueprint 路径已跳过：求解前 DAG 评审门返回空"
@@ -457,6 +472,35 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
     # ★ 2026-09-23：把 LeanSearch 检索到的 Mathlib 定理注入**解题侧**引理记忆。
     #   此前检索结果只喂验证器（`leansearch_inject_verifier`）⇒ 解题器从未见过，
     #   实测 460 条里仅 1% 进入 Lean 代码。必须在**求解前**注入。
+    # ★ 2026-10-12 批次 3（用户 D20/D21）：对子目标链做 **R1/R2 机械校验**
+    #   （零 LLM）：R2 = inputs 是否引用了不存在/自引用的节点（断链）；
+    #   R1 = 叶子节点却依赖前序结论（应继续分解 —— K11 空壳的形态学成因）。
+    #   缺口按「题面是否已给」二分（D21）：
+    #     · 缺的量**在题面出现过** ⇒ kind=B（题面给了但没读到）⇒ 就地补子目标；
+    #     · 否则 ⇒ kind=A（题面确实没给）⇒ 回退蓝图作风险项。
+    #   ⚠ 本轮只做**可观测 + 分类**（不自动改蓝图，遵循「先可观测→后改逻辑」）。
+    if getattr(self.config, "subgoal_inputs_validation", True):
+        try:
+            _vres = dag.validate_inputs()
+            _prob = str(getattr(ctx, "problem", "") or "")
+            _gaps = []
+            for _it in (_vres.get("broken") or []):
+                _gaps.append({"kind": "A" if _it.get("ref") not in _prob else "B",
+                              "detail": "%s: %s" % (_it.get("reason"), _it.get("ref")),
+                              "node": _it.get("id")})
+            for _it in (_vres.get("leaky_leaves") or []):
+                _gaps.append({"kind": "B", "detail": _it.get("reason"),
+                              "node": _it.get("id")})
+            ctx.subgoal_chain_gaps = _gaps
+            self.record(ctx, "subgoal_inputs",
+                        "inputs 校验：%d 节点，断链 %d、疑似该分解的叶子 %d（缺口 A%d/B%d）"
+                        % (_vres.get("n", 0), len(_vres.get("broken") or []),
+                           len(_vres.get("leaky_leaves") or []),
+                           sum(1 for g in _gaps if g["kind"] == "A"),
+                           sum(1 for g in _gaps if g["kind"] == "B")))
+        except Exception as _e_v:  # noqa: BLE001  校验是增益，绝不阻断
+            self.record(ctx, "subgoal_inputs",
+                        f"inputs 校验异常（跳过）: {type(_e_v).__name__}: {str(_e_v)[:120]}")
     self._inject_mathlib_theorems(ctx)
     self._inject_anticipatory_lemmas(ctx, plan.get("anticipatory_lemmas") or [])
     # 2026-09-06 去 Lean 化：原 LEAP Stage 2 整树 Lean 搭桥审核

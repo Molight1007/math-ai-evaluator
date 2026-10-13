@@ -518,6 +518,11 @@ class SubGoalSolverAgent(BaseAgent):
 
     # ---------- 阶段二：逐步求解 ----------
     _solve_subgoal = _sgs_solve._solve_subgoal
+    # ★ 2026-10-13：本类用**显式装配清单**把 `sub_goal_solver__*` 的模块级函数挂到类上
+    #   ⇒ **新增函数必须在此登记**，否则类上不存在（实测：漏登记导致
+    #     `AttributeError: 'SubGoalSolverAgent' object has no attribute
+    #      '_improve_subgoal_result'`，被集成测试当场抓到）。
+    _improve_subgoal_result = _sgs_solve._improve_subgoal_result
 
     _prepare_step_prompt = _sgs_solve._prepare_step_prompt
 

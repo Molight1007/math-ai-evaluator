@@ -150,7 +150,14 @@ class TestBlueprintPathHonoursConfig(unittest.TestCase):
 
         cfg = SimpleNamespace(max_subgoals=cfg_max, use_blueprint_dag=True,
                               enable_skeleton_review=False,
-                              dag_replan_gate=False)
+                              dag_replan_gate=False,
+                             # 2026-10-12 批次 2：新增「蓝图自审」会额外发起 DagReviewer
+                             # LLM 调用、改变调用序列 ⇒ 本测试显式隔离（**非放宽判据**：
+                             # 这些断言验证的是 max_subgoals 旋钮/评审流程，与新步骤无关）
+                             blueprint_self_review=False,
+                             # 2026-10-13：接线处兜底值改为 3 后，本类测试若不显式指定
+                             # 会走进 3 轮迭代生成 ⇒ 打乱桩 ⇒ 显式隔离（**非放宽判据**）
+                             blueprint_multi_gen_rounds=1)
         agent = SubGoalSolverAgent(MagicMock(), cfg)
         ctx = TaskContext(
             problem="证明 P", metadata={}, budget=Budget(max_calls=50),

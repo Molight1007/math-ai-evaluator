@@ -55,6 +55,14 @@ def sec_overview(recs, meta, files, env):
     L.append("| 项 | 值 |")
     L.append("|---|---|")
     arm = meta.get("arm") or {}
+    # ★ 2026-10-12 修（判读失真 #5）：arm.json 的 `overrides` 常为空（启动器不写），
+    #   真正生效的覆盖在**日志 `EvalEngine init`**（skill §5.2 的权威口径）。
+    #   此前只显示 arm ⇒ 表1 显示 "{}" 而表14/16 显示「24 键」，两处自相矛盾。
+    _arm_ov = arm.get("overrides") or {}
+    _log_ov = meta.get("overrides") or {}
+    _ov_cell = (json.dumps(_arm_ov, ensure_ascii=False) if _arm_ov
+                else "%s（来源：日志 overrides，共 %d 键）"
+                % (json.dumps(_log_ov, ensure_ascii=False), len(_log_ov)))
     rows = [
         ("会话名", meta["run"]),
         ("起始时间", arm.get("started_at") or "—"),
@@ -65,7 +73,7 @@ def sec_overview(recs, meta, files, env):
         ("题目数", str(len(recs))),
         ("报告文件名", "%s（日期口径：起始日；来源 %s）"
          % (files.get("fname") or "—", files.get("date_src") or "—")),
-        ("override", json.dumps(arm.get("overrides") or {}, ensure_ascii=False) or "{}"),
+        ("override", _ov_cell),
         ("LLM 模型", env.get("LLM_MODEL") or "—"),
         ("LLM_TIMEOUT", env.get("LLM_TIMEOUT") or "—"),
         ("结果文件", os.path.basename(files["results"])),
@@ -163,8 +171,16 @@ def sec_perq_time(recs):
             fmt(tp), "正确" if r.get("correct") else "错误",
             len(_as_list(r.get("candidates")))))
     L.append("")
-    L.append("> 分时桶口径沿用 2026-09 的实测结论：<450s 桶正确率最高，>700s 桶基本为 0，"
-             "说明单纯延长求解时间没有收益。")
+    # ★ 2026-10-12 修：原文是**硬编码的 2026-09 旧结论**（「<450s 正确率最高、>700s
+    #   基本为 0」），会被新数据直接反驳（本轮 10 题全在 >700s 桶、且有正确题）
+    #   ⇒ 改为按本轮数据陈述 + 样本量告警，不再外推。
+    _parts = ["%s %s%%（%d题）" % (k, fmt(pct(ok_b[k], buckets[k])), buckets[k])
+              for k in ("<450s", "450–700s", ">700s") if buckets[k]]
+    if _parts:
+        L.append("> 本轮分时桶正确率：%s。样本量小，**不据此外推「延长求解时间有无收益」**"
+                 "（判据见 skill §4.4：单次差异是噪声）。" % "、".join(_parts))
+    else:
+        L.append("> 本轮无分时数据。")
     L.append("")
     return L
 
@@ -222,11 +238,13 @@ def sec_stage_error(recs, audit, judge):
             note = str(an.get("root_cause") or "")
             gic = an.get("gold_in_candidates")
         else:
-            st, ty, note = local_attribution(r, judge)
-            gic = "—"
+            st, ty, note, gic = local_attribution(r, judge)
         by_stage[st] += 1
         by_type[ty] += 1
-        rows.append((rid, st, ty, gic, note))
+        # ★ 2026-10-12 修（判读失真 #1 的配套）：统一渲染成 是/否/—。
+        #   此前本地归因分支恒写 "—"，等于**该列一直是空的**却照下"求解失败"结论。
+        gic_txt = "是" if gic is True else ("否" if gic is False else "—")
+        rows.append((rid, st, ty, gic_txt, note))
     L.append("归因来源：**%s**（%d 道错题；DeepSeek 覆盖 %d 道，其余用本地启发式补齐）。"
              % (src_tag, len(rows), len(amap)))
     L.append("")
@@ -538,16 +556,35 @@ def sec_reasoning_vs_calc(recs, judge, amap):
 
     L.append("### 求解 vs 选答（错题第一分诊）")
     L.append("")
-    gic_false = sum(1 for a in amap.values() if _as_dict(a.get("analysis")).get("gold_in_candidates") is False)
-    gic_true = sum(1 for a in amap.values() if _as_dict(a.get("analysis")).get("gold_in_candidates") is True)
+    # ★ 2026-10-12 修（判读失真 #1 的配套）：原来**只有 DeepSeek 检错**（amap 非空）时
+    #   才出这张分诊表；没跑检错时整节缺失，只留一句硬编码旧统计（且写成 `96.7%%`）。
+    #   现改为：无 DeepSeek 时用**本地启发式**（与「五、逐题归因」同源）计算分诊。
+    gic_false = gic_true = 0
     if amap:
-        L.append("| 分诊 | 题数 | 含义 |")
-        L.append("|---|---|---|")
-        L.append("| gold 不在候选池 | %d | 求解失败：答案从未被算出 |" % gic_false)
-        L.append("| gold 在候选池却答错 | %d | 选答/终答失败：算出来了却没用上 |" % gic_true)
-        L.append("")
+        gic_false = sum(1 for a in amap.values()
+                        if _as_dict(a.get("analysis")).get("gold_in_candidates") is False)
+        gic_true = sum(1 for a in amap.values()
+                       if _as_dict(a.get("analysis")).get("gold_in_candidates") is True)
+        _src = "DeepSeek 检错"
+    else:
+        for r in recs:
+            if r.get("correct"):
+                continue
+            _gic = local_attribution(r, judge)[3]
+            if _gic is False:
+                gic_false += 1
+            elif _gic is True:
+                gic_true += 1
+        _src = "本地启发式（选择池 = diag.pick_diag.divergent_clusters）"
+    L.append("分诊来源：**%s**。" % _src)
+    L.append("")
+    L.append("| 分诊 | 题数 | 含义 |")
+    L.append("|---|---|---|")
+    L.append("| gold 不在选择池 | %d | 求解失败：答案从未被算出 |" % gic_false)
+    L.append("| gold 在选择池却答错 | %d | 选答/终答失败：算出来了却没用上 |" % gic_true)
+    L.append("")
     L.append("> 这一分诊决定改进方向：前者要动求解与蓝图，后者才要动闸门与选答。"
-             "历史三轮 150 道错题中约 96.7%% 属前者。")
+             "（参考：历史三轮 150 道错题中约 96.7% 属「求解失败」—— 以**本轮**表为准。）")
     L.append("")
     return L
 
@@ -606,7 +643,13 @@ def sec_infra(recs, monitor, log_path):
             q80 += 1
         if "-20048" in s:
             q48 += 1
-        if "timeout" in s.lower() or "读超时" in s:
+        # ★ 2026-10-12 修（判读失真 #4）：原判据 `"timeout" in s.lower()` 是**整段 diag
+        #   子串扫** —— 参数说明 / URL / note 里出现 "timeout" 都命中 ⇒ 本轮把 3/3 全
+        #   误报成「疑似超时」（还与同表下方「日志侧 超时=0」自相矛盾）。
+        #   改为结构化判定：trace 步骤名含 timeout、或穷尽检查 reason 明说超时。
+        _steps = [str(_as_dict(t).get("step", "")).lower() for t in tr]
+        _reason = str(_as_dict(_as_dict(r.get("diag")).get("exhaust_result")).get("reason") or "")
+        if any("timeout" in x for x in _steps) or ("超时" in _reason):
             to += 1
     L.append("| 失败信号 | 题数 / 次数 |")
     L.append("|---|---|")

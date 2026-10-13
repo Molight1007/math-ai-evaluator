@@ -85,11 +85,18 @@ def test_research_profile_matches_code_defaults_now():
     assert REQUIRED["--enable_web_search"] == "true"
 
 
-def test_web_search_default_on_leansearch_still_off():
-    """2026-10-01：联网搜索默认开（用户决策）；LeanSearch 未在本次清单内，仍默认关。"""
+def test_web_search_default_on_and_leansearch_default_on():
+    """2026-10-01：联网搜索默认开（用户决策）；
+    ★ 2026-10-12（用户决策 Q3）：「必须使用 leansearch，改为 true」⇒ LeanSearch
+    类默认值 False → True。
+
+    ⚠ 这是**决策变更**，不是放宽既有判据：旧断言锁定的是「赛期受限档默认 +
+    未验证不上」，用户 2026-10-12 明确把 LeanSearch 纳入研究期必用清单。
+    （`run_eval` 基线仍不得硬写 `"use_leansearch": True`，该断言原样保留。）
+    """
     ua = _src("user_agent.py")
     assert "enable_web_search: bool = True" in ua
-    assert "use_leansearch: bool = False" in ua
+    assert "use_leansearch: bool = True" in ua
     rv = _src("run_eval.py")
     # run_eval 自带基线里不能出现 LeanSearch 开启（未在本次清单内）
     assert '"use_leansearch": True' not in rv
