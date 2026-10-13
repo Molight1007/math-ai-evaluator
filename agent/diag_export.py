@@ -248,6 +248,12 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                     for t in (getattr(ctx, "trace", None) or [])
                                     if isinstance(t, dict)
                                     and t.get("step") == "adversarial_gate"],
+        # ★ 2026-10-14（五道审核链第 3 道）：Lean 代回题目（汇总 + 逐候选事件）
+        "lean_backcheck": dict(getattr(ctx, "lean_backcheck", None) or {}),
+        "lean_backcheck_events": [str(t.get("content", ""))[:200]
+                                  for t in (getattr(ctx, "trace", None) or [])
+                                  if isinstance(t, dict)
+                                  and t.get("step") == "lean_backcheck"],
         "n_self_improved": int(getattr(ctx, "n_self_improved", 0) or 0),
         "self_improve_rounds_used": int(
             getattr(ctx, "self_improve_rounds_used", 0) or 0),

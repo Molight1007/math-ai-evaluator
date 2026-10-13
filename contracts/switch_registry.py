@@ -532,6 +532,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.2 AI 对抗证伪（五道审核链第 2 道）：逐存活候选两层对抗验证——"
         "机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰；"
         "跳过/故障一律保留候选（防误杀）；=0 关闭做 A/B"),
+    "five_gate_lean_check": (
+        "FIVE_GATE_LEAN_CHECK", "bool", True,
+        "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "
+        "LeanGate.apply 硬验证（题目+答案翻译为 Lean 命题编译判定）；"
+        "部分淘汰落池、全拒标记不静默清池、不适用题豁免；=0 关闭做 A/B"),
     "objective_itemwise_plan": (
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"
