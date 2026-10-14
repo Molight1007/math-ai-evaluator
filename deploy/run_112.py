@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """run_112.py — 服务器端 112 题全量评测启动器。
 
-与本地 `C:\\Users\\35174\\_run_solution10_0916.py` 的配置**逐项对齐**，只改路径：
+与本地 `D:\mathpilot_work\tools\_run_solution10_0916.py` 的配置**逐项对齐**，只改路径：
   · 时间：max_time_per_question=86400 / tier_budget=86400（单档）/
           max_total_time_seconds=86400000（= 无实际上限，不跳过不中断）
           ★ 2026-09-29：全卷时间池已彻底删除，`--paper_target_time` /

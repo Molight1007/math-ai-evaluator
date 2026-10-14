@@ -64,7 +64,7 @@ from cli.test_report__sections import (  # noqa: E402
 # ================================================================
 # 路径 / 可执行文件常量
 # ================================================================
-MK = r"C:\Users\35174\_mkdocx.py"
+MK = r"D:\mathpilot_work\tools\_mkdocx.py"
 PY = r"D:\python\python.exe"
 OUT_DIR_DEFAULT = os.path.join(ROOT, "测试结果")
 TESTSEET_DEFAULT = os.path.join(ROOT, "题库", "official112_本地测试题库", "official112_full.jsonl")

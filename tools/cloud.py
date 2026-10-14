@@ -751,7 +751,7 @@ def cmd_pull(cfg: dict, args) -> int:
     info('  python tools/gen_test_report.py --results results/_cloud/results/<结果>.jsonl '
          '--testset <题单>.jsonl --core results/_112_core_table.jsonl '
          '--out-md "测试结果/xin测试结果/云端_<名>_' + time.strftime('%Y%m%d') + '.md"')
-    info("  再用 C:\\Users\\35174\\_mkdocx.py 转 docx")
+    info("  再用 D:\mathpilot_work\tools\_mkdocx.py 转 docx")
     info("⚠️ 生成器两个坑：md 里禁止围栏代码块；内容里的竖线要换成 ∣(U+2223)")
     return 0
 
