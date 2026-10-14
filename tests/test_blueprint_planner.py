@@ -501,6 +501,12 @@ class SubGoalReviewReplanTest(unittest.TestCase):
             blueprint_self_review=False,
             subgoal_self_improve_rounds=0,  # 4.2 隔离：新接线会多跑 LLM
             dag_replan_max_rounds=2,
+            # 2026-10-14 任务 #2：定理检索下移到 2.7 子目标求解体首，会在
+            # `run` 起始多打一次 LLM 查询（LLM 辅助 query）——本测试直接构造
+            # SubGoalSolverAgent 并调 `run`（绕过编排层 2.6 门控），而
+            # MyClient 按**调用序号**返回（第 1 次必须是 DAG_JSON）⇒ 必须显式
+            # 关掉检索以保持调用序列（**非放宽判据**，与上面两项隔离同理）。
+            enable_theorem_hint=False,
         )
         ctx = make_ctx()
         ctx.budget = Budget(max_calls=50)

@@ -575,6 +575,9 @@ def objective_injection(problem: str, qtype: str, tactic_on: bool = True) -> str
 
 # ---------------------------------------------------------------------------
 # §3 方案 A（2026-10-13）：题型 LLM 判题 + 交叉校验 + 路径分流表
+#   ★ 2026-10-14（任务列表 #1）：本块产出的判题结论**已并入 2.6 题意理解**（不再是
+#     独立阶段 1.1_type_understanding）；同时修复了"中文题型 ⇄ 类别键"从未互转
+#     导致交叉校验与下游消费整体失效的缺陷（见 `QT_TO_KEY` / `merge_type_decision`）。
 # ---------------------------------------------------------------------------
 
 TYPE_LLM_SYSTEM = """你是数学题**题型判定**专家。请判断题目属于下列哪一类，并只输出一个 JSON 对象。
@@ -610,8 +613,53 @@ TYPE_PATH_PLAN = {
 }
 _TYPE_PATH_DEFAULT = {"lean": True, "options": False, "answer_form": ""}
 
-# 规则基线的**强信号**（§3.3）：命中即视为"规则可信"，LLM 不得覆盖。
-_STRONG_SIGNAL_MARKERS = ("选项", "A.", "（A）", "(A)", "判断", "对错", "是否")
+# ---------------------------------------------------------------------------
+# 两套题型命名空间的显式互转（★ 2026-10-14 修复；随任务 #1「题型判断并入题意理解」）
+# ---------------------------------------------------------------------------
+# 本项目里的题型有**两套命名**，此前从未互转，导致 §3 交叉校验整体失效
+# （机理见 `merge_type_decision` 的长注释）：
+#   · **中文题型常量**（`QT_*`）：全仓 130+ 处消费点按它判定
+#     （`objective_injection` / `answer_form_requirement` / `lean_applicable` /
+#      `audit_gate` / `solver__prompt` …）；
+#   · **LLM 类别键**（`TYPE_LLM_SYSTEM` 要求模型输出的 "proof"/"solution"/
+#     "choice"/"boolean"/"fill_blank"）：`TYPE_PATH_PLAN` 按它索引。
+# ⇒ 铁律：凡进入 `ctx.question_type` 的值**必须是中文题型**（既有契约）；类别键
+#   只用于查 `TYPE_PATH_PLAN`。两者一律经 `type_key()` / `qt_of_key()` 互转，
+#   **禁止裸比较或裸写入**。
+QT_TO_KEY = {
+    QT_PROOF: "proof",
+    QT_SOLUTION: "solution",
+    QT_CHOICE: "choice",
+    QT_JUDGE: "boolean",
+    QT_FILL: "fill_blank",
+}
+KEY_TO_QT = {_k: _q for _q, _k in QT_TO_KEY.items()}
+
+# 规则基线的**强信号**（§3.3）：规则判为选择题/判断题时视为"规则可信"，LLM 不得覆盖
+# —— 这两类的形态标记（选项/判断措辞）在题面上极其专一，且规则判据已背书上位
+# 七轮误判修复（PB 39/60、009、045、086、087/098/102/103/106/107）。
+# ⚠ 用**类别键**表达（原写成中文标记串 `_STRONG_SIGNAL_MARKERS`，与比较用的英文
+#   命名空间不同源 ⇒ 守卫恒假，见 `merge_type_decision`）。
+_STRONG_SIGNAL_KEYS = ("choice", "boolean")
+
+
+def type_key(qtype) -> str:
+    """题型（中文常量**或**类别键、任意大小写）→ 统一类别键；未知/空 → ``""``。
+
+    ★ 这是两套命名空间之间**唯一**的入口，任何"比较题型"的地方都必须先经它归一。
+    """
+    s = str(qtype or "").strip()
+    if not s:
+        return ""
+    if s in QT_TO_KEY:                     # 中文题型常量
+        return QT_TO_KEY[s]
+    _k = s.lower()
+    return _k if _k in TYPE_PATH_PLAN else ""
+
+
+def qt_of_key(key) -> str:
+    """类别键（或中文题型）→ 中文题型常量；未知/空 → ``""``（**不猜**）。"""
+    return KEY_TO_QT.get(type_key(key), "")
 
 
 _ANSWER_FORM_HINT = {
@@ -638,13 +686,21 @@ def render_type_path_hint(type_path) -> str:
 
 
 def type_path_plan(qtype: str) -> dict:
-    """题型 → 路径计划（§3.4）。未知题型按默认（全走）⇒ 行为与接线前一致。"""
-    return dict(TYPE_PATH_PLAN.get(str(qtype or "").strip().lower(),
-                                  _TYPE_PATH_DEFAULT))
+    """题型 → 路径计划（§3.4）。未知题型按默认（全走）⇒ 行为与接线前一致。
+
+    ★ 2026-10-14：入参**中文题型常量与类别键都接受**（经 `type_key()` 归一）——
+    此前只认英文键，而调用方传的是中文 `ctx.question_type` ⇒ 除 LLM 覆盖那条路径
+    外**恒返回默认计划**（"分流表形同虚设"）。
+    """
+    return dict(TYPE_PATH_PLAN.get(type_key(qtype), _TYPE_PATH_DEFAULT))
 
 
 def parse_type_json(raw) -> dict:
-    """解析 LLM 判题输出（容错）。返回 {} 表示无法解析（调用方回退规则）。"""
+    """解析 LLM 判题输出（容错）。返回 {} 表示无法解析（调用方回退规则）。
+
+    ★ 2026-10-14：`type` 字段一律归一为**类别键**（`type_key()`）—— 模型偶尔会
+      回中文题型（"证明题"），归一后与英文键同源，下游不必再分支。
+    """
     if not raw:
         return {}
     txt = str(raw).strip()
@@ -653,15 +709,22 @@ def parse_type_json(raw) -> dict:
         _m = txt[txt.find("{"):txt.rfind("}") + 1] if "{" in txt else ""
         if _m:
             d = _json_t.loads(_m)
-            if isinstance(d, dict) and d.get("type"):
-                return d
+            if isinstance(d, dict):
+                _k = type_key(d.get("type"))
+                if _k:
+                    d["type"] = _k
+                    return d
     except Exception:  # noqa: BLE001
         pass
     low = txt.lower()
-    for k in TYPE_PATH_PLAN:
+    for k in TYPE_PATH_PLAN:                     # 英文类别键兜底
         if k in low:
             return {"type": k, "confidence": 0.5,
                     "evidence": "正则兜底（JSON 不可解析）"}
+    for _qt, _key in QT_TO_KEY.items():          # 中文题型兜底
+        if _qt in txt:
+            return {"type": _key, "confidence": 0.5,
+                    "evidence": "正则兜底（JSON 不可解析，命中中文题型）"}
     return {}
 
 
@@ -673,26 +736,56 @@ def merge_type_decision(rule_type: str, llm_type: str,
     PB 39/60、009、045、086、087/098/102/103/106/107）⇒ 让 LLM 无条件覆盖会**误伤**
     本来能答对的题（code-audit 路线 C：「不研究某类」≠「降低其处理质量」）。
 
-    返回 ``{"final","rule","llm","confidence","overrides","reason"}``；
-    `overrides` 非空 = 发生了"LLM 覆盖规则"或"规则否决 LLM"，供 diag 审计。
+    返回字段：
+      · ``final``     —— **中文题型常量**，与 `ctx.question_type` **同一命名空间**
+        （既有契约；**不得**写类别键，否则 `objective_injection` /
+        `answer_form_requirement` / `lean_applicable` / `solver__prompt` /
+        `audit_gate` 等按中文常量判定的下游模块会**整段失效**）；
+      · ``final_key`` —— 类别键（英文），供 `type_path_plan` 索引 `TYPE_PATH_PLAN`；
+      · ``rule`` / ``llm`` —— 归一后的**中文题型**（报告可读，未识别时保留原串）；
+        ``rule_key`` / ``llm_key`` 为对应类别键；
+      · ``overrides`` 非空 = 发生了"LLM 覆盖规则"或"规则否决 LLM"，供 diag 审计。
+
+    ⚠ `final` **严格限定在中文题型常量或空串**：未识别的输入一律回落空串
+      （调用方据此不覆盖 `ctx.question_type`，由惰性属性给出规则判定），
+      **不得**把原始串/类别键透传进契约域。
+
+    ★ 2026-10-14（随任务 #1「题型判断并入题意理解」的随附修复）：
+      原实现**直接拿中文规则值与英文 LLM 值比较**，在同一行代码里造成三重失效：
+        ① `l == r` 永不成立（"解答题" ≠ "solution"）⇒ `reason` 恒为"LLM 覆盖"，
+           低置信/一致等分支全部不可达；
+        ② `if r in ("choice", "boolean")` 中的 `r` 是中文常量（"选择题"/"判断题"）
+           ⇒ **"规则强信号优先"守卫恒为假** —— §3.3 的核心保护**从未生效过**；
+        ③ 返回的 `final` 是英文类别键 ⇒ 写进 `ctx.question_type` 后**污染中文契约**：
+           证明题变成 `"proof"` 后 `answer_form_requirement` 不再认它是证明题，
+           于是反过来给它注入"必须给出具体数值"（与 028/034/061 的标定结论相悖）；
+           选择题变成 `"choice"` 后 `objective_injection` 直接返回空串
+           ⇒ **选项清单与客观题特化解法整段丢失**。
+      现改为：两侧先经 `type_key()` 归一为**类别键**再比较（比较域统一），
+      `final` 再经 `qt_of_key()` 回转**中文**（契约域统一）。比较用键、契约用中文。
     """
-    r = str(rule_type or "").strip().lower()
-    l = str(llm_type or "").strip().lower()
-    out = {"final": r, "rule": r, "llm": l,
+    _rk = type_key(rule_type)
+    _lk = type_key(llm_type)
+    _r_qt = qt_of_key(_rk)                     # 未识别 → ""（**不把原始串塞进契约域**）
+    _l_qt = qt_of_key(_lk)
+    out = {"final": _r_qt, "final_key": _rk,
+           "rule": _r_qt or str(rule_type or "").strip(), "rule_key": _rk,
+           "llm": _l_qt or str(llm_type or "").strip(), "llm_key": _lk,
            "confidence": float(llm_conf or 0.0), "overrides": [], "reason": ""}
-    if not l or l == r:
+    if not _lk or _lk == _rk:
         out["reason"] = "一致或无 LLM 结果"
         return out
     # 规则**强信号**（选择题/判断题的形态标记）⇒ 规则优先，拒绝 LLM 覆盖
-    if r in ("choice", "boolean") and l != r:
-        out["overrides"].append({"by": "rule", "from": l, "to": r,
+    if _rk in _STRONG_SIGNAL_KEYS:
+        out["overrides"].append({"by": "rule", "from": _lk, "to": _rk,
                                  "reason": "规则命中强信号（选项/判断形态）"})
         out["reason"] = "规则强信号优先"
         return out
     # 其余：采纳 LLM（但低置信不覆盖，避免抖动）
     if out["confidence"] >= 0.6:
-        out["final"] = l
-        out["overrides"].append({"by": "llm", "from": r, "to": l,
+        out["final"] = qt_of_key(_lk)      # ★ 契约字段必须是中文题型
+        out["final_key"] = _lk
+        out["overrides"].append({"by": "llm", "from": _rk, "to": _lk,
                                  "reason": "置信 %.2f ≥ 0.6" % out["confidence"]})
         out["reason"] = "LLM 覆盖（高置信）"
     else:

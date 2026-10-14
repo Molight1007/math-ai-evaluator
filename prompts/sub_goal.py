@@ -112,11 +112,6 @@ SUBGOAL_PLAN_SYSTEM = """你是一位精通高等数学的 AI 解题专家，擅
 
 ```json
 {
-  "problem_analysis": {
-    "domain": "数学领域",
-    "core_objective": "核心目标的一句话描述",
-    "key_constraints": ["约束1", "约束2"]
-  },
   "subgoals": [
     {
       "id": 1,

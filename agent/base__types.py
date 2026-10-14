@@ -168,6 +168,9 @@ class TaskContext:
     audit_gate: list = field(default_factory=list)      # 每候选/最终答案 AuditGate 审核诊断记录
 
     # ---- Lean 前置形式化验证 + 子目标细化字段（v2.9）----
+    # ★ 2026-10-14：**主流水线的 2.6 前置形式化调用点已撤除**（三条原始理由全失效；
+    #   详见 orchestrator__prep.py 内撤除说明）⇒ 下列三字段在**主流水线恒为空**，
+    #   只有独立入口 `cli/leap_eval.py` 会写（与 sketch_tree / refine_result 同纪律）。
     formal_spec: str = ""                           # 题目前置形式化描述（已知条件/结论，LeanPreVerifier 写入）
     formal_gaps: list = field(default_factory=list) # Lean 形式化编译发现的「缺口」（缺失定义/引理/模块/类型），供子目标规划优先拆解
     # AI 实际检索/引用过的 Mathlib 定理名（2026-08-29 新增）
@@ -186,12 +189,23 @@ class TaskContext:
     subgoal_merge_plan: str = ""                    # 最终整合方案
 
     # ---- 骨架(sketch) 阶段 Lean 审核字段（#28）----
+    # ★ 2026-10-14：同上前置形式化 —— 主流水线不写（恒空），仅 `cli/leap_eval.py` 写。
     sketch: str = ""                                 # 书生生成的题目骨架/Proof Body Outline（LeanPreVerifier 写入）
     sketch_audit: dict = field(default_factory=dict) # 骨架 Lean 语法审核结果（verdict/gaps/lean_code/formal_spec）
 
     # ---- Blueprint DAG（LEAP Stage 1，#27）----
     blueprint: dict = field(default_factory=dict)    # AND-OR DAG 序列化（BlueprintPlannerAgent 写入）
     blueprint_plan: dict = field(default_factory=dict)  # DAG 转出的子目标规划（兼容 SubGoalSolver）
+
+    # ---- 单一「题目目标」（任务列表 #3，2026-10-14）----
+    # 题意理解的**唯一产物**：`agent/problem_goal.py::build_problem_goal` 从既有产物
+    # （question_type / type_path / understanding_chain / extract_options）派生，
+    # **零 LLM 调用**。字段：question_type / task / options / n_correct /
+    # answer_form / terminal_state / answer_slot / goal_statement。
+    # ⚠ 原先「理解题意、抽目标」在**三处**各做一遍（蓝图 LLM 的 problem_analysis、
+    #   子目标 LLM 的 problem_analysis、选择题两处代码构造的 problem_analysis）
+    #   —— 那些副本已随 #3 删除，蓝图/子目标/merge 渲染一律改读本字段。
+    problem_goal: dict = field(default_factory=dict)
 
     # ---- 整树 Lean 搭桥（LEAP Stage 2，#26/#28）----
     # ⚠ 2026-09-30 注释订正（原注释「LeanTranslatorAgent 写入」在主流水线里是**错的**）：

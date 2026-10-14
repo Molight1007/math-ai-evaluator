@@ -110,8 +110,6 @@ def audit_summary(entries: list) -> str:
             cand[str(e.get("verdict"))] += 1
         elif step == "final_gate":
             finals.append(str(e.get("verdict")))
-        elif step == "confirm_understanding" and e.get("skipped"):
-            pass
     seg = []
     if cand:
         seg.append("候选审核 " + "、".join("%s×%d" % (k, v)

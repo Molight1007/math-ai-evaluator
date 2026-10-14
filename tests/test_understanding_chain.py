@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""题意前置理解升级（终态逻辑链 + Lean 自检 + 一致性复推）回归测试（2026-10-12）。
+"""题意前置理解回归测试（2026-10-12；★ 2026-10-14 收敛重写）。
 
-用户设计（方案 v4 §3.5，Q6–Q10）：
-  · 终态用**符号槽**（禁写具体值）；
-  · **无条件反复理解** = 带着上一轮结论重推并报告是否一致（Q7）；
-  · 缺口强制二分：A=题面没给 / B=题面给了但没读到。
+用户设计（方案 v4 §3.5，Q6–Q10）**已按 2026-10-14 口径收敛**：
+  「题意理解只做『让模型注意到我们所需要求解的部分』，对题目整体的理解归蓝图构建」
+  ⇒ 只保留 **终态 + 答案槽（纯符号）+ 缺口 A/B** 三联产出；
+  ⇒ 删「逻辑链 chain + 一致性复推 + 链的 Lean 自检」（与 2.7 蓝图 DAG 同层同义）；
+  ⇒ answer_slot / terminal_state 由代码**机械剥离**被写死的数值（K11 防泄漏）。
+
 本测试不依赖 Lean 环境与真实 LLM（全部用桩），只验证**纯逻辑与开关契约**。
 """
 import json
@@ -16,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from tools.lean_local.lean_pre_verifier import (  # noqa: E402
-    LeanPreVerifier, _canonical_chain, split_gaps)
+    LeanPreVerifier, _mask_answer_values, split_gaps)
 
 
 # ---------------------------------------------------------------- 纯函数
@@ -35,14 +37,21 @@ def test_split_gaps_binary_classification():
     assert split_gaps(["裸字符串缺口"]) == ([{"kind": "A", "detail": "裸字符串缺口"}], [])
 
 
-def test_canonical_chain_ignores_whitespace_and_key_order():
-    c1 = [{"premises": ["a > 0"], "conclusion": "b > 0"}]
-    c2 = [{"conclusion": "b>0", "premises": ["a>0"]}]
-    assert _canonical_chain(c1) == _canonical_chain(c2)
-    c3 = [{"premises": ["a > 0"], "conclusion": "b >= 0"}]
-    assert _canonical_chain(c1) != _canonical_chain(c3)
-    assert _canonical_chain(None) == ""
-    assert _canonical_chain([{"premises": "x", "conclusion": "y"}]) == "x=>y"
+def test_mask_answer_values_strips_concrete_values():
+    """★ 2026-10-14：代码机械剥离被写死的数值（K11 防泄漏）。"""
+    # 实测泄漏原句（official112-002，gold=1/2）—— 激进口径必须掩掉整个赋值
+    m = _mask_answer_values(r"T = \frac{\sqrt{5}-1}{2}", aggressive=True)
+    assert "frac" not in m and "5" not in m
+    # 基础口径（终态）：掩「…等于 N」形态……
+    assert _mask_answer_values("最大值为 42") != "最大值为 42"
+    # ……但不误伤符号等式
+    assert _mask_answer_values("n² - n = 2k") == "n² - n = 2k"
+    # 纯符号槽本就不受影响
+    assert _mask_answer_values("∃ n, P(n) ∧ ∀ m, m > n → ¬P(m)") == \
+        "∃ n, P(n) ∧ ∀ m, m > n → ¬P(m)"
+    assert _mask_answer_values("") == ""
+    # 激进口径只给 answer_slot 用；非激进时 `X = 42` 不被掩（避免误伤终态里的符号）
+    assert _mask_answer_values("f(x) = 42") == "f(x) = 42"
 
 
 # ---------------------------------------------------------------- 契约
@@ -86,35 +95,44 @@ def test_empty_problem_short_circuit():
     assert ctx.understanding_chain["verdict"] == "unknown"
 
 
-def test_refine_loop_runs_and_stops_on_no_gain():
-    """两轮返回同一条链 ⇒ 无增益早停应在第 2 轮结束（不跑满 3 轮）。"""
-    same = {"terminal_state": "n 为最大可行值", "answer_slot": "∃ n, P(n)",
-            "chain": [{"premises": ["P(k) 成立"], "conclusion": "k ≤ n"}],
-            "lean_code": "", "gaps": [{"kind": "A", "detail": "缺上界"}]}
-    nxt = dict(same, consistent=True, diffs=[])
-    v = _mk_verifier(SimpleNamespace(
-        enable_understanding_chain=True, understanding_refine_rounds=3,
-        understanding_no_gain_stop=True, understanding_chain_lean_check=False),
-        [json.dumps(same, ensure_ascii=False),
-         json.dumps(nxt, ensure_ascii=False),
-         json.dumps(nxt, ensure_ascii=False)])
+def test_single_round_terminal_slot_and_gaps_only():
+    """★ 2026-10-14：单轮定案 = 终态 + 答案槽 + 缺口 A/B；**不再有 chain/复推**。"""
+    payload = {"terminal_state": "n 为最大可行值", "answer_slot": "待求量 n_max",
+               "gaps": [{"kind": "A", "detail": "缺上界"},
+                        {"kind": "B", "detail": "题面已给 a>0 但本轮没读到"}]}
+    v = _mk_verifier(SimpleNamespace(enable_understanding_chain=True),
+                     [json.dumps(payload, ensure_ascii=False)])
     ctx = _mk_ctx()
     v.run_understanding_chain(ctx)
     out = ctx.understanding_chain
     assert out["verdict"] == "ok"
-    assert out["rounds"] == 2, "无增益早停应在第 2 轮生效，实际 %d" % out["rounds"]
-    assert out["consistent"] is True
-    assert len(out["chain"]) == 1
-    assert out["gaps_a"] and not out["gaps_b"]
+    assert out["rounds"] == 1
+    assert out["terminal_state"] == "n 为最大可行值"
+    assert out["answer_slot"] == "待求量 n_max"
+    # 链 / 一致性 / 差异 三个字段**必须已消失**（题链已随收敛删除）
+    for dead in ("chain", "consistent", "diffs", "lean_code", "lean_verdict"):
+        assert dead not in out, "字段 %s 应随题意理解收敛删除" % dead
+    assert out["gaps_a"] and out["gaps_b"]
     assert ctx.understanding_gaps[0]["kind"] == "A"
-    assert out["lean_verdict"] == "skipped", "关闭 Lean 检查时应为 skipped"
+    assert ctx.understanding_rounds == 1
+
+
+def test_answer_slot_values_are_mechanically_masked():
+    """★ 2026-10-14：LLM 无视提示词禁令写死数值时，代码必须兜底剥离（K11）。"""
+    payload = {"terminal_state": "T 的最大值为 1/2",
+               "answer_slot": r"T = \frac{\sqrt{5}-1}{2}", "gaps": []}
+    v = _mk_verifier(SimpleNamespace(enable_understanding_chain=True),
+                     [json.dumps(payload, ensure_ascii=False)])
+    ctx = _mk_ctx()
+    v.run_understanding_chain(ctx)
+    out = ctx.understanding_chain
+    assert "frac" not in out["answer_slot"], "答案槽里的 LaTeX 值必须被剥离"
+    assert "1/2" not in out["terminal_state"]
 
 
 def test_unparseable_llm_output_degrades_without_raise():
-    v = _mk_verifier(SimpleNamespace(
-        enable_understanding_chain=True, understanding_refine_rounds=3,
-        understanding_no_gain_stop=True, understanding_chain_lean_check=False),
-        ["这不是 JSON", "也不是", "仍不是"])
+    v = _mk_verifier(SimpleNamespace(enable_understanding_chain=True),
+                     ["这不是 JSON", "也不是"])
     ctx = _mk_ctx()
     v.run_understanding_chain(ctx)          # 不得抛异常
     out = ctx.understanding_chain

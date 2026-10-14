@@ -101,6 +101,9 @@ class AgentConfig(_AgentConfigBase):
     #   · enable_theorem_hint 是 A/B 抓手：设 False = 不检索、不注入
     #     ⇒ 与 True 对比即可回答「定理对推理有没有帮助」；
     #   · theorem_hint_max_queries 控制每题最多发几次 leansearch 检索。
+    #   ★ 2026-10-14（任务列表 #2）：**执行点已下移到 2.7 子目标求解体首**
+    #     （原 `1.2_theorem_hint` 独立阶段已撤），入口
+    #     `agent.theorem_hint.run_hint_for(agent, ctx)`；A/B 开关语义不变。
     enable_theorem_hint: bool = True
     theorem_hint_max_queries: int = 2
     # ---- 子目标结论 → 主求解 信息流（2026-10-02 阶段一，用户拍板设计）----
@@ -420,13 +423,13 @@ class AgentConfig(_AgentConfigBase):
     #   预验证阶段的**骨架 Lean 审核**。与 2.7 的 DAG 整树审核功能重叠，故默认关；
     #   需要「骨架也过一遍 Lean 语法」时置 True。
     enable_preverify_sketch_audit: bool = False
-    # ---- 2026-10-12 批次 1：题意理解链（用户设计 D1–D4，方案 v4 §3.5）----
+    # ---- 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛）----
     #   默认 **True**（用户 2026-10-12 决策：本轮直接启用以便「全开测 10 题」）。
     #   缺省语义与既有 `lean_pre_verifier.run` **互不影响**（后者行为不变）。
+    #   ★ 2026-10-14：删「逻辑链 + 一致性复推 + 链的 Lean 自检」⇒ 只保留
+    #   终态 + 答案槽（纯符号）+ 缺口 A/B；配套三开关（understanding_refine_rounds /
+    #   understanding_no_gain_stop / understanding_chain_lean_check）一并撤除。
     enable_understanding_chain: bool = True
-    understanding_refine_rounds: int = 3      # 无条件复推轮数
-    understanding_chain_lean_check: bool = True
-    understanding_no_gain_stop: bool = True
     # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式）+ 自审（用户 Q11–Q13/Q18）----
     #   1 次初始生成 + (N-1) 次在上一轮基础上无条件自改进；采用**最后一轮**；
     #   第 4 次交 LLM 自审（DagReviewer），拒收比例 ≥0.4 才重写 1 轮。
@@ -535,8 +538,10 @@ class AgentConfig(_AgentConfigBase):
     #     空串表示「用注册表默认表」（读取侧解析失败也回退默认表）。
     #   ⚠ 默认值必须与 `contracts/switch_registry.py::SWITCHES` 的**逐字一致**
     #     （门禁 `test_60_registry_default_matches_config_default` 强制比对 87 个字段）。
+    # ★ 2026-10-14（任务列表 #2）：检索下移到 2.7 子目标求解后，`subgoal` 成为
+    #   主消费者，按任务原文「这个环节的产出就是 25 个定理」把 8 → 25。
     theorem_hint_top_k_by_stage: str = (
-        '{"pre_audit": 4, "blueprint": 12, "subgoal": 8, "solve": 25, "revise": 25}')
+        '{"pre_audit": 4, "blueprint": 12, "subgoal": 25, "solve": 25, "revise": 25}')
     leansearch_max_calls_per_q: int = 2     # 单题检索次数上限（护栏：防时间膨胀）
     # ⚠ 原 `leansearch_timeout` 已**删除**（2026-09-15 上线审计）：
     #   检索器把官方 API 超时**硬编码为 10 秒**（`lean_search.py` 的

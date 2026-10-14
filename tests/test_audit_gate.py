@@ -2,10 +2,14 @@
 """AuditGate（答案审核闸门，2026-09-06 取代 Lean 系审核）单元测试。
 
 覆盖:
-- ``confirm_understanding``: 默认跳过 / 时间紧张跳过 / LLM 复述解析
 - ``audit_candidates``: 无候选 / deterministic fail 淘汰 / 全否回退保留
 - ``gate_final_answer``: 空答案放行 / deterministic fail 打回 /
   challenge hard_fail 打回 / rubric 高置信 B 打回 / 正常放行
+
+★ 2026-10-14（题意理解收敛）：原 ``ConfirmUnderstandingTest`` 已删除 ——
+  被测方法 ``confirm_understanding`` 是**双重不可达的死分支**
+  （开关 ``audit_confirm_understanding`` 从未在 AgentConfig 声明 + 调用点在 else 分支），
+  已随题意理解收敛整体撤除。
 """
 import unittest
 from types import SimpleNamespace
@@ -19,7 +23,6 @@ def make_gate(config=None):
         def chat(self, messages=None, temperature=0.0, max_tokens=0, **kw):
             return '{"understood":true,"restatement":"ok","gaps":[]}'
     cfg = config or SimpleNamespace(
-        audit_confirm_understanding=False,
         use_rubric=False,
         use_challenge=False,
         audit_rubric_reject_conf=0.85,
@@ -40,37 +43,6 @@ def make_ctx(problem="求 x^2=4 的正根", deadline=0.0):
 def cand(answer="2", reasoning="因为 x^2=4", cid=0):
     from types import SimpleNamespace as NS
     return NS(id=cid, answer=answer, reasoning=reasoning)
-
-
-class ConfirmUnderstandingTest(unittest.TestCase):
-    def test_disabled_skips(self) -> None:
-        g = make_gate()
-        ctx = make_ctx()
-        res = g.confirm_understanding(ctx)
-        self.assertTrue(res.get("skipped"))
-        self.assertEqual(len(ctx.revise_feedback), 0)
-
-    def test_enabled_parses_understood(self) -> None:
-        g = make_gate(SimpleNamespace(
-            audit_confirm_understanding=True, use_rubric=False,
-            use_challenge=False, audit_rubric_reject_conf=0.85,
-            max_workers=2, verifier_voting_times=1, use_scoring=False,
-            use_bug_report_feedback=False))
-        ctx = make_ctx()
-        res = g.confirm_understanding(ctx)
-        self.assertTrue(res.get("understood"))
-
-    def test_exception_degrades_open(self) -> None:
-        """复核异常不阻断主流程（宁放行不崩溃）。"""
-        class Boom:
-            def chat(self, messages=None, temperature=0.0,
-                     max_tokens=0, **kw):
-                raise RuntimeError("llm 崩")
-        cfg = SimpleNamespace(audit_confirm_understanding=True)
-        g = AuditGate(client=Boom(), config=cfg)
-        ctx = make_ctx()
-        res = g.confirm_understanding(ctx)
-        self.assertTrue(res.get("understood"))
 
 
 class AuditCandidatesTest(unittest.TestCase):
@@ -151,7 +123,7 @@ class GateFinalAnswerTest(unittest.TestCase):
     def test_challenge_hard_fail_rejects(self) -> None:
         """反例挑战命中（程序数值验证证伪）→ 打回。"""
         g = make_gate(SimpleNamespace(
-            audit_confirm_understanding=False, use_rubric=False,
+            use_rubric=False,
             use_challenge=True, audit_rubric_reject_conf=0.85,
             max_workers=2, verifier_voting_times=1, use_scoring=False,
             use_bug_report_feedback=False))
@@ -166,7 +138,7 @@ class GateFinalAnswerTest(unittest.TestCase):
     def test_rubric_high_conf_b_rejects(self) -> None:
         """rubric 高置信 B → 打回（带错因供 rework/revise）。"""
         g = make_gate(SimpleNamespace(
-            audit_confirm_understanding=False, use_rubric=True,
+            use_rubric=True,
             use_challenge=False, audit_rubric_reject_conf=0.85,
             max_workers=2, verifier_voting_times=1, use_scoring=False,
             use_bug_report_feedback=False))
@@ -188,7 +160,7 @@ class GateFinalAnswerTest(unittest.TestCase):
     def test_rubric_low_conf_b_passes(self) -> None:
         """rubric B 但置信度低 → 放行（宁 unknown 不误杀）。"""
         g = make_gate(SimpleNamespace(
-            audit_confirm_understanding=False, use_rubric=True,
+            use_rubric=True,
             use_challenge=False, audit_rubric_reject_conf=0.85,
             max_workers=2, verifier_voting_times=1, use_scoring=False,
             use_bug_report_feedback=False))
@@ -218,7 +190,7 @@ class GateFinalAnswerTest(unittest.TestCase):
 def _solution_cfg(**kw):
     """解答题判别重写相关的配置（含 2026-10-07 新增的两个开关）。"""
     base = dict(
-        audit_confirm_understanding=False, use_rubric=False, use_challenge=False,
+        use_rubric=False, use_challenge=False,
         audit_rubric_reject_conf=0.85, max_workers=2, verifier_voting_times=1,
         use_scoring=False, use_bug_report_feedback=False,
         audit_gate_skip_non_proof=True,        # 旧"解答题早退"开关仍开

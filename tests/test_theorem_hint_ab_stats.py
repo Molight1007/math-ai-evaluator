@@ -162,3 +162,36 @@ def test_score_field_is_thresholded(tmp_jsonl):
         f.write(json.dumps({"id": "q1", "score": 0.5}) + "\n")
     r = analyze(path, path)
     assert r["n_paired"] == 2
+
+
+# ----------------------------------------------------------------------
+# plan 侧的题库解析（2026-10-14，任务 #2）：旧实现默认指向 `data/official112.jsonl`
+# 与 `data/theorem_ground_truth/*.jsonl`，两者在本仓都不存在 ⇒ plan 打出「题数 0」
+# 的空设计、命令里的 `--problems` 也不是 run_eval 的旗标。以下守住修正。
+# ----------------------------------------------------------------------
+def test_bank_path_resolves_to_existing_file():
+    from tools.theorem_hint_ab import _resolve_bank_path
+    rel = _resolve_bank_path()
+    assert os.path.exists(os.path.join(_SRC, rel)), (
+        "题库解析返回了不存在的路径：%s" % rel)
+
+
+def test_default_ids_non_empty():
+    """ground-truth 标注文件缺失时须回退到题库 id ⇒ 题号清单不能为空。"""
+    from tools.theorem_hint_ab import _default_ids
+    ids = _default_ids(0)
+    assert ids, "题号清单为空（plan 会打出『题数 0』的空设计）"
+    assert all(isinstance(x, str) and x for x in ids)
+
+
+def test_plan_uses_test_file_flag(capsys):
+    """plan 打印的命令必须用 `--test_file`（run_eval 无 `--problems`）。"""
+    import types
+    from tools.theorem_hint_ab import cmd_plan
+    args = types.SimpleNamespace(ids_file=None, limit=0)
+    cmd_plan(args)
+    out = capsys.readouterr().out
+    assert "--test_file" in out
+    assert "--problems" not in out
+    assert "--enable_theorem_hint false" in out
+    assert "--enable_theorem_hint true" in out

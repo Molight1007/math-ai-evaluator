@@ -42,24 +42,20 @@ STAGES_stage_audit = [
     # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty`（前者阶段已删、后者统一档位后
     #   空转）；此前报告仍含这两个阶段名（留痕）。下方按名分派的 handler 保留，
     #   供**历史 jsonl** 兼容渲染。
-    # ★ 2026-10-02 补登 `1.2_theorem_hint`（现行阶段，此前审计清单漏登 ⇒ 其耗时从未进
-    #   审计/报告）；其 `_stage_start` 无条件执行 ⇒ 预期态 run。
-    # ★ 2026-10-14 补登 `1.1_type_understanding`（v4 新增阶段，此前审计清单漏登
-    #   ⇒ 其耗时从未进审计/报告）；`_stage_start` 无条件执行 ⇒ 预期态 run。
-    ("1.1_type_understanding", "题型判题",
-     "LLM 判题型 + 规则交叉校验，产出 ctx.type_path 指导后续路径分流",
-     "type_decision 非空", "run"),
-    ("1.2_theorem_hint", "定理检索提示",
-     "leansearch 到 Mathlib 检索定理并写入 ctx，供 2.6/3_solve 提示词使用"
-     "（超时可跳过，失败不阻断主流程）",
-     "阶段耗时 > 0（恒被 _stage_start/_stage_stop 包裹）", "run"),
-    ("2.6_pre_audit", "题意理解确认",
-     "Lean 前置形式化：题目转 Lean 声明编译校验，失败带错强制重审",
-     "preverify_trace 非空 或 lean_preverify 记录", "cond"),
+    # ★ 2026-10-02 补登 `1.2_theorem_hint`（当时为现行阶段，此前审计清单漏登
+    #   ⇒ 其耗时从未进审计/报告）；★ 2026-10-14（任务列表 #2「定理检索移到后面
+    #   子目标求解过程中」）**撤下** —— 检索已下移为 `2.7_subgoal_main` 体首动作，
+    #   不再有独立阶段行，其耗时并入 2.7。历史 jsonl 的 1.2 行仍可渲染
+    #   （阶段名是稳定契约，按名分派 handler 一律保留）。
+    ("2.6_pre_audit", "题意理解（含题型判题）",
+     "① 题型判题：LLM 判题型 + 规则交叉校验，产出 ctx.type_decision / ctx.type_path；"
+     "② 题意理解：Lean 前置形式化（题目转 Lean 声明编译校验，失败带错强制重审）",
+     "type_decision 非空（题型判题恒跑）；Lean 前置形式化另见日志侧证据", "run"),
     # ★ 2026-10-02 移除 `2.65_calc_prewarm`（calc 板块 2026-10-01 整体删除时的漏网残留）；
     #   其 D 类兜底 handler 保留，供**历史 jsonl** 兼容渲染。
-    ("2.7_subgoal_main", "子目标主循环",
-     "全部档位统一先做一次子目标分解 + 逐步求解（v2.9 主路径）",
+    ("2.7_subgoal_main", "子目标主循环（含定理检索）",
+     "体首先做 Mathlib 定理检索（原 1.2 阶段，2026-10-14 下移）+ 子目标分解"
+     " + 逐步求解 + 结论合并（v2.9 主路径）",
      "subgoal_trace 非空", "run"),
     ("3_solve", "主体求解",
      "生成候选解答（deep 档先走 Plan-and-Execute）",
@@ -256,11 +252,16 @@ def judge_stage(key, rows, ts, logtxt):
     elif key == "2.5_difficulty":
         ok = cnt(lambda r: bool(d(r).get("tier")))
     elif key == "2.6_pre_audit":
-        # ⚠ 该阶段成功时**不写 record**（只在异常时记 lean_preverify），
-        #    且 `preverify_trace` 实测恒空 ⇒ **jsonl 侧无判据**。
-        #    真实证据在服务器 `deploy/mathlib-olean/_lean_trash/preverify_*.lean`
-        #    与日志的「走 mcp 后端：preverify_*」。故本项单独标「埋点不足」。
-        ok = None
+        # ★ 2026-10-14（任务列表 #1：题型判题并入题意理解）：本阶段现以
+        #    `type_decision` 为**必产**证据（判题是题意理解的第一步，恒跑）。
+        # ⚠ 原判据缺口仍在：Lean 前置形式化成功时**不写 record**、`preverify_trace`
+        #    实测恒空 ⇒ 该子步骤的 jsonl 侧无判据，真实证据在服务器
+        #    `deploy/mathlib-olean/_lean_trash/preverify_*.lean` 与日志
+        #    「走 mcp 后端：preverify_*」（由 `_log_evidence` 兜底）。
+        _td = cnt(lambda r: bool(d(r).get("type_decision")))
+        ok = _td
+        extra = ("(type_decision 命中 %d/%d；Lean 前置形式化见日志侧证据)"
+                 % (_td, n))
     elif key == "2.65_calc_prewarm":
         ok = cnt(lambda r: bool(d(r).get("calc_prewarm_events")))
     elif key == "2.7_subgoal_main":

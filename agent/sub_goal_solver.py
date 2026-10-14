@@ -148,7 +148,8 @@ _MASK_LOCKED = "[待求解值：由子目标结果现场确定]"
 def _mask_asserted_values(text: str) -> tuple:
     """把策略文本里**被断言的数值**换成占位符（不删句）。返回 (新文本, 替换处数)。
 
-    只用于 `merge_strategy` / `problem_analysis` 这类**策略文本**；
+    只用于 `merge_strategy` 这类**策略文本**（`problem_analysis` 已于 2026-10-14
+    随题意理解收敛删除，改由 2.6 的 `ctx.problem_goal` 单一承载）；
     节点 `statement` 不在此处改（由提示词纪律约束，代码不越权改写题目陈述）。
     """
     t = str(text or "")
@@ -319,13 +320,14 @@ def _exhaust_missing_sections(text: str) -> list:
         miss.append("EXHAUSTIVE")
     return miss
 
-# 单选信号（2026-09-13）：题干出现这些**明确指向唯一答案**的措辞时，
-# 选择题按"单选"汇总（取唯一/最优），否则按多选（全取判真项）。
-# ⚠ 不可用“下列正确的是”判断单选——087/093/094 都是该措辞却为**多选**，
-#   096 也是该措辞却为**单选**；只有下列措辞才可靠。
-_SINGLE_CHOICE_RE = re.compile(
-    r"哪一项|哪一种|哪一类|哪一个|最为?合适|最恰当|最符合|最适合"
-    r"|分别是?|定义是|通常采用|应采用|应选择|最好采用")
+# 单选信号（2026-09-13）：「单选 / 多选」口径。
+# ★ 2026-10-14（任务列表 #3）：判定本身**上移到 2.6 题意理解** ——
+#   正则与判定函数现居 `agent/problem_goal.py`（`SINGLE_CHOICE_RE` /
+#   `judge_n_correct()`），结论落在 `ctx.problem_goal["n_correct"]`，
+#   2.7 只读结论 ⇒ 此处**不再保留副本**（原 `_SINGLE_CHOICE_RE` 已删）。
+# ⚠ 判定措辞的实测教训（随正则一并迁移）：不可用"下列正确的是"判断单选 ——
+#   087/093/094 都是该措辞却为**多选**，096 也是该措辞却为**单选**；
+#   只有"哪一项 / 最合适 / 定义是"这类措辞才可靠。
 
 
 
@@ -373,6 +375,27 @@ class SubGoalSolverAgent(BaseAgent):
                 return float("inf")
             return ctx._subgoal_stage_end - time.time()
 
+        # ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
+        #   检索在**本阶段体首**发起 —— 早于 `_plan_subgoals`（蓝图构建在其内），
+        #   也早于逐步求解与合并。这样定理线索对蓝图（3 处读
+        #   `theorem_hint_block`）、子目标规划、merge/solve、3_solve（3 处）
+        #   全部可见；同时顺带修掉 #1 遗留的顺序代价（此前检索跑在 2.6 判题
+        #   之前，读到的题型是规则判定）。
+        #   ⚠ 增益型动作：`run_hint_for` 内部全程 try，失败绝不阻断主链。
+        #   ⚠ 保留原 `theorem_hint_stage` 的**两道门控**，搬移不得改变语义：
+        #       ① master 开关 `enable_theorem_hint`（默认 True）——任务 #10 的
+        #          A/B 把手（`--enable_theorem_hint 0/1`），漏搬即 A/B 失效；
+        #       ② 紧急态守卫 `ctx.state.emergency` 时不检索。
+        try:
+            from .theorem_hint import run_hint_for
+            if (getattr(self.config, 'enable_theorem_hint', True)
+                    and not ctx.state.emergency):
+                run_hint_for(self, ctx)
+        except Exception as _e_th:  # noqa: BLE001
+            self.record(ctx, "theorem_hint",
+                        "定理检索启动失败（跳过，不阻断）: %s: %s"
+                        % (type(_e_th).__name__, str(_e_th)[:100]))
+
         # 阶段一：子目标规划
         plan_data = self._plan_subgoals(ctx)
         if plan_data is None:
@@ -385,7 +408,10 @@ class SubGoalSolverAgent(BaseAgent):
         if not subgoals:
             self.record(ctx, "subgoal", "子目标规划为空 → 跳过求解与合并（Z8 2026-09-17）")
             return ctx
-        merge_strategy, problem_analysis = strip_and_mask_plan(self, ctx, plan_data)
+        # ★ 2026-10-14（任务列表 #3）：第二项不再是「蓝图自己产的问题分析」，而是
+        #   2.6 的**唯一题目目标** `ctx.problem_goal`（`strip_and_mask_plan` 只负责
+        #   merge_strategy 的形态剥离与断言值掩码）。
+        merge_strategy, problem_goal = strip_and_mask_plan(self, ctx, plan_data)
         # ---- 2026-09-14 穷尽性搜索机制（B0 遗留课题）----
         # 2026-10-08 批1：本段逐字搬到 agent/sub_goal_solver__exhaust.py::
         # append_exhaust_subgoal，调用点改一行委托（merge_strategy 由之返回）。
@@ -434,7 +460,7 @@ class SubGoalSolverAgent(BaseAgent):
         # 构造 Candidate（`full_reasoning` 在门槛**之后**构建 ⇒ 与最终入池的
         #   `final_answer` 保持一致；避免抢救替换值后 reasoning 仍写原句）。
         full_reasoning = self._build_full_reasoning(
-            subgoals, problem_analysis, final_answer)
+            subgoals, problem_goal, final_answer)
         candidate = Candidate(
             id=next_candidate_id(ctx.candidates),
             answer=final_answer,

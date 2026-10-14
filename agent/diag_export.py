@@ -194,7 +194,7 @@ def _diag_blueprint_review(ctx, config) -> dict:
                               and t.get("step") == "dag_replan"],
         # ★ 2026-10-12（判读失真 #5 治本）：自改进的结构化观测。
         #   此前报告读 `n_self_improved` 而无人写 ⇒ 恒 0 ⇒ 假「未触发」。
-        # ★ 2026-10-12 批次 1：题意理解链（终态 + 链 + 缺口 A/B + 复推一致性）
+        # ★ 2026-10-12 批次 1（★ 2026-10-14 收敛）：题意理解（终态 + 答案槽 + 缺口 A/B）
         "understanding_chain": dict(
             getattr(ctx, "understanding_chain", None) or {}),
         "understanding_gaps": list(

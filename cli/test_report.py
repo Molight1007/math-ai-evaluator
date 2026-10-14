@@ -197,19 +197,22 @@ _STAGE_DASHBOARD = [
     # ★★ 2026-10-14（五道审核链定案）：旧链阶段行（1_classify /
     #   3.6_audit_filter / 4_verify / 4.5_oracle / 4.6_adv / 5.5_low_conf /
     #   5_revise_or_fallback）已随机制整体删除；本表改为现行链：
-    #   1.1 判题 + 2.6/2.7/3.x 生成段 + **五道审核 4.0 → 4.5**。
-    ("1.1_type_understanding", "① 题型判题", "type_decision 非空", "type"),
-    ("2.6_pre_audit", "② Lean 前置理解", "verdict != fail", "preverify"),
-    ("2.7_subgoal_main", "③ 子目标主链", "子目标未被判失败", "subgoal"),
-    ("3_solve", "④ 求解生成", "产出 ≥1 个可用候选", "solve"),
-    ("3.3_improve", "⑤ 无条件自改进", "有候选被改进", "self_improve"),
-    ("4.0_normalize", "⑥ 答案规范化", "answer_normalize 非空（归一+形态分流完成）", "normalize"),
-    ("4.1_self_audit", "⑦ AI 自审", "self_audit 非空（自审执行完成；淘汰数见结果列）", "self_audit"),
-    ("4.2_falsify", "⑧ 对抗证伪", "adversarial_gate 非空（证伪执行完成）", "falsify"),
-    ("4.3_lean_check", "⑨ Lean 代回", "lean_backcheck 非空（代回判定执行完成）", "lean_check"),
-    ("4.4_math_check", "⑩ 计算检测", "math_check 非空（计算检测执行完成）", "math_check"),
-    ("4.5_vote", "⑪ 投票", "best 簇获得 ≥1 张正确票", "vote"),
-    ("4.6_rewrite", "⑫ 池空重写", "重写后候选存活（池空触发时；未触发不计分母）", "rewrite"),
+    #   2.6/2.7/3.x 生成段 + **五道审核 4.0 → 4.5**。
+    # ★ 2026-10-14（任务列表 #1「题型判断要和题意理解合并」）：原「① 题型判题」行
+    #   **取消** —— 题型判题已下沉为 2.6 题意理解的第一个子步骤；本表 ① 行现同时
+    #   呈现 `type=`（题型判题结果）与 `verdict=`（Lean 前置理解结果）。
+    ("2.6_pre_audit", "① 题意理解（含题型判题）",
+     "题型判题完成（type_decision 非空）且 Lean 前置理解未判失败", "type"),
+    ("2.7_subgoal_main", "② 子目标主链", "子目标未被判失败", "subgoal"),
+    ("3_solve", "③ 求解生成", "产出 ≥1 个可用候选", "solve"),
+    ("3.3_improve", "④ 无条件自改进", "有候选被改进", "self_improve"),
+    ("4.0_normalize", "⑤ 答案规范化", "answer_normalize 非空（归一+形态分流完成）", "normalize"),
+    ("4.1_self_audit", "⑥ AI 自审", "self_audit 非空（自审执行完成；淘汰数见结果列）", "self_audit"),
+    ("4.2_falsify", "⑦ 对抗证伪", "adversarial_gate 非空（证伪执行完成）", "falsify"),
+    ("4.3_lean_check", "⑧ Lean 代回", "lean_backcheck 非空（代回判定执行完成）", "lean_check"),
+    ("4.4_math_check", "⑨ 计算检测", "math_check 非空（计算检测执行完成）", "math_check"),
+    ("4.5_vote", "⑩ 投票", "best 簇获得 ≥1 张正确票", "vote"),
+    ("4.6_rewrite", "⑪ 池空重写", "重写后候选存活（池空触发时；未触发不计分母）", "rewrite"),
 ]
 
 
@@ -247,12 +250,12 @@ def _stage_dashboard_rows(recs):
     # 各阶段的"结果"取值（尽量取既有的、信息量最大的字段）
     def _raw_for(stage, r):
         d = _as_dict(r.get("diag"))
-        if stage == "1.1_type_understanding":
-            td = _as_dict(d.get("type_decision"))
-            return "type=%s" % (td.get("final") or "—")
         if stage == "2.6_pre_audit":
+            # ★ 2026-10-14（#1 题型判题并入）：一行同时给题型判题与 Lean 前置理解结果。
+            td = _as_dict(d.get("type_decision"))
             pv = _as_dict(d.get("preverify_trace"))
-            return str(pv.get("verdict") or "")
+            return "type=%s verdict=%s" % (
+                td.get("final") or "—", pv.get("verdict") or "—")
         if stage == "2.7_subgoal_main":
             # ⚠ 真实键是 n_subgoals / dep_edges（**没有** n_failed）。
             #   原写法硬取 `n_failed` 恒得 0.0 ⇒ 报告里显示 "fail=0.0"，
@@ -311,16 +314,17 @@ def _stage_dashboard_rows(recs):
         _t = _num_or_zero(_as_dict(d.get("stage_timers")).get(stage))
         if _t <= 0:
             return None, "未跑到（耗时 0）"
-        if stage == "1.1_type_understanding":
-            return bool(_as_dict(d.get("type_decision"))), "type 非空"
         if stage == "2.6_pre_audit":
+            # ★ 2026-10-14（#1 题型判题并入）：本行覆盖两件事，达标判据取"合取"：
+            #   ① 题型判题完成（type_decision 非空）—— 并入后的**必产**证据；
+            #   ② Lean 前置理解未判失败（verdict != fail）。
+            td = _as_dict(d.get("type_decision"))
             v = str(_as_dict(d.get("preverify_trace")).get("verdict") or "")
-            if not v:
-                # ⚠ 与"耗时 0"**不同**：这里耗时 >0（阶段跑了）但**没留下 verdict**
-                #   ⇒ 是"跑了但没产出可比结论"（如预验证被跳过/降级）。
-                #   既不计入"达标"也不计入"不达标"，单列出来让人看得见。
-                return None, "跑了但无 verdict"
-            return v != "fail", "verdict=%s" % v
+            if not td:
+                return False, "无 type_decision（题型判题未产出）"
+            if v == "fail":
+                return False, "verdict=fail"
+            return True, ("type 非空" + ("，verdict=%s" % v if v else "，无 verdict"))
         if stage == "2.7_subgoal_main":
             ss = _as_dict(d.get("subgoal_stats"))
             if not ss:

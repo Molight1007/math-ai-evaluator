@@ -409,8 +409,15 @@ def build_queries(problem: str, domain: str = "",
 
 # 分环节注入条数的**默认表**（2026-10-12，用户 §5.2）：前置理解少、主求解/修订多。
 # 为什么前置理解只给 4：读题对标阶段给多了反而干扰审题；主求解/修订要全量线索。
+# ★ 2026-10-14（任务列表 #2）：检索已下移到 2.7 子目标求解，`subgoal` 由此成为
+#   **检索的主消费者**（蓝图 12 条在其后、merge 用同一批），按任务原文「这个环节
+#   的产出就是 25 个定理」把 8 → 25，与 `solve` 齐平。
+# ★ 2026-10-14 同日：`pre_audit` 一项**保留但已无调用者** —— 2.6 的两处定理注入
+#   （audit_gate.confirm_understanding / lean_pre_verifier 理解链）已随检索下移撤除；
+#   保留键位是为了 `render_for_stage(ctx, "pre_audit")` 在外部脚本/历史数据里
+#   仍能取到确定性条数（不返回 1/2 全量的兜底值）。
 DEFAULT_TOPK_BY_STAGE = {
-    "pre_audit": 4, "blueprint": 12, "subgoal": 8,
+    "pre_audit": 4, "blueprint": 12, "subgoal": 25,
     "solve": 25, "revise": 25,
 }
 
@@ -476,18 +483,74 @@ THEOREM_QUERY_LLM_SYSTEM = """你是 Mathlib 检索助手。给你一道数学�
    不要解释、不要 markdown 围栏。"""
 
 
+def _looks_like_query(s: str) -> bool:
+    """判断一个候选串是否**像**一条 Mathlib 关键词 query。
+
+    ★ 2026-10-14（任务 #2 A/B 小样实测暴露）：本函数是「垃圾 query 注入」的闸门。
+
+    事故链（小样 trace 原文）：
+      1. 本次调用 `max_tokens=512`，而 `intern-s2-preview` 是**推理模型**，先吐
+         "Thinking Process" 块 ⇒ 512 token 全被思考吃掉，JSON 数组从未产出
+         （日志：`finish_reason=length, max_tokens=512, <- theorem_hint.py:675`）；
+      2. `utils/llm_client.py` 对推理模型**优先返回 reasoning_content**
+         ⇒ 调用方拿到的是**被截断的思考文本**，而不是答案；
+      3. 旧 `parse_llm_queries` 的②号降级路径把这段思考文本按行切分，产出
+         `'Problem Analysis:**'` / `'y) \\mid 0 \\leq x \\leq 19'` 这类**碎片**；
+      4. 检索层把 LLM query **前置**并占用配额 ⇒ 碎片把正确的规则 query 挤掉，
+         `source_scan` 在碎片上匹配出 99 条噪声命中全量注入提示词
+         （实测 `adopted_ratio=0.0`，一条也没被采用）。
+
+    ⇒ 结论：**垃圾 query 比没有 query 更糟**（没有 query 会走规则兜底拿回正确命中）。
+      故降级路径必须**宁缺毋滥**：像不像「几个纯英文概念词」是硬门槛。
+    """
+    _s = (s or "").strip()
+    if not (4 <= len(_s) <= 60):
+        return False
+    # 禁字符：markdown / LaTeX / JSON / 命题符号 —— 均为思考文本或题干的特征
+    for _bad in ("**", "\\", "$", "{", "}", "`", "<", ">", "=", "#", "|",
+                 "(", ")", "[", "]", "_", "////", "分析", "题目", "要求"):
+        if _bad in _s:
+            return False
+    # ★ 叙述性开头黑名单：思考文本被截断后最典型的残留形态是「一句英文叙述」。
+    #   注意不能只靠"词数/字符"筛（'The problem asks for the number' 是 6 个纯英文词，
+    #   字符与词数检查全过），必须识别**叙述语气**。
+    _low = _s.lower()
+    for _lead in ("the problem", "this problem", "the question", "this question",
+                  "the task", "we need", "we must", "we should", "we are asked",
+                  "i need", "i will", "i should", "let us", "let's", "first,",
+                  "next,", "then,", "finally,", "step ", "analysis",
+                  "requirement", "therefore", "note that", "given that",
+                  "to solve", "so the", "in this", "here ", "think",
+                  "thinking", "reasoning", "the answer", "we can"):
+        if _low.startswith(_lead) or (" " + _lead.strip(" ,") + " ") in (" " + _low + " "):
+            return False
+    # 词数 2–8，且**至少 2 个纯英文词**（发音词/概念词），排除单点长句
+    _words = [w for w in _s.split() if w]
+    if not (2 <= len(_words) <= 8):
+        return False
+    _alpha = [w for w in _words
+              if len(w) >= 2 and all(c.isascii() and (c.isalpha() or c == "-")
+                                     for c in w)]
+    return len(_alpha) >= 2
+
+
 def parse_llm_queries(raw) -> list:
     """把 LLM 输出的 query 解析成字符串列表（**容错**：JSON 数组 / 逗号分隔 / 逐行）。
 
     为什么要容错：本项目实测「要求 JSON 但模型给了别的东西」很常见
     （题意理解链曾因四合一输出被截断而整体不可解析）⇒ 解析失败必须**降级**而不是丢弃。
     返回去重后的列表；无法解析 ⇒ 空列表（下游用规则 query 兜底）。
+
+    ⚠ 2026-10-14（任务 #2 A/B 小样）：降级路径加**质量闸门** `_looks_like_query`。
+      推理模型的思考文本被截断后回传时，旧的裸行切分会产生垃圾 query，
+      而垃圾 query 会被**前置**并挤掉规则 query ⇒ 注入整片噪声。
+      现在垃圾一律丢弃，宁可返回 `[]` 让规则 query 兜底。详见 `_looks_like_query`。
     """
     if not raw:
         return []
     txt = str(raw).strip()
     out = []
-    # ① 优先按 JSON 数组解析
+    # ① 优先按 JSON 数组解析（模型按要求产出时走这条，可信度高）
     try:
         import json as _json_q
         _m = txt[txt.find("["):txt.rfind("]") + 1] if "[" in txt else ""
@@ -497,7 +560,9 @@ def parse_llm_queries(raw) -> list:
                 out = [str(x).strip() for x in _arr if str(x).strip()]
     except Exception:  # noqa: BLE001
         out = []
-    # ② 退化为按行 / 逗号切分
+    # ★ JSON 路径也要过闸门：思考文本里也可能出现 `[...]`，解析成功≠内容可信
+    out = [q for q in out if _looks_like_query(q)]
+    # ② 退化为按行 / 逗号切分（**必须过闸门**，见 docstring 事故链）
     if not out:
         import re as _re_q
         for _ln in _re_q.split(r"[\n,;；]+", txt):
@@ -505,7 +570,7 @@ def parse_llm_queries(raw) -> list:
             # ⚠ 必须剥掉**列表符号与序号**（实测模型常输出 ' - prime' / '1. Euclid' 这种形态）
             _s = _s.lstrip("-•*·").strip()
             _s = _s.lstrip("0123456789").lstrip(".)、 ").strip()
-            if _s and len(_s) <= 120 and not _s.lower().startswith(("```", "json")):
+            if _looks_like_query(_s):
                 out.append(_s)
     # ③ 去重保序 + 上限 3 条
     seen, uniq = set(), []
@@ -636,6 +701,124 @@ def retrieve_theorems_for_question(
     return out
 
 
+def run_hint_for(agent, ctx) -> None:
+    """在**任意 Agent 上下文**里执行一次定理检索，并把结果写回 ``ctx``。
+
+    ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
+      本函数承载原 ``orchestrator__lean._retrieve_theorem_hints`` 的**全部逻辑**，
+      但**不绑定编排层** —— 参数只需鸭子类型（``agent.llm`` / ``agent.record``
+      / ``agent.config``），故子目标求解器可原地调用，无需反向 import
+      ``orchestrator__*``（保持 agent 包内依赖方向自洽）。
+
+    调用时机：``sub_goal_solver.run`` 体首（**2.7 内、蓝图构建之前**）。
+      顺序由此变为「2.6 判题 → 2.7 检索 → 蓝图/子目标规划 → 求解 → merge」：
+        · 蓝图 3 处、子目标 merge/solve 2 处、3_solve 3 处都仍在检索**之后**
+          ⇒ 消费点零改动；
+        · 顺带修掉 #1 遗留的顺序代价（检索此前的题型的来源是规则判定）。
+
+    写出的字段（与搬移前逐字一致，下游零改动）：
+      · ``ctx.theorem_hints``        : list[str] 命中的 Mathlib 全名
+      · ``ctx.theorem_hint_block``   : str 默认注入块（主求解口径）
+      · ``ctx.theorem_hint_trace``   : dict 完整埋点（query/命中/耗时/后端）
+      · ``ctx.theorem_hint_result``  : dict 全量结果，供 `render_for_stage` 按环节重渲染
+      · ``ctx._theorem_topk_by_stage``: dict 分环节条数表
+
+    ⚠ 失败与超时一律降级（不阻断主流程）：检索只是**增益**，不是门禁。
+    """
+    # ★ 2026-10-13（用户 A1）：**LLM 辅助 query** —— 让大模型先给出检索方向，
+    #   再交检索器出事实（LLM 不直接吐定理名，防幻觉）。失败 ⇒ 完全回退规则 query。
+    _extra_q: list = []
+    if getattr(agent.config, "enable_theorem_query_llm", True):
+        try:
+            _raw_q = agent.llm(ctx, [
+                {"role": "system", "content": THEOREM_QUERY_LLM_SYSTEM},
+                {"role": "user", "content": "题目：%s\n领域：%s" % (
+                    ctx.problem or "", getattr(ctx, "domain", "") or "未知")},
+            # ★ 2026-10-14（任务 #2 A/B 小样实测）：512 → 2048。
+            #   `intern-s2-preview` 是**推理模型**，先输出一长段 "Thinking Process"
+            #   再给 JSON 数组。512 token 连思考都写不完 ⇒ `finish_reason=length`
+            #   ⇒ content 空 ⇒ `llm_client` 回退返回**截断的 reasoning_content**
+            #   ⇒ 解析器拿到思考碎片当 query（实测产 99 条噪声命中）。
+            #   2048 给思考留出空间，使真正的 JSON 数组能产出。
+            #   代价极小：这只是一次短输出调用，且失败仍回退规则 query。
+            ], 0.2, 2048)
+            _extra_q = parse_llm_queries(_raw_q)
+            agent.record(ctx, "theorem_hint",
+                         "LLM 辅助 query：%s" % (_extra_q or "（空，回退规则 query）"))
+        except Exception as _e_q:  # noqa: BLE001  检索是增益，绝不阻断
+            agent.record(ctx, "theorem_hint",
+                         "LLM 辅助 query 失败（回退规则 query）: %s" % str(_e_q)[:100])
+
+    try:
+        res = retrieve_theorems_for_question(
+            ctx.problem or "",
+            domain=getattr(ctx, "domain", "") or "",
+            question_type=getattr(ctx, "question_type", "") or "",
+            config=agent.config,
+            max_queries=int(getattr(
+                agent.config, "theorem_hint_max_queries", 2) or 2),
+            top_k=int(getattr(agent.config, "leansearch_top_k", 5) or 5),
+            extra_queries=_extra_q,
+        )
+    except Exception as e:  # noqa: BLE001  # 兜底：接口内已 try，此处再保险
+        agent.record(ctx, "theorem_hint",
+                     f"定理检索异常（跳过，不阻断）: {type(e).__name__}: {e}")
+        return
+
+    ctx.theorem_hints = list(res.names)
+    md = res.to_dict()
+    # 与题库预标注比对（若 metadata 里带了该题标注；云端/离线注入时才有）
+    gt = None
+    try:
+        _md = getattr(ctx, "metadata", None)
+        if isinstance(_md, dict):
+            gt = _md.get("theorem_gt")
+    except Exception:  # noqa: BLE001
+        gt = None
+    if gt:
+        try:
+            md["gt_match"] = match_against_ground_truth(res, gt)
+        except Exception as e:  # noqa: BLE001
+            md["gt_match"] = {"error": f"{type(e).__name__}: {e}"}
+    ctx.theorem_hint_trace = md
+    # ★ 2026-10-12（批次 5 剩余，用户 §5.2）：保留**全量**检索结果，
+    #   供 `render_for_stage()` 按环节重新渲染（分环节条数）。
+    ctx.theorem_hint_result = md
+    # 分环节条数：config 里是 **JSON 字符串**（注册表无 dict 类型）⇒ 在此解析。
+    # 解析失败/为空 ⇒ 用模块内默认表（避免「配置写错就静默失效」）。
+    try:
+        import json as _json_th
+        _raw_topk = str(getattr(
+            agent.config, "theorem_hint_top_k_by_stage", "") or "").strip()
+        _parsed = _json_th.loads(_raw_topk) if _raw_topk else {}
+        ctx._theorem_topk_by_stage = (dict(_parsed) if isinstance(_parsed, dict)
+                                      else dict(DEFAULT_TOPK_BY_STAGE))
+        if not ctx._theorem_topk_by_stage:
+            ctx._theorem_topk_by_stage = dict(DEFAULT_TOPK_BY_STAGE)
+    except Exception:  # noqa: BLE001  解析失败 ⇒ 回退默认表，绝不阻断
+        ctx._theorem_topk_by_stage = dict(DEFAULT_TOPK_BY_STAGE)
+
+    # 默认注入块（主求解口径）。分环节取用请调 `render_for_stage(ctx, "<stage>")`；
+    # 本块口径与搬移前逐字一致，**不改变**既有 8 个直接读 `theorem_hint_block`
+    # 的消费点行为。
+    try:
+        ctx.theorem_hint_block = res.render_hint_block(
+            max_items=int(getattr(agent.config, "leansearch_top_k", 5) or 5),
+            max_chars=int(getattr(
+                agent.config, "theorem_hint_block_max_chars", 2500) or 0))
+    except Exception as e:  # noqa: BLE001  渲染失败不阻断
+        logger.warning("[theorem_hint] 渲染注入块失败，跳过注入: %s", e)
+        ctx.theorem_hint_block = ""
+
+    agent.record(
+        ctx, "theorem_hint",
+        f"定理检索 {'命中 ' + str(len(res.hits)) + ' 条' if res.ok else '未跑通'}"
+        f"（{res.elapsed:.1f}s，后端 {res.backend or '-'}）"
+        + (f"；{res.reason}" if res.reason else ""),
+        n_hits=len(res.hits), elapsed=round(res.elapsed, 2),
+        backend=res.backend)
+
+
 # ---------------------------------------------------------------------------
 # 评审：命中的定理是否 == 预标注的正确定理
 # ---------------------------------------------------------------------------
@@ -723,4 +906,5 @@ __all__ = [
     "domain_keywords", "question_keywords", "build_queries",
     "retrieve_theorems_for_question", "match_against_ground_truth",
     "render_for_stage", "DEFAULT_TOPK_BY_STAGE",
+    "run_hint_for",
 ]

@@ -162,11 +162,15 @@ class BlueprintNode:
 
 @dataclass
 class BlueprintDAG:
-    """AND-OR 蓝图：节点集合 + 根节点 + 合并策略。"""
+    """AND-OR 蓝图：节点集合 + 根节点 + 合并策略。
+
+    ★ 2026-10-14（任务列表 #3）：原 `problem_analysis` 字段**已删除** ——
+      「题目要我们做什么」由 2.6 的 `ctx.problem_goal`（`agent/problem_goal.py`）
+      单点产出，蓝图只负责**分解目标**、不再自带一份题意理解。
+    """
     nodes: dict                          # id -> BlueprintNode
     root_id: str
     merge_strategy: str = ""
-    problem_analysis: dict = field(default_factory=dict)
 
     # ---------------- 校验 ----------------
     def validate(self) -> tuple[bool, list[str]]:
@@ -253,7 +257,7 @@ class BlueprintDAG:
         （2026-09-10 那批 112 题实测 dep_edges **全部为 0**）。
         """
         if not self.nodes:
-            return {"problem_analysis": {}, "subgoals": [], "merge_strategy": "",
+            return {"subgoals": [], "merge_strategy": "",
                     "anticipatory_lemmas": []}
 
         # 1) 展开：从根出发，收集需要求解的叶子（AND 全展开，OR 取第一个分支）
@@ -359,7 +363,6 @@ class BlueprintDAG:
                 "result": "",
             })
         return {
-            "problem_analysis": self.problem_analysis,
             "subgoals": subgoals,
             "merge_strategy": self.merge_strategy,
             "anticipatory_lemmas": anticipatory,   # ★ 前瞻引理（供引理记忆消费）
@@ -509,7 +512,6 @@ class BlueprintDAG:
         return BlueprintDAG(
             nodes=nodes, root_id=self.root_id,
             merge_strategy=self.merge_strategy,
-            problem_analysis=self.problem_analysis,
         )
 
     def _graft_subtree(self, root_id: str,
@@ -558,7 +560,6 @@ class BlueprintDAG:
         merged = BlueprintDAG(
             nodes=nodes, root_id=self.root_id,
             merge_strategy=self.merge_strategy,
-            problem_analysis=self.problem_analysis,
         )
         ok, _ = merged.validate()
         return merged if ok else None
@@ -587,7 +588,6 @@ class BlueprintDAG:
         return {
             "root_id": self.root_id,
             "merge_strategy": self.merge_strategy,
-            "problem_analysis": self.problem_analysis,
             "nodes": [
                 {"id": n.id, "type": n.node_type, "statement": n.statement,
                  "children": n.children, "rationale": n.rationale,
@@ -615,5 +615,4 @@ class BlueprintDAG:
             nodes=nodes,
             root_id=data.get("root_id", data.get("root", "")),
             merge_strategy=data.get("merge_strategy", ""),
-            problem_analysis=data.get("problem_analysis", {}),
         )

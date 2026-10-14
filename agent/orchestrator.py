@@ -113,9 +113,16 @@ from .orchestrator__solve import solve_stage, _SOLVE_CONTINUE  # noqa: F401
 #   oracle 删、投票并入 4.5_vote、对抗升级为 4.2_falsify）⇒ 不再 import。
 # 2026-10-07 阶段C6：1.2_theorem_hint 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+# ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
+#   `1.2_theorem_hint` 阶段**已整体撤销** ⇒ 不再 import `theorem_hint_stage`
+#   （该函数已删）。检索改由 `sub_goal_solver.run` 体首调
+#   `agent.theorem_hint.run_hint_for(agent, ctx)`；本模块的
+#   `Orchestrator._retrieve_theorem_hints` 仍保留为薄委托（兼容既有调用/测试）。
 from .orchestrator__prep import prep_tier_budget  # noqa: F401
-from .orchestrator__prep import theorem_hint_stage  # noqa: F401
-from .orchestrator__prep import type_understanding_stage  # noqa: F401
+# ★ 2026-10-14（任务列表 #1「题型判断要和题意理解合并」）：原独立阶段
+#   `1.1_type_understanding` 已撤销 —— 其逻辑（`judge_question_type`）下沉为
+#   `2.6_pre_audit`（题意理解）的第一个子步骤，由 `pre_audit_stage` 内部调用。
+#   故此处**不再需要** import 判题函数（`pre_audit_stage` 同模块内直呼）。
 # 2026-10-07 阶段C6：2.6_pre_audit 段已抽到 agent/orchestrator__prep.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
 from .orchestrator__prep import pre_audit_stage  # noqa: F401
@@ -183,8 +190,11 @@ class Orchestrator(BaseAgent):
         # lean_pre_verifier 在检测链中的全部作用——平台无 Lean，硬核验/反例/
         # rubric 程序与 LLM 混合瀑布，只审不答）
         self.audit_gate = AuditGate(client, config)
-        # Lean 双通道（2026-09-06 晚恢复）：lean 可用即 LeanGate 硬验证 /
-        # LeanPreVerifier 前置形式化；不可用由 _lean_active() 回落 AuditGate。
+        # Lean 双通道（2026-09-06 晚恢复）：lean 可用即 LeanGate 硬验证；
+        # ★ 2026-10-14：LeanPreVerifier 在 2.6 的**前置形式化调用点已撤除**
+        # （三条原始理由全失效 + 无 Lean 环境时从未跑过），其实例仍保留 ——
+        # 供 2.6 题意理解 `run_understanding_chain` 与本地 `cli/leap_eval.py` 使用。
+        # 两通道不可用时由 _lean_active() 回落 AuditGate。
         self.lean_gate = (LeanGate(client, config)
                           if _LEAN_MODULES_OK and LeanGate is not None else None)
         self.lean_pre_verifier = (
@@ -469,11 +479,13 @@ class Orchestrator(BaseAgent):
             #      （这里就要使用 leansearch 去 mathlib 搜索对应的定理）……
             #      判断大模型或 leansearch 最后有没有找到正确的定理，以及
             #      定理对大模型的推理效果如何？」
-            #      本阶段负责**找**（检索命中定理并写入 ctx，供 2.6 前置理解 /
-            #      3_solve 提示词使用）；**判定命中率**由离线脚本
-            #      `cli/theorem_probe.py` 对预标注表做（非运行时）；
-            #      **效用**由 有/无定理 的 A/B（开关 enable_theorem_hint）回答。
-            #      ★ 全程 try 包裹且超时可跳过 —— 检索失败绝不阻断主流程。
+            #      ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
+            #        **检索的执行点已不在此处** —— 改由 `sub_goal_solver.run`
+            #        体首发起（2.7 内、蓝图构建之前）。本处只保留领域判定（1.5），
+            #        检索所需的 `ctx.domain` / `ctx.question_type` 已就绪。
+            #      **判定命中率**由离线脚本 `cli/theorem_probe.py` 对预标注表做
+            #      （非运行时）；**效用**由 有/无定理 的 A/B（开关
+            #      enable_theorem_hint）在 2.7 环节回答。
             _r = self._run_main_stages(ctx)
             if _r is not _SOLVE_CONTINUE:
                 return _r
@@ -494,23 +506,25 @@ class Orchestrator(BaseAgent):
             return self._fallback(ctx, problem, e)
 
     def _run_main_stages(self, ctx: TaskContext) -> dict:
-        """主阶段序列 1.2_theorem_hint → 6.5_audit_gate（含 3_solve 哨兵早退）。
+        """主阶段序列 2.6_pre_audit → 6_format（含 3_solve 哨兵早退）。
 
-        纯搬迁自 ``run``（2026-10-08 批8 原地拆分），**阶段名顺序与 record 步序逐字不变**。
+        纯搬迁自 ``run``（2026-10-08 批8 原地拆分）；阶段名顺序在此后按任务列表
+        调整过两次（见下方注释），**除这些显式删除外，其余阶段名与 record 步序逐字不变**。
         返回 ``_SOLVE_CONTINUE`` 表示「继续往下走」；其余值（含 3_solve 的早退产物）由调用方透传。
         """
-        # ★ 2026-10-13（§3 方案 A）：**1.1_type_understanding** 置于检索之前 ——
-        #   先判题型（LLM + 规则交叉校验），产出 `ctx.type_path` 指导后续路径。
-        self._stage_start(ctx, "1.1_type_understanding")
-        try:
-            type_understanding_stage(self, ctx)
-        except Exception as _e_tu:  # noqa: BLE001  判题失败不得阻断主链
-            self.record(ctx, "type_understanding",
-                        f"题型判题阶段异常（跳过，沿用规则判定）: "
-                        f"{type(_e_tu).__name__}: {str(_e_tu)[:120]}")
-
-        self._stage_start(ctx, "1.2_theorem_hint")
-        theorem_hint_stage(self, ctx)
+        # ★ 2026-10-14（任务列表 #1「题型判断要和题意理解合并」）：
+        #   **1.1_type_understanding 独立阶段已撤销** —— 题型判题（LLM + 规则
+        #   交叉校验）下沉为 `2.6_pre_audit`（题意理解）的第一个子步骤，由
+        #   `pre_audit_stage` 内部调用（见 agent/orchestrator__prep.py）。
+        #   ⇒ 此处不再有 `_stage_start("1.1_type_understanding")`，阶段耗时表
+        #     也随之少一行（题型判题的耗时并入 2.6_pre_audit）。
+        #   产出字段（question_type / type_decision / type_path）与下游读取点不变。
+        # ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
+        #   **1.2_theorem_hint 独立阶段亦已撤销** —— 检索改由
+        #   `sub_goal_solver.run` 体首发起（2.7 内、蓝图构建之前），执行顺序变为
+        #   「2.6 判题 → 2.7 检索 → 蓝图/子目标规划 → 求解/合并」。
+        #   ⇒ 阶段耗时表再少一行（检索耗时并入 2.7_subgoal_main）；定理产物字段
+        #     与 8 个消费点**零改动**（它们都在 2.7 及之后）。
 
         # 2) 2026-09-29：**快车道旁路已删除**（用户决策）。
         # 原 `_fast_path()` 用正则匹配题型（如 `\d+\s*[\+\-\*/×÷]\s*\d+`）后
@@ -641,9 +655,11 @@ class Orchestrator(BaseAgent):
         # 阶段耗时收尾（2026-09-03）：统一 stop 全部阶段（start 在阶段开始）
         # ★ 2026-10-02 移除 `1_classify` / `2.5_difficulty` / `0_paper_pacer`（阶段均已删）；
         #   此前报告仍含这些阶段名（留痕，阶段名是契约）。
-        for _stg in ("1.1_type_understanding",
-                     "1.2_theorem_hint",
-                     "2.6_pre_audit",
+        # ★ 2026-10-14（任务列表 #1）移除 `1.1_type_understanding`：题型判题已并入
+        #   `2.6_pre_audit`（题意理解），不再是独立阶段 ⇒ 无需单独收尾。
+        # ★ 2026-10-14（任务列表 #2）移除 `1.2_theorem_hint`：检索已下移到
+        #   `2.7_subgoal_main`（其耗时并入该阶段）⇒ 无需单独收尾。
+        for _stg in ("2.6_pre_audit",
                      "2.7_subgoal_main","3_solve","3.2_complete","3.3_improve",
                      "3.4_collab",
                      "4.0_normalize",

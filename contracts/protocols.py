@@ -37,10 +37,13 @@ class TaskContext(Protocol):
     formal_spec: str
     formal_gaps: list
     preverify_trace: dict
-    # 2026-10-12 批次 1：题意理解链（终态 + 逻辑链 + 一致性复推）
+    # 2026-10-12 批次 1（★ 2026-10-14 收敛）：题意理解（终态 + 答案槽 + 缺口 A/B）
     understanding_chain: dict
     understanding_gaps: list
     understanding_rounds: int
+    # 2026-10-14 任务 #3：单一「题目目标」（题意理解的唯一产物；
+    # 蓝图/子目标/merge 渲染共用，取代原先三处 problem_analysis 副本）
+    problem_goal: dict
     # 2026-10-12 批次 2：蓝图多次生成
     blueprint_diffs: list
     blueprint_gen_rounds: int
@@ -68,8 +71,8 @@ class TaskContext(Protocol):
     # ---- 动态私有缓存（非 TaskContext 声明字段，由消费方 getattr/setattr）----
     # lean_gate: `getattr(ctx, "_lean_verify_cache", None)` / `ctx._lean_verify_cache = ...`
     _lean_verify_cache: Any
-    # lean_pre_verifier: `ctx._preverify_unconfirmed = True`
-    _preverify_unconfirmed: bool
+    # ★ 2026-10-14：`_preverify_unconfirmed` 声明**已删** —— 唯一写入点在
+    #   `lean_pre_verifier.run()` 的 fail 分支，全仓无读取方（死字段）。
 
     # ---- 时间方法（lean_gate / lean_pre_verifier / lean_refiner）----
     def time_remaining(self) -> float: ...

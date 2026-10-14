@@ -55,7 +55,10 @@ def is_subgoal_failed(result_text):
 #   4.5_oracle/4.6_adv/4.7_lean/5.5/5_revise）已删，保留在清单里仅为历史 jsonl 渲染顺序。
 STAGE_ORDER_test_report = [
     # ★ 2026-10-02 移除 `2.65_calc_prewarm`（calc 板块删除时漏网残留）；此前报告仍含之。
-    "1.1_type_understanding",
+    # ★ 2026-10-14（任务列表 #1）：`1.1_type_understanding` 已并入 `2.6_pre_audit`
+    #   （题意理解的第一步）⇒ 移出现行区，但**保留在清单尾部**，供历史 jsonl 按序渲染。
+    # ★ 2026-10-14（任务列表 #2）：`1.2_theorem_hint` 已下移为 `2.7_subgoal_main`
+    #   体首动作 ⇒ 不再有独立阶段行（本清单历史版本也从未收录它，故无需迁移）。
     "2.6_pre_audit",
     "2.7_subgoal_main", "3_solve", "3.2_complete", "3.3_improve", "3.4_collab",
     # 五道审核链（现行）
@@ -64,6 +67,7 @@ STAGE_ORDER_test_report = [
     # 池空重写（2026-10-14 二次定案：池空不再直答）
     "4.6_rewrite",
     # 已删阶段（历史 jsonl 兼容渲染）
+    "1.1_type_understanding",
     "3.5_subgoal_sup", "3.6_audit_filter", "4_verify", "4.5_oracle", "4.6_adv", "4.7_lean",
     "5.5_low_conf", "5_revise_or_fallback",
 ]

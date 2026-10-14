@@ -218,8 +218,35 @@ def _print_report(r: dict, threshold_pp: float, min_net: int) -> None:
 # ---------------------------------------------------------------------------
 # plan：打印实验设计（不执行评测）
 # ---------------------------------------------------------------------------
+# 官方 112 题题库的实际落点（2026-10-14 校）：`data/` 目录在本仓并不存在，
+# 题库统一在 `题库/` 下。按优先级探测，避免 plan 打出「题数 0」的空设计。
+_BANK_CANDIDATES = [
+    "题库/official112_本地测试题库/official112_full.jsonl",
+    "题库/official112_题库包/official112_full.jsonl",
+    "题库/official112_题库包/official112_questions.jsonl",
+    "data/official112.jsonl",
+]
+
+# `run_eval.py` 的入参是 `--test_file`（**没有** `--problems` 这个旗标）；旧脚本
+# 里的 `--problems` 属过期写法，会直接报 unknown argument，故一并改正。
+_BANK_PROBLEMS_FLAG = "--test_file"
+
+
+def _resolve_bank_path() -> str:
+    """返回实际存在的官方 112 题题库路径（找不到则回退首个候选名）。"""
+    for rel in _BANK_CANDIDATES:
+        if os.path.exists(os.path.join(_SRC, rel)):
+            return rel
+    return _BANK_CANDIDATES[0]
+
+
 def _default_ids(limit: int = 0) -> list:
-    """默认取官方 112 题 id 清单。"""
+    """默认取官方 112 题 id 清单。
+
+    优先读题意标注文件（`data/theorem_ground_truth/*.jsonl`，含定理 ground
+    truth）；**该文件不存在时**回退到题库本身的 `id` 字段（只取题号，够做配对
+    实验的题号清单）——否则 plan 会打出「题数 0」的空设计。
+    """
     gt = os.path.join(_SRC, "data", "theorem_ground_truth",
                       "official112_theorems.jsonl")
     ids: list = []
@@ -233,6 +260,20 @@ def _default_ids(limit: int = 0) -> list:
                     ids.append(str(json.loads(line).get("id")))
                 except Exception:  # noqa: BLE001
                     pass
+    if not ids:
+        bank = os.path.join(_SRC, _resolve_bank_path())
+        if os.path.exists(bank):
+            with open(bank, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    try:
+                        _qid = json.loads(line).get("id")
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if _qid is not None:
+                        ids.append(str(_qid))
     if limit:
         ids = ids[:limit]
     return ids
@@ -245,11 +286,13 @@ def cmd_plan(args) -> None:
             ids = [l.strip() for l in f if l.strip() and not l.startswith("#")]
     if not ids:
         ids = _default_ids(args.limit)
+    bank = _resolve_bank_path()
 
     print("=" * 68)
     print("定理注入 A/B 实验设计")
     print("=" * 68)
-    print(f"题号来源 : {args.ids_file or 'data/theorem_ground_truth（官方 112 题）'}")
+    print(f"题号来源 : {args.ids_file or bank}")
+    print(f"题库文件 : {bank}")
     print(f"题数     : {len(ids)}")
     print(f"题号前 10: {ids[:10]}")
     print()
@@ -262,15 +305,16 @@ def cmd_plan(args) -> None:
     print("★ 两条命令（**需先获得用户授权再执行**）")
     print("-" * 68)
     base = ("D:/python/python.exe run_eval.py "
-            "--problems data/official112.jsonl "
-            f"--limit {len(ids)} "
-            "--enable_theorem_hint {v}")
+            "%s %s "
+            "--enable_theorem_hint {v}" % (_BANK_PROBLEMS_FLAG, bank))
     print("A−（对照组，不注入定理）:")
     print("   " + base.format(v="false"))
     print("A+（实验组，注入定理线索）:")
     print("   " + base.format(v="true"))
     print("-" * 68)
-    print("⚠ 上面 `--problems` 路径按实际题库文件名调整；两轮必须一致。")
+    print(f"⚠ 两轮必须用**同一**题库文件（当前：{bank}）；")
+    print("  若要只跑子集，两轮都加 `--test_file <同一子集文件>`。")
+    print(f"   当前题数 {len(ids)} 已由 `_default_ids` 解析，可直接落为子集清单。")
     print()
     print("★ 分析")
     print("   python tools/theorem_hint_ab.py analyze \\")

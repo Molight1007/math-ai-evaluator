@@ -160,16 +160,22 @@ class NeverRaisesTest(unittest.TestCase):
     def test_all_stages_present_in_output(self):
         """现行链阶段必须在表里出现（否则读者会以为漏了环节）。
 
-        ★ 2026-10-14（五道链定案）：预期清单改为现行链 —— 1.1 判题 +
-        2.6/2.7/3_solve/3.3 + 五道 4.0~4.5；旧链阶段行已随机制删除。
+        ★ 2026-10-14（五道链定案）：预期清单改为现行链 —— 2.6/2.7/3_solve/3.3 +
+        五道 4.0~4.5；旧链阶段行已随机制删除。
+        ★ 2026-10-14（任务列表 #1）：`1.1_type_understanding` 已**并入** 2.6 题意理解
+        ⇒ 从预期清单移除，并**断言它不再作为独立行出现**（合并的回归守卫）。
         """
         recs = [_rec(st={"3_solve": 10.0}, candidates=[{"answer": "1"}])]
         text = "\n".join(sec_stage_dashboard(recs))
-        for key in ("1.1_type_understanding", "2.6_pre_audit", "2.7_subgoal_main",
+        for key in ("2.6_pre_audit", "2.7_subgoal_main",
                     "3_solve", "3.3_improve", "4.0_normalize", "4.1_self_audit",
                     "4.2_falsify", "4.3_lean_check", "4.4_math_check", "4.5_vote",
                     "4.6_rewrite"):
             self.assertIn(key, text, f"四维表缺少阶段 {key}")
+        self.assertNotIn("1.1_type_understanding", text,
+                         "题型判题已并入 2.6 题意理解，不应再作为独立阶段行出现")
+        self.assertIn("题意理解（含题型判题）", text,
+                      "① 行须体现题型判题已并入题意理解")
 
 
 class DisciplinesTest(unittest.TestCase):

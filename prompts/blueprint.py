@@ -57,7 +57,7 @@ BLUEPRINT_DAG_SYSTEM = """你是一位精通高等数学与形式化证明的 AI
 
 **硬性禁令（违反即视为蓝图无效）**：
 
-1. **禁止在蓝图的任何字段里写出最终答案** —— 包括 `merge_strategy`、`problem_analysis`、
+1. **禁止在蓝图的任何字段里写出最终答案** —— 包括 `merge_strategy`、
    任何节点的 `statement`、以及 `rationale`。
    - ✗ 反例：`"merge_strategy": "Combine n3's value with n4's proof to output single value 2024."`
      （这正是本项目实测最高频的失败根因：蓝图层把 2024 写死，后续求解与重解全部沿该错值推进，
@@ -148,7 +148,7 @@ BLUEPRINT_DAG_SYSTEM = """你是一位精通高等数学与形式化证明的 AI
 ============================================================
 
 **字段顺序很重要**：必须先输出 `root_id` 与 `nodes`，
-补充说明字段（`merge_strategy`、`problem_analysis`）一律放在最后。
+补充说明字段（`merge_strategy`）一律放在最后。
 实测若把嵌套的说明块放在开头，模型容易把它摊平并提前闭合花括号，
 导致 `root_id` / `nodes` 落到主对象之外而被解析器丢弃。
 
@@ -206,12 +206,7 @@ BLUEPRINT_DAG_SYSTEM = """你是一位精通高等数学与形式化证明的 AI
       "rationale": "把各分支结论组装成题目要求的最终答案形式"
     }
   ],
-  "merge_strategy": "只写「如何组合」，禁止写出组合后的数值或表达式：例如由 n1 给出可行构造（下界）、由 n2 给出不可行证明（上界），两者夹逼得到题目所求的最小取值；具体取值由 n1/n2 的求解结果现场给出。",
-  "problem_analysis": {
-    "domain": "数学领域",
-    "core_objective": "核心目标的一句话描述",
-    "key_constraints": ["约束1", "约束2"]
-  }
+  "merge_strategy": "只写「如何组合」，禁止写出组合后的数值或表达式：例如由 n1 给出可行构造（下界）、由 n2 给出不可行证明（上界），两者夹逼得到题目所求的最小取值；具体取值由 n1/n2 的求解结果现场给出。"
 }
 ```
 
@@ -287,7 +282,7 @@ BLUEPRINT_IMPROVE_USER_TEMPLATE = """请为以下数学问题**改进**上一轮
 1. 先逐节点检查上一轮蓝图，**至少找出 2 处可改进点**，写进 `improve_notes` 数组；
    可改进点类型：粒度过粗（一步做太多）/ 循环依赖 / 子目标并不比父问题更简单 / 缺关键中间量；
 2. 在 `improve_notes` 里逐条写明「哪个节点、为什么不好、改成什么」；
-3. 输出修改后的完整 DAG JSON（root_id + nodes + merge_strategy + problem_analysis + improve_notes）；
+3. 输出修改后的完整 DAG JSON（root_id + nodes + merge_strategy + improve_notes）；
 4. ★ **`nodes` 必须与上一轮有实质差异**：至少一个节点被拆分 / 替换 / 新增或删除，或某个节点的 `statement` 被修正。**禁止原样返回上一轮的 nodes**（实测「原样返回」正是自改进无效的根因）；
 5. **不要写出最终答案的具体数值**（答案只能以符号/结构形式出现）。
 """

@@ -27,11 +27,16 @@ answer_oracle.verify_proof 在平台上全部 unknown 空转：只付时间不�
 
 对外契约
 ========
-- ``confirm_understanding(ctx) -> dict``   题前理解确认（默认跳过省时）
 - ``audit_candidates(ctx, tier, candidates) -> (kept, feedbacks)``
 - ``gate_final_answer(ctx, tier, answer, reasoning) -> bool``
 
 2026-09-06 依据《检测链重构_去Lean化_三方案_0905.md》方案二实现。
+★ 2026-10-14（题意理解收敛）：原 ``confirm_understanding``（题前理解确认）**已删除**
+  —— 它是**双重不可达的死分支**：读的开关 ``audit_confirm_understanding`` 在
+  ``AgentConfig`` 里从未声明（``getattr(..., False)`` 恒 False ⇒ 恒 skipped），
+  且调用点位于 ``lean_pre_verify`` 的 ``else`` 分支（deep 档 + Lean 可用时永远到不了）。
+  其职责（复述题型 / 未知量 / 关键条件）已由 2.6 的 ``judge_question_type`` +
+  ``problem_goal`` 覆盖。
 """
 from __future__ import annotations
 
@@ -80,16 +85,14 @@ class AuditGate(BaseAgent):
     # ------------------------------------------------------------------
     def run(self, ctx: TaskContext, stage: str = "final",
             candidates: list | None = None) -> dict:
-        """统一入口。``stage``: ``candidates``(3.6) / ``final``(6.5) /
-        ``understanding``(2.6)；orchestrator 亦可直接调专用方法。
+        """统一入口。``stage``: ``candidates``(3.6) / ``final``(6.5)。
+        （原 ``understanding``(2.6) 位已随题意理解收敛删除，见模块头说明。）
         """
         if stage == "candidates":
             kept, fb = self.audit_candidates(
                 ctx, getattr(ctx, "tier", "standard") or "standard",
                 candidates or [])
             return {"kept": kept, "feedbacks": fb}
-        if stage == "understanding":
-            return self.confirm_understanding(ctx)
         # ★ 2026-09-23 新增：**非证明题早退**。
         #   依据（0923 环节效能审计实测）：本闸门 37/46 题触发、235 条 verdict
         #   **全 unknown**（本文件 255-268 行已自陈是"结构性无输出"——
@@ -123,88 +126,6 @@ class AuditGate(BaseAgent):
             ctx, getattr(ctx, "tier", "standard") or "standard",
             getattr(ctx, "final_response", "") or "")
         return {"ok": ok}
-
-    # ------------------------------------------------------------------
-    # 2.6 位：题前理解确认（默认跳过；开启时 LLM 题意复核，不阻断）
-    # ------------------------------------------------------------------
-    def confirm_understanding(self, ctx: TaskContext) -> dict:
-        """确认对题意的理解（题型/未知量/条件），失败注入 revise_feedback。
-
-        平台去 Lean 后原 preverify（Lean 形式化编译）不再执行；本题前复核为
-        可选的 LLM 轻量替代——默认关闭（省时），由下游 revise/重理解兜底。
-        """
-        if not getattr(self.config, "audit_confirm_understanding", False):
-            self._record_ctx(ctx, {"step": "confirm_understanding",
-                                   "skipped": "disabled"})
-            return {"skipped": True}
-        if ctx.is_time_critical():
-            self._record_ctx(ctx, {"step": "confirm_understanding",
-                                   "skipped": "time_critical"})
-            return {"skipped": True}
-        try:
-            sys_p = ("你是题意确认器。复述下面题目的：①题型（代数/几何/组合/"
-                     "数论/证明等）②未知量类型③关键条件。若题目信息不足以求解，"
-                     "指出缺失。输出 JSON：{\"understood\":true|false,"
-                     "\"restatement\":\"...\",\"gaps\":[\"...\"]}")
-            from utils.prefill import prefill_messages, stitch
-            # ★ 2026-10-13（§3.4 消费 + §6 用定理）：题意复核时也带上
-            #   「答题形态提示」与「检索到的定理线索」—— 此前本阶段**看不到**它们，
-            #   导致复核只能凭题面判断（与下游注入的信息不一致）。
-            _ctx_extra = ""
-            try:
-                _parts = []
-                try:
-                    from agent.question_type import (
-                        render_type_path_hint as _rtp_ag)
-                    _tp = _rtp_ag(getattr(ctx, "type_path", None))
-                    if _tp:
-                        _parts.append(_tp)
-                except Exception:  # noqa: BLE001
-                    pass
-                _th = str(getattr(ctx, "theorem_hint_block", "") or "").strip()
-                if _th:
-                    _parts.append(_th)
-                _ctx_extra = "\n\n".join(_parts)
-            except Exception:  # noqa: BLE001  注入是增益，绝不阻断
-                _ctx_extra = ""
-            _user_content = ctx.problem[:1500]
-            if _ctx_extra:
-                _user_content = _user_content + "\n\n" + _ctx_extra
-            raw = self.llm(ctx, prefill_messages(
-                [{"role": "system", "content": sys_p},
-                 {"role": "user", "content": _user_content}], '{"'),
-                           # ★ 2026-10-02：4096→8192（DeepSeek 适配方案 A，统一上限）。
-                           #   本处输出为小 JSON，抬上限只增安全余量、不改行为。
-                           0.0, 8192)
-            if not raw:
-                return {"understood": True, "degraded": "empty_llm"}
-            raw = stitch('{"', raw)
-            import re
-            m = re.search(r"\{[\s\S]*\}", raw)
-            parsed = None
-            if m:
-                import json
-                try:
-                    parsed = json.loads(m.group())
-                except (json.JSONDecodeError, ValueError):
-                    parsed = None
-            if not isinstance(parsed, dict):
-                self._record_ctx(ctx, {"step": "confirm_understanding",
-                                       "degraded": "parse_failed"})
-                return {"understood": True, "degraded": "parse_failed"}
-            if not parsed.get("understood", True):
-                gaps = parsed.get("gaps") or []
-                msg = ("⚠️ 题意理解存疑：" + ("；".join(gaps) if gaps
-                       else "模型未能确认题意"))
-                ctx.revise_feedback = list(ctx.revise_feedback) + [msg]
-            self._record_ctx(ctx, {"step": "confirm_understanding",
-                                   "result": parsed})
-            return parsed
-        except Exception as e:  # noqa: BLE001  复核失败不阻断主流程
-            logger.warning("AuditGate: 题意复核异常（放行）: %s", e)
-            self._record_ctx(ctx, {"step": "confirm_understanding",
-                                   "degraded": "exception"})
-            return {"understood": True, "degraded": "exception"}
 
     # ------------------------------------------------------------------
     # 3.6 位：候选审核（顶替原 lean_filter）

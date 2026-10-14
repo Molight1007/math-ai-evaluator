@@ -3,7 +3,9 @@
 SubGoalSolverAgent.run 抽出）。
 
 抽出段（run 内顺序）：
-  · strip_and_mask_plan    —— P-20 剥「答案形态」+ K11 掩码 merge_strategy/problem_analysis
+  · strip_and_mask_plan    —— P-20 剥「答案形态」+ K11 掩码 merge_strategy，
+                              第二返回值改为 2.6 的唯一题目目标 ctx.problem_goal
+                              （原 problem_analysis 已随任务 #3 删除）
   · finalize_plan_stats    —— 子目标统计（n/依赖边/入度）落 ctx + record 一条规划完成记录
   · build_plan_summary     —— 生成子目标规划摘要 + K11 摘要注入点掩码
 
@@ -18,7 +20,15 @@ from __future__ import annotations
 
 
 def strip_and_mask_plan(self, ctx, plan_data):
-    """P-20 形态剥离 + K11 断言值掩码。返回 (merge_strategy, problem_analysis)。"""
+    """P-20 形态剥离 + K11 断言值掩码。返回 ``(merge_strategy, problem_goal)``。
+
+    ★ 2026-10-14（任务列表 #3）：第二项**不再**是蓝图 / 子目标规划自产的
+      `problem_analysis`（该字段已随题意理解收敛而删除），而是 2.6 产出的
+      **唯一题目目标** `ctx.problem_goal`（`agent/problem_goal.py`）。
+      本函数对它的职责只有"取出来"：目标里的终态/答案槽在渲染处
+      （`problem_goal.render_problem_goal`）已显式标注为「**假设**，不得当作
+      已证结论」，故此处不再做数值掩码。
+    """
     from .sub_goal_solver import _strip_answer_forms, _mask_asserted_values
     # 2026-09-17（P-20）：剥掉规划结论里的「答案形态」，防其被当作指令
     merge_strategy = _strip_answer_forms(plan_data.get("merge_strategy", ""))
@@ -30,25 +40,7 @@ def strip_and_mask_plan(self, ctx, plan_data):
         self.record(ctx, "blueprint_lock_guard",
                     f"蓝图 merge_strategy 内嵌 {_n_lock} 处断言数值 → 已屏蔽为占位符"
                     "（蓝图只构建信息、不产出答案；2026-09-22 用户口径）")
-    problem_analysis = plan_data.get("problem_analysis", {})
-    # 同一守卫覆盖 problem_analysis 的字符串字段（core_objective 等常被写进答案）
-    if isinstance(problem_analysis, dict):
-        try:
-            _pa_new, _pa_mask = {}, 0
-            for _k, _v in problem_analysis.items():
-                if isinstance(_v, str):
-                    _nv, _m = _mask_asserted_values(_v)
-                    _pa_new[_k] = _nv
-                    _pa_mask += _m
-                else:
-                    _pa_new[_k] = _v
-            if _pa_mask:
-                self.record(ctx, "blueprint_lock_guard",
-                            f"蓝图 problem_analysis 内嵌 {_pa_mask} 处断言数值 → 已屏蔽")
-                problem_analysis = _pa_new
-        except Exception:  # noqa: BLE001
-            pass
-    return merge_strategy, problem_analysis
+    return merge_strategy, dict(getattr(ctx, "problem_goal", None) or {})
 
 
 def finalize_plan_stats(self, ctx, subgoals, merge_strategy) -> None:

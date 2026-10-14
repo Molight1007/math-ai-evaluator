@@ -251,20 +251,15 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "enable_preverify_sketch_audit": (
         "ENABLE_PREVERIFY_SKETCH_AUDIT", "bool", False,
         "预验证阶段的骨架 Lean 审核（与 2.7 DAG 整树审核功能重叠，默认关）"),
-    # ---- 2026-10-12 批次 1：题意理解链（终态 + 逻辑链 + 一致性复推）----
+    # ---- 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛）----
     "enable_understanding_chain": (
         "ENABLE_UNDERSTANDING_CHAIN", "bool", True,
-        "题意理解链：终态构建 + 逻辑链 + Lean 自检 + 无条件反复理解"
-        "（用户 2026-10-12 决策：本轮直接启用以便测试；=0 回退）"),
-    "understanding_refine_rounds": (
-        "UNDERSTANDING_REFINE_ROUNDS", "num", 3,
-        "题意理解链的**无条件**复推轮数（每轮带上一轮成果重推）"),
-    "understanding_chain_lean_check": (
-        "UNDERSTANDING_CHAIN_LEAN_CHECK", "bool", True,
-        "题意理解链的 Lean 自检（把链编译一次，只判形式自洽）"),
-    "understanding_no_gain_stop": (
-        "UNDERSTANDING_NO_GAIN_STOP", "bool", True,
-        "题意理解链的无增益早停（链与上一轮相同即停）"),
+        "题意理解：终态构建 + 答案槽（**纯符号**，代码机械剥离被写死的数值）+ "
+        "缺口 A/B（用户 2026-10-12 决策启用；=0 回退）。"
+        "★ 2026-10-14（用户口径「题意理解只做让模型注意到所求部分，整体理解归蓝图」）："
+        "**删『逻辑链 + 一致性复推 + 链的 Lean 自检』** —— 链式分解与 2.7 蓝图 "
+        "AND-OR DAG 同层同义，配套三个开关（understanding_refine_rounds / "
+        "understanding_no_gain_stop / understanding_chain_lean_check）一并撤除"),
     # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式自改进）+ 自审 ----
     "blueprint_multi_gen_rounds": (
         "BLUEPRINT_MULTI_GEN_ROUNDS", "num", 3,
@@ -283,7 +278,8 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # ---- 2026-10-12 批次 4：验证链重排（用户 Q29–Q33）----
     "enable_type_llm": (
         "ENABLE_TYPE_LLM", "bool", True,
-        "**题型 LLM 判题**（§3 方案 A）：阶段 `1.1_type_understanding` 用 LLM 判题型，"
+        "**题型 LLM 判题**（§3 方案 A）：在阶段 `2.6_pre_audit`（**题意理解**）的"
+        "第一步用 LLM 判题型（2026-10-14 任务 #1 起与原 1.1 独立阶段合并），"
         "**与规则基线交叉校验**（规则强信号优先、低置信不覆盖）；失败完全回退规则"),
     "subgoal_self_improve_rounds": (
         "SUBGOAL_SELF_IMPROVE_ROUNDS", "num", 3,
@@ -317,11 +313,16 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "用户 §5.3「注意力预算」）"),
     # ---- 2026-10-12 批次 5 剩余：「分环节条数」（用户 §5.2）----
     #   ⚠ 注册表**只支持 bool/int/num/str**（无 dict）⇒ 用 **JSON 字符串**承载；
-    #     读取侧 `orchestrator__lean` 解析为 dict 后写入 `ctx._theorem_topk_by_stage`。
+    #     读取侧 `theorem_hint.run_hint_for` 解析为 dict 后写入
+    #     `ctx._theorem_topk_by_stage`（2026-10-14 前该解析在 `orchestrator__lean`）。
+    #   ★ 2026-10-14（任务列表 #2）：`subgoal` 8 → 25 —— 检索已下移到 2.7 子目标
+    #     求解，该环节成为检索的主消费者（与 `solve` 齐平，对齐任务原文「这个
+    #     环节的产出就是 25 个定理」）。`pre_audit` 键保留但已无调用者：2.6 内的
+    #     两处注入（audit_gate / 理解链）已随检索下移撤除。
     "theorem_hint_top_k_by_stage": (
         "THEOREM_HINT_TOP_K_BY_STAGE", "str",
-        '{"pre_audit": 4, "blueprint": 12, "subgoal": 8, "solve": 25, "revise": 25}',
-        "分环节定理注入条数（JSON：前置理解 4 / 蓝图 12 / 子目标 8 / 主求解 25 / 修订 25）"),
+        '{"pre_audit": 4, "blueprint": 12, "subgoal": 25, "solve": 25, "revise": 25}',
+        "分环节定理注入条数（JSON：前置理解 4 / 蓝图 12 / 子目标 25 / 主求解 25 / 修订 25）"),
     # ---- agent/skeleton_reviewer.py（骨架编排层评审循环）----
     "enable_skeleton_review": (
         "ENABLE_SKELETON_REVIEW", "bool", False,

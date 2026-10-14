@@ -740,8 +740,12 @@ def cmd_pull(cfg: dict, args) -> int:
     info(f"共 {got} 个文件 → {dest}")
     info("数据完整性（实测确认，无需再补）：")
     info("  逐题答题情况  results/*.jsonl  17 个顶层字段 + diag 69 个键")
-    # 2026-10-02 起阶段数随删除同步更新（0_paper_pacer 已删 ⇒ 16→15）
-    info("  分步耗时      diag.stage_timers  15 个阶段（1.2_theorem_hint … 6.5_audit_gate）")
+    # 2026-10-02 起阶段数随删除同步更新（0_paper_pacer 已删 ⇒ 16→15）；
+    # 2026-10-14 末段改为 `6_format`（6.5_audit_gate 已于五道链定案中删除），
+    #   `1.1_type_understanding` 并入 2.6 题意理解 ⇒ 15 段；
+    # ★ 2026-10-14（任务列表 #2）`1.2_theorem_hint` 下移为 2.7 体首动作 ⇒ 14 段，
+    #   首段变为 `2.6_pre_audit`。
+    info("  分步耗时      diag.stage_timers  14 个阶段（2.6_pre_audit … 6_format）")
     info("  分步叙事      trace  每题约 111 条")
     info("  资源曲线      logs/monitor_*.csv（内存/swap/lean 进程数/CPU）")
     info("  8 个分析脚本均以 jsonl 为输入（stage_timers / gen_test_report / diagnosis / "

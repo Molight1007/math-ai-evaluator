@@ -226,7 +226,6 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
         nodes=nodes,
         root_id=root_id,
         merge_strategy=str(raw.get("merge_strategy", "")),
-        problem_analysis=raw.get("problem_analysis", {}),
     )
 
 
@@ -297,6 +296,19 @@ class BlueprintPlannerAgent(BaseAgent):
                 ctx.problem or "", getattr(ctx, "question_type", "") or "")
         except Exception:  # noqa: BLE001
             pass
+        # ★ 2026-10-14（题意理解收敛 item ④）：目标锚改由 2.6 的**唯一目标**
+        #   `ctx.problem_goal` 注入，且**位置在「题目」占位符内部**（al-075 纪律：
+        #   注入块绝不追加到提示词末尾，否则破坏收尾结构、诱使模型进入续写模式）。
+        #   原 `_render_understanding_anchor` 把「题意理解链」注入蓝图并要求
+        #   "蓝图必须覆盖链上每个中间结论" —— 该函数已删除：链本身随题意理解
+        #   收敛撤除（链式分解与蓝图 DAG 同层同义），保留即让蓝图照抄一份错链。
+        try:
+            from .problem_goal import render_problem_goal as _rpg
+            _anchor = _rpg(ctx)
+            if _anchor:
+                problem_text = problem_text + "\n\n" + _anchor
+        except Exception:  # noqa: BLE001  目标是增益，取不到就退回纯题干
+            pass
 
         if prior_dag_json:
             # 迭代式自改进轮（2026-10-12 批次 2）：把上一轮 DAG 原样喂回，要求改进。
@@ -308,14 +320,6 @@ class BlueprintPlannerAgent(BaseAgent):
                                     prior_dag=str(prior_dag_json)[:8000])
         else:
             user_msg = BLUEPRINT_DAG_USER_TEMPLATE.format(problem=problem_text)
-            # ★ 2026-10-13 **接线**（方案 v4 §3.5.6）：把题意理解链的「终态 + 逻辑链」
-            #   作为**目标锚**注入蓝图 prompt —— 蓝图须覆盖链上每个中间结论、不得偏离终态。
-            #   为什么：`ctx.understanding_chain` 此前**只落盘、无消费者**（审核报告点名）；
-            #   蓝图是它的第一顺位消费者。
-            #   ⚠ 终态里的答案槽是**假设**：本块显式标注"不得当作已证结论"（K11 红线）。
-            _anchor = _render_understanding_anchor(ctx)
-            if _anchor:
-                user_msg = user_msg + "\n\n" + _anchor
         # ★ 2026-09-29（截图 #6）：蓝图规划决定"需要推理出哪些中间结论"，
         # 正是 Mathlib 定理线索最该起作用的地方（用户原话："子目标的设立有没有
         # 帮助大模型简化题目"）。注入到 user 侧（不污染 JSON 输出的 system 契约）。
@@ -729,41 +733,3 @@ def _dag_diff(prev, new) -> dict:
         "stmt_changed": sum(1 for k in (set(st1) & set(st2))
                             if st1[k] != st2[k]),
     }
-
-
-def _render_understanding_anchor(ctx) -> str:
-    """把题意理解链渲染成蓝图 prompt 的「目标锚」块（2026-10-13 接线）。
-
-    为什么需要：`ctx.understanding_chain` 在批次 1 之后**只落盘、无消费者**
-    （改动效果审核报告点名"三处新产物没有下游消费者"）。蓝图是它的第一顺位消费者 ——
-    链上的每个中间结论都应成为蓝图的必备节点，否则蓝图可能偏离终态。
-
-    ⚠ **红线（K11）**：终态里的答案槽是**假设**，本块显式标注"不得当作已证结论"，
-    绝不把假设值下传成结论。
-
-    无理解链 / 链为空 ⇒ 返回空串（下游零成本，行为与接线前一致）。
-    """
-    uc = getattr(ctx, "understanding_chain", None)
-    if not isinstance(uc, dict) or not uc.get("chain"):
-        return ""
-    lines = ["【题意理解链（目标锚：仅供对齐思路；其中答案槽是**假设**，不得当作已证结论）】"]
-    _ts = str(uc.get("terminal_state") or "").strip()
-    if _ts:
-        lines.append("终态（题目完成后的情形）：" + _ts[:400])
-    _as = str(uc.get("answer_slot") or "").strip()
-    if _as:
-        lines.append("答案槽（**符号形式、待定**）：" + _as[:200])
-    for _i, _c in enumerate(uc.get("chain") or [], 1):
-        if not isinstance(_c, dict):
-            continue
-        _prem = "；".join(str(p) for p in (_c.get("premises") or []))
-        lines.append("%d) [%s] ⇒ %s" % (_i, _prem[:150],
-                                       str(_c.get("conclusion") or "")[:200]))
-    _gb = uc.get("gaps_b") or []
-    if _gb:
-        lines.append("⚠ 上一轮理解时**没读到**的题面条件（务必纳入本次分解）："
-                     + "；".join(str(g.get("detail") or "")[:80]
-                                 for g in _gb[:5] if isinstance(g, dict)))
-    lines.append("要求：蓝图必须覆盖上述链上的每个中间结论（可细化、**不得遗漏**）；"
-                 "若你认为某节推理有误，请在有依据的前提下修正它。")
-    return "\n".join(lines)

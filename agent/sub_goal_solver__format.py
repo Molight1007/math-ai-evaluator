@@ -255,13 +255,18 @@ def _fallback_from_last_subgoal(subgoals: list[dict]) -> str:
 
 
 def _build_full_reasoning(subgoals: list[dict],
-                          problem_analysis: dict,
+                          problem_goal: dict,
                           final_answer: str) -> str:
-    """构建完整的推理过程文本（用于展示和回溯）"""
+    """构建完整的推理过程文本（用于展示和回溯）。
+
+    ★ 2026-10-14（任务列表 #3）：原「## 问题分析」区块读的是蓝图 / 子目标规划
+      自产的 `problem_analysis`（同一件事被推了三遍），现改读 2.6 的**唯一题目
+      目标** `ctx.problem_goal`（`agent/problem_goal.py`），该副本字段已删除。
+    """
     lines = ["# 子目标分解求解过程\n"]
-    if problem_analysis:
-        lines.append(f"## 问题分析\n领域: {problem_analysis.get('domain', 'N/A')}")
-        lines.append(f"目标: {problem_analysis.get('core_objective', 'N/A')}\n")
+    if problem_goal:
+        lines.append(f"## 题目目标\n题型: {problem_goal.get('question_type', 'N/A')}")
+        lines.append(f"要做什么: {problem_goal.get('task', 'N/A')}\n")
     lines.append("## 子目标规划")
     for sg in subgoals:
         lines.append(f"  #{sg['id']} [{sg['type']}] {sg['title']}: {sg['description']}")

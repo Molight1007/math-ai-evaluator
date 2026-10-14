@@ -71,11 +71,6 @@ def _plan_value_choice(self, ctx: TaskContext, opts: list) -> dict:
                 "选择题求值型规划：先整体求解 → 再匹配选项（{} 个选项）"
                 .format(len(opts)))
     return {
-        "problem_analysis": {
-            "question_type": "选择题",
-            "subtype": "value_choice",
-            "options": [{"label": l, "text": t} for l, t in opts],
-        },
         "subgoals": [
             {
                 "id": 0,
@@ -122,7 +117,6 @@ def _plan_choice_by_options(self, ctx: TaskContext) -> dict | None:
         边界：① 非选择题 → None（走原流程）；② 选项 < 2 → None（判据不足）；
         ③ 选项数 > max_subgoals → None（交回 LLM 规划，避免被截断丢项）。
         """
-    from .sub_goal_solver import _SINGLE_CHOICE_RE
     from .sub_goal_solver import _itemwise_plan_on
     try:
         # 独立开关（项目惯例：每项优化一个开关，便于 A/B 与逐项审查）。
@@ -166,7 +160,11 @@ def _plan_choice_by_options(self, ctx: TaskContext) -> dict | None:
         _q = ctx.problem or ""
         if self._is_value_choice(opts):
             return self._plan_value_choice(ctx, opts)
-        _is_single = bool(_SINGLE_CHOICE_RE.search(_q))
+        # ★ 2026-10-14（任务列表 #3）：「单选 / 多选」口径由 2.6 题意理解**一次判定**
+        #   （`ctx.problem_goal["n_correct"]`），此处只读结论 —— 不再自己判题面，
+        #   也不再把选项清单塞回 problem_analysis（那是题意，不是规划）。
+        from .problem_goal import is_single_choice as _is_single_choice
+        _is_single = _is_single_choice(ctx, _q)
         subgoals = []
         # ★ 子目标 0：判断基准 —— **只建一次、全员共享**。
         #   对治用户指出的"ab 项是 cd 项的基础"：若让每个选项各自重新推导基准，
@@ -227,10 +225,6 @@ def _plan_choice_by_options(self, ctx: TaskContext) -> dict | None:
                     "选择题逐项判定规划：{} 个选项 → {} 个判定子目标"
                     "（代码强制，未走 LLM 规划）".format(len(opts), len(subgoals)))
         return {
-            "problem_analysis": {
-                "question_type": "选择题",
-                "options": [{"label": l, "text": t} for l, t in opts],
-            },
             "subgoals": subgoals,
             "merge_strategy": (
                 ("【单选型】" if _is_single else "【多选型】")
@@ -333,6 +327,22 @@ def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
             ctx.problem or "", getattr(ctx, "question_type", "") or "")
     except Exception:  # noqa: BLE001
         pass
+    # ★ 2026-10-14（任务列表 #2）：让**定理线索真正进入子目标规划**。
+    #   检索已在 `SubGoalSolver.run` 体首完成（2.7 内），此处按环节取条数
+    #   （默认 25，见 `theorem_hint.DEFAULT_TOPK_BY_STAGE["subgoal"]`）——
+    #   用户原话：「用 leansearch 去搜索定理然后将定理返回给大模型，让大模型的
+    #   推理方向更准确」。
+    #   ⚠ 必须拼进 `problem_text`（即"题目"占位符**内部**），不得追加到提示词
+    #     末尾 —— 与 objective_injection / answer_form_requirement 同一纪律
+    #     （历史教训 algebra-075：末尾追加破坏收尾结构 → 模型进入续写模式）。
+    #   ⚠ 无检索结果/开关关闭 ⇒ `render_for_stage` 返回空串，此处零成本、行为不变。
+    try:
+        from .theorem_hint import render_for_stage as _rfs
+        _th_block = _rfs(ctx, "subgoal")
+        if _th_block:
+            problem_text = problem_text + "\n\n" + _th_block
+    except Exception:  # noqa: BLE001  检索是增益，绝不阻断
+        pass
 
     user_msg = SUBGOAL_PLAN_USER_TEMPLATE.format(
         domain_hint=domain_hint,
@@ -371,7 +381,6 @@ def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
             logger.warning("SubGoal plan: invalid subgoals on attempt %d", attempt + 1)
             continue
         return {
-            "problem_analysis": raw.get("problem_analysis", {}),
             "subgoals": subgoals,
             "merge_strategy": raw.get("merge_strategy", ""),
         }
@@ -383,7 +392,6 @@ def _plan_subgoals(self, ctx: TaskContext) -> dict | None:
                 f"子目标规划 2 次尝试均失败; 最后响应片段: {(last_resp or '<None>')[:200]};"
                 " 回退到单步求解整道题")
     return {
-        "problem_analysis": {},
         "subgoals": [{
             "id": 1,
             "title": "完整求解",

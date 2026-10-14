@@ -243,7 +243,8 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
     #   被原样写成子目标 `title` / `description`，再由本模板送进每步求解提示词
     #   （见 prompts/sub_goal.py:229-231）⇒ 蓝图若写「证明最小值为 4030，故答案为
     #   4030」就等于**指令模型输出 4030**（K11，已数据确认的唯一过半根因 41.4%）。
-    #   原守卫只覆盖 merge_strategy / problem_analysis（生产点），此处为最后一道关口。
+    #   原守卫只覆盖 merge_strategy / problem_analysis（生产点；后者已于
+    #   2026-10-14 随任务 #3 删除），此处为最后一道关口。
     #   只改局部变量，**不动 sg 本体**（其它消费者与 trace 不受影响）。
     _desc = str(sg.get("description") or "")
     _title = str(sg.get("title") or "")
