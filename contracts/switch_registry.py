@@ -230,24 +230,9 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "LeanSearch 检索总开关（★ 2026-10-12 用户决策 Q3：**纳入研究期必用清单，默认由 False 改为 True**）。"
         "注：实际评测入口（deploy/run_112.py:274 / run_research.py:69）此前已显式传 `--use_leansearch true`，"
         "故对云端评测**无行为变化**；本改动的作用是让「裸跑 run_eval」也默认开启，并消除「默认关」的误读。"),
-    # ---- agent/dag_reviewer.py（求解前 DAG 强制评审门）----
-    "dag_replan_gate": (
-        "DAG_REPLAN_GATE", "bool", False,
-        "求解前 DAG 强制评审门（**默认 False**；机制已就绪但**未翻默认值** —— 项目已为"
-        "此设专臂 `deploy/run_112.py::arm2`，翻默认会与对照臂重合；复测请走 `--arm arm2`。"
-        "旧负面结论「拦得住修不好」是在时间墙 + 重生成未写回 bug 下得出的，两条均已修复："
-        "置 True 复测、置 False 取回旧基线做 A/B）"),
-    # ---- 2026-10-12 补齐：以下 3 个此前只被裸 `getattr` 读取 —— 未声明、
-    #      不在白名单、不在注册表 ⇒「假开关」（传参被静默丢弃）。现登记为注册制。
-    "dag_replan_lean_check": (
-        "DAG_REPLAN_LEAN_CHECK", "bool", True,
-        "求解前 Lean 逻辑检查：把 DAG 节点陈述翻译为 Lean Prop 编译，"
-        "失败节点硬升级 reject（**只判逻辑/形式层，不判方向**；=0 关闭）"),
-    "dag_lean_max_nodes": (
-        "DAG_LEAN_MAX_NODES", "num", 50,
-        "求解前 Lean 逻辑检查的节点数上限。★ 2026-10-13：6 → **50**（= MAX_DAG_NODES，"
-        "事实上覆盖全图）—— 原 6 是「省资源」型抽样，与研究期「不裁剪能力」冲突；"
-        "用户口径：每题都跑、耗时不用愁。=6 可一键回退旧行为"),
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
+    #   `dag_replan_gate` / `dag_replan_lean_check` / `dag_lean_max_nodes`
+    #   （求解前 DAG 强制评审门 + 其 Lean 逻辑检查）三个开关已整块撤除。
     "enable_preverify_sketch_audit": (
         "ENABLE_PREVERIFY_SKETCH_AUDIT", "bool", False,
         "预验证阶段的骨架 Lean 审核（与 2.7 DAG 整树审核功能重叠，默认关）"),
@@ -323,18 +308,8 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "THEOREM_HINT_TOP_K_BY_STAGE", "str",
         '{"pre_audit": 4, "blueprint": 12, "subgoal": 25, "solve": 25, "revise": 25}',
         "分环节定理注入条数（JSON：前置理解 4 / 蓝图 12 / 子目标 25 / 主求解 25 / 修订 25）"),
-    # ---- agent/skeleton_reviewer.py（骨架编排层评审循环）----
-    "enable_skeleton_review": (
-        "ENABLE_SKELETON_REVIEW", "bool", False,
-        "骨架编排层评审循环（**默认 False**；机制已就绪但**未翻默认值** —— 复测请走 "
-        "`--arm arm2`。旧结论「71% 走满 2 轮从未收敛」的根因是**根节点参与评审**"
-        "（必然 replan）+ 重生成未写回，两条均已修复：置 True 复测、置 False 取回旧基线）"),
-    # ---- agent/sub_goal_solver.py（求解后 DAG 复盘重规划，2026-10-04 补登记）----
-    "enable_dag_replan": (
-        "ENABLE_DAG_REPLAN", "bool", False,
-        "求解**后**（候选已入池）再评审 DAG 并重写（**默认 False**；机制已就绪但"
-        "**未翻默认值** —— 复测请走 `--arm arm2`。旧结论「2/3 白跑」同属时间墙下产物："
-        "置 True 复测、置 False 取回旧基线）"),
+    # ★ 2026-10-15：原 `enable_skeleton_review`（骨架编排层评审循环）与
+    #   `enable_dag_replan`（求解后 DAG 复盘重规划）两个开关已整块撤除。
     # ---- agent/blueprint_planner.py（OR 节点展开策略，2026-10-04 补登记）----
     "blueprint_or_expand_all": (
         "BLUEPRINT_OR_EXPAND_ALL", "bool", False,

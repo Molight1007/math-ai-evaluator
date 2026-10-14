@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 
 from .base import TaskContext
 
@@ -427,38 +426,12 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
                     "Blueprint 路径已跳过：蓝图生成返回空（generate_blueprint=None）"
                     "→ 回退 LLM 子目标规划")
         return None
-    # 老师 9/2 建议：骨架编排层 review（求解前规划质量门）。
-    # 生成骨架后先提交 LLM 审查：子目标是否不适定 / 求解难度是否 >= 原问题；
-    # 有问题 → 带评审反馈重新生成骨架 → 再 review 确认；
-    # 通过后才进入下方语法审核（_audit_blueprint_tree）与子目标求解。
-    if getattr(self.config, "enable_skeleton_review", True):
-        dag = self._skeleton_review_loop(ctx, dag, planner)
-        if dag is None:
-            self.record(ctx, "blueprint",
-                        "Blueprint 路径已跳过：骨架评审循环返回空"
-                        "→ 回退 LLM 子目标规划")
-            return None
-    # 2026-09-08 求解前 DAG 强制评审门——默认关闭（dag_replan_gate=False）。
-    # 45 题实证：门"拦得住、修不好"（21/45 触发强制重写、净正确率贡献≈0、
-    # 总耗时 +23%、触发组人均 +245s），重写对方向性错误无济于事（comb-058
-    # 差1 / geo-068 思路偏，重写 2 轮达硬上限仍错）。蓝图评审-重写循环的
-    # 时间让给子目标求解与数值验证。A/B 复测时显式置 dag_replan_gate=True。
-    # 门代码与 Lean 升级逻辑保留（_dag_replan_gate / _lean_dag_logic_check），
-    # 不开时不产生任何调用开销。
-    if getattr(self.config, "dag_replan_gate", True):
-        # ★ 2026-10-12 观测补齐：本门此前**无耗时记录** ⇒ 无法回答
-        #   「蓝图检查到底烧了多少」（实测整个 2.7 段 430.7 s/题，但拆不出
-        #   蓝图生成 / 逐节点评审 / Lean 检查各占多少）。
-        _drg_t0 = time.time()
-        dag = self._dag_replan_gate(ctx, dag)
-        self.record(ctx, "dag_replan",
-                    f"求解前评审门总耗时 {time.time() - _drg_t0:.1f}s"
-                    f"（DagReviewer 逐节点 LLM 评审 + Lean 逻辑检查）")
-        if dag is None:
-            self.record(ctx, "blueprint",
-                        "Blueprint 路径已跳过：求解前 DAG 评审门返回空"
-                        "→ 回退 LLM 子目标规划")
-            return None
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+    #   原「骨架编排层评审循环」（`enable_skeleton_review`）与「求解前 DAG 强制
+    #   评审门」（`dag_replan_gate`）两块**整块撤除** —— 两者均默认关闭、从未在
+    #   生产启用（仅 `deploy/run_112.py::arm2` 复测臂引用），其宿主模块
+    #   `sub_goal_solver__review.py` / `agent/skeleton_reviewer.py` 已删除。
+    #   蓝图生成后**直接**进入子目标求解（自审 `blueprint_self_review` 仍保留）。
     # 2026-09-15 同源修复：此前不传参 ⇒ 恒用默认 6，**config.max_subgoals
     # （含 0915 新增的 --max_subgoals CLI）对 blueprint 路径完全无效**。
     # 实测 003/074 都走 Blueprint DAG ⇒ 这些题的旋钮是死的。现与 LLM 规划

@@ -57,19 +57,15 @@ ARMS: dict = {
     # 臂 0：基线 = 现状配置（24 项机制关闭），不做任何改动
     "baseline": {},
 
-    # ★ 臂 2（当前选定）：蓝图结构修复 + 评审链恢复
-    # 依据：dag_replan_gate(09-08)、enable_skeleton_review(09-13)、
-    #   enable_dag_replan(09-13) 被判「无效」的证据，**全部采于**
-    #   `blueprint_deps_enabled` 修复(09-15)**之前** —— 当时 DAG 依赖边恒空、
-    #   OR 节点退化为 AND 单分支 ⇒ 评审员很可能是在**正确报警**，
-    #   「评审链无效」这一结论被上游结构缺陷**混杂**了。
-    #   `blueprint_or_expand_all` 的注释自述：OR 退化「正是子目标链锁定错值的
-    #   上游结构原因（比提示词层规则更根本）」。
+    # ★ 臂 2：OR 全展开（**本臂现在只剩这一个键**）
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：本臂原有的
+    #   `dag_replan_gate` / `enable_dag_replan` / `enable_skeleton_review` 三键
+    #   已随对应机制整块撤除（三者默认关闭、从未在生产启用），故 arm2 现在**只**
+    #   保留 `blueprint_or_expand_all` —— 即原 §⑥ 的可改项 B：验证「OR 节点展开
+    #   全部备选分支」是否修复「子目标链锁定错值」的上游结构原因。
+    #   （旧注释里「蓝图结构修复 + 评审链恢复」的评审链部分已不复存在。）
     "arm2": {
         "blueprint_or_expand_all": True,
-        "dag_replan_gate": True,
-        "enable_dag_replan": True,
-        "enable_skeleton_review": True,
     },
 
     # 臂 1：standard 档升配（standard 覆盖 89/112 题却只有 **1 票**验证）

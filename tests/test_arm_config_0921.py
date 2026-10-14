@@ -12,9 +12,9 @@
   ② 在 `ReasoningAgent` 覆盖白名单（`_CONFIG_OVERRIDE_KEYS`）内
   ③ `setattr` 后能读到新值
 
-⚠ 注意 `enable_skeleton_review` 的反例形态：它有注解承诺
-`--enable_skeleton_review`，但 `run_eval.py` 里**不存在**该 argparse
-⇒ 本测试额外校验「臂键必须可经 DEFAULT_AGENT_OVERRIDES 注入」（①②③已覆盖）。
+★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：旧注释里
+`enable_skeleton_review` 的「有注解承诺、无 argparse」反例已随该机制整块
+撤除而不复存在；本测试的不变式（①②③）保持不变。
 """
 import ast
 import importlib.util
@@ -196,20 +196,15 @@ class TestResolveArm:
 class TestArmSemantics:
     """锁定各臂的预期语义（防止被误改）。"""
 
-    def test_arm2_is_blueprint_structural_fix(self, arms):
-        """臂 2 = 蓝图结构修复 + 评审链恢复，四项全 True。"""
-        assert arms["arm2"] == {
-            "blueprint_or_expand_all": True,
-            "dag_replan_gate": True,
-            "enable_dag_replan": True,
-            "enable_skeleton_review": True,
-        }
+    def test_arm2_is_or_expand_all_only(self, arms):
+        """★ 2026-10-15：臂 2 现只剩 `blueprint_or_expand_all` ——
+        原 `dag_replan_gate` / `enable_dag_replan` / `enable_skeleton_review`
+        三键已随对应机制整块撤除（用户决策「把没有用和关掉开关的部分全删了」）。"""
+        assert arms["arm2"] == {"blueprint_or_expand_all": True}
 
     def test_arm2_keys_default_to_false(self):
         """臂 2 的作用必须真的是「False → True」；若默认已 True 则臂是空转。"""
         from user_agent import AgentConfig
         cfg = AgentConfig()
-        for k in ("blueprint_or_expand_all", "dag_replan_gate",
-                  "enable_dag_replan", "enable_skeleton_review"):
-            assert getattr(cfg, k) is False, (
-                "%s 类默认已是 True，臂 2 将空转（应改臂定义或改默认）" % k)
+        assert cfg.blueprint_or_expand_all is False, (
+            "blueprint_or_expand_all 类默认已是 True，臂 2 将空转")

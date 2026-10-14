@@ -17,7 +17,7 @@ from utils.extract import is_truncated_answer as _is_truncated_answer
 from .param_usage import collect_param_usage
 from .diag_metrics import (
     _merge_error_types, _sum_reject_votes, _compute_subgoal_gaps,
-    _compute_lean_gaps, _switch_snapshot, _tool_gateway_summary,
+    _switch_snapshot, _tool_gateway_summary,
     _parse_exhaust_result, _diag_completeness, _summarize_deep_review,
     _summarize_leansearch,
 )
@@ -158,40 +158,23 @@ def _diag_identity_and_problem(ctx, _pv) -> dict:
 
 
 def _diag_blueprint_review(ctx, config) -> dict:
-    """③ 蓝图 DAG / 骨架评审 / DAG 评审 + 相关逐轮事件流 + 被客观证伪答案。"""
+    """③ 蓝图 DAG 评审 + 被客观证伪答案。"""
     return {
-        # ③ 蓝图 DAG + 骨架评审 + DAG 评审
-        #   ⚠ 2026-10-07（问题 2.7 ②）：「结构性为空」的归因明确为**开关默认关**：
-        #     `skeleton_review`/`skeleton_review_events`  ← enable_skeleton_review(默认 False)
-        #     `dag_review`/`dag_replan_events`            ← dag_replan_gate / enable_dag_replan(默认 False)
-        #     `sketch_audit`                              ← enable_preverify_sketch_audit(默认 False)
-        #   三者**不是"跑了失败"**，是**设计未启用**；`disabled_mechanisms` 字段显式列出。
+        # ③ 蓝图 DAG 评审（DagReviewerAgent 写入，供 `blueprint_self_review` 消费）
+        #   ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+        #     原「骨架评审」`enable_skeleton_review`、「求解前 DAG 强制门」
+        #     `dag_replan_gate`、「求解后 DAG replan」`enable_dag_replan` 三块
+        #     已**整块撤除** ⇒ 其 diag 字段（skeleton_review / skeleton_review_events /
+        #     dag_replan_events）与 `disabled_mechanisms` 中对应项一并移除。
         "blueprint_nodes": len((getattr(ctx, "blueprint", None) or {}).get("nodes", []) or []),
         "blueprint_merge": (getattr(ctx, "blueprint", None) or {}).get("merge_strategy", ""),
-        "skeleton_review": getattr(ctx, "skeleton_review_report", None) or None,
         "dag_review": getattr(ctx, "dag_review_report", None) or {},
         "sketch_audit": getattr(ctx, "sketch_audit", None) or {},
         "disabled_mechanisms": [
             _n for _n, _f, _d in (
-                ("skeleton_review", "enable_skeleton_review", False),
-                ("dag_review/skeleton_gate", "dag_replan_gate", False),
-                ("dag_replan", "enable_dag_replan", False),
                 ("preverify_sketch_audit", "enable_preverify_sketch_audit", False),
             ) if not bool(getattr(config, _f, _d))
         ],
-        # ③' 骨架评审事件流 + 求解前 DAG 强制门事件流（2026-09-08 补：
-        #    两机制 record 只进 ctx.trace 且 trace 不落盘 → 冒烟 10 题事后
-        #    查不到门是否触发/重规划几轮。现从 trace 提取进 diag，同
-        #    value_attack 模式。skeleton_review/dag_review 是最终态报告，
-        #    这里是逐轮事件（通过/重规划/放行/预算耗尽），互为补充。）
-        "skeleton_review_events": [str(t.get("content", ""))[:200]
-                                   for t in (getattr(ctx, "trace", None) or [])
-                                   if isinstance(t, dict)
-                                   and t.get("step") == "skeleton_review"],
-        "dag_replan_events": [str(t.get("content", ""))[:200]
-                              for t in (getattr(ctx, "trace", None) or [])
-                              if isinstance(t, dict)
-                              and t.get("step") == "dag_replan"],
         # ★ 2026-10-12（判读失真 #5 治本）：自改进的结构化观测。
         #   此前报告读 `n_self_improved` 而无人写 ⇒ 恒 0 ⇒ 假「未触发」。
         # ★ 2026-10-12 批次 1（★ 2026-10-14 收敛）：题意理解（终态 + 答案槽 + 缺口 A/B）
@@ -610,16 +593,9 @@ def _diag_verdicts_metrics(ctx, config, _md, _counts_recon) -> dict:
         #   笼统读成"推理能力差"，而实际可能大半是译题错误 —— 那会把优化
         #   方向引到完全错误的地方。
         "subgoal_gaps": _compute_subgoal_gaps(ctx),
-        # ★ 2026-09-30（截图 #6 下半问）：**Lean 侧逻辑缺口** —— 回答
-        #   「可不可以用 lean 来检测有没有 sorry 的地方」。
-        #   与 `subgoal_gaps` 并列但**口径不同**，勿混算：
-        #     · `subgoal_gaps`  ：自然语言求解有没有得出结论（软信号）；
-        #     · `lean_gaps`     ：`by sorry` 声明能否编译（**硬信号**，
-        #                        失败即"连要证什么都没说清"）。
-        #   判读要点：`lean_gaps` 抓到的缺口绝大多数属 `formalization`
-        #   （命题写得不成立），**不是模型该推出来的点**。若把它读成推理
-        #   瓶颈，优化就会错到去调解题提示词。
-        "lean_gaps": _compute_lean_gaps(ctx),
+        # ★ 2026-10-15：`lean_gaps` 已随「求解前 Lean 逻辑检查」撤除 ——
+        #   `_lean_dag_logic_check` 的唯一调用者是默认关闭的 `dag_replan_gate`，
+        #   该字段在生产中恒为空。`subgoal_gaps` 不受影响，仍为现役。
         # ★ 2026-09-30（截图 #10）：**统一工具调用遥测**。
         #   用户诉求「调用工具的方法有没有写成规范性的类函数，需要 Lean 检测时
         #   直接调用，适配各阶段」—— `agent/tool_gateway.py` 是那个统一入口，

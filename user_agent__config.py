@@ -570,70 +570,19 @@ class AgentConfig(_AgentConfigBase):
     # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
     # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
     blueprint_or_expand_all: bool = False
-    # ---- 求解前 DAG 强制门（#34；2026-09-08 起默认关闭）----
-    # 45 题实证：门"拦得住、修不好"（21/45 触发重写，净正确率贡献≈0，
-    # 总耗时 +23%、触发组人均 +245s）。默认去掉前置强制评审-重写循环，
-    # 蓝图直接进子目标求解；后置 replan（候选入池后、预算允许时）仍由
-    # enable_dag_replan 独立控制。需 A/B 复测门效果时显式置 True。
-    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
-    #   旧的关闭依据「45 题实证：净正确率贡献≈0、耗时 +23%、重写对方向性错误无济于事」
-    #   —— 按 `docs/ima论文分析_..._0915.md §5 隐患 2`，该结论是在
-    #   **时间墙 + 「修复结果从不落盘」** 下得出的，而后者的根因
-    #   （`_skeleton_review_loop` / `_dag_replan_gate` 的重生成**未写回 `ctx.blueprint`**）
-    #   已于 2026-10-04 修复。旧结论失效 ⇒ 必须在无时间约束下复测。
-    #   ★★ 2026-10-04 决策更正：**不翻默认值** —— 项目已有专为此设计的实验臂
-    #   `deploy/run_112.py` 的 `arm2`（= 蓝图结构修复 + 评审链恢复，理由与本条完全一致）。
-    #   翻默认值会让 arm2 与基线重合、毁掉 A/B 对照。**复测请用 `--arm arm2`。**
-    dag_replan_gate: bool = False
-    # 2026-10-12 补齐（原为裸 getattr，读取点 agent/sub_goal_solver__lean.py:41/65
-    #   与 agent/sub_goal_solver__review.py:261）—— 这两个键是「Lean 检查蓝图逻辑」
-    #   的实际执行开关与节点上限，此前不可配置、diag 也读不到。
-    dag_replan_lean_check: bool = True
-    #   ★ 2026-10-13：6 → **50**（覆盖全图；原 6 是省资源型抽样，与研究期口径冲突）。
-    dag_lean_max_nodes: int = 50
-    # 2026-09-13 补上**显式声明**（此前**未在 dataclass 声明**，而读取处是
-    # `sub_goal_solver.py:693` 的 `getattr(config, "enable_dag_replan", True)`
-    # ⇒ **恒为 True、恒开且无法配置**，是典型的"静默恒开"）。
-    # 默认关，依据（195 题 `stage_timers` + 45 题专项实测）：
-    #   · 它排在**候选入池之后**（`sub_goal_solver.py:680` 之后），对本题得分
-    #     **无直接影响**，只是"再评审一遍"；
-    #   · **2/3 白跑**："达硬上限 2 轮停止" 94 次 vs "通过评审停止" 46 次；
-    #   · 有该事件的题 p50 = 606s vs 无 = 218s（**差 388s**）；
-    #   · 每轮 `DagReviewer.review` 是**逐节点 LLM**（实测均评审 11.1 节点/题、
-    #     上限 30），过阈值再整树重生成。
-    # 需 A/B 复测时显式置 True 或 `--enable_dag_replan true`。
-    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
-    #   `docs/ima论文分析_蓝图生成与子目标制定_0915.md §5 隐患 2` 明确记载——
-    #   旧的"关闭"理由是「后置 replan 受 **stage budget** 限制 + **修复结果从不落盘**」，
-    #   **那是时间墙导致的，不是机制本身无效**；并列出 6 道错题
-    #   （comb-032 48% / geo-051 50% / nt-031 41.7% / nt-037 47.6% / nt-077 45% /
-    #     nt-096 60%）"**审查已亮红灯并建议重规划，但实际修订轮数 = 0**"。
-    #   ⇒ 其中「修复结果从不落盘」**正是 2026-10-04 修掉的写回 bug**
-    #     （`_skeleton_review_loop` 未写回 `ctx.blueprint`）。
-    #   ⇒ 旧负面结论**已失效**，现在必须在无时间约束下复测。
-    #   开关可随时置 False 取回旧基线做 A/B。
-    enable_dag_replan: bool = False
-    # ---- 骨架编排层评审（老师 9/2 建议：求解前规划质量门）----
-    # 蓝图生成后先提交 LLM 审查子目标是否不适定 / 难度>=原题；有问题重生成再确认，
-    # 通过后才进语法审核。LLM 失败/预算不足降级放行不阻断。
-    # ⚠ 2026-09-13 由"默认开启（老师明确要求）"改为默认**关**。
-    # 依据（195 题 / 604 条 `stage_timers` 实测）：
-    #   · 112 题中 **80 题（71%）走满 2 轮仍判 replan、从未收敛**；
-    #   · 2.7 阶段耗时：**0 轮组中位 162s vs 走满 2 轮组 576s（差 250–390s/题）**；
-    #   · 同族 `dag_replan_gate` 已有 45 题实证"拦得住、修不好"——净正确率 ≈0、
-    #     耗时 +23%（正是它被默认关掉的理由）；骨架评审是同一模式，且从未收敛；
-    #   · 每轮 = 1 次 32768-token 评审 + 1 次整树重生成。
-    # 老师原意是"求解前把关"，但实测**不收敛** ⇒ 机制保留、默认关闭；
-    # 需要时置 True（或 `--enable_skeleton_review true`）复测。
-    # ★★ 2026-10-04 由 **False 改为 True**（复测，推翻旧结论）：
-    #   同一份 ima 论文分析 §5 隐患 2 指出，骨架评审的关闭理由
-    #   （"80/112 走满 2 轮仍判 replan、从未收敛"）**根因是"从未真正收敛"
-    #   被两个缺陷放大**：① 评审对象**包含根节点**（= 原题本身，永远无法满足
-    #   "比父题更简单"）⇒ 必然 replan；② 重生成结果**不写回**。
-    #   这两条均已于 2026-10-04 修复 ⇒ 旧结论失效，须在无时间约束下复测。
-    #   开关可随时置 False 取回旧基线做 A/B。
-    enable_skeleton_review: bool = False
-    skeleton_review_max_rounds: int = 2     # 评审-重生成循环硬上限（防死循环）
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+    #   以下 6 个开关**整组撤除** —— 均为默认关闭（False）的蓝图评审/重规划机制，
+    #   在生产路径上从不执行（读取点的 getattr 兜底值亦为假），仅
+    #   `deploy/run_112.py::arm2` 复测臂引用：
+    #     · dag_replan_gate            （求解前 DAG 强制评审门）
+    #     · dag_replan_lean_check      （求解前门 Lean 逻辑检查开关）
+    #     · dag_lean_max_nodes         （同上，节点数上限）
+    #     · enable_dag_replan          （候选入池后 DAG replan）
+    #     · enable_skeleton_review     （骨架编排层评审循环）
+    #     · skeleton_review_max_rounds （同上的轮数上限）
+    #   宿主代码（`sub_goal_solver__review.py` / `agent/skeleton_reviewer.py` /
+    #   `_lean_dag_logic_check`）已同步删除。`blueprint_self_review`（有信号自审）
+    #   与 `blueprint_or_expand_all`（A/B 参数）、`blueprint_deps_enabled` 保留。
     # ---- lemma 记忆（#30，跨题持久化）----
     lemma_storage_path: str = ""            # LemmaMemory 跨题持久化路径（空=仅内存）
 

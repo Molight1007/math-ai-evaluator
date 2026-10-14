@@ -215,30 +215,26 @@ class TaskContext:
     #   ⇒ **主流水线跑完本字段恒为空**；只有独立入口 `cli/leap_eval.py`
     #     才会写它（该入口自带测试，仍可用）。
     #   判读纪律：不得因本字段为空就声称"Lean 没检查过"——主线的 Lean 检查走
-    #   `lean_gate` / `lean_dag_fails`（见下）。
+    #   `lean_gate`（见下）。
     sketch_tree: dict = field(default_factory=dict)
 
     # ---- Stage 3 迭代精炼（#29/#30/#32/#33）----
     # ⚠ 2026-09-30 注释订正：同上，「LeanRefinerAgent 写入」仅在独立入口成立。
     #   主流水线不调用 ⇒ **本字段恒为空**，故 `gap_analyzer.extract_gaps()`
     #   （消费本字段）在主链路下**恒返回 "无 refine_result"**；
-    #   现役缺口分析走 `extract_subgoal_gaps()`（subgoal_trace）与
-    #   `extract_lean_dag_gaps()`（lean_dag_fails）。详见 gap_analyzer.ORPHAN_NOTE。
+    #   现役缺口分析走 `extract_subgoal_gaps()`（subgoal_trace）
+    #   （Lean 侧 `extract_lean_dag_gaps()` 已随求解前门一并撤除）。
+    #   详见 gap_analyzer.ORPHAN_NOTE。
     refine_result: dict = field(default_factory=dict)
 
     # ---- DAG 动态评审（LEAP 5.3，#34，2026-09-01）----
     # DagReviewerAgent 写入：评审 DAG 分解质量，建议触发整树重生成
     dag_review_report: dict = field(default_factory=dict)
 
-    # ---- 求解前 Lean 逻辑检查结果（2026-09-30 存，截图 #6）----
-    # `SubGoalSolver._lean_dag_logic_check()` 用 `example : (expr) := by sorry`
-    # 逐节点编译；编译失败的节点**命题无法良构形式化** ⇒ 该子目标存在
-    # 可判定的逻辑/类型层缺陷。此处存原始明细，供离线做缺口性质分类
-    # （回答用户 #6「用 Lean 检测 sorry 的地方，缺的逻辑点是不是模型该推出来的」）。
-    # ★ 空字典 = 未触发该检查（无 reject 信号/预算不足/Lean 不可用），
-    #   与「检查了但全通过」不同 —— 后者会留下 `lean_dag_checked` 非空。
-    lean_dag_fails: dict = field(default_factory=dict)
-    lean_dag_checked: list = field(default_factory=list)
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+    #   原 `lean_dag_fails` / `lean_dag_checked`（求解前 Lean 逻辑检查落点）随
+    #   `_lean_dag_logic_check` 一并撤除 —— 其唯一调用者是默认关闭的
+    #   `dag_replan_gate`，字段在生产中恒为空。
 
     # ---- 领域 → 定理检索（2026-09-29 新增，截图 #3+#4）----
     # 由 orchestrator 的 1.6) 阶段写入（实现在 agent/theorem_hint.py）。

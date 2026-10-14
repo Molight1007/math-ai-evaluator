@@ -29,7 +29,7 @@ if _SRC not in sys.path:
 
 from agent.gap_analyzer import (  # noqa: E402
     aggregate_gaps, classify_gap, classify_subgoal_gap, counts_as_reasoning,
-    extract_gaps, extract_lean_dag_gaps, extract_subgoal_gaps, gap_meaning,
+    extract_gaps, extract_subgoal_gaps, gap_meaning,
     is_subgoal_failed, merge_gap_sources,
 )
 
@@ -300,82 +300,3 @@ def test_negation_control_would_catch_a_wrong_classifier():
     assert counts_as_reasoning("formalization") is not True
     # 若把正常结论误判为失败，本断言会红
     assert is_subgoal_failed("答案是 42") is False
-
-
-# ----------------------------------------------------------------------
-# 7) Lean 侧缺口：extract_lean_dag_gaps（2026-09-30，截图 #6 下半问）
-# ----------------------------------------------------------------------
-# 数据源 = 求解前 Lean 逻辑检查（`example : (expr) := by sorry` 编译结果）。
-# ★ 三个状态**必须区分**（本项目反复吃亏的地方）：
-#     · 没跑            → ok=False，"不能据此判定蓝图无缺陷"
-#     · 跑了且全通过    → ok=True,  n_failed=0   ← 好信号
-#     · 跑了且有失败    → ok=True,  n_failed>0
-#   把「没跑」当「没问题」是致命的假阴性。
-# ----------------------------------------------------------------------
-def test_lean_gaps_not_run_is_not_a_pass():
-    """★ 关键：检查未触发 ≠ 通过。绝不能返回 ok=True / n_failed=0 的"全通过"形态。"""
-    r = extract_lean_dag_gaps({}, [])
-    assert r["ok"] is False
-    assert "未触发" in r["diagnosis"]
-    assert "不能据此判定" in r["diagnosis"]
-
-
-def test_lean_gaps_ran_and_all_passed():
-    r = extract_lean_dag_gaps({}, ["n1", "n2", "n3"])
-    assert r["ok"] is True
-    assert r["n_checked"] == 3
-    assert r["n_failed"] == 0
-    assert r["n_done"] == 3
-    assert "全部通过" in r["diagnosis"]
-
-
-def test_lean_gaps_formalization_is_not_reasoning():
-    """★ 核心：`by sorry` 编译失败 ⇒ 命题本身写得不成立 ⇒ **不是**推理瓶颈。"""
-    r = extract_lean_dag_gaps(
-        {"n1": "unknown identifier 'foo'", "n2": "type mismatch: Nat vs Int"},
-        ["n1", "n2", "n3"])
-    assert r["ok"] is True
-    assert r["by_kind"] == {"formalization": 2}
-    assert r["reasoning_gaps"] == 0
-    assert r["non_reasoning_gaps"] == 2
-    assert "形式化缺陷" in r["diagnosis"]
-    assert "不是模型该推出来的点" in r["diagnosis"]
-
-
-def test_lean_gaps_logical_jump_does_count():
-    """反向对照：真正推不出来的（unsolved goals）**要**算推理瓶颈。"""
-    r = extract_lean_dag_gaps({"n1": "unsolved goals"}, ["n1"])
-    assert r["reasoning_gaps"] == 1
-    assert r["reasoning_share"] == 1.0
-
-
-def test_lean_gaps_restores_statement_from_blueprint():
-    bp = {"nodes": {"n1": {"statement": "设 x > 0 且 x + 1/x = 3"}}}
-    r = extract_lean_dag_gaps({"n1": "unknown identifier 'y'"}, ["n1"], bp)
-    assert r["gaps"][0]["statement"] == "设 x > 0 且 x + 1/x = 3"
-    # list 形态的 nodes 也要能还原
-    bp2 = {"nodes": [{"id": "n1", "statement": "s2"}]}
-    r2 = extract_lean_dag_gaps({"n1": "unknown identifier 'y'"}, ["n1"], bp2)
-    assert r2["gaps"][0]["statement"] == "s2"
-
-
-def test_lean_gaps_never_raises_on_junk():
-    """诊断路径绝不能因脏数据崩（本项目铁律）。"""
-    for junk in (None, [], "str", 42):
-        r = extract_lean_dag_gaps(junk, None)
-        assert r["ok"] is False
-    r = extract_lean_dag_gaps({"n1": None}, None)
-    assert r["ok"] is True          # 有 fails 就算跑过
-    assert r["gaps"][0]["kind"] == "unknown"
-
-
-def test_lean_gaps_can_merge_with_subgoal_gaps():
-    """两源可汇总：merge_gap_sources 认 ok=True 的源，不认未触发的源。"""
-    lg = extract_lean_dag_gaps({"n1": "unknown identifier 'x'"}, ["n1"])
-    sg = extract_subgoal_gaps(
-        [{"id": "n1", "title": "t", "description": "d", "result": "推不出"}])
-    m = merge_gap_sources(sg, lg)
-    assert m["ok"] is True
-    assert "lean_dag_check" in m["sources"]
-    # 同一个 node_id 两边都失败 ⇒ 高置信推理瓶颈候选
-    assert "n1" in m["in_both_failed"]

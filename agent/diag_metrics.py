@@ -105,46 +105,6 @@ def _compute_subgoal_gaps(ctx) -> dict:
 
 
 # ---------------------------------------------------------------------------
-def _compute_lean_gaps(ctx) -> dict:
-    """Lean 侧逻辑缺口（2026-09-30，截图 #6 下半问）—— 纯埋点，不改分支。
-
-    用户原话：
-    > **可不可以用 lean 来检测有没有 sorry 的地方，像这种缺少的逻辑点
-    > 是不是就是大模型需要推理出来的点呢？**
-
-    数据源：`ctx.lean_dag_fails` / `ctx.lean_dag_checked`
-      （由 `SubGoalSolver._lean_dag_logic_check()` 写入 —— 它把每个候选子目标
-      变成 `example : (expr) := by sorry` 交给 Lean 编译；`by sorry` 挖空了
-      "证明"，故**编译失败只可能来自命题本身**）。
-
-    ★ 关键判读（必须与自然语言侧分开看）：
-      编译失败 ⇒ 该子目标**连要证什么都没说清** ⇒ 属 `formalization`
-      （形式化/表述缺陷），**不是模型推理不出来的点**。
-      把它误读成推理瓶颈，优化方向就会错到去调解题提示词。
-
-    与 `_compute_subgoal_gaps` 是**两个独立视角**，故 diag 中并列输出；
-    需要交集时由 `gap_analyzer.merge_gap_sources()` 在离线汇总里做。
-    """
-    try:
-        from .gap_analyzer import extract_lean_dag_gaps
-    except Exception as e:  # noqa: BLE001
-        logger.debug("[gap_analyzer] 导入失败，跳过 Lean 缺口分析: %s", e)
-        return {"ok": False, "error": "模块导入失败"}
-    try:
-        r = extract_lean_dag_gaps(
-            getattr(ctx, "lean_dag_fails", None) or {},
-            getattr(ctx, "lean_dag_checked", None) or [],
-            getattr(ctx, "blueprint", None) or {},
-        )
-        if r.get("gaps"):
-            r["gaps"] = r["gaps"][:20]
-        return r
-    except Exception as e:  # noqa: BLE001
-        logger.debug("[gap_analyzer] Lean 缺口分析异常: %s", e)
-        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
-
-
-# ---------------------------------------------------------------------------
 def _switch_snapshot() -> dict:
     """开关注册表生效值快照（2026-10-01 注册制）。
 

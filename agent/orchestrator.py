@@ -76,7 +76,7 @@ from .param_usage import collect_param_usage  # noqa: F401
 # 既有 `from agent.orchestrator import _merge_error_types` 等调用点/测试零改动。
 from .diag_metrics import (  # noqa: F401
     _merge_error_types, _sum_reject_votes, _compute_subgoal_gaps,
-    _compute_lean_gaps, _switch_snapshot, _tool_gateway_summary,
+    _switch_snapshot, _tool_gateway_summary,
     _parse_exhaust_result, _diag_completeness, _summarize_deep_review,
     _summarize_leansearch)
 from .diag_export import collect_diag  # noqa: F401  （供 _collect_diag 委托）
@@ -494,8 +494,6 @@ class Orchestrator(BaseAgent):
             _artifact_put(ctx, "07_lean", {
                 "final_gate": getattr(ctx, "final_gate", None),
                 "gate_rejected": getattr(ctx, "gate_rejected", None),
-                "lean_dag_checked": getattr(ctx, "lean_dag_checked", None),
-                "lean_dag_fails": getattr(ctx, "lean_dag_fails", None),
                 "lean_reject_feedback": getattr(ctx, "lean_reject_feedback", None),
                 "final_response_after_gate": getattr(ctx, "final_response", ""),
             })

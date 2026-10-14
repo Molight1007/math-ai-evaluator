@@ -462,108 +462,6 @@ def extract_subgoal_gaps(subgoal_trace: list,
             f"其中**真·推理瓶颈** {out['reasoning_gaps']} 个"
             f"（占失败子目标 {out['reasoning_share']:.0%}）。")
     return out
-
-
-def extract_lean_dag_gaps(lean_fails: dict,
-                          checked: list | None = None,
-                          blueprint: dict | None = None) -> dict:
-    """从**求解前 Lean 逻辑检查**结果提炼缺口清单（用户 #6 的 Lean 侧答案）。
-
-    数据来源：`ctx.lean_dag_fails`（`{node_id: 首条 Lean 诊断}`）+
-    `ctx.lean_dag_checked`（本次送去编译的节点 id 列表）。
-
-    ★ 这条链回答的是用户原话里最硬的那一问：
-      > **可不可以用 lean 来检测有没有 sorry 的地方，像这种缺少的逻辑点
-      > 是不是就是大模型需要推理出来的点呢？**
-
-      做法是**间接但可靠**的：`_lean_dag_logic_check()` 为每个候选子目标生成
-      `example : (expr) := by sorry` 并交给 Lean 编译 —— `by sorry` 把"证明"
-      这一环挖空，所以**编译失败只可能来自命题本身**（符号没定义、量词/类型错、
-      自引用、不是良构命题）。于是：
-        · 编译**通过** ⇒ 该子目标是个能站住的命题 ⇒ 剩下的才是"证明"要干的事；
-        · 编译**失败** ⇒ 该子目标连"要证什么"都没说清 ⇒ **不是推理瓶颈，
-          是形式化/表述缺陷**（`formalization`），该修的是译题与陈述生成。
-
-      ⇒ 结论：**Lean 抓到的 sorry 缺口，大多不是模型该推出来的点**，
-        而是"这个子目标本来就写得不成立"。这正是必须做性质区分的理由：
-        若不区分，会把这批缺口误读成推理能力不足，优化方向直接跑偏。
-
-    返回结构与 `extract_gaps()` / `extract_subgoal_gaps()` **完全一致**，
-    便于 `merge_gap_sources()` 汇总，额外带 `"source": "lean_dag_check"`。
-    """
-    out = {
-        "ok": False, "source": "lean_dag_check", "verdict": "unknown",
-        "n_nodes": 0, "n_done": 0, "n_failed": 0,
-        "gaps": [], "by_kind": {},
-        "reasoning_gaps": 0, "non_reasoning_gaps": 0, "unclassified": 0,
-        "reasoning_share": 0.0, "diagnosis": "",
-        "n_checked": 0,
-    }
-    if not isinstance(lean_fails, dict):
-        out["diagnosis"] = "无 lean_dag_fails（该检查未触发）"
-        return out
-
-    checked_ids = [str(x) for x in (checked or [])]
-    out["n_checked"] = len(checked_ids)
-    # 关键区分：`checked` 非空但 `fails` 为空 = **检查跑了且全通过**（好信号）；
-    #           `checked` 也空 = **检查根本没跑**（不可解读为"没问题"）。
-    if not checked_ids and not lean_fails:
-        out["diagnosis"] = ("Lean 逻辑检查未触发（无评审 reject 信号 / 预算不足 / "
-                            "Lean 不可用）⇒ **不能据此判定蓝图无缺陷**")
-        return out
-
-    stmt_map = _stmt_map_from_blueprint(blueprint)
-    out["ok"] = True
-    by_kind: dict = {}
-
-    for nid, err in lean_fails.items():
-        kind = classify_gap(str(err))       # 复用 Lean 报错分类（同一套 kind 命名）
-        meaning, advice = gap_meaning(kind)
-        is_reasoning = counts_as_reasoning(kind)
-        by_kind[kind] = by_kind.get(kind, 0) + 1
-        out["gaps"].append({
-            "node_id": str(nid),
-            "theorem": "",
-            "statement": stmt_map.get(str(nid), ""),
-            "kind": kind,
-            "meaning": meaning,
-            "is_reasoning": is_reasoning,
-            "advice": advice,
-            "error_excerpt": str(err)[:400],
-            "attempts": None,
-        })
-        if is_reasoning is True:
-            out["reasoning_gaps"] += 1
-        elif is_reasoning is False:
-            out["non_reasoning_gaps"] += 1
-        else:
-            out["unclassified"] += 1
-
-    out["n_nodes"] = len(checked_ids) or len(lean_fails)
-    out["n_failed"] = len(lean_fails)
-    out["n_done"] = max(out["n_nodes"] - out["n_failed"], 0)
-    out["by_kind"] = by_kind
-    if out["n_failed"]:
-        out["reasoning_share"] = round(out["reasoning_gaps"] / out["n_failed"], 4)
-
-    if not out["gaps"]:
-        out["diagnosis"] = (
-            f"Lean 逐节点编译**全部通过**（{out['n_checked']} 个节点）⇒ "
-            "送检子目标均可良构形式化，**未发现「连要证什么都没说清」的缺陷**。")
-    else:
-        top = sorted(by_kind.items(), key=lambda kv: -kv[1])
-        top_desc = "、".join(f"{k}×{v}" for k, v in top[:3])
-        _f = out["by_kind"].get("formalization", 0)
-        out["diagnosis"] = (
-            f"{out['n_failed']}/{out['n_nodes']} 个送检节点 Lean 编译失败，"
-            f"性质：{top_desc}。"
-            + (f"其中 {_f} 个属**形式化缺陷**（命题写得不成立/符号未定义）——"
-               f"**这不是模型该推出来的点**，应修陈述生成；"
-               if _f else "")
-            + f"真·推理瓶颈 {out['reasoning_gaps']} 个。")
-    return out
-
-
 def _stmt_map_from_blueprint(blueprint: dict | None) -> dict:
     """从 blueprint 还原 {节点id: statement}（兼容 list / dict 两种 nodes 形态）。"""
     stmt_map: dict = {}
@@ -656,16 +554,7 @@ def merge_gap_sources(*results: dict) -> dict:
 #        回答：自然语言求解时，"每步子目标有没有得出结论"。
 #        接入点：`orchestrator._compute_subgoal_gaps()` → diag["subgoal_gaps"]。
 #
-#   ② `extract_lean_dag_gaps(lean_fails, checked)`  ← **现役，条件触发**
-#        消费 `ctx.lean_dag_fails` / `ctx.lean_dag_checked`
-#        （sub_goal_solver._lean_dag_logic_check 写入）。
-#        回答：**用 Lean 检测"有哪些子目标连要证什么都没说清"**。
-#        ★ 触发条件较严：需 ①评审已出 reject 信号 ②非预算紧张
-#          ③Lean 环境可用 ④每题至多 1 次。⇒ 大量题会显示"未触发"，
-#          **"未触发"不等于"没问题"**（函数已在 diagnosis 里写明这句）。
-#        接入点：`orchestrator._compute_lean_gaps()` → diag["lean_gaps"]。
-#
-#   ③ `extract_gaps(refine_result)`  ← **孤儿（ORPHAN），恒空**
+#   ② `extract_gaps(refine_result)`  ← **孤儿（ORPHAN），恒空**
 #        消费 `ctx.refine_result` —— 该字段由 LeanRefinerAgent 写入，
 #        而 **LeanRefinerAgent 已于 2026-09-06 从链路移除**
 #        （`sub_goal_solver.py:1602-1605`：平台无 Lean，整树翻译+编译只空转）。

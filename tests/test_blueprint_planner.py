@@ -463,61 +463,33 @@ class ReplanTest(unittest.TestCase):
 # SubGoalSolver 阶段四：Reviewer + Replan 集成测试
 # ============================================================
 
-class SubGoalReviewReplanTest(unittest.TestCase):
-    """SubGoalSolver.run 末尾应触发 DagReviewer + 必要时整树重生成。"""
+class SubGoalReviewReplanRemovedTest(unittest.TestCase):
+    """★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+    `SubGoalSolver.run` 末尾的 DAG 评审 + 整树重生成闭环
+    （`_review_and_maybe_replan`，开关 `enable_dag_replan`，默认 False）已整块撤除。
+    原 `test_subgoal_solver_runs_review_at_end` 所守护的对象已不存在，
+    此处改守「撤除确实落地」—— 防止被误恢复。"""
 
-    def _make_sub_goal_mock_llm_response(self):
-        """构造 SubGoalSolver 需要的多步 LLM 输出：plan + step 结果。
+    def test_review_replan_call_removed(self):
+        import pathlib
+        repo = pathlib.Path(__file__).resolve().parent.parent
+        src = (repo / "agent" / "sub_goal_solver.py").read_text(encoding="utf-8")
+        # ⚠ 判据必须是**调用/跳板形态**而非裸名：源码保留了「已撤除」的中文说明，
+        #   其中仍会提到函数名（属留痕，不是活引用 —— 本项目 _code_only 同款坑）。
+        self.assertNotIn("_sgs_review", src, "review 模块跳板应已撤除")
+        self.assertNotIn("self._review_and_maybe_replan(", src)
+        self.assertFalse((repo / "agent" / "sub_goal_solver__review.py").exists(),
+                         "宿主模块 sub_goal_solver__review.py 应已删除")
 
-        走通三个 LLM 调用：
-          1) planner.generate_blueprint() → 用现有 DAG_JSON 即可
-          2) plan_subgoals 走 DAG 路径，但 generate_blueprint 已被前面 mock 替换
-          3) _call_step 每子目标调用一次（结果占位）
-        """
-        step_ok = json.dumps({"result": "ok"})
-        return ["```json\n" + DAG_JSON + "\n```", "```json\n" + step_ok + "\n```"]
-
-    def test_subgoal_solver_runs_review_at_end(self):
-        """子目标完成后跑 Reviewer，不触发重生成（评审通过 → False）。"""
-        from agent.sub_goal_solver import SubGoalSolverAgent
-        # 准备第一段响应 = DAG JSON；第二段 = 每子目标 step 结果（多次返回）
-        idx = {"i": 0}
-
-        class MyClient:
-            def chat(self, messages=None, temperature=0.0, max_tokens=256, **kw):
-                idx["i"] += 1
-                # 第一次（generate_blueprint）→ DAG_JSON；其他 → step result
-                if idx["i"] == 1:
-                    return "```json\n" + DAG_JSON + "\n```"
-                return "```\n【本步结果】\n已求解\n```"
-
-        config = SimpleNamespace(
-            use_blueprint_dag=True,
-            use_leansearch=False,
-            theorem_memory_enable=False,
-            enable_dag_replan=True,    # 开启评审+replan
-            # 2026-10-12 批次 2：新增「蓝图自审」步骤会额外发起 LLM 调用、
-            # 改变调用序列 ⇒ 显式隔离（**非放宽判据**）
-            blueprint_self_review=False,
-            subgoal_self_improve_rounds=0,  # 4.2 隔离：新接线会多跑 LLM
-            dag_replan_max_rounds=2,
-            # 2026-10-14 任务 #2：定理检索下移到 2.7 子目标求解体首，会在
-            # `run` 起始多打一次 LLM 查询（LLM 辅助 query）——本测试直接构造
-            # SubGoalSolverAgent 并调 `run`（绕过编排层 2.6 门控），而
-            # MyClient 按**调用序号**返回（第 1 次必须是 DAG_JSON）⇒ 必须显式
-            # 关掉检索以保持调用序列（**非放宽判据**，与上面两项隔离同理）。
-            enable_theorem_hint=False,
-        )
-        ctx = make_ctx()
-        ctx.budget = Budget(max_calls=50)
-        solver = SubGoalSolverAgent(MyClient(), config)
-        solver.run(ctx)
-        # dag_review_report 应被写入
-        self.assertTrue(ctx.dag_review_report)
-        # trace 应有 dag_review 步骤
-        trace_steps = [t.get("step") for t in ctx.trace]
-        self.assertIn("dag_review", trace_steps)
-
+    def test_skeleton_and_gate_calls_removed(self):
+        import pathlib
+        repo = pathlib.Path(__file__).resolve().parent.parent
+        src = (repo / "agent" / "sub_goal_solver__planner.py").read_text(
+            encoding="utf-8")
+        self.assertNotIn("self._skeleton_review_loop(", src,
+                         "骨架评审调用应已撤除")
+        self.assertNotIn("self._dag_replan_gate(", src,
+                         "求解前 DAG 强制门调用应已撤除")
 
 # ============================================================
 # 子树级局部重写（#34 第二级）测试
@@ -595,7 +567,6 @@ class SubtreeRewriteTest(unittest.TestCase):
         """mock LLM：子树重写成功 → 只动 LCA 子树，其他节点保留。"""
         cfg = SimpleNamespace(
             use_blueprint=True, use_blueprint_dag=True,
-            enable_dag_replan=True, dag_replan_max_rounds=2,
             blueprint_self_review=False,   # 批次 2 隔离：新增自审会改调用序列
             subgoal_self_improve_rounds=0,  # 4.2 隔离
             use_leansearch=False, theorem_memory_enable=False,
@@ -635,7 +606,6 @@ class SubtreeRewriteTest(unittest.TestCase):
         """LCA=根 → 退化为整树重生成（mock 返回新 DAG）。"""
         cfg = SimpleNamespace(
             use_blueprint=True, use_blueprint_dag=True,
-            enable_dag_replan=True, dag_replan_max_rounds=2,
             blueprint_self_review=False,   # 批次 2 隔离：新增自审会改调用序列
             subgoal_self_improve_rounds=0,  # 4.2 隔离
             use_leansearch=False, theorem_memory_enable=False,

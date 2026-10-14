@@ -210,10 +210,9 @@ def _add_extended_switch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--enable_collaborative_deep", type=str, default=None,
                         choices=["true", "false"],
                         help="enable_collaborative_deep（3.4 deep档三Agent协作）")
-    parser.add_argument("--enable_dag_replan", type=str, default=None, choices=["true", "false"],
-                        help="enable_dag_replan（DAG 动态评审+重生成闭环）")
-    # 2026-09-08：求解前 DAG 强制门独立开关（默认关=去掉门）
-    parser.add_argument("--dag_replan_gate", type=str, default=None, choices=["true", "false"], help="dag_replan_gate（求解前 DAG 强制评审门，默认 false）")
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+    #   `--enable_dag_replan` / `--dag_replan_gate` 两个 CLI 参数已随三个默认
+    #   关闭的门整块撤除（见 user_agent__config.py 同名说明）。
     # 2026-09-08：L2 子目标数值/代数断言 Lean 验证（lean-lsp-mcp norm_num/ring）
     parser.add_argument("--enable_numeric_lean_verify", type=str, default=None, choices=["true", "false"], help="enable_numeric_lean_verify（子目标数值断言 Lean 验证）")
     parser.add_argument("--lean_numeric_max_per_q", type=int, default=None, help="lean_numeric_max_per_q（每题数值 Lean 验证限额，默认 2）")
@@ -371,15 +370,11 @@ def _collect_arg_overrides(args) -> Dict[str, Any]:
     if args.blueprint_or_expand_all is not None:
         overrides["blueprint_or_expand_all"] = (
             args.blueprint_or_expand_all == "true")
-    if args.enable_dag_replan is not None:
-        overrides["enable_dag_replan"] = args.enable_dag_replan == "true"
     if args.enable_self_improve is not None:
         overrides["enable_self_improve"] = args.enable_self_improve == "true"
     if args.enable_collaborative_deep is not None:
         overrides["enable_collaborative_deep"] = \
             args.enable_collaborative_deep == "true"
-    if args.dag_replan_gate is not None:
-        overrides["dag_replan_gate"] = args.dag_replan_gate == "true"
     if args.enable_numeric_lean_verify is not None:
         overrides["enable_numeric_lean_verify"] = \
             args.enable_numeric_lean_verify == "true"

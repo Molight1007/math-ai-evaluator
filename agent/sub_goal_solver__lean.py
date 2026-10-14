@@ -5,14 +5,20 @@
 搬出后形如模块级函数：实例方法保留 `self` 首参（原方法体逐字不变），
 静态方法去 `@staticmethod`（普通函数）。原文件 `sub_goal_solver.py` 在类内
 保留 1 行**跳板**（`_x = _sgs_lean._x`），故 `self._x(...)` /
-`SubGoalSolverAgent._x(...)`（含 tests/test_dag_lean_check.py）**契约逐字不变**。
+`SubGoalSolverAgent._x(...)` **契约逐字不变**。
 与 agent/verifier__review.py（批6）同口径。
 
-本模块**自洽**：只依赖 stdlib（json/os/re/time/logging）+ `TaskContext`。
+★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：撤除
+`_lean_dag_logic_check` / `_merge_lean_rejects` / `_parse_lean_expr_map` /
+`_map_lean_errors` / `_extract_chain_lean_lines`（求解前 DAG 强制门的 Lean
+逻辑层检测）—— 其唯一调用者是默认关闭的 `dag_replan_gate`；配套的
+`prompts/dag_lean_check.py` 与 `tests/test_dag_lean_check.py` 一并删除。
+剩余 8 个方法继续服务「数值断言 Lean 验证」链。
+
+本模块**自洽**：只依赖 stdlib（os/re/time/logging）+ `TaskContext`。
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -21,133 +27,6 @@ import time
 from .base import TaskContext
 
 logger = logging.getLogger("MathPilot")
-
-
-def _lean_dag_logic_check(self, ctx: TaskContext, dag,
-                          node_ids) -> dict:
-    """Lean 作为「逻辑错误」机器检测器：把节点陈述翻译成 Lean Prop
-        并编译（声明模式 allow_sorry）。返回 {node_id: 首条诊断}。
-
-        可判定层：语句无法良构形式化 / 符号未定义 / 类型错 / 自引用 /
-        不成闭合命题。方向与语义错误**不在此列**（仍由 DagReviewer LLM 判）。
-
-        成本受控（勿拖累解题预算——上轮 45 题教训）：
-        - 每题至多被调用 1 次（gate 首轮、且有 reject 信号时）；
-        - 节点数 ≤ dag_lean_max_nodes（默认 6）；
-        - 时间紧迫 / Lean 环境不可用 / 无 lake 工程 / LLM 翻译失败 → 一律
-          返回 {}（记一条事件后静默放行，绝不阻断、绝不误判整图）。
-        """
-    try:
-        _t0 = time.perf_counter()
-        if not getattr(self.config, "dag_replan_lean_check", True):
-            # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return {}。
-            self.record(ctx, "dag_replan",
-                        "求解前 Lean 逻辑检查已跳过：开关 dag_replan_lean_check=0")
-            return {}
-        if not node_ids:
-            return {}
-        if ctx.is_time_critical() or ctx.gen_time_up():
-            self.record(ctx, "dag_replan",
-                        "求解前 Lean 逻辑检查已跳过：当前处于时间紧迫/生成侧截止")
-            return {}
-        from tools.lean_local.lean_bridge import LeanBridge
-        from tools.lean_local.lean_bridge import _trash_lean_file
-        from tools.lean_local.lean_bridge import _mathlib_import_block
-        bridge = LeanBridge(self.client, self.config)
-        if not bridge.lean_available:
-            self.record(ctx, "dag_replan",
-                        "求解前 Lean 逻辑检查跳过（Lean 环境不可用）")
-            return {}
-        work_dir = bridge._lean_project_dir or ""
-        if not work_dir:
-            self.record(ctx, "dag_replan",
-                        "求解前 Lean 逻辑检查跳过（无 lake 工程）")
-            return {}
-        cap = max(1, int(getattr(self.config, "dag_lean_max_nodes", 50) or 50))
-        targets = [nid for nid in node_ids
-                   if nid in dag.nodes][:cap]
-        if not targets:
-            return {}
-        stmts = {nid: (dag.nodes[nid].statement or "")[:300]
-                 for nid in targets}
-        from prompts.dag_lean_check import (
-            DAG_LEAN_CHECK_SYSTEM, DAG_LEAN_CHECK_USER_TEMPLATE)
-        from utils.prefill import prefill_messages, stitch
-        user_msg = DAG_LEAN_CHECK_USER_TEMPLATE.format(
-            problem=(ctx.problem or "")[:1200],
-            statements=json.dumps(stmts, ensure_ascii=False))
-        _PREFILL = '{"'
-        resp = self.llm(ctx, prefill_messages(
-            [{"role": "system", "content": DAG_LEAN_CHECK_SYSTEM},
-             {"role": "user", "content": user_msg}],
-            _PREFILL), 0.0, 16384)
-        if resp:
-            resp = stitch(_PREFILL, resp)
-        exprs = self._parse_lean_expr_map(resp, targets)
-        if not exprs:
-            self.record(ctx, "dag_replan",
-                        "求解前 Lean 逻辑检查跳过（节点翻译为空/不可解析）")
-            return {}
-        # 组装单文件：import 头（兼容部分编译布局，用 _mathlib_import_block）
-        # + 每节点一行 example（匿名声明）；行号即节点映射。
-        head_lines = [ln for ln in _mathlib_import_block().split("\n")]
-        code_lines = list(head_lines)
-        _chain_merged = [False]   # 合并标记（只并一次）
-        if code_lines and code_lines[-1].strip():
-            code_lines.append("")
-        line_of: dict = {}
-        for nid in targets:
-            expr = exprs.get(nid, "")
-            if not expr:
-                continue
-            expr = expr.strip()
-            if not expr:
-                continue
-            # ★ 2026-10-13（§3.6.4 **合并编译**）：把「终态链 Lean」并入同一文件 ——
-            #   一次编译既查节点，也查「蓝图是否偏离终态链」。只并一次，且去重防重名。
-            if not _chain_merged[0]:
-                _chain_merged[0] = True
-                _uc = _extract_chain_lean_lines(ctx)
-                if _uc:
-                    code_lines.extend(_uc)
-                    code_lines.append("")
-            code_lines.append(f"example : ({expr}) := by sorry")
-            line_of[nid] = len(code_lines)
-        if not line_of:
-            return {}
-        code = "\n".join(code_lines)
-        fname = (f"daglogic_{os.getpid()}_"
-                 f"{int(time.time() * 1000) % 1000000}.lean")
-        result = bridge._compile(code, work_dir, lean_filename=fname,
-                                 allow_sorry=True)
-        try:
-            _trash_lean_file(work_dir, fname)
-        except Exception:  # noqa: BLE001
-            pass
-        if not result or result.get("ok"):
-            # 编译全过（节点均可良构形式化）也留痕，便于评测区分
-            # "Lean 检查已执行但无逻辑错误" 与 "检查根本没触发"
-            self.record(ctx, "dag_replan",
-                        f"求解前 Lean 逻辑检查通过 {len(line_of)} 节点"
-                        f"（无编译错误，耗时 {time.perf_counter() - _t0:.1f}s）")
-            return {}
-        self.record(ctx, "dag_replan",
-                    f"求解前 Lean 逻辑检查：{len(line_of)} 节点编译，"
-                    f"耗时 {time.perf_counter() - _t0:.1f}s"
-                    f"（含把陈述翻译成 Lean 的 LLM 调用 + 编译）")
-        err_text = str(result.get("error", ""))
-        return self._map_lean_errors(err_text, line_of)
-    except Exception as exc:  # noqa: BLE001  任何异常：降级放行，绝不阻断
-        # 2026-09-08 排查：原仅 logger.debug → 评测零痕迹，无法区分
-        # "检查未执行" 与 "执行中异常被吞"。升级为 record 留痕（防静默失效）。
-        logger.debug("求解前 Lean 逻辑检查异常（放行）: %s: %s",
-                     type(exc).__name__, exc)
-        self.record(ctx, "dag_replan",
-                    f"求解前 Lean 逻辑检查异常（放行）: "
-                    f"{type(exc).__name__}: {str(exc)[:120]}")
-        return {}
-
-
 def _numeric_lean_verify(self, ctx: TaskContext, result: str) -> str:
     """L2 数值断言 Lean 验证，返回反馈文本（空=通过/无可验断言/放行）。"""
     if not getattr(self.config, "enable_numeric_lean_verify", False):
@@ -468,85 +347,6 @@ def _extract_check_asserts(self, result: str) -> list:
             seen.add(t)
             uniq.append(t)
     return uniq[:4]
-
-
-def _merge_lean_rejects(report, lean_fails: dict) -> list:
-    """Lean 编译失败的节点硬升级为 reject（含 LLM 漏判/未评的），
-        返回本轮新升级的 node_id 列表。已 reject 的节点保持不动。"""
-    from .dag_reviewer import DagReviewResult
-    ups = []
-    for nid, err in lean_fails.items():
-        issue = f"lean_logic_error: {err}"
-        r = report.results.get(nid)
-        if r is None:
-            report.results[nid] = DagReviewResult(
-                node_id=nid, verdict="reject", quality_score=0.2,
-                issues=[issue],
-                reconstruction_hint=(
-                    "该节点陈述存在可判定的形式化逻辑错误（Lean 编译失败），"
-                    "请修正陈述中的符号/量词/类型错误或改换可形式化的表述"),
-                heuristic_only=False)
-            ups.append(nid)
-        elif not r.is_reject:
-            r.verdict = "reject"
-            try:
-                r.quality_score = min(float(r.quality_score or 0.0), 0.3)
-            except (TypeError, ValueError):
-                r.quality_score = 0.3
-            if issue not in list(r.issues):
-                r.issues.append(issue)
-            ups.append(nid)
-    return ups
-
-
-def _parse_lean_expr_map(resp, targets) -> dict:
-    """解析翻译 LLM 的 JSON 输出 → {nid: expr}；失败/空返回 {}。"""
-    if not resp:
-        return {}
-    text = str(resp).strip()
-    # 剥 markdown 围栏
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        return {}
-    try:
-        raw = json.loads(text[start:end + 1])
-    except (TypeError, ValueError):
-        raw = None
-    if not isinstance(raw, dict):
-        return {}
-    out = {}
-    for nid in targets:
-        val = raw.get(nid)
-        if isinstance(val, str) and val.strip():
-            out[nid] = val.strip()
-    return out
-
-
-def _map_lean_errors(err_text: str, line_of: dict) -> dict:
-    """把 Lean 编译错误文本按行号映射回节点。行号在首个 example 之前
-        （import/文件级错误）→ 视为环境问题，返回 {}（不误判节点）。"""
-    if not err_text or not line_of:
-        return {}
-    min_line = min(line_of.values())
-    node_fail: dict = {}
-    msg_of_line: dict = {}
-    for m in re.finditer(r":(\d+):(\d+):\s*(error|warning):\s*([^\n]*)",
-                         err_text):
-        line = int(m.group(1))
-        if m.group(3) == "error" and line not in msg_of_line:
-            msg_of_line[line] = m.group(4).strip()
-    if any(line < min_line for line in msg_of_line):
-        return {}                      # 文件级/import 错误 → 环境问题
-    for nid, line in line_of.items():
-        msg = msg_of_line.get(line)
-        if msg:
-            node_fail[nid] = msg[:160]
-    return node_fail
-
-
 def _build_auto_proof(self, fails: list):
     """为疑似错断言构建多策略 Lean 声明（P4）。
 
@@ -601,30 +401,3 @@ def _fix_lean_mul(expr: str) -> str:
     e = re.sub(r"\*\s*\*", "*", e)
     e = re.sub(r"\(\s*\*\s*\(", "(", e)
     return e.strip()
-
-def _extract_chain_lean_lines(ctx) -> list:
-    """抽出「题意理解链」的 Lean 片段（去 import、防重名），供**合并编译**用（§3.6.4）。
-
-    合并目的：一次编译同时检查 ① 蓝图节点陈述是否 well-typed；② 蓝图是否**偏离**理解链。
-    安全处理（否则合并会**破坏**原有检查）：
-      · 去掉片段里的 import 行（本文件已 import Mathlib）；
-      · 顶层声明加 uchain_ 前缀，避免与蓝图节点重名；
-      · 上限 60 行（防爆）。
-    """
-    import re as _re_uc
-    uc = getattr(ctx, "understanding_chain", None)
-    if not isinstance(uc, dict):
-        return []
-    code = str(uc.get("lean_code") or "").strip()
-    if not code:
-        return []
-    out = []
-    for ln in code.split("\n"):
-        t = ln.strip()
-        if not t or t.startswith("import "):
-            continue
-        m = _re_uc.match(r"^(lemma|theorem|def|example)\s+([A-Za-z_][A-Za-z0-9_'.]*)", t)
-        if m and not m.group(2).startswith("uchain_"):
-            t = t.replace(m.group(2), "uchain_" + m.group(2).split(".")[-1], 1)
-        out.append(t)
-    return out[:60]

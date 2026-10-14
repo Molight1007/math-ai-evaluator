@@ -36,7 +36,7 @@ def _cfg(**kw):
         leansearch_max_calls_per_q=2, leansearch_top_k=5,
         max_subgoals=6, max_subgoals_by_tier={"standard": 8, "deep": 16},
         lean_gate_unknown_stop=2, max_revise_rounds=5, deep_revise_rounds=2,
-        preverify_max_rounds=2, skeleton_review_max_rounds=2, collab_max_rounds=3,
+        preverify_max_rounds=2, collab_max_rounds=3,
         self_improve_max=2, policy_sample_times=2, verifier_voting_times=1,
         verifier_disagreement_votes=3, max_total_calls=150,
         max_answer_tokens=65536, verifier_deep_review_max_tokens=6144,

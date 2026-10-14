@@ -53,7 +53,6 @@ from .sub_goal_solver__plan import (  # noqa: F401
 from .sub_goal_solver__loop import solve_subgoals  # noqa: F401
 from .sub_goal_solver__pool import apply_pool_gate  # noqa: F401
 from . import sub_goal_solver__lean as _sgs_lean  # noqa: F401
-from . import sub_goal_solver__review as _sgs_review  # noqa: F401
 from . import sub_goal_solver__planner as _sgs_planner  # noqa: F401
 from . import sub_goal_solver__parse as _sgs_parse  # noqa: F401
 from . import sub_goal_solver__format as _sgs_format  # noqa: F401
@@ -481,32 +480,12 @@ class SubGoalSolverAgent(BaseAgent):
         self.record(ctx, "subgoal", "子目标求解完成，已生成候选解答",
                     subgoal_stats=self._subgoal_stats(subgoals),
                     ctx_inject_chars=_ctx_inject_chars)
-        # -------- #34 阶段四：DAG 评审 + 整树重生成 --------
-        # 老师要求："dag 框架错了要重新构建"。判定标准（DagReviewer）：
-        # - reject >= 3 个（绝对阈值）
-        # - reject 比例 >= 40%（相对阈值）
-        # 满足任一 → 注入失败反馈让 BlueprintPlanner.regenerate_with_feedback 重写 DAG。
-        # 硬上限 MAX_REPLAN_ROUNDS 防死循环；预算耗尽或 DAG 不可改进即停。
-        # 2026-09-04 阶段预算：replan 是"候选已入池后"的改进环节（评审+重生成
-        # 每轮 2-3 次 LLM），budget 用尽时跳过——不影响已产出的 merge 答案，
-        # 把时间留给 orchestrator 后续 3_solve/lean 验证/答案闸门。
-        # ★ 2026-10-04 修（D18）：原条件为 `enable_dag_replan and _stage_left() > 0`，
-        #   是一条纯「**按剩余时间砍方法**」的闸门 —— 750s 之后"蓝图就算错了也不再修"，
-        #   与「研究期不限时间、一切为正确率让路」的口径直接冲突。
-        #   它还是**跨文件漏网**的实例：不受 `phase_budget_enabled` 管辖，
-        #   关掉阶段预算总开关也拦不住它。
-        #   现只保留机制开关，删掉时间条件；防挂死由单题硬墙（`is_timed_out`）负责。
-        #   注：`getattr` 兜底默认值同步由 True 改为 False，与 `AgentConfig` 一致
-        #   （原先两处默认值不一致，属潜在"同一开关两套默认"）。
-        if getattr(self.config, "enable_dag_replan", False):
-            self._review_and_maybe_replan(ctx, dag=ctx.blueprint)
+        # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
+        #   原 `#34 阶段四：DAG 评审 + 整树重生成`（`enable_dag_replan`，默认 False）
+        #   已**整块撤除** —— 机制从未在生产启用（默认关、仅 arm2 复测臂引用），
+        #   连同 `_review_and_maybe_replan` / `_review_dag_prepare` / `_note_dag_replan`
+        #   与其宿主模块 `sub_goal_solver__review.py` 一并删除。
         return ctx
-
-    _note_dag_replan = _sgs_review._note_dag_replan
-
-    _review_and_maybe_replan = _sgs_review._review_and_maybe_replan
-
-    _review_dag_prepare = _sgs_review._review_dag_prepare
 
     _is_value_choice = staticmethod(_sgs_planner._is_value_choice)
 
@@ -526,21 +505,10 @@ class SubGoalSolverAgent(BaseAgent):
 
     _inject_anticipatory_lemmas = _sgs_planner._inject_anticipatory_lemmas
 
-    _skeleton_review_loop = _sgs_review._skeleton_review_loop
-
-    # ---------- 求解前 DAG 强制评审门（2026-09-08 改进建议1）----------
-    _dag_replan_gate = _sgs_review._dag_replan_gate
-
-    _dag_replan_gate_prepare = _sgs_review._dag_replan_gate_prepare
-
-    # ---------- 求解前门 Lean 逻辑层检测（2026-09-08 门升级，见 _dag_replan_gate）---
-    _lean_dag_logic_check = _sgs_lean._lean_dag_logic_check
-
-    _parse_lean_expr_map = staticmethod(_sgs_lean._parse_lean_expr_map)
-
-    _map_lean_errors = staticmethod(_sgs_lean._map_lean_errors)
-
-    _merge_lean_rejects = staticmethod(_sgs_lean._merge_lean_rejects)
+    # ★ 2026-10-15：`_skeleton_review_loop` / `_dag_replan_gate(_prepare)` /
+    #   `_lean_dag_logic_check` / `_parse_lean_expr_map` / `_map_lean_errors` /
+    #   `_merge_lean_rejects` 跳板随三个默认关闭的门一并撤除
+    #   （`sub_goal_solver__review.py` 已整文件删除）。
 
     # ---------- 阶段二：逐步求解 ----------
     _solve_subgoal = _sgs_solve._solve_subgoal

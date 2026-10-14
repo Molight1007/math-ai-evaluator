@@ -53,7 +53,7 @@ SCHEMA = "param_usage/1"
 from .param_usage__extract import (  # noqa: F401
     _int, _trace, _gate_events, _cfg_get, _cap, _cap_by_tier, _cap_gate_rework,
     _u_leansearch_calls, _u_leansearch_topk, _u_subgoals, _u_gate_tried,
-    _u_unknown_streak, _u_revise_round, _u_preverify_rounds, _u_skeleton_rounds,
+    _u_unknown_streak, _u_revise_round, _u_preverify_rounds,
     _u_total_calls, _u_candidates, _u_verdicts, _u_deep_review)
 
 
@@ -284,10 +284,6 @@ _SPEC = (
      None, "str",
      "VERIFIER_VOTE_REASONING — 投票放开完整推理的档位"
      "（off / disagree=默认 / always；2026-10-04 B 折中）", None),
-    ("enable_dag_replan",
-     lambda cfg, tier, _f="enable_dag_replan", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "ENABLE_DAG_REPLAN — 求解后 DAG 复盘重规划（2026-10-04 默认 True = 复测）", None),
     ("blueprint_or_expand_all",
      lambda cfg, tier, _f="blueprint_or_expand_all", _d=False: getattr(cfg, _f, _d),
      None, "bool",
@@ -312,21 +308,8 @@ _SPEC = (
      lambda cfg, tier, _f="use_leansearch", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "USE_LEANSEARCH — LeanSearch 检索总开关（2026-10-12 起默认开）", None),
-    ("dag_replan_gate",
-     lambda cfg, tier, _f="dag_replan_gate", _d=False: getattr(cfg, _f, _d),
-     None, "bool",
-     "DAG_REPLAN_GATE — 求解前 DAG 强制评审门", None),
     # ---- 2026-10-12 补齐（门禁 `tests/test_switch_registry_four_way_guard.py`
     #      强制「注册表 A ⊆ 本表 D」—— 新增开关四处同登记，缺一即红）----
-    ("dag_replan_lean_check",
-     lambda cfg, tier, _f="dag_replan_lean_check", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "DAG_REPLAN_LEAN_CHECK — 求解前 Lean 逻辑检查（节点陈述→Lean Prop 编译，"
-     "失败节点硬升级 reject；只判逻辑层）", None),
-    ("dag_lean_max_nodes",
-     lambda cfg, tier, _f="dag_lean_max_nodes", _d=50: getattr(cfg, _f, _d),
-     None, "数",
-     "DAG_LEAN_MAX_NODES — 求解前 Lean 逻辑检查的节点数上限（成本护栏）", None),
     ("enable_preverify_sketch_audit",
      lambda cfg, tier, _f="enable_preverify_sketch_audit", _d=False: getattr(cfg, _f, _d),
      None, "bool",
@@ -413,10 +396,6 @@ _SPEC = (
      lambda cfg, tier, _f="theorem_hint_top_k_by_stage", _d=None: getattr(cfg, _f, _d),
      None, "dict",
      "THEOREM_HINT_TOP_K_BY_STAGE — 分环节定理注入条数", None),
-    ("enable_skeleton_review",
-     lambda cfg, tier, _f="enable_skeleton_review", _d=False: getattr(cfg, _f, _d),
-     None, "bool",
-     "ENABLE_SKELETON_REVIEW — 骨架编排层评审循环", None),
     ("falsify_max_per_q",
      lambda cfg, tier, _f="falsify_max_per_q", _d=2: getattr(cfg, _f, _d),
      None, "数",
@@ -508,10 +487,6 @@ _SPEC = (
      lambda cfg, tier: _cap(cfg, "preverify_max_rounds"),
      _u_preverify_rounds, "轮",
      "Lean 前置形式化验证的修正轮数上限", True),
-    ("skeleton_review_max_rounds",
-     lambda cfg, tier: _cap(cfg, "skeleton_review_max_rounds"),
-     _u_skeleton_rounds, "轮",
-     "骨架评审重规划轮数上限（arm2 已开 enable_skeleton_review）", True),
     ("max_total_calls",
      lambda cfg, tier: _cap(cfg, "max_total_calls"),
      _u_total_calls, "次",

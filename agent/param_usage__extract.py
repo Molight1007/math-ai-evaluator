@@ -184,17 +184,6 @@ def _u_preverify_rounds(ctx):
     return (n or None), "count(trace step=preverify)"
 
 
-def _u_skeleton_rounds(ctx):
-    """⑧ 骨架评审实际跑了几轮（对照 `skeleton_review_max_rounds`）。"""
-    sr = getattr(ctx, "skeleton_review_report", None)
-    if isinstance(sr, dict):
-        for k in ("rounds", "n_rounds", "replan_rounds", "attempts"):
-            v = _int(sr.get(k))
-            if v is not None:
-                return v, "ctx.skeleton_review_report.%s" % k
-    return None, ""
-
-
 def _u_total_calls(ctx):
     """⑨ 本题 LLM 调用总次数（对照 `max_total_calls`；该上限**只记账不阻断**）。"""
     b = getattr(ctx, "budget", None)

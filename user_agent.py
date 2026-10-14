@@ -207,15 +207,12 @@ _CONFIG_OVERRIDE_KEYS = (
     "blueprint_deps_enabled",
     # 2026-09-20：OR 节点展开策略开关（默认 False = 保持历史行为）
     "blueprint_or_expand_all",
-    # DAG 动态评审闭环（#34，2026-09-02 补白名单：此前 CLI --enable_dag_replan
-    # 等键被静默丢弃，A/B 静态对照组实际仍是动态，开关无效）
-    "enable_dag_replan", "dag_review_reject_count", "dag_replan_max_rounds",
-    # 求解前 DAG 强制门独立开关（2026-09-08：默认关=去掉门）
-    "dag_replan_gate",
-    # 骨架编排层评审（老师 9/2 建议：求解前规划质量门，2026-09-02）
-    "enable_skeleton_review", "skeleton_review_max_rounds",
-    # 2026-10-12 补齐（原裸 getattr ⇒ CLI/kwargs 传参被静默丢弃）
-    "dag_replan_lean_check", "dag_lean_max_nodes",
+    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
+    #   `enable_dag_replan` / `dag_replan_gate` / `enable_skeleton_review` /
+    #   `skeleton_review_max_rounds` / `dag_replan_lean_check` / `dag_lean_max_nodes`
+    #   及孤儿键 `dag_replan_max_rounds` 已随三个默认关闭的门一并撤除。
+    #   `dag_review_reject_count` 保留（DagReviewerAgent 仍在读）。
+    "dag_review_reject_count",
     "enable_preverify_sketch_audit",
     # 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：只留总开关）
     "enable_understanding_chain",

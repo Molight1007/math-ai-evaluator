@@ -149,8 +149,6 @@ class TestBlueprintPathHonoursConfig(unittest.TestCase):
         from unittest.mock import patch
 
         cfg = SimpleNamespace(max_subgoals=cfg_max, use_blueprint_dag=True,
-                              enable_skeleton_review=False,
-                              dag_replan_gate=False,
                              # 2026-10-12 批次 2：新增「蓝图自审」会额外发起 DagReviewer
                              # LLM 调用、改变调用序列 ⇒ 本测试显式隔离（**非放宽判据**：
                              # 这些断言验证的是 max_subgoals 旋钮/评审流程，与新步骤无关）
