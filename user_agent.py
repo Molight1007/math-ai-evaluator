@@ -217,8 +217,8 @@ _CONFIG_OVERRIDE_KEYS = (
     # 2026-10-12 补齐（原裸 getattr ⇒ CLI/kwargs 传参被静默丢弃）
     "dag_replan_lean_check", "dag_lean_max_nodes",
     "enable_preverify_sketch_audit",
-    # 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：只留总开关）
-    "enable_understanding_chain",
+    # 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：只留总开关 + 生成遍数）
+    "enable_understanding_chain", "understanding_passes",
     # 2026-10-12 批次 2：蓝图多次生成 + 自审
     "blueprint_multi_gen_rounds", "blueprint_self_review",
     "blueprint_self_review_reject_ratio",

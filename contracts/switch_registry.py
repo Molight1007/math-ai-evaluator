@@ -260,6 +260,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "**删『逻辑链 + 一致性复推 + 链的 Lean 自检』** —— 链式分解与 2.7 蓝图 "
         "AND-OR DAG 同层同义，配套三个开关（understanding_refine_rounds / "
         "understanding_no_gain_stop / understanding_chain_lean_check）一并撤除"),
+    "understanding_passes": (
+        "UNDERSTANDING_PASSES", "num", 3,
+        "题意理解的 LLM 生成遍数：第 1 遍从零生成，第 2…N 遍**在上一遍结果基础上"
+        "重新生成**，采用**最后一遍**（用户 2026-10-14 决策「生成三遍…取第三遍结果」）；"
+        "=1 回退单轮旧行为。某遍不可解析即停、沿用最近一遍结果"),
     # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式自改进）+ 自审 ----
     "blueprint_multi_gen_rounds": (
         "BLUEPRINT_MULTI_GEN_ROUNDS", "num", 3,

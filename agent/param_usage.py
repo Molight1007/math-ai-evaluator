@@ -331,11 +331,16 @@ _SPEC = (
      lambda cfg, tier, _f="enable_preverify_sketch_audit", _d=False: getattr(cfg, _f, _d),
      None, "bool",
      "ENABLE_PREVERIFY_SKETCH_AUDIT — 预验证阶段骨架 Lean 审核（默认关）", None),
-    # ---- 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：只留总开关）----
+    # ---- 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：总开关 + 生成遍数）----
     ("enable_understanding_chain",
      lambda cfg, tier, _f="enable_understanding_chain", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "ENABLE_UNDERSTANDING_CHAIN — 题意理解（终态 + 答案槽 + 缺口 A/B）", None),
+    ("understanding_passes",
+     lambda cfg, tier, _f="understanding_passes", _d=3: getattr(cfg, _f, _d),
+     None, "遍",
+     "UNDERSTANDING_PASSES — 题意理解 LLM 生成遍数（第 2…N 遍在上一遍基础上重新生成，"
+     "取最后一遍；=1 回退单轮）", None),
     # ---- 2026-10-12 批次 2：蓝图多次生成 + 自审 ----
     ("blueprint_multi_gen_rounds",
      lambda cfg, tier, _f="blueprint_multi_gen_rounds", _d=3: getattr(cfg, _f, _d),
