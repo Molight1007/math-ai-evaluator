@@ -172,11 +172,7 @@ def pre_audit_stage(self, ctx, tier: str) -> None:
     #   ctx.understanding_gaps，供子目标消费）。
     #   ★ 2026-10-14 删「逻辑链 + 一致性复推 + 链的 Lean 自检」——链式分解与
     #   2.7 蓝图 AND-OR DAG 同层同义（属「整体理解」），保留即重复劳动。
-    #   ★ 2026-10-14（同日晚，用户决策「涉及大模型的地方生成三遍…取第三遍的结果」）：
-    #   题意理解的 LLM 生成改**多遍迭代** —— 第 1 遍从零生成，第 2…N 遍在上一遍结果
-    #   基础上重新生成，**采用最后一遍**；遍数 `understanding_passes`（默认 3，=1 回退
-    #   单轮）。某遍不可解析即停、沿用最近一遍可用结果，异常一律降级。
-    #   独立于既有 `lean_pre_verifier.run`（后者保持原行为不变）。
+    #   独立于既有 `lean_pre_verifier.run`（后者保持原行为不变），异常一律降级。
     # ⚠ 兜底值必须与 `AgentConfig.enable_understanding_chain`(=True) **一致**：
     #   若写成 False，则任何"字段缺失"的旧 config/测试桩都会**静默关闭**本机制，
     #   与「配置默认开」矛盾 ⇒ 典型的"两套默认值"缺陷（code-audit 路线 C「隐形门控」）。

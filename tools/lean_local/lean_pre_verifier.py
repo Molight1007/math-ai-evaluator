@@ -32,16 +32,9 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
   配套开关 `understanding_refine_rounds` / `understanding_no_gain_stop` /
   `understanding_chain_lean_check` 一并撤除（用户口径：「题意理解只做让模型注意到
   我们所需要求解的部分，对题目整体的理解则到蓝图构建部分」）。
-  ★ 2026-10-14（同日晚，用户决策「涉及大模型的地方生成三遍 —— 再生成后再在生成的
-  基础上重新生成两遍，然后采取第三遍的结果」）：LLM 生成改**多遍迭代** ——
-  第 1 遍从零生成，第 2…N 遍**在上一遍结果的基础上重新生成**，采用**最后一遍**；
-  每遍解析成功即进入下一遍；某遍不可解析则停止并沿用**最近一遍**可用结果（不阻断）。
-  轮数由 `understanding_passes`（默认 3；=1 回退单轮）控制；每遍结果留痕于
-  `ctx.understanding_chain["pass_history"]` 供诊断/前后对比。
 - ⚠ `run()` 的既有行为**一字未改**（两条通道互不影响）。
 """
 
-import json
 import logging
 import os
 import re
@@ -303,21 +296,11 @@ class LeanPreVerifier(BaseAgent):
         ★ 2026-10-14 收敛（用户口径：「题意理解只做让模型注意到我们所需要求解的
           部分，整体理解归蓝图」）：
             · **删逻辑链 `chain` 及无条件一致性复推** —— 链式分解与 2.7 蓝图
-              AND-OR DAG 同层同义（属「整体理解」）；
+              AND-OR DAG 同层同义（属「整体理解」）⇒ 单轮即定案；
             · **删链的 Lean 自检** —— 它只为编译"链"服务，链删后即无对象；
             · **answer_slot / terminal_state 机械剥离数值** —— 提示词的软禁令
               实测被忽略（official112-002 把错值 `T=(√5−1)/2` 写进答案槽，
               经 `problem_goal` → 蓝图 → 最终答案泄漏）⇒ 代码兜底。
-
-        ★ 2026-10-14（同日晚，用户决策「涉及大模型的地方生成三遍 —— 再生成后再在生成
-          的基础上重新生成两遍，然后采取第三遍的结果」）⇒ 本函数改**多遍迭代**：
-            · 第 1 遍：从零生成（`UNDERSTANDING_TERMINAL_USER`）；
-            · 第 2…N 遍：把**上一遍的完整结果**喂回去，要求在其基础上**重新生成**
-              （`UNDERSTANDING_ITERATION_USER`，明令禁止原样复制）；
-            · **采用最后一遍**的成功结果；遍数由 `understanding_passes`（默认 3）控制，
-              =1 即回退旧单轮行为。
-            · 任一遍解析失败 ⇒ 停止迭代、沿用**最近一遍**可用结果（首遍失败仍走
-              2026-10-13 的"更严 JSON 指令降级重试 1 次"），绝不阻断主链。
 
         产出：`ctx.understanding_chain` / `ctx.understanding_gaps` / `ctx.understanding_rounds`。
         失败 / 超时一律降级，**绝不阻断主流程**。
@@ -331,53 +314,25 @@ class LeanPreVerifier(BaseAgent):
             ctx.understanding_chain = {"verdict": "unknown", "reason": "题目为空"}
             return
 
-        # ⚠ 兜底值须与 AgentConfig.understanding_passes(=3) 一致（同一"两套默认值"纪律）。
-        passes = max(1, int(getattr(cfg, "understanding_passes", 3) or 3))
-        out = {"verdict": "unknown", "rounds": 0, "passes": passes,
+        out = {"verdict": "unknown", "rounds": 0,
                "terminal_state": "", "answer_slot": "",
-               "gaps_a": [], "gaps_b": [], "reason": "", "pass_history": []}
+               "gaps_a": [], "gaps_b": [], "reason": ""}
         if ctx.is_time_critical():
             out["reason"] = "时间紧迫，提前结束"
             ctx.understanding_chain = out
             ctx.understanding_rounds = 0
             return
 
-        payload = None
-        for i in range(1, passes + 1):
-            # 时间护栏：遍数使耗时线性增长 ⇒ 第 2 遍起若已紧张就停手，保住已有结果。
-            if payload is not None and ctx.is_time_critical():
-                out["reason"] = ("时间紧迫，第 %d 遍未生成（沿用第 %d 遍结果）"
-                                 % (i, i - 1))
-                break
-            got = self._understanding_round(ctx, prev=payload, pass_no=i,
-                                            pass_total=passes)
-            if got is None and payload is None:
-                # ★ 2026-10-13 修正（实测 2/3 题首轮即不可解析、却已烧 613–716 s）：
-                #   首轮失败**不允许直接放弃** —— 用更严格的 JSON 指令**降级重试 1 次**。
-                out["retry_used"] = True
-                got = self._understanding_round(ctx, force_json=True, prev=None,
-                                                pass_no=i, pass_total=passes)
-            if got is None:
-                # 本遍不可解析 ⇒ 停止迭代，沿用最近一遍成功结果（无则判 unknown）。
-                out["reason"] = (("第 %d 遍输出不可解析，沿用前 %d 遍结果"
-                                  % (i, i - 1)) if payload is not None
-                                 else "LLM 输出不可解析（含降级重试）")
-                break
-            payload = got
-            out["rounds"] = i
-            _hist = {"pass": i,
-                     "terminal_state": str(got.get("terminal_state") or ""),
-                     "answer_slot": str(got.get("answer_slot") or ""),
-                     "n_gaps": len(got.get("gaps") or [])}
-            out["pass_history"].append(_hist)
-            self.record(ctx, "understanding_chain",
-                        "第 %d/%d 遍完成：终态 %d 字、答案槽 %s、缺口 %d 条"
-                        % (i, passes, len(_hist["terminal_state"]),
-                           ("（" + _hist["answer_slot"][:40] + "）")
-                           if _hist["answer_slot"] else "（空）",
-                           _hist["n_gaps"]))
-
-        if payload is not None:
+        out["rounds"] = 1
+        payload = self._understanding_round(ctx)
+        if payload is None:
+            # ★ 2026-10-13 修正（实测 2/3 题首轮即不可解析、却已烧 613–716 s）：
+            #   首轮失败**不允许直接放弃** —— 用更严格的 JSON 指令**降级重试 1 次**。
+            out["retry_used"] = True
+            payload = self._understanding_round(ctx, force_json=True)
+        if payload is None:
+            out["reason"] = "LLM 输出不可解析（含降级重试）"
+        else:
             # ★ 2026-10-14（item ②）：**机械化剥离**被写死的数值。答案槽用激进口径
             #   （连 `T = \frac{...}` 这类赋值也掩掉），终态用 K11 既有口径（只掩
             #   「…为/是/等于 N」形态，避免误伤符号等式）。
@@ -390,8 +345,8 @@ class LeanPreVerifier(BaseAgent):
             ctx.understanding_gaps = a_gaps + b_gaps
             self.record(
                 ctx, "understanding_chain",
-                "题意理解：采用第 %d/%d 遍结果 —— 终态 %d 字、答案槽 %s、缺口 A%d/B%d"
-                % (out["rounds"], passes, len(out["terminal_state"]),
+                "题意理解：终态 %d 字、答案槽 %s、缺口 A%d/B%d"
+                % (len(out["terminal_state"]),
                    ("（" + out["answer_slot"][:60] + "）")
                    if out["answer_slot"] else "（空）",
                    len(a_gaps), len(b_gaps)))
@@ -401,40 +356,27 @@ class LeanPreVerifier(BaseAgent):
         ctx.understanding_chain = out
         ctx.understanding_rounds = out["rounds"]
         self.record(ctx, "understanding_chain",
-                    "题意理解结束：verdict=%s（%d/%d 遍）%s"
-                    % (out["verdict"], out["rounds"], passes,
+                    "题意理解结束：verdict=%s%s"
+                    % (out["verdict"],
                        ("（" + out["reason"] + "）") if out["reason"] else ""))
 
-    def _understanding_round(self, ctx, force_json: bool = False, prev=None,
-                             pass_no: int = 1, pass_total: int = 1):
-        """一遍生成：只看"题目要什么" ⇒ 终态 + 答案槽 + 缺口。
+    def _understanding_round(self, ctx, force_json: bool = False):
+        """单轮：只看"题目要什么" ⇒ 终态 + 答案槽 + 缺口（单轮即定案）。
 
         ★ 2026-10-13：新增 `force_json` —— 降级重试用。实测首轮有 2/3 题产出不可解析
           （疑因契约复杂 + 模型先吐大段解释）⇒ 重试时**把 JSON 要求前置并加硬约束**。
         ★ 2026-10-14：删「复推」分支（原 `prev` 参数与 `UNDERSTANDING_REFINE_USER`）。
-        ★ 2026-10-14（用户决策"生成三遍、取第三遍"）：`prev` **回归**，但语义已换 ——
-          它是**上一遍的完整结果**（`None` = 第 1 遍从零生成）；非 None 时本遍走
-          `UNDERSTANDING_ITERATION_USER`，要求"在它基础上重新生成一遍"。
-          ⚠ 与旧 `UNDERSTANDING_REFINE_USER` **同名不同义**：旧版复推"链"的一致性，
-            链已随收敛删除；本版重写整份理解结果。
         """
         try:
             from tools.lean_local.prompts.lean_pre_verify import (
                 UNDERSTANDING_TERMINAL_SYSTEM as _SYS,
-                UNDERSTANDING_TERMINAL_USER as _U0,
-                UNDERSTANDING_ITERATION_USER as _U1)
+                UNDERSTANDING_TERMINAL_USER as _U0)
         except ImportError:
             from .prompts.lean_pre_verify import (  # type: ignore
                 UNDERSTANDING_TERMINAL_SYSTEM as _SYS,
-                UNDERSTANDING_TERMINAL_USER as _U0,
-                UNDERSTANDING_ITERATION_USER as _U1)
+                UNDERSTANDING_TERMINAL_USER as _U0)
         domain = getattr(ctx, "domain", "") or "未知"
-        if prev is None:
-            user_msg = _U0.format(problem=ctx.problem, domain=domain)
-        else:
-            user_msg = _U1.format(problem=ctx.problem, domain=domain,
-                                  prev_block=_render_prev_understanding(prev),
-                                  pass_no=pass_no, pass_total=pass_total)
+        user_msg = _U0.format(problem=ctx.problem, domain=domain)
         # ★ 2026-10-14（任务列表 #2「定理检索移到后面子目标求解过程中」）：
         #   **原此处的 `render_for_stage(ctx, "pre_audit")` 注入已撤除**。
         #   检索从 1.2 下移到 2.7 子目标求解，而题意理解跑在 2.6（更早）⇒ 此处
@@ -470,30 +412,6 @@ class LeanPreVerifier(BaseAgent):
 # ---------------------------------------------------------------------------
 # 题意前置理解（2026-10-12 用户设计 D1–D4；★ 2026-10-14 收敛：删链与复推）
 # ---------------------------------------------------------------------------
-
-
-def _render_prev_understanding(prev) -> str:
-    """把上一遍的 JSON 结果渲染成喂给下一遍的**定长**文本块（多遍迭代用）。
-
-    ⚠ 逐字段截断，而非对整段 JSON 做 `[:N]` —— 整体截断会把 JSON 剪成非法形态，
-      模型更难利用；逐字段截断后仍是**合法 JSON**（键名不丢、结构不破）。
-    """
-    if not isinstance(prev, dict):
-        return "（上一遍没有产出可用结果）"
-    gaps = []
-    for g in (prev.get("gaps") or [])[:12]:
-        if isinstance(g, dict):
-            gaps.append({"kind": str(g.get("kind") or "A").upper(),
-                         "detail": str(g.get("detail") or "")[:200]})
-        else:
-            gaps.append({"kind": "A", "detail": str(g)[:200]})
-    block = {
-        "terminal_state": str(prev.get("terminal_state") or "").strip()[:2000],
-        "answer_slot": str(prev.get("answer_slot") or "").strip()[:1000],
-        "gaps": gaps,
-    }
-    return json.dumps(block, ensure_ascii=False, indent=2)
-
 
 # 被**写死的数值**的机械剥离（K11 防泄漏；2026-10-14 题意理解收敛时新增）
 # 实证：official112-002 的 answer_slot 被写成 `T = \frac{\sqrt{5}-1}{2}`（gold = 1/2），

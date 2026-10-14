@@ -430,12 +430,6 @@ class AgentConfig(_AgentConfigBase):
     #   终态 + 答案槽（纯符号）+ 缺口 A/B；配套三开关（understanding_refine_rounds /
     #   understanding_no_gain_stop / understanding_chain_lean_check）一并撤除。
     enable_understanding_chain: bool = True
-    #   ★ 2026-10-14（用户决策「涉及大模型的地方生成三遍 —— 再生成后再在生成的基础上
-    #   重新生成两遍，然后采取第三遍的结果」）：题意理解的 LLM 生成遍数。
-    #   第 1 遍从零生成；第 2…N 遍把上一遍结果喂回去、要求在其基础上重新生成；
-    #   **采用最后一遍**。=1 即回退单轮旧行为（消融对照）。某遍不可解析即停，
-    #   沿用最近一遍可用结果（不阻断主链）。
-    understanding_passes: int = 3
     # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式）+ 自审（用户 Q11–Q13/Q18）----
     #   1 次初始生成 + (N-1) 次在上一轮基础上无条件自改进；采用**最后一轮**；
     #   第 4 次交 LLM 自审（DagReviewer），拒收比例 ≥0.4 才重写 1 轮。
