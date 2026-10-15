@@ -86,7 +86,6 @@ from .final_selector__parse import (  # noqa: F401
 # ④ 注入口径：单候选推理原文上限 / 最多注入候选数 / 子目标旁证总上限
 _MAX_REASONING_CHARS = 4000
 _MAX_CANDIDATES_IN_PROMPT = 6
-_MAX_SG_EVIDENCE_CHARS = 3000
 
 
 class _Cand:
@@ -233,39 +232,10 @@ def _vote(survivors: List[Tuple[str, str, Any]],
     return top[0], top[2], diag
 
 
-def _build_sg_evidence(ctx, cap: int = _MAX_SG_EVIDENCE_CHARS) -> Tuple[str, dict]:
-    """子目标保留候选 → 步④旁证块。返回 (文本, diag)。
-
-    ⚠ 复用路径命中的子目标**没有候选**（`candidates=[]`）——此处**显式跳过**，
-    并在 diag 计数（`Q2` 处理：不把空旁证混进来，也不阻断）。
-    """
-    _tr = list(getattr(ctx, "subgoal_trace", None) or [])
-    if not _tr:
-        return "", {"n_with_candidates": 0, "n_skipped_reuse": 0}
-    lines, used, n_with, n_skip = [], 0, 0, 0
-    for s in _tr:
-        cands = list(s.get("candidates") or [])
-        if not cands:
-            if s.get("reused"):
-                n_skip += 1
-            continue
-        if len(cands) < 2:      # 单候选无"多解"信息，不进旁证
-            continue
-        n_with += 1
-        seg = "  · 子目标 {}「{}」候选结论：{}".format(
-            s.get("id"), (s.get("title") or "")[:24],
-            " ｜ ".join(str(x)[:120] for x in cands[:4]))
-        if used + len(seg) > cap:
-            break
-        used += len(seg)
-        lines.append(seg)
-    if not lines:
-        return "", {"n_with_candidates": n_with, "n_skipped_reuse": n_skip}
-    block = ("\n【子目标结论旁证（各子目标保留的多个候选结论，供你判断时参考；"
-             "不是最终答案）】\n" + "\n".join(lines))
-    return block, {"n_with_candidates": n_with, "n_skipped_reuse": n_skip}
-
-
+# ★ 2026-10-15（审核 + Q1 无用功清理）：原 `_build_sg_evidence`
+#   （"子目标保留候选 → 步④旁证块"）已删除 —— 其消费场景「步④模型对比」
+#   已按 2026-10-14 五道链定案整块删除（见 _select_from_survivors docstring），
+#   函数属历史决策残留、全仓无调用。
 def select_final_answer(ctx, candidates, llm: Callable,
                         record: Optional[Callable] = None) -> dict:
     """五层选择终答。返回::

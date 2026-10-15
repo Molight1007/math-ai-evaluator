@@ -529,8 +529,15 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
         if not _LEAN_FENCE_RE.search(str(result or "")):
             _mark(False, False)
             return ""
+        # ★ 2026-10-15（审核 F6）：环境不可用等「未真跑」⇒ tool_ran=False
+        #   （不再把"没核验"标成 pass —— 同 F5 口径）。
+        try:
+            sg.pop("tool_not_run_reason", None)
+        except Exception:  # noqa: BLE001
+            pass
         _fb = _lean_block_verify(self, ctx, result, sg)
-        _mark(True, bool(_fb))
+        _ran = not bool(sg.get("tool_not_run_reason"))
+        _mark(_ran, bool(_fb) if _ran else False)
         return _fb
     _mark(False, False)
     return ""
@@ -606,20 +613,32 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
     cnt = int(meta.get("sg_lean_count", 0) or 0)
     cap = max(1, int(getattr(self.config, "blueprint_lean_max_per_q", 2) or 2))
     if cnt >= cap:
+        if isinstance(sg, dict):
+            sg["tool_not_run_reason"] = "lean-cap"
         return ""
     try:
         from tools.lean_local.lean_bridge import LeanBridge
         from tools.lean_local.lean_bridge import _trash_lean_file
     except Exception:  # noqa: BLE001
+        if isinstance(sg, dict):
+            sg["tool_not_run_reason"] = "lean-bridge-import"
         return ""
     try:
         bridge = LeanBridge(self.client, self.config)
     except Exception:  # noqa: BLE001
+        if isinstance(sg, dict):
+            sg["tool_not_run_reason"] = "lean-bridge-init"
         return ""
     if not getattr(bridge, "lean_available", False):
+        # ★ 2026-10-15（审核 F6）：环境不可用 = **未核验**（≠ pass）——
+        #   打标记供外层 _mark 判「未跑」，不再静默标 pass。
+        if isinstance(sg, dict):
+            sg["tool_not_run_reason"] = "lean-unavailable"
         return ""
     work_dir = getattr(bridge, "_lean_project_dir", "") or ""
     if not work_dir:
+        if isinstance(sg, dict):
+            sg["tool_not_run_reason"] = "lean-no-workdir"
         return ""
     meta["sg_lean_count"] = cnt + 1
     fname = "sglean_%d_%d.lean" % (os.getpid(),

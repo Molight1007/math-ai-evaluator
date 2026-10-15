@@ -176,6 +176,18 @@ def normalize_stage(self, ctx) -> None:
                     self.record(ctx, "answer_normalize",
                                 "候选池 %d 个全部呈不可判形态 ⇒ **已清空**"
                                 "（pool_empty_clear=True，走下游兜底）" % len(cands))
+                    # ★ 2026-10-15（审核 S2）：清池后把「池为何被清」喂给下游
+                    #   （4.6 重写诊断读 ctx.pool_empty_errors）——此前不调用
+                    #   ⇒ 4.6 拿到空错误清单、根因丢失。
+                    try:
+                        from .orchestrator__verify import (
+                            _pool_empty_fallback as _pef)
+                        _pef(self, ctx, "4.0_normalize")
+                    except Exception as _e_pef:  # noqa: BLE001
+                        self.record(ctx, "answer_normalize",
+                                    "pool_empty_fallback 失败（不阻断）: %s: %s"
+                                    % (type(_e_pef).__name__,
+                                       str(_e_pef)[:100]))
                 else:
                     self.record(ctx, "answer_normalize",
                                 "候选池 %d 个全部呈不可判形态（pool_empty_clear=False，"
