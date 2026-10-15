@@ -21,6 +21,7 @@ from prompts.sub_goal import (
     SUBGOAL_STEP_SYSTEM,
     SUBGOAL_STEP_USER_TEMPLATE,
     SUBGOAL_TOOL_INSTRUCTIONS,      # 2026-10-15：蓝图 tool 指派 → 工具指令
+    SUBGOAL_LEAN_SIG_TEMPLATE,      # 2026-10-15：lean 节点已带形式化签名 → 只补证明体
     SUBGOAL_SUCCESSION_TEMPLATE,    # 2026-10-15：承接前提块
 )
 from utils.prefill import prefill_messages, stitch
@@ -414,9 +415,18 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     #   `tool` 为空 / "llm" ⇒ 不追加任何指令（保持历史行为，零回归面）。
     if _node_contract_on() and sg:
         _tool = str(sg.get("tool") or "").strip().lower()
-        _tool_ins = SUBGOAL_TOOL_INSTRUCTIONS.get(_tool, "")
-        if _tool_ins:
-            _step_system = _step_system + "\n" + _tool_ins
+        # ★★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」——叶子级形式化下传）：
+        #   `tool=lean` 且蓝图**已给出** `formal_sig` 时，改用「补证明体」指令
+        #   （分工：蓝图出"证什么"、求解出"怎么证"）；没有签名才退回原指令
+        #   （求解侧自行写整段 Lean）。两条指令互斥，避免模型收到矛盾要求。
+        _sig = str(sg.get("formal_sig") or "").strip() if _tool == "lean" else ""
+        if _sig:
+            _step_system = _step_system + "\n" + \
+                SUBGOAL_LEAN_SIG_TEMPLATE.format(formal_sig=_sig)
+        else:
+            _tool_ins = SUBGOAL_TOOL_INSTRUCTIONS.get(_tool, "")
+            if _tool_ins:
+                _step_system = _step_system + "\n" + _tool_ins
 
     # ★ 2026-09-30（截图 #8）：**多 agent 求解子目标**。
     #   用户原话：「多 agent 拿子目标的求解能不能换成多 agent？

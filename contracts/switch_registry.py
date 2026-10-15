@@ -283,6 +283,17 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "SUBGOAL_SELF_IMPROVE_ROUNDS", "num", 3,
         "子目标级**无条件**自改进轮数（用户 E24：「让大模型反复写一道题」）；"
         "同轮产出与上轮相同/为空即提前停；=0 关闭"),
+    # ---- 2026-10-15（用户「2 与 3 之间建一个环」）：求解期动态倒推 ----
+    "subgoal_dynamic_backward": (
+        "SUBGOAL_DYNAMIC_BACKWARD", "bool", True,
+        "**求解期动态倒推**：子目标判定「缺前提」时**现场再倒推一层**，把缺失的"
+        "前提立为新子目标、就地求解（可递归）、把结论回填后重解原目标。"
+        "生成期倒推（prompts/blueprint.py）只能按**题面**判断前提是否具备，"
+        "求解期才暴露的缺口靠本机制补；=0 关闭（回到「失败只重做一次」旧行为）"),
+    "subgoal_backward_max_depth": (
+        "SUBGOAL_BACKWARD_MAX_DEPTH", "num", 2,
+        "动态倒推的**递归层数上限**（防「缺前提→再倒推→又缺前提」无限套娃）；"
+        "=0 等同关闭本机制"),
     "enable_theorem_query_llm": (
         "ENABLE_THEOREM_QUERY_LLM", "bool", True,
         "**LLM 辅助 query**（用户 A1）：先让大模型给出 2–3 条检索方向（只给关键词、"
@@ -340,6 +351,14 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "② `inputs[i].use` 声明「把上游哪个结论当成本步的什么条件」并下传为子目标"
         "`inputs_from`。开 ⇒ 求解侧按 tool 追加工具指令、并把承接前提注入 step 提示词；"
         "关 ⇒ 回退（tool/inputs 只落盘不兑现）"),
+    # ---- 2026-10-15（用户：「把 lean 内化到蓝图构建里面」——叶子级形式化下传）----
+    "blueprint_lean_sig": (
+        "BLUEPRINT_LEAN_SIG", "bool", True,
+        "蓝图**叶子级形式化下传**：`tool=lean` 的节点额外产出 Lean 4 形式化签名 "
+        "`formal_sig`（`theorem/example … := by sorry`），下传给求解侧 —— "
+        "分工变为「蓝图出**证什么**、求解出**怎么证**」；求解侧只补证明体，"
+        "兑现层把签名与证明体拼接后交本地编译器。关 ⇒ `formal_sig` 不下传，"
+        "求解侧自行写整段 Lean（历史行为；A/B 对照组）"),
     "blueprint_tool_exec": (
         "BLUEPRINT_TOOL_EXEC", "bool", True,
         "把蓝图声明的 `tool` **兑现成真正的机器核验**（lean 交本地编译器实编译 / "

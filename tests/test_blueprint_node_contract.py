@@ -314,3 +314,57 @@ def test_step_prompt_masks_asserted_values_in_succession_block():
     assert "4030" not in msg, "承接前提块里的断言数值必须被屏蔽，不得注入提示词"
     assert any(k == "blueprint_lock_guard" for k, _ in s.records), \
         "屏蔽发生时应留痕（否则无法判断守卫生效与否）"
+
+
+def _dag(nodes_spec, root="g"):
+    """按 {id: (statement, children, role)} 构造 BlueprintDAG。"""
+    nodes = {
+        nid: BlueprintNode(id=nid, node_type="and", statement=st,
+                           children=list(ch), node_role=role)
+        for nid, (st, ch, role) in nodes_spec.items()
+    }
+    return BlueprintDAG(nodes=nodes, root_id=root, merge_strategy="")
+
+
+def test_validate_rejects_unreachable_node():
+    """游离节点必须被判失败（2026-10-15 新增）。
+
+    下游 `to_subgoal_plan` 是 `expand(root)`（本模块 :363/:383），**只从根出发**；
+    没挂进 `children` 的节点根本不会被发现 ⇒ 前提或"收尾节点"会被静默丢弃。
+    实测依据：`prompts/blueprint.py` 的示例早期版本把 final 写成游离节点，
+    归并步直接消失、全链白解。
+    """
+    d = _dag({
+        "g": ("目标", ["n1"], "required"),
+        "n1": ("前提", [], "required"),
+        "orphan": ("游离的子目标", [], "required"),
+    })
+    ok, errs = d.validate()
+    assert not ok
+    assert any("orphan" in e and "不可达" in e for e in errs), errs
+
+
+def test_validate_exempts_anticipatory_lemma():
+    """前瞻引理按设计就是旁挂的，必须豁免可达性检查。
+
+    `prompts/blueprint.py` 的「前瞻引理」节明确要求它**不得**出现在任何节点的
+    `children` 里；若不豁免，每道带前瞻引理的题都会被误判失败并触发无谓重试。
+    """
+    d = _dag({
+        "g": ("目标", ["n1"], "required"),
+        "n1": ("前提", [], "required"),
+        "aux": ("辅助恒等式", [], "anticipatory"),
+    })
+    ok, errs = d.validate()
+    assert ok, errs
+
+
+def test_validate_accepts_reachable_chain():
+    """正常可达链（含挂在根下的收尾节点）应通过——回归护栏。"""
+    d = _dag({
+        "g": ("目标", ["n1", "final"], "required"),
+        "n1": ("前提", [], "required"),
+        "final": ("由前提归并回目标", [], "required"),
+    })
+    ok, errs = d.validate()
+    assert ok, errs

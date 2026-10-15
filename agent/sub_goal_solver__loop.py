@@ -20,6 +20,11 @@ from __future__ import annotations
 
 import time
 
+# ★ 2026-10-15（用户「2 与 3 之间建一个环」）：求解期动态倒推。
+#   backward 模块模块级**只依赖 stdlib**（对 prompts / blueprint_planner 的引用
+#   全在函数体内惰性 import）⇒ 此处模块级 import 无循环风险。
+from .sub_goal_solver__backward import sg_dynamic_backward  # noqa: F401
+
 
 def sg_light_check_resolve(self, ctx, sg, step_result, subgoal_plan_summary,
                            prev_results) -> str:
@@ -279,6 +284,17 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
             self, ctx, sg, step_result, subgoal_plan_summary, prev_results)
         step_result = sg_adaptive_recover(
             self, ctx, sg, step_result, subgoal_plan_summary, prev_results)
+        # ★ 2026-10-15（用户「2 与 3 之间建一个环」）：**求解期动态倒推**。
+        #   位置刻意排在 `sg_adaptive_recover` **之后**：
+        #     · recover = 不拆图的恢复（重做该子目标 / 交上游重规划），便宜，先跑；
+        #     · 本步 = 拆图的恢复（现场倒推补一层前提再重解），贵（+1~2 次 LLM），
+        #       只在"仍失败且失败指向缺前提"时才兜底。
+        #   此前这种子目标只能写 `ctx.revise_feedback` 交上游，而上游 replan 已于
+        #   2026-10-15 整块删除 ⇒ 反馈无人消费、子目标以占位符放行。本调用是那条
+        #   断裂链的替代。实现与设计取舍见 sub_goal_solver__backward.py。
+        step_result = sg_dynamic_backward(
+            self, ctx, sg, step_result, subgoal_plan_summary, prev_results,
+            results_map)
         # 2026-09-08：剥 <check> 验证标签（去标签留内容）——校验已在上面
         # 消费过 <check> 断言，存盘/注入下游（merge/lemma/后续子目标）时
         # 不得再带协议标记，防污染提示词与最终答案。

@@ -109,8 +109,35 @@ def _flatten_produces(value) -> str:
     return str(value).strip()
 
 
+_LEAN_FENCE_STRIP_RE = re.compile(r"```(?:lean4?|)\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _flatten_formal_sig(value) -> str:
+    """把蓝图给的形式化陈述（`formal_sig`）归一成可编译的 Lean 签名文本。
+
+    归一动作（**只做无歧义清理，不改写数学内容**）：
+      · 摊平 dict / list（模型偶尔串用 `produces` 的结构）；
+      · 剥掉 ```` ```lean ... ``` ```` 代码围栏（提示词要求纯文本，但模型常带围栏）；
+      · 去掉行尾空白、压掉首尾空行。
+
+    ⚠ **不**尝试补 `:= by sorry` 或纠正语法 —— 签名是否合法交由 Lean 编译器裁决；
+      本函数只负责"别把 Markdown 围栏喂给编译器"。
+    """
+    text = _flatten_produces(value)
+    if not text:
+        return ""
+    m = _LEAN_FENCE_STRIP_RE.search(text)
+    if m:
+        text = m.group(1)
+    lines = [ln.rstrip() for ln in text.replace("\r\n", "\n").split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
 # ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具」）：工具指派的**唯一白名单**。
-#   蓝图由 LLM 自由生成，`tool` 实测会给出 `Lean` / `lean4` / `sympy_expr` /
 #   `符号计算` / `证明` 等五花八门的写法 ⇒ 必须在此归一，下游只认下列四个键。
 #   `""` = 未声明（模型没写 / 写了无法识别），下游按「无工具指令」处理（等价 llm），
 #   **不做猜测性映射**——猜错会把叙述型步骤送进编译器，白白浪费一次重解。
@@ -127,6 +154,20 @@ TOOL_ALIASES = {
     "llm": "llm", "none": "llm", "text": "llm", "narrative": "llm",
     "自然语言": "llm", "叙述": "llm", "推理": "llm",
 }
+
+
+def _lean_sig_on() -> bool:
+    """`blueprint_lean_sig` 开关是否生效（2026-10-15）。
+
+    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    注册表不可用时退回 True（与 `_node_contract_on` 同口径）。
+    关 ⇒ `to_subgoal_plan` 不下传 `formal_sig`，求解侧自行写整段 Lean。
+    """
+    try:
+        from contracts.switch_registry import get_bool
+        return bool(get_bool("blueprint_lean_sig"))
+    except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
+        return True
 
 
 def _normalize_tool(value) -> str:
@@ -253,6 +294,21 @@ class BlueprintNode:
     #   下传时（`to_subgoal_plan`）会**把 id 翻成子目标序号**，供求解侧渲染
     #   「本步承接前提」块（上游产出了什么、本步把它当什么条件用）。
     inputs_use: dict = field(default_factory=dict)
+    # ★★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」——叶子级形式化下传）：
+    #   `formal_sig` = 本节点**由蓝图给出的 Lean 4 形式化陈述**（`theorem` /
+    #   `example` 的**签名部分**，不含证明体；证明体写 `:= by sorry` 或不写）。
+    #
+    #   分工定位（本字段存在的全部理由）：
+    #     · **蓝图** —— 负责倒推分解，并在 `tool == "lean"` 的**叶子**上把该步
+    #       的命题形式化出来（即"证什么"）；
+    #     · **求解** —— 只负责把证明体补全（即"怎么证"），不必再自行形式化。
+    #   这与用户提的「倒推 = lean 的作用，子目标求解 = 其他工具」分工一致：
+    #   Lean 的能力用在**给定命题**上，计算/叙述类叶子仍由 sympy/numeric/llm 承担。
+    #
+    #   ⚠ 只对 `tool == "lean"` 的节点有意义；其余工具（含 llm）恒 ""。
+    #   ⚠ 允许为空 —— 形式化失败是常态（历史实测 2.6 前置形式化 5/5 fail），
+    #     下游必须**回落**到"求解侧自行写整段 Lean"，绝不因缺签名而阻断。
+    formal_sig: str = ""
 
     @property
     def is_anticipatory(self) -> bool:
@@ -295,6 +351,29 @@ class BlueprintDAG:
             cycle = self._find_cycle()
             if cycle:
                 errors.append(f"DAG 存在环: {' -> '.join(cycle)}")
+            # ★ 2026-10-15：可达性检查（豁免前瞻引理）
+            #   倒推结构下 root = 题目目标、children = 为它所需的前提；下游
+            #   `to_subgoal_plan` 是 `expand(root)`（见本文件 :363/:383），**只从根出发**。
+            #   因此任何没挂进 children 的节点都不会被发现 —— 前提或"收尾节点"
+            #   一旦游离，就被静默丢弃（实测：`prompts/blueprint.py` 的示例曾把
+            #   final 写成游离节点，归并步直接消失，全链白解）。
+            #   ⚠ 前瞻引理（role=anticipatory）按设计就是旁挂的：`prompts/blueprint.py`
+            #   的「前瞻引理」节明确要求它**不得**出现在任何节点的 children 里，
+            #   故必须豁免，否则每道带前瞻引理的题都会被误判为失败并触发无谓重试。
+            reachable = set()
+            stack = [self.root_id]
+            while stack:
+                cur = stack.pop()
+                if cur in reachable or cur not in self.nodes:
+                    continue
+                reachable.add(cur)
+                stack.extend(self.nodes[cur].children)
+            for nid, node in self.nodes.items():
+                if nid in reachable or node.is_anticipatory:
+                    continue
+                errors.append(
+                    f"节点 {nid} 从根不可达（且非前瞻引理）——"
+                    f"请把它挂进某个节点的 children")
         return (not errors), errors
 
     def _find_cycle(self) -> Optional[list]:
@@ -429,6 +508,8 @@ class BlueprintDAG:
         #    用展开顺序近似：expand 是前序 DFS，父节点先于子节点被访问。
         #    子目标按 order 排列即满足"依赖在前"。
         subgoals = []
+        # 2026-10-15：叶子级形式化下传开关**在循环外只读一次**（逐节点查注册表没必要）
+        _sig_on = _lean_sig_on()
         # 位置索引（子目标编号从 1 开始），避免在循环里反复 order.index()
         _pos = {nid: i for i, nid in enumerate(order, 1)}
         for idx, nid in enumerate(order, 1):
@@ -473,6 +554,20 @@ class BlueprintDAG:
                 # ★ 2026-10-15 工具指派（见 BlueprintNode.tool）：
                 #   空串 = 蓝图未给出有效 tool ⇒ 下游不追加工具指令（历史行为）。
                 "tool": str(getattr(node, "tool", "") or "").strip().lower(),
+                # ★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」）：
+                #   `formal_sig` = 蓝图给出的 Lean 形式化陈述（**仅 tool=lean 有效**）。
+                #   求解侧据此把「证什么」与「怎么证」分开：蓝图出签名、求解只填证明体
+                #   （见 `sub_goal_solver__solve._prepare_step_prompt` 的注入与
+                #   `sub_goal_solver__lean._lean_block_verify` 的拼接编译）。
+                #   空串 = 蓝图未能形式化 ⇒ 求解侧自行写整段 Lean（历史行为，不阻断）。
+                #   ⚠ 开关 `blueprint_lean_sig` 关闭时一律不传（A/B 对照组）。
+                #   ⚠ 再按 `tool` 收口：签名只对 lean 有意义，其它工具一律传空
+                #     （解析/反序列化两侧都已过滤，此处是**求解前的最后一道闸**）。
+                "formal_sig": (
+                    str(getattr(node, "formal_sig", "") or "").strip()
+                    if (_sig_on
+                        and str(getattr(node, "tool", "") or "").strip().lower()
+                        == "lean") else ""),
                 # ★ 2026-10-15 承接语义（见 BlueprintNode.inputs_use）：
                 #   **键统一为子目标序号的字符串**（int 键经 JSON 落盘再读回会变成
                 #   str，两处形态不一致会让求解侧查表落空）；只保留**存活且严格
@@ -660,6 +755,7 @@ class BlueprintDAG:
                 node_role=node.node_role,
                 inputs=list(node.inputs), method=node.method,
                 tool=node.tool, inputs_use=dict(node.inputs_use),
+                formal_sig=node.formal_sig,   # ★ 2026-10-15：形式化陈述随拷贝保留
             )
         return BlueprintDAG(
             nodes=nodes, root_id=self.root_id,
@@ -699,6 +795,7 @@ class BlueprintDAG:
                 inputs=[f"{id_prefix}_{c}" if c in new_dag.nodes else c
                         for c in (node.inputs or [])],
                 method=node.method, tool=node.tool,
+                formal_sig=node.formal_sig,   # ★ 2026-10-15：签名随子树嫁接保留
                 inputs_use={
                     (f"{id_prefix}_{k}" if k in new_dag.nodes else k): v
                     for k, v in (node.inputs_use or {}).items()},
@@ -716,6 +813,7 @@ class BlueprintDAG:
                 node_role=node.node_role,
                 inputs=list(node.inputs), method=node.method,
                 tool=node.tool, inputs_use=dict(node.inputs_use),
+                formal_sig=node.formal_sig,   # ★ 2026-10-15：形式化陈述随拷贝保留
             )
         if root_id not in nodes:
             return None
@@ -764,7 +862,11 @@ class BlueprintDAG:
                  #   `dag_reviewer` 的 `BlueprintDAG.from_dict(ctx.blueprint)`），
                  #   此前这两个字段在回路上被静默丢弃。
                  "inputs": list(n.inputs), "method": n.method,
-                 "tool": n.tool, "inputs_use": dict(n.inputs_use)}
+                 "tool": n.tool, "inputs_use": dict(n.inputs_use),
+                 # ★ 2026-10-15：Lean 形式化陈述（`tool=lean` 叶子用）——
+                 #   与 tool/inputs_use 同理，必须随序列化保留，否则
+                 #   子树重写回流的节点会**静默丢掉签名**，求解侧退化为自行形式化。
+                 "formal_sig": n.formal_sig}
                 for n in self.nodes.values()
             ],
         }
@@ -796,6 +898,13 @@ class BlueprintDAG:
                     nd.get("inputs_use")
                     if nd.get("inputs_use")
                     else nd.get("inputs", nd.get("needs", []))),
+                # ★ 2026-10-15：Lean 形式化陈述。只对 tool=lean 的节点保留
+                #   （非 lean 节点上的该键一律丢弃，与 parse_blueprint 同口径）。
+                formal_sig=(_flatten_formal_sig(
+                    nd.get("formal_sig", nd.get("lean_sig",
+                                               nd.get("signature", ""))))
+                    if _normalize_tool(nd.get("tool", nd.get("use_tool", ""))) == "lean"
+                    else ""),
             )
         return cls(
             nodes=nodes,

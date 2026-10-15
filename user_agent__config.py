@@ -461,6 +461,14 @@ class AgentConfig(_AgentConfigBase):
     # ★ 2026-10-13（§3 方案 A）：题型 LLM 判题；False ⇒ 完全回退规则判定。
     enable_type_llm: bool = True
     subgoal_self_improve_rounds: int = 3
+    # ★ 2026-10-15（用户「2 与 3 之间建一个环」）：**求解期动态倒推**。
+    #   生成期倒推（prompts/blueprint.py 构造原则第 2/3 条）只能基于**题面**判断
+    #   前提是否具备；求解期才发现的前提缺口由本机制现场补：倒推一层 → 解前提 →
+    #   回填 → 重解原目标。此前这种子目标只能写 `ctx.revise_feedback` 交上游，
+    #   而上游 replan 已于 2026-10-15 整块删除 ⇒ 反馈无人消费。
+    #   默认值与 contracts/switch_registry.py 同名条目逐字一致（门禁强制比对）。
+    subgoal_dynamic_backward: bool = True
+    subgoal_backward_max_depth: int = 2
     enable_theorem_query_llm: bool = True
     enable_lean_before_vote: bool = False
     enable_verify_chain_reorder: bool = True
@@ -588,6 +596,13 @@ class AgentConfig(_AgentConfigBase):
     #      判等式 / numeric 跑 norm_num），未过带反馈重解一次。关 ⇒ 零机器开销。
     blueprint_node_contract: bool = True
     blueprint_tool_exec: bool = True
+    # ★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」）：
+    #   `blueprint_lean_sig` = **叶子级形式化下传**。`tool=lean` 的节点由蓝图
+    #   直接给出 Lean 4 形式化签名（`formal_sig`），求解侧只补证明体 ——
+    #   即「蓝图出证什么、求解出怎么证」，把 Lean 的能力用在**给定命题**这一层。
+    #   关 ⇒ 签名不下传，求解侧自行形式化（历史行为；A/B 对照组）。
+    #   ⚠ 形式化失败（签名为空）时下游**静默回落**，绝不阻断。
+    blueprint_lean_sig: bool = True
     # 每题子目标级 Lean 实编译次数上限（防证明类子目标密集时把预算烧在编译器上；
     # 与既有 `lean_numeric_max_per_q` 同口径，但计的是**子目标级**编译）
     blueprint_lean_max_per_q: int = 2
