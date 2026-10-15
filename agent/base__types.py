@@ -302,10 +302,6 @@ class TaskContext:
         # 显式赋值即缓存该值；置 `None` 表示"重新惰性求值"。
         self._question_type = value
 
-    def verified_ids(self) -> set:
-        """已验证过的候选 id 集合（避免重复验证）"""
-        return {v.id for v in self.verdicts}
-
     # ---- 时间检查方法（适配竞赛新规则）----
     def time_remaining(self) -> float:
         """返回当前题目剩余壁钟时间（秒），负值=已超时。

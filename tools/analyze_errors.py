@@ -32,13 +32,6 @@ from collections import Counter
 # 归因规则
 # ---------------------------------------------------------------------------
 
-def _pick(d: dict, *keys, default=None):
-    for k in keys:
-        if k in d and d[k]:
-            return d[k]
-    return default
-
-
 def attribute_question(row: dict) -> list[str]:
     """对单题做环节归因，返回疑点列表（可能多个，按严重度排序）。"""
     d = row.get("diag") or {}

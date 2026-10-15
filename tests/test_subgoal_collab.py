@@ -104,6 +104,20 @@ def test_review_agent_ok_path():
     assert r["pass"] is True and r["issues"] == []
 
 
+def test_extract_unicode_operators():
+    """★ 审核 S1：Unicode 运算符（× ÷ −）须归一化为 ASCII 后提取——
+    否则 `20 × 3 = 60` 会被劈成假等式（3 = 60）误报"算错"。"""
+    from agent.math_check_gate import _extract_numeric_equations as E
+    assert E("20 × 3 = 60") == [("20 * 3", "60")]
+    assert E("100 ÷ 4 = 25") == [("100 / 4", "25")]
+    assert E("5 − 2 = 3") == [("5 - 2", "3")]
+    # 真错算仍被抓（不是被归一化掩盖）
+    from tools.agent_toolkit import calc_verify
+    eqs = E("20 × 3 = 61")
+    r = calc_verify([{"expr": a, "claimed": b} for a, b in eqs])
+    assert r["n_bad"] == 1
+
+
 def test_planning_agent_prefetch_and_blueprint():
     s = _Solver(["## 下一个子目标计划\n先求值再代入\n## 蓝图补充\n补充：新条件 k>0"])
     ctx = _Ctx()

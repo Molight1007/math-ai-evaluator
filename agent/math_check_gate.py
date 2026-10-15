@@ -53,12 +53,17 @@ def _calcverify_enabled() -> bool:
 # ★ 2026-10-15 修复：原正则两侧都强制"首字符+中间≥2+尾字符"三段式 ⇒
 #   单字符结果（如 `2 + 3 = 6` 的右值 "6"）**提取失败**（实测暴露）。
 #   现改为「首数字 +（中间任意 + 尾字符）可选」两段式，单字符结果可提取。
+# ★ 2026-10-15 修复二（审核 S1）：模型常写 Unicode 运算符 `×`/`÷`/`−` ——
+#   字符类不收会把 `20 × 3 = 60` 从 `3` 起劈成假等式（`3 = 60`）⇒ 误报"算错"。
+#   现收录 Unicode 运算符，并在提取时归一化为 ASCII 交给 SymPy。
 _CALC_EQ_RE = re.compile(
     r"(?<![A-Za-z0-9_.])"
-    r"([0-9](?:[0-9A-Za-z.\s*+\-/()^]*?[0-9A-Za-z)])?)"
+    r"([0-9](?:[0-9A-Za-z.\s*+\-/()^×÷−]*?[0-9A-Za-z)×÷−])?)"
     r"\s*=\s*"
-    r"([0-9](?:[0-9A-Za-z.\s*+\-/()^]*?[0-9A-Za-z)])?)"
+    r"([0-9](?:[0-9A-Za-z.\s*+\-/()^×÷−]*?[0-9A-Za-z)×÷−])?)"
     r"(?![A-Za-z0-9_])")
+_OP_NORMALIZE = (("×", "*"), ("·", "*"), ("⋅", "*"), ("÷", "/"),
+                 ("−", "-"), ("–", "-"), ("—", "-"))
 _ALLOWED_FUNCS = ("sqrt", "abs", "floor", "ceil", "log", "exp", "sin",
                   "cos", "tan", "pi", "ln", "pow", "e")
 
@@ -72,10 +77,19 @@ def _looks_numeric(s: str) -> bool:
 
 
 def _extract_numeric_equations(text: str) -> list:
-    """从推理文本提取数值等式 [(lhs, rhs), ...]（最多 8 条）。"""
+    """从推理文本提取数值等式 [(lhs, rhs), ...]（最多 8 条）。
+
+    ★ 2026-10-15（审核 S1）：Unicode 运算符（× ÷ − · 等）归一化为 ASCII
+    后再交给 SymPy —— 否则 SymPy 解析失败会被判"无法验证"，而错误的分割
+    还可能产生假等式。
+    """
+    def _norm(s: str) -> str:
+        for _u, _a in _OP_NORMALIZE:
+            s = s.replace(_u, _a)
+        return s
     out = []
     for m in _CALC_EQ_RE.finditer(text or ""):
-        lhs, rhs = m.group(1).strip(), m.group(2).strip()
+        lhs, rhs = _norm(m.group(1).strip()), _norm(m.group(2).strip())
         if _looks_numeric(lhs) and _looks_numeric(rhs):
             out.append((lhs, rhs))
         if len(out) >= 8:

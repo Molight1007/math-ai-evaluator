@@ -102,9 +102,9 @@ def _parse_diagnostics(text: str) -> list:
             "type": m.group(4),                       # error / warning
             "detail": (m.group(5) or "").strip()[:300],
         })
-    if not errs and txt.strip():
-        errs.append({"step": "", "type": "error",
-                     "detail": txt.strip()[:400]})
+    # ★ 2026-10-15 审核修复（S5）：删「整段当 error」兜底 —— 非诊断格式的文本
+    #   不是"逻辑错误点"，塞进来会把工具/环境类问题误判为 statement_error；
+    #   主流程在"无任何诊断"时按 unknown 处理（不臆断）。
     return errs[:12]
 
 
@@ -240,12 +240,20 @@ def lean_check(lean_code: str = "", reasoning: str = "", problem: str = "",
         return out
 
     # 编译失败 → 分类错误点（★ 优先 `items` —— MCP 已结构化的诊断列表；
-    #   `error`/`raw` 的 JSON 包装作为次选；最后才兜底原始文本）
+    #   `error`/`raw` 的 JSON 包装作为次选；无任何诊断 ⇒ unknown 不臆断）
     errs = _parse_items(res.get("items"))
     if not errs:
         errs = _parse_diagnostics(err_text)
     if not errs:
         errs = _parse_diagnostics(str(res.get("raw") or ""))
+    if not errs:
+        # ★ 2026-10-15 审核修复（S5）：无诊断文本 ⇏ statement_error（可能是
+        #   工具/环境/超时类问题）——按 unknown 处理，绝不误判成逻辑错误。
+        out["verdict"] = "unknown"
+        out["error"] = "no-diagnostics（失败但无诊断文本）: %s" % (
+            (err_text or str(res.get("raw") or ""))[:160] or "(空)")
+        out["elapsed_s"] = round(time.time() - t0, 2)
+        return out
     out["errors"] = errs
     out["verdict"] = "proof_failed" if _is_proof_layer(errs) else "statement_error"
     out["elapsed_s"] = round(time.time() - t0, 2)

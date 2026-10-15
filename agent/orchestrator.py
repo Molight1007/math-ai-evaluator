@@ -244,38 +244,6 @@ class Orchestrator(BaseAgent):
     def _collect_stage_durs(self, ctx) -> dict:
         return dict(getattr(ctx, "_stage_durs", {}) or {})
 
-    @staticmethod
-    def _reassign_stage_time(ctx, name: str, seconds: float) -> None:
-        """把 `seconds` 从**当前正在计时**的阶段窗口里**搬**到阶段 `name`。
-
-        ★ 2026-10-07（fix-gate-timing-diag 问题 2.8）：`_deep_revise_loop` 是**共享
-        子过程**，被 4 个阶段调用（P1@4_verify :2051 / 4.6 对抗 :2210 / 5 :2225 /
-        5.5 :2339）。`_stage_start` 只在阶段入口打点 ⇒ 谁调用它，耗时就算进谁：
-        实测题 001 `4_verify=5546s` 而 `5_revise_or_fallback=7.4e-06s`
-        （revise_round=4，即 4 轮 revise 全被记进 4_verify）；题 000 恰好从 5 段
-        调用 ⇒ `5_revise_or_fallback=3683s`。同一机制两种归属 ⇒ 耗时表不可比、
-        「verify 占 51.26%」被高估。
-
-        做法：正的 `seconds` 加到 `_stage_durs[name]`，**同时把当前开放阶段的起点
-        后移** `seconds`（`dur = now - start` ⇒ 起点后移即等量扣减）。若开放的正是
-        `name` 自己（从 5 段内调用），加/扣相抵 ⇒ 幂等，不会重复计数。
-        `<=0` 直接返回；无开放阶段时只累加。
-        """
-        try:
-            s = float(seconds or 0.0)
-            if s <= 0:
-                return
-            ctx._stage_durs = getattr(ctx, "_stage_durs", {}) or {}
-            ctx._stage_durs[name] = ctx._stage_durs.get(name, 0.0) + s
-            starts = getattr(ctx, "_stage_starts", {}) or {}
-            for _open in list(starts.keys()):
-                try:
-                    starts[_open] = starts[_open] + s
-                except Exception:  # noqa: BLE001
-                    pass
-        except Exception:  # noqa: BLE001  纯埋点，绝不阻断主流程
-            return
-
     # ------------------------------------------------------------------
     # C-lite：数值攻击蓝图极值声称（2026-09-03 老师拍板）
     # ------------------------------------------------------------------

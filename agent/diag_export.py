@@ -260,6 +260,10 @@ def _diag_blueprint_review(ctx, config) -> dict:
         "subgoal_collab": dict(getattr(ctx, "subgoal_collab_diag", None) or {}),
         "subgoal_blueprint_updates": list(
             getattr(ctx, "subgoal_blueprint_updates", None) or [])[:8],
+        # ★ 2026-10-15（审核修复）：4.3 全拒标记此前"只写不读"（死状态）——
+        #   接入 diag（全拒是关键事件，报告/归因需要看到）。
+        "gate_all_rejected": bool(
+            getattr(ctx, "_gate_all_rejected", False)),
         "rewrite_gate": dict(getattr(ctx, "rewrite_gate", None) or {}),
         "rewrite_context": str(getattr(ctx, "rewrite_context", None) or "")[:800],
         "rewrite_gate_events": [str(t.get("content", ""))[:200]

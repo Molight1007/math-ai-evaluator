@@ -85,9 +85,21 @@ def _collect_error_brief(ctx) -> str:
     _lg = getattr(ctx, "lean_gate", None)
     if isinstance(_lg, list):
         for g in _lg:
-            if isinstance(g, dict) and str(g.get("verdict") or "") in (
-                    "reject", "strict_reject", "proof_invalid"):
-                lines.append("- [4.3Lean] %s" % (str(g.get("reason") or "")[:180]))
+            if not isinstance(g, dict):
+                continue
+            # ★ 2026-10-15 审核修复（S3）：lean_gate 的实际字段口径 ——
+            #   verdict ∈ {proof_invalid, unknown}；strict 拒绝落在 `degraded`
+            #   （如 "strict_reject"）；错误文本在 `feedback`。原实现只读
+            #   verdict∈{reject,strict_reject}/reason ⇒ 两类淘汰原因全部丢失。
+            _v = str(g.get("verdict") or "")
+            _deg = str(g.get("degraded") or "")
+            if (_v in ("reject", "strict_reject", "proof_invalid")
+                    or _deg == "strict_reject"):
+                _txt = str(g.get("feedback") or g.get("reason")
+                           or g.get("error") or "").strip()
+                lines.append("- [4.3Lean] %s%s"
+                             % (_txt[:180] or "(无文本)",
+                                ("（degraded=%s）" % _deg) if _deg else ""))
     if not lines:
         lines.append("（无具体错误点留痕：候选在各道被整体淘汰，或错误点未记录）")
     return "\n".join(lines)[:_ERRORS_MAX]

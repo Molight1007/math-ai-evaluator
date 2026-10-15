@@ -66,6 +66,14 @@ class LemmaMemory:
             "source": source,
             "ts": time.time(),
         }
+        # ★ 2026-10-15（审核 Q1：修正无用功）：`save` 此前全仓无调用者 ⇒
+        #   「跨题持久化」名存实亡。现改为**添加即惰性落盘**（配置了
+        #   storage_path 才写；失败只警告不阻断）——自包含接线。
+        if getattr(self, "storage_path", ""):
+            try:
+                self.save()
+            except Exception:  # noqa: BLE001
+                pass
         return True
 
     def add_many(self, items: list) -> int:

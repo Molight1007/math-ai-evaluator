@@ -176,13 +176,20 @@ def review_agent(solver, ctx, sg: dict, out_text: str) -> dict:
                 lr = lean_check(lean_code=tr["lean_code"],
                                 problem=str(getattr(ctx, "problem", "") or ""),
                                 client=getattr(solver, "client", None))
-                tool_report["lean"] = {"verdict": lr.get("verdict")}
-                if lr.get("verdict") in ("statement_error", "proof_failed",
-                                         "disproved"):
+                _lv = str(lr.get("verdict") or "")
+                tool_report["lean"] = {
+                    "verdict": _lv,
+                    "n_missing": len(lr.get("missing") or [])}
+                # ★ 2026-10-15 审核修复（S8）：本检查的定位 = 「结论陈述的可
+                #   形式化性」——to_lean 恒产出 `by sorry` 骨架 ⇒ 常态
+                #   verdict=proof_incomplete（missing 计入 tool_report 供追溯，
+                #   **不构成问题**、不触发重解）；statement_error / proof_failed
+                #   = 陈述/类型病态 ⇒ 真问题。`disproved` 死值已删（lean_check
+                #   从不返回它）。
+                if _lv in ("statement_error", "proof_failed"):
                     for e in (lr.get("errors") or [])[:2]:
-                        issues.append("逻辑问题：%s" % str(e.get("detail"))[:120])
-                    for g in (lr.get("missing") or [])[:2]:
-                        issues.append("逻辑缺少点：%s" % str(g.get("hint"))[:120])
+                        issues.append("逻辑问题（%s）：%s"
+                                      % (_lv, str(e.get("detail"))[:120]))
     except Exception:  # noqa: BLE001
         pass
 
