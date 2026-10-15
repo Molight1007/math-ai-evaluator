@@ -24,7 +24,8 @@ _DIAG_RE = re.compile(
 
 # 「证明层」错误关键词（区分"陈述写错"与"证明证不出"）
 _PROOF_LAYER_HINTS = ("unsolved goals", "tactic", "tactic '", "no goals",
-                      "failed to", "invalid '", "linarith", "omega")
+                      "failed to", "invalid '", "linarith", "omega",
+                      "not a definitional equality", "type mismatch")
 
 # 环境/工具执行失败标记（❗实测教训：proxy 的 `ok=True` 只表示"MCP 调用完成"，
 #   LSP 起不来时仍 ok=True、错误藏在 `raw`；不识别会把"环境坏"误报成"代码 ok"）
@@ -66,17 +67,44 @@ def _parse_items(items) -> list:
 
 
 def _parse_diagnostics(text: str) -> list:
-    """从编译输出提取诊断（行号 + 消息）→ 逻辑错误点列表。"""
+    """从编译输出提取诊断（行号 + 消息）→ 逻辑错误点列表。
+
+    2026-10-15 增强：MCP 的 error 字段可能是**一段 JSON**
+    （``{"success": false, "timed_out": false, "diagnostics": [...]}``）——
+    优先按 JSON 解析取结构化诊断；失败则退回行级正则。
+    """
+    txt = str(text or "")
+    if txt.strip().startswith("{"):
+        try:
+            import json as _json
+            d = _json.loads(txt)
+            diags = d.get("diagnostics") if isinstance(d, dict) else None
+            out = []
+            if isinstance(diags, list):
+                for it in diags[:12]:
+                    if isinstance(it, dict):
+                        msg = str(it.get("message") or "")
+                        sev = str(it.get("severity") or "error").lower()
+                        ln = it.get("line") or it.get("start_line") or ""
+                        out.append({
+                            "step": ("L%s" % ln) if ln else "",
+                            "type": ("error" if "err" in sev else sev),
+                            "detail": msg[:300],
+                        })
+            if out:
+                return out
+        except Exception:  # noqa: BLE001
+            pass
     errs = []
-    for m in _DIAG_RE.finditer(text or ""):
+    for m in _DIAG_RE.finditer(txt):
         errs.append({
             "step": "L%s" % m.group(2),
             "type": m.group(4),                       # error / warning
             "detail": (m.group(5) or "").strip()[:300],
         })
-    if not errs and text and str(text).strip():
+    if not errs and txt.strip():
         errs.append({"step": "", "type": "error",
-                     "detail": str(text).strip()[:400]})
+                     "detail": txt.strip()[:400]})
     return errs[:12]
 
 
@@ -156,6 +184,17 @@ def lean_check(lean_code: str = "", reasoning: str = "", problem: str = "",
             out["elapsed_s"] = round(time.time() - t0, 2)
             return out
 
+    # ★ 2026-10-15：work_dir 缺省 → 复用 lean_bridge 的**自动探测**
+    #   （与主链同口径；本机探测 = D:/mathlib4-last_bump_for_v4.31.0 ——
+    #   这正是「之前能跑通」的配置。此前不探测直接用空目录 ⇒ mcp-env-missing）
+    if not work_dir:
+        try:
+            from tools.lean_local.lean_bridge import (
+                _detect_lean_project_dir as _detect_wd)
+            work_dir = str(_detect_wd() or "")
+        except Exception:  # noqa: BLE001
+            work_dir = ""
+
     try:
         res = runner(code, work_dir, timeout)
     except Exception as exc:  # noqa: BLE001  执行异常 ⇒ unknown（不误判）
@@ -200,8 +239,13 @@ def lean_check(lean_code: str = "", reasoning: str = "", problem: str = "",
         out["elapsed_s"] = round(time.time() - t0, 2)
         return out
 
-    # 编译失败 → 分类错误点
-    errs = _parse_diagnostics(err_text)
+    # 编译失败 → 分类错误点（★ 优先 `items` —— MCP 已结构化的诊断列表；
+    #   `error`/`raw` 的 JSON 包装作为次选；最后才兜底原始文本）
+    errs = _parse_items(res.get("items"))
+    if not errs:
+        errs = _parse_diagnostics(err_text)
+    if not errs:
+        errs = _parse_diagnostics(str(res.get("raw") or ""))
     out["errors"] = errs
     out["verdict"] = "proof_failed" if _is_proof_layer(errs) else "statement_error"
     out["elapsed_s"] = round(time.time() - t0, 2)

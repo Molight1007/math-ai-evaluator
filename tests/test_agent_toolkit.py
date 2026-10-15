@@ -191,6 +191,20 @@ def test_lean_check_items_diagnostics_are_errors():
     assert r["errors"][0]["step"] == "L2"
 
 
+def test_lean_check_error_prefers_items():
+    """★ 实测修正（2026-10-15）：失败场景（ok=False）诊断同样优先取 items
+    （MCP 已结构化的列表）；error/raw 的 JSON 包装仅作次选。"""
+    fail_with_items = {
+        "ok": False, "error": "", "raw": "",
+        "items": [{"severity": "error", "line": 1,
+                   "message": ("Not a definitional equality: the left-hand side "
+                               "1 + 1 is not definitionally equal to 3")}]}
+    [r] = _post([(_CODE_OK, lambda c, w, t: fail_with_items)])
+    assert r["verdict"] == "proof_failed"
+    assert r["errors"][0]["step"] == "L1"
+    assert "definitional" in r["errors"][0]["detail"]
+
+
 def test_lean_check_needs_translation_without_client():
     from tools.agent_toolkit import lean_check
     r = lean_check(reasoning="一段推理", client=None)
