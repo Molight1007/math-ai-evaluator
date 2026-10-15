@@ -499,8 +499,18 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
         if not self._extract_lean_assert_pairs(result):
             _mark(False, False)
             return ""
+        # ★ 2026-10-15（审核修复 F5）：开关关 = **未核验**（≠ pass）——原实现
+        #   无论是否真跑都 _mark(True, ...) ⇒ "没跑"被标成 pass（假信号）。
+        if not getattr(self.config, "enable_numeric_lean_verify", False):
+            _mark(False, False)
+            return ""
+        _meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+        _cnt0 = int(_meta.get("numeric_lean_count", 0) or 0)
         _fb = self._numeric_lean_verify(ctx, result)
-        _mark(True, bool(_fb))
+        _meta2 = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+        _cnt1 = int(_meta2.get("numeric_lean_count", 0) or 0)
+        _did = _cnt1 > _cnt0        # 计数未增 = 未实际执行（时间到/超上限/桥不可用）
+        _mark(_did, bool(_fb) if _did else False)
         return _fb
     if tool == "sympy":
         if not self._extract_check_asserts(result):

@@ -80,6 +80,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "subgoal_collab_regen_rounds": (
         "SUBGOAL_COLLAB_REGEN_ROUNDS", "num", 3,
         "子目标协作求解的生成遍数（默认 3；1=关闭迭代；上限 5）"),
+    "enable_numeric_lean_verify": (
+        "ENABLE_NUMERIC_LEAN_VERIFY", "bool", False,
+        "numbers 叶子 Lean 数值核验开关（2026-10-15 审核 F5 补登记）：原字段只"
+        "存在于 kwargs 白名单/评测覆盖 ⇒ bare 入口恒 False（空转）。默认 False "
+        "与现行为一致；评测经覆盖传 True 时生效。"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

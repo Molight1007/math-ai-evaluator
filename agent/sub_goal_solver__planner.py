@@ -433,6 +433,15 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
         self._subgoal_cap(ctx),
         with_deps=getattr(self.config, "blueprint_deps_enabled", True),
         or_expand_all=getattr(self.config, "blueprint_or_expand_all", False))
+    # ★ 2026-10-15（审核修复 F3）：生产路径补写 ctx.blueprint_plan（此前仅
+    #   BlueprintPlannerAgent.run 写，而生产走本函数直接生成 ⇒ 03_subgoals.plan
+    #   恒空、rewrite 复位亦空）。直接复用同一 plan 对象，零额外成本。
+    try:
+        ctx.blueprint_plan = plan
+    except Exception as _e_bp:  # noqa: BLE001
+        self.record(ctx, "blueprint",
+                    "blueprint_plan 导出失败: %s: %s"
+                    % (type(_e_bp).__name__, str(_e_bp)[:100]))
     if not plan.get("subgoals"):
         # 退化情形：整张 DAG 都是前瞻引理（无 required 叶子）。
         # 此时无子目标可解，仍视为规划失败并回退 LLM 规划（不静默产出空解）。

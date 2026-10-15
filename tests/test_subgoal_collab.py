@@ -49,6 +49,16 @@ class _Solver:
         self.calls += 1
         return self.replies.pop(0) if self.replies else "## 结论\n兜底"
 
+    def _solve_subgoal(self, ctx, sg, plan_summary, prev_results,
+                       extra_hint=""):
+        """★ F1 修复后 solve_agent 走此入口（复用旧链单步求解）。"""
+        self.last_hint = extra_hint
+        self.last_plan = plan_summary
+        return self.replies.pop(0) if self.replies else "## 结论\n兜底"
+
+    def _strip_check_tags(self, out):
+        return out
+
     def record(self, ctx, kind, msg, **kw):
         self.events.append((kind, msg))
 
@@ -69,21 +79,19 @@ def test_rounds_config():
 
 
 def test_solve_agent_regen_prompt():
-    """rnd>0 时必须带上「上一轮产出」（在现有基础上再生成，不推倒重来）。"""
-    s = _Solver(["## 结论\nX"])
+    """rnd>0 时必须把「上一轮产出」经 extra_hint 带回（在现有基础上再生成，
+    不推倒重来）——★ F1 修复后经 `_solve_subgoal` 的 extra_hint 通道。"""
+    s = _Solver([])
     ctx = _Ctx()
-    msg_holder = {}
-
-    def _fake_llm(ctx2, messages, temp, max_tokens):
-        msg_holder["sys"] = messages[0]["content"]
-        msg_holder["user"] = messages[1]["content"]
-        return "## 结论\nY"
-
-    s.llm = _fake_llm
-    solve_agent(s, ctx, {"title": "t", "description": "d"}, "plan",
-                prev="上一轮内容ABC", rnd=1)
-    assert "上一轮内容ABC" in msg_holder["user"]
-    assert "现有基础" in msg_holder["sys"]
+    _r = solve_agent(s, ctx, {"title": "t", "description": "d"}, "plan",
+                     prev="上一轮内容ABC", rnd=1)
+    assert _r                              # 返回非空
+    assert "上一轮内容ABC" in s.last_hint
+    assert "不要推倒重来" in s.last_hint
+    # rnd=0 时不带"上一轮"段
+    s2 = _Solver(["## 结论\nX"])
+    solve_agent(s2, _Ctx(), {"title": "t"}, "plan", prev="", rnd=0)
+    assert "上一轮产出" not in s2.last_hint
 
 
 def test_review_agent_calc_catch():

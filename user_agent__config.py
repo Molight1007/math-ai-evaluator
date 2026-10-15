@@ -255,6 +255,8 @@ class AgentConfig(_AgentConfigBase):
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
     # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
     enable_lean_tools: bool = True
+    # ★ 2026-10-15（审核 F5 补登记）：numbers 叶子 Lean 数值核验（默认 False）
+    enable_numeric_lean_verify: bool = False
     # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认关，可 A/B）
     subgoal_collab_mode: bool = False
     subgoal_collab_regen_rounds: int = 3

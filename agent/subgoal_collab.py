@@ -21,18 +21,9 @@ import re
 import time
 
 # ---------------------------------------------------------------- 提示词
-_SOLVER_SYS = (
-    "你是数学子目标的求解器。请针对给定的子目标与求解计划，给出**完整、严谨**"
-    "的求解。输出必须严格按以下三节格式（标题逐字）：\n"
-    "## 逻辑推导\n（该子目标的推理链，逐步写清依据）\n"
-    "## 计算\n（若涉及数值/符号计算，逐行写「算式 = 结果」，一行一个等式；无计算写「无」）\n"
-    "## 结论\n（该子目标的最终结论，一句话，尽量写成可直接引用的形式）"
-)
-_REGEN_SYS = (
-    "你正在**完善**一份已有的数学子目标求解。请严格**在现有基础上继续深化**："
-    "补齐遗漏的中间步骤、加强推导的严谨性、核对每一处计算；"
-    "**不要推倒重来、不要改变已经正确的部分**。输出仍按三节格式（逻辑推导 / 计算 / 结论）。"
-)
+# ★ 2026-10-15 审核修复（F1）：求解不再用自带极简 prompt（功能子集），改复用
+#   旧链 `_solve_subgoal`（承接块/formal_sig/K11 掩码/结论契约全注入）；
+#   原 `_SOLVER_SYS` / `_REGEN_SYS` 已删。审核与规划仍用各自提示词：
 _REVIEWER_SYS = (
     "你是数学子目标求解的审核员。你会收到：子目标、待审产出（逻辑推导/计算/结论）、"
     "以及**工具给出的客观检测结果**（计算复算 + Lean 逻辑检查）。\n"
@@ -111,26 +102,32 @@ def split_blocks(text: str) -> dict:
 
 # ---------------------------------------------------------------- ① 求解 agent
 def solve_agent(solver, ctx, sg: dict, plan: str, prev: str = "",
-                rnd: int = 0) -> str:
-    """求解一个子目标；rnd>0 时走「在现有基础上再生成」。
+                rnd: int = 0, prev_results: str = "") -> str:
+    """求解一个子目标（★ 2026-10-15 审核修复 F1：**复用旧链单步求解**）。
 
-    返回原始产出文本（含三节板块）。
+    旧链 `_solve_subgoal` 承载全部注入与机制（承接块 / formal_sig / 定理线索 /
+    K11 掩码 / 结论契约 / 工具兑现 / 自改进 / 重试）——此前 collab 自带极简
+    prompt 属「功能子集」，开启即降级；现**直接复用**，杜绝子集。
+
+    rnd>0 = 「在现有基础上再生成」：上一轮产出经 `extra_hint` 带回
+    （语义即"带反馈重解"，**不告知"有错"、不推倒重来**）。
     """
-    _title = str(sg.get("title") or "")
-    _desc = str(sg.get("description") or "")
-    user = ("【子目标】%s\n%s\n\n【求解计划】\n%s\n"
-            % (_title, _desc, (plan or "（无，自行规划）")[:1500]))
+    _hint = str(plan or "")
     if prev and rnd > 0:
-        sys_text = _REGEN_SYS
-        user += ("\n【上一轮产出（在此基础上完善，不要推倒重来）】\n%s"
-                 % prev[-6000:])
-    else:
-        sys_text = _SOLVER_SYS
-    out = _llm(solver, ctx, sys_text, user, temp=0.3)
+        _hint = (_hint + "\n\n【上一轮产出——请在此基础上继续深化：补齐遗漏、"
+                 "加强严谨性、核对每一处计算；不要推倒重来】\n" + prev[-6000:])
+    try:
+        out = solver._solve_subgoal(ctx, sg, _hint, prev_results, _hint) or ""
+    except Exception as _e:  # noqa: BLE001  单步失败不抛（由调用方记/降级链处理）
+        solver.record(ctx, "subgoal_collab",
+                      "①求解异常（%s）: %s: %s"
+                      % (str(sg.get("title") or "")[:30],
+                         type(_e).__name__, str(_e)[:120]))
+        return ""
     try:
         solver.record(ctx, "subgoal_collab",
                       "①求解 %s（第%d遍，产出 %d 字）"
-                      % (_title[:40], rnd + 1, len(out)))
+                      % (str(sg.get("title") or "")[:40], rnd + 1, len(out)))
     except Exception:  # noqa: BLE001
         pass
     return out
@@ -283,6 +280,7 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
 
     _n = _rounds(solver)
     _blueprint_digest = ""
+    _done_digest = ""          # 已完成子目标结论摘要（作 prev_results 供后续步）
 
     # ★ 预取（PC 指令预取模型）：先为**第一个**子目标制定计划
     _next_plan = planning_agent(
@@ -314,23 +312,45 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
             solver.record(ctx, "subgoal_collab", "复用已完成子目标：%s" % _title[:40])
             continue
 
-        # ① 求解 ×3（无条件、在现有基础上再生成）
+        # ① 求解 ×N（无条件、在现有基础上再生成；复用旧链单步求解）
         _t0 = time.time()
         _out = ""
         for _r in range(_n):
-            _out = solve_agent(solver, ctx, sg, _next_plan, prev=_out, rnd=_r)
+            _out = solve_agent(solver, ctx, sg, _next_plan, prev=_out,
+                               rnd=_r, prev_results=_done_digest)
 
-        # ② 审核（工具③ + 工具①）；不通过 → 带反馈重解 1 次（有限、可观测）
+        # ★ 2026-10-15 审核修复（F2）：动态倒推（拆图补前提；内部双闸门
+        #   `sg_missing_premise` 自判触发）——与旧循环同位置（recover 之后）。
+        try:
+            from .sub_goal_solver__backward import sg_dynamic_backward as _bd
+            _bd_out = _bd(solver, ctx, sg, _out, _next_plan, _done_digest,
+                          results_map)
+            if _bd_out and len(str(_bd_out)) > 20:
+                _out = str(_bd_out)
+        except Exception as _e_bd:  # noqa: BLE001
+            solver.record(ctx, "subgoal_collab",
+                          "动态倒推异常（不阻断）: %s: %s"
+                          % (type(_e_bd).__name__, str(_e_bd)[:100]))
+
+        # ② 审核（工具③ + 工具①）；不通过 → 带审核意见重解 1 次（经旧链单步）
         _rev = review_agent(solver, ctx, sg, _out)
         if not (_rev.get("pass", True)) and _rev.get("issues"):
-            _fb_user = ("【子目标】%s\n\n【上一版产出】\n%s\n\n【审核意见（请修正）】\n%s"
-                        % (_title, _out[-5000:], "\n".join(_rev["issues"])))
-            _out2 = _llm(solver, ctx, _SOLVER_SYS + "\n\n⚠ 必须修正审核指出的问题。",
-                         _fb_user, temp=0.2)
+            _fb = "【审核意见（请修正）】\n" + "\n".join(_rev["issues"])
+            try:
+                _out2 = solver._solve_subgoal(ctx, sg, _next_plan,
+                                              _done_digest, _fb) or ""
+            except Exception:  # noqa: BLE001
+                _out2 = ""
             if _out2 and len(_out2) > 40:
                 _out = _out2
                 solver.record(ctx, "subgoal_collab",
                               "②审核未过 → 带反馈重解：%s" % _title[:40])
+
+        # 剥 <check> 协议标签（防污染下游提示词 / 终答；与旧循环同口径）
+        try:
+            _out = solver._strip_check_tags(_out) or _out
+        except Exception:  # noqa: BLE001
+            pass
 
         _blocks = split_blocks(_out)
         step_result = _blocks.get("result") or _out.strip()
@@ -364,6 +384,7 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
         _next_plan = planning_agent(solver, ctx, _sg_next, _digest,
                                     _blueprint_digest or (subgoal_plan_summary or ""))
         _blueprint_digest = (_blueprint_digest + "\n" + _digest)[-2000:]
+        _done_digest = (_done_digest + "\n" + "【%s】%s" % (_title[:30], _digest))[-3000:]
 
     # 落一份协作全景（可观测）
     try:
