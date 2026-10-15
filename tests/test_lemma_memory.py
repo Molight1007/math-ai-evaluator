@@ -26,16 +26,6 @@ class LemmaMemoryTest(unittest.TestCase):
         self.assertEqual(len(hits2), 1)
         self.assertEqual(mem.lookup("不存在"), [])
 
-    def test_add_many(self):
-        mem = LemmaMemory()
-        added = mem.add_many([
-            {"name": "a", "statement": "1 + 1 = 2"},
-            {"name": "a", "statement": "重复"},
-            {"name": "b", "statement": "2 + 2 = 4"},
-            {"name": "c"},  # 无 statement
-        ])
-        self.assertEqual(added, 2)
-        self.assertEqual(len(mem), 2)
 
     def test_serialization_roundtrip(self):
         with tempfile.TemporaryDirectory() as td:

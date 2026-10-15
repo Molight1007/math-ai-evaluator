@@ -115,17 +115,6 @@ _TRAIL_TAIL_RE = re.compile(r"[=＝].*$")          # 截断 "3-1=2" 的 = 尾巴
 _WS_RE = re.compile(r"\s+")
 
 
-def _clean_expr(expr: str) -> str:
-    """净化被污染的表达式（仅当直接求值失败时调用）。
-
-    剥离中文/全角标点、截断 = 尾巴、压缩空白；**保留 ASCII 全部字符**
-    （`*`、`,`、`(` 等都是合法语法，删了会算出错误值）。
-    返回净化后表达式；若没有可净化内容返回原串（此时调用方不重试）。
-    """
-    cleaned = _NON_ASCII_RE.sub("", expr)
-    cleaned = _TRAIL_TAIL_RE.sub("", cleaned)
-    cleaned = _WS_RE.sub("", cleaned)
-    return cleaned
 
 
 def safe_eval(expr: str) -> str:

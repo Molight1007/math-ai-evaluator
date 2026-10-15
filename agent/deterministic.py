@@ -26,7 +26,6 @@ from agent.switch_registry import (
 """
 
 import logging
-import os
 import random
 import re
 import threading
@@ -596,44 +595,3 @@ _INT_VARIABLES: frozenset = frozenset({"n", "m", "k", "i", "j", "p", "q"})
 # ============================================================
 
 
-def verify_answer_exact(expr: str, answer: str, mapping: dict | None = None) -> dict:
-    """精确代入核验：把 mapping 代入 expr，与 answer 做**精确**数值判等。
-
-    与 verify_by_substitution 的分工：那条通道核"等式/恒等式"（采样+容差），
-    这条通道核"关系式 + 具体取值 → 具体答案"（代入+精确）。
-
-    Returns:
-        {"verdict": "pass"|"fail"|"unknown", "evidence": str,
-         "value": str|None, "method": str}
-        - pass/fail 只在**双方都精确**时给出；否则一律 unknown。
-    """
-    try:
-        from utils.math_eval import safe_eval_subst, to_exact_number
-    except ImportError:  # 模块不可用时降级（绝不阻断）
-        return {"verdict": "unknown", "evidence": "math_eval 不可用",
-                "value": None, "method": "exact_subst"}
-    if not expr or not str(expr).strip():
-        return {"verdict": "unknown", "evidence": "表达式为空",
-                "value": None, "method": "exact_subst"}
-    if not mapping:
-        return {"verdict": "unknown", "evidence": "无可用变量取值",
-                "value": None, "method": "exact_subst"}
-    want = to_exact_number(answer)
-    if want is None:
-        return {"verdict": "unknown", "evidence": f"答案非精确数值: {str(answer)[:40]}",
-                "value": None, "method": "exact_subst"}
-    got_s = safe_eval_subst(expr, mapping)
-    if got_s.startswith(("WARN:", "ERROR:")):
-        return {"verdict": "unknown", "evidence": f"代入求值未成功: {got_s[:80]}",
-                "value": None, "method": "exact_subst"}
-    got = to_exact_number(got_s)
-    if got is None:                      # 代入后是近似值/无理式 → 不精确判等
-        return {"verdict": "unknown", "evidence": f"代入结果是近似/符号值: {got_s[:60]}",
-                "value": got_s, "method": "exact_subst"}
-    if got == want:
-        return {"verdict": "pass",
-                "evidence": f"精确代入一致: {expr} → {got_s}",
-                "value": got_s, "method": "exact_subst"}
-    return {"verdict": "fail",
-            "evidence": f"精确代入不一致: {expr} → {got_s}，与答案 {answer} 不符",
-            "value": got_s, "method": "exact_subst"}

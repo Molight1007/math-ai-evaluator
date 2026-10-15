@@ -264,49 +264,6 @@ def extract_gaps(refine_result: dict,
 # ---------------------------------------------------------------------------
 # 汇总多题（离线分析用）
 # ---------------------------------------------------------------------------
-def aggregate_gaps(per_q: list) -> dict:
-    """把多题的缺口清单汇总 —— 回答「本项目的推理瓶颈集中在哪类子目标」。
-
-    参数
-    ----
-    per_q : list[dict]，每项为 `extract_gaps()` 的返回值（需带 'id' 键）
-
-    返回
-    ----
-    {"n_q", "n_q_with_gaps", "total_failed", "by_kind", "reasoning_gaps",
-     "reasoning_share", "top_advice"}
-    """
-    agg = {
-        "n_q": 0, "n_q_with_gaps": 0, "total_nodes": 0, "total_failed": 0,
-        "by_kind": {}, "reasoning_gaps": 0, "non_reasoning_gaps": 0,
-        "unclassified": 0, "reasoning_share": 0.0, "top_advice": [],
-    }
-    for r in (per_q or []):
-        if not isinstance(r, dict) or not r.get("ok"):
-            continue
-        agg["n_q"] += 1
-        agg["total_nodes"] += int(r.get("n_nodes") or 0)
-        agg["total_failed"] += int(r.get("n_failed") or 0)
-        if r.get("gaps"):
-            agg["n_q_with_gaps"] += 1
-        for k, v in (r.get("by_kind") or {}).items():
-            agg["by_kind"][k] = agg["by_kind"].get(k, 0) + int(v)
-        agg["reasoning_gaps"] += int(r.get("reasoning_gaps") or 0)
-        agg["non_reasoning_gaps"] += int(r.get("non_reasoning_gaps") or 0)
-        agg["unclassified"] += int(r.get("unclassified") or 0)
-
-    if agg["total_failed"]:
-        agg["reasoning_share"] = round(
-            agg["reasoning_gaps"] / agg["total_failed"], 4)
-
-    # 按缺口条数排序，给出「最该优化的方向」
-    advice = []
-    for kind, cnt in sorted(agg["by_kind"].items(), key=lambda kv: -kv[1]):
-        meaning, adv = gap_meaning(kind)
-        advice.append({"kind": kind, "count": cnt, "meaning": meaning,
-                       "advice": adv})
-    agg["top_advice"] = advice
-    return agg
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +284,7 @@ def aggregate_gaps(per_q: list) -> dict:
 #   本模块**复用同一组判据**，保证两侧口径一致（口径漂移会让统计失去意义）。
 _PLAN_ERR_MARKERS = ("依赖", "前提", "缺少", "不成立", "无法确定")
 
+
 # 占位/失败文本特征
 # ★ 2026-09-29 修正（实测暴露）：除占位符外，**模型自陈"没做出来"的措辞**
 #   也必须算失败，否则「计算未能完成」「无法化简」这类会被当作**成功结论**
@@ -339,7 +297,6 @@ _FAIL_MARKERS = (
     "未能求出", "无法求出", "推不出", "未能推出", "无法推出",
     "化简失败", "计算失败", "无法化简", "无法计算", "未能计算",
 )
-
 
 def is_subgoal_failed(result_text: str) -> bool:
     """该子目标是否**未产出有效结论**（复用 sub_goal_solver 的判据）。

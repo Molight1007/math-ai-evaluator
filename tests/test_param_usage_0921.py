@@ -27,7 +27,7 @@ from agent.param_usage import (  # noqa: E402
     SCHEMA, collect_param_usage, aggregate)
 from agent.orchestrator import _summarize_leansearch  # noqa: E402
 from utils.llm_client import (  # noqa: E402
-    _mark_response, truncation_breakdown, get_truncation_stats)
+    _mark_response, get_truncation_stats)
 
 
 # ---------------------------------------------------------------- 夹具
@@ -255,35 +255,6 @@ class TestSummarizeLeansearch:
 # ⑥ llm_client 截断台账分解
 # ================================================================
 class TestTruncationBreakdown:
-    def test_by_max_tokens_and_by_site_accumulate(self):
-        before = truncation_breakdown()
-        b_bmt = dict(before["by_max_tokens"])
-        b_bs = dict(before["by_site"])
-
-        def _outer():                       # 造一个非 llm_client 的调用帧
-            _mark_response("m", "length", 32768)
-
-        _outer()
-        _mark_response("m", "stop", 100)    # 非截断 ⇒ 不计入分解
-        _mark_response("m", "length", 6144)
-
-        after = truncation_breakdown()
-        assert after["by_max_tokens"].get("32768", 0) == b_bmt.get("32768", 0) + 1
-        assert after["by_max_tokens"].get("6144", 0) == b_bmt.get("6144", 0) + 1
-        assert after["truncated"] == before["truncated"] + 2
-        assert after["calls"] == before["calls"] + 3
-        # site 应指向本测试文件（栈里第一处非 llm_client 的帧）
-        sites = [k for k in after["by_site"] if k not in b_bs]
-        assert sites, "应新增至少一个 site"
-        assert any("test_param_usage_0921" in s for s in sites), \
-            "site 应指向真实调用点，实际=%r" % sites
-
-    def test_breakdown_returns_copies(self):
-        bd = truncation_breakdown()
-        bd["by_max_tokens"]["__poison__"] = 1
-        bd["by_site"]["__poison__"] = 1
-        assert "__poison__" not in truncation_breakdown()["by_max_tokens"]
-        assert "__poison__" not in truncation_breakdown()["by_site"]
 
     def test_get_truncation_stats_still_has_legacy_keys(self):
         st = get_truncation_stats()

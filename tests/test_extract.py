@@ -3,14 +3,12 @@
 
 覆盖:
 - ``extract_final_answer``: 显式标记 / boxed / 尾部有效行
-- ``normalize_answer``: LaTeX 归一化 / 隐式乘法 / 数值统一 / 单位剥离
 - ``rescue_final_answer``: boxed / 强结论模式 / 尾部兜底
 """
 import unittest
 
 from utils.extract import (
     extract_final_answer,
-    normalize_answer,
     rescue_final_answer,
     looks_like_pool_answer,
     normalize_pool_answer,
@@ -68,29 +66,6 @@ class ExtractFinalAnswerTest(unittest.TestCase):
                                 f"正常答案 {real!r} 不应被过滤")
 
 
-class NormalizeAnswerTest(unittest.TestCase):
-    def test_latex_fraction_to_decimal(self) -> None:
-        self.assertEqual(normalize_answer(r"\frac{1}{2}"), "0.5")
-
-    def test_implicit_multiplication(self) -> None:
-        self.assertEqual(normalize_answer("2x"), "2*x")
-
-    def test_trailing_zero_removed(self) -> None:
-        self.assertEqual(normalize_answer("3.0"), "3")
-
-    def test_unit_stripped(self) -> None:
-        self.assertEqual(normalize_answer("5cm"), "5")
-        self.assertEqual(normalize_answer("120s"), "120")
-
-    def test_set_standardized(self) -> None:
-        self.assertEqual(normalize_answer("{1,2,3}"), "[1,2,3]")
-
-    def test_prefix_label_stripped(self) -> None:
-        self.assertEqual(normalize_answer("答案：4"), "4")
-
-    def test_empty_input(self) -> None:
-        self.assertEqual(normalize_answer(""), "")
-        self.assertEqual(normalize_answer(None), "")
 
 
 class RescueFinalAnswerTest(unittest.TestCase):

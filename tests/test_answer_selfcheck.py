@@ -11,7 +11,6 @@
 from fractions import Fraction
 
 from utils.math_eval import safe_eval_subst, to_exact_number
-from agent.deterministic import verify_answer_exact
 
 
 # ---------------------------------------------------------------- 1) 代入求值
@@ -123,18 +122,6 @@ def test_subst_robust_inputs():
     assert safe_eval_subst("1+" * 400 + "1", {"x": 1}).startswith("ERROR:")
 
 
-# ------------------------------------------------------------ 3) 精确代入核验
-def test_verify_answer_exact():
-    r = verify_answer_exact("2*x+y", "25", {"x": 10, "y": 5})
-    assert r["verdict"] == "pass", r
-    r = verify_answer_exact("2*x+y", "26", {"x": 10, "y": 5})
-    assert r["verdict"] == "fail", r
-    # 答案无法精确数值化 → unknown（绝不误杀）
-    assert verify_answer_exact("2*x", "2*x", {"x": 5})["verdict"] == "unknown"
-    # 无取值 → unknown
-    assert verify_answer_exact("2*x", "10", None)["verdict"] == "unknown"
-    # 表达式为空 → unknown
-    assert verify_answer_exact("", "10", {"x": 1})["verdict"] == "unknown"
 
 
 # --------------------------------------------------- 4) 关卡桩（不触发 LLM）

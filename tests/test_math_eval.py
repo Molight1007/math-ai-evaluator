@@ -20,7 +20,7 @@
 - 安全面（拒绝 dunder / 任意代码 / 超长式）
 """
 
-from utils.math_eval import _clean_expr, safe_eval
+from utils.math_eval import safe_eval
 
 
 def test_safe_eval_pure():
@@ -105,11 +105,6 @@ def test_safe_eval_errors():
     assert safe_eval("sqrt(-1)").startswith("ERROR:")     # 负数开方
 
 
-def test_clean_expr_strips_cn_and_tail():
-    assert _clean_expr("3/6 + 2/6 + 1/6 约分后") == "3/6+2/6+1/6"
-    assert _clean_expr("3*7-1=20") == "3*7-1"
-    assert _clean_expr("1/2，然后 1/3") == "1/21/3"      # 剥中文后残留，无意义但仍安全
-    assert _clean_expr("comb(50, 3) × 2") == "comb(50,3)2"  # 全角×被剥，ASCII 语法保留
 
 
 def test_safe_eval_pow_caret_numeric():

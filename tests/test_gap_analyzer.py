@@ -28,7 +28,7 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from agent.gap_analyzer import (  # noqa: E402
-    aggregate_gaps, classify_gap, classify_subgoal_gap, counts_as_reasoning,
+    classify_gap, classify_subgoal_gap, counts_as_reasoning,
     extract_gaps, extract_subgoal_gaps, gap_meaning,
     is_subgoal_failed, merge_gap_sources,
 )
@@ -263,31 +263,6 @@ def test_merge_with_no_valid_source():
     assert "无任何可用缺口数据源" in m["diagnosis"]
 
 
-# ----------------------------------------------------------------------
-# 5) 多题汇总
-# ----------------------------------------------------------------------
-def test_aggregate_orders_advice_by_frequency():
-    per_q = []
-    for i in range(3):
-        trace = [
-            {"id": f"a{i}", "title": "t", "description": "d",
-             "result": "[子目标求解失败]"},          # logical_jump
-            {"id": f"b{i}", "title": "t", "description": "d",
-             "result": "前提缺少"},                   # formalization
-        ]
-        per_q.append(extract_subgoal_gaps(trace))
-    agg = aggregate_gaps(per_q)
-    assert agg["n_q"] == 3
-    assert agg["total_failed"] == 6
-    assert agg["by_kind"]["logical_jump"] == 3
-    # 建议按频次降序 —— 让"最该优化什么"一眼可见
-    assert agg["top_advice"][0]["kind"] == "logical_jump"
-
-
-def test_aggregate_skips_invalid_entries():
-    agg = aggregate_gaps([{"ok": False}, None, "junk"])
-    assert agg["n_q"] == 0
-    assert agg["top_advice"] == []
 
 
 # ----------------------------------------------------------------------

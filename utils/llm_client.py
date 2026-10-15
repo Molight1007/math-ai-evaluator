@@ -114,26 +114,6 @@ def get_truncation_stats() -> dict:
     with _TRUNCATION_STATS_LOCK:
         return dict(_TRUNCATION_STATS)
 
-def truncation_breakdown() -> dict:
-    """返回截断的**分解**口径（2026-09-21 新增）。
-
-    {
-      "calls": 总响应数, "truncated": 截断数,
-      "by_max_tokens": {"32768": 4, "6144": 14, ...},   # 哪一档上限在被撞
-      "by_site": {"Solver@base.py:757 <- solver.py:1437": 4, ...},  # 谁在撞
-    }
-
-    为什么要这两个维度：只知道"截断了 40 次"
-    无法决策该调哪个参数 ——
-    `max_answer_tokens`(65536) / `verifier_deep_review_max_tokens`(6144) /
-    硬编码的 32768 是**不同**的上限，
-    撞顶率与改法完全不同。
-    """
-    with _TRUNCATION_STATS_LOCK:
-        out = dict(_TRUNCATION_STATS)
-    out["by_max_tokens"] = dict(out.get("by_max_tokens") or {})
-    out["by_site"] = dict(out.get("by_site") or {})
-    return out
 
 
 def _capture_truncation_site(max_frames: int = 2) -> str:

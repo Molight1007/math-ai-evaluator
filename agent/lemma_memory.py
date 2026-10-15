@@ -76,15 +76,6 @@ class LemmaMemory:
                 pass
         return True
 
-    def add_many(self, items: list) -> int:
-        """批量添加；返回实际新增数。items: [{name, statement, proof?, source?}]"""
-        added = 0
-        for it in items or []:
-            if isinstance(it, dict) and self.add(
-                    it.get("name", ""), it.get("statement", ""),
-                    it.get("proof", ""), it.get("source", "")):
-                added += 1
-        return added
 
     # ---------------- 检索 ----------------
     def lookup(self, keyword: str, limit: int = 5) -> list:
