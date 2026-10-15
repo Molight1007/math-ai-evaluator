@@ -87,7 +87,8 @@ _CONFIG_OVERRIDE_KEYS = (
     #   `enable_question_type_hint`：solver 注释称"仍可全题型强制开启做 A/B"；
     #   `verify_reserve_seconds`：orchestrator 注释称"可覆盖生成侧预留"。
     "enable_question_type_hint", "verify_reserve_seconds",
-    "enable_web_search",  # 2026-09-16 联网搜索工具（默认 False）
+    "enable_web_search",
+    "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
     "lean_dedup_by_answer",  # 2026-09-17 Lean 同答案去重缓存（默认 False）
     # ★★ 2026-09-16 审计修复（**关键断链**）：以下三键此前
     #   **有 argparse、有 AgentConfig 声明，却不在白名单** ⇒
@@ -187,7 +188,8 @@ _CONFIG_OVERRIDE_KEYS = (
     "theorem_hint_top_k_by_stage",
     # 2026-10-14 五道审核链（0 规范化/1 自审/2 对抗证伪/3 Lean 代回/4 计算检测/5 投票 + 重写通道）
     "five_gate_normalize", "five_gate_self_audit", "five_gate_falsify",
-    "five_gate_lean_check", "five_gate_math_check", "five_gate_vote",
+    "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
+    "five_gate_math_check_calcverify",
     "five_gate_rewrite",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。

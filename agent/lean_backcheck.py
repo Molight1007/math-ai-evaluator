@@ -35,6 +35,20 @@ def _switch_enabled() -> bool:
         return True
 
 
+def _tool_channel_enabled() -> bool:
+    """读「4.3 工具①观测通道」开关（默认 False，云端 A/B 时开）。
+
+    ★ 2026-10-15（工具化定稿）：开启后对**存活候选**调工具①
+    `tools/agent_toolkit.lean_check`（LLM 翻译 → Lean 检查 → 错误点/缺少点），
+    结果写 diag（``ctx.lean_tool_check``）与 trace —— **观测模式：暂不改淘汰**，
+    等云端验证通过后再切换为判定通道（届时把 verdict 并入淘汰条件）。
+    """
+    try:
+        return _sw_get_bool("five_gate_lean_check_tool")
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def lean_backcheck_stage(self, ctx, tier: str) -> None:
     """4.3 阶段入口（orchestrator 一行委托；``self`` 即 Orchestrator 实例）。
 
@@ -71,6 +85,37 @@ def lean_backcheck_stage(self, ctx, tier: str) -> None:
 
         _n_in = len(cands)
         kept, fbs = _gate.apply(ctx, tier, cands)
+
+        # ★ 2026-10-15（工具①接线 · 观测模式）：对存活候选做第二意见检查。
+        #   开关 five_gate_lean_check_tool（默认 False）；结果只写 diag/record，
+        #   不影响淘汰（等云端验证后再升级为判定通道）。
+        if _tool_channel_enabled() and kept:
+            try:
+                from tools.agent_toolkit import lean_check as _lc
+                _res = []
+                for _c in kept:
+                    _r = _lc(
+                        reasoning=((getattr(_c, "answer", "") or "") + "\n" +
+                                   (getattr(_c, "reasoning", "") or "")[-1200:]),
+                        problem=str(getattr(ctx, "problem", "") or ""),
+                        client=getattr(self, "client", None),
+                        work_dir=str(getattr(getattr(self, "config", None),
+                                             "lean_project_dir", "") or ""))
+                    _res.append({
+                        "id": getattr(_c, "id", None),
+                        "verdict": _r.get("verdict"),
+                        "n_errors": len(_r.get("errors") or []),
+                        "n_missing": len(_r.get("missing") or []),
+                    })
+                ctx.lean_tool_check = _res
+                self.record(ctx, "lean_backcheck",
+                            "4.3（工具①观测）: " + "; ".join(
+                                "id=%s:%s" % (x["id"], x["verdict"])
+                                for x in _res[:6]))
+            except Exception as _e_tool:  # noqa: BLE001  观测通道绝不阻断主链
+                self.record(ctx, "lean_backcheck",
+                            "4.3（工具①观测）异常（跳过）: %s: %s"
+                            % (type(_e_tool).__name__, str(_e_tool)[:100]))
 
         if kept:
             ctx.candidates = kept

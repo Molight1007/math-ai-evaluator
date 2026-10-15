@@ -204,3 +204,51 @@ def test_lean_check_runner_exception_safe():
         raise RuntimeError("lsp dead")
     [r] = _post([(_CODE_OK, _boom)])
     assert r["verdict"] == "unknown" and "runner-exception" in r["error"]
+
+
+# ---------------------------------------------------------------- 双通道（base.py 注册）
+def test_lean_tool_schemas_registered():
+    """4 个工具以 schema 注册给大模型（原生 tool_calls 协议）。"""
+    from agent.base import BaseAgent
+    names = {t["function"]["name"] for t in BaseAgent.LEAN_TOOLS_SCHEMAS}
+    assert names == {"lean_search", "calc_verify", "to_lean", "lean_check"}
+
+
+def test_tool_schemas_respect_switch():
+    from types import SimpleNamespace
+    from agent.base import BaseAgent
+
+    class _A(BaseAgent):
+        def __init__(self):
+            self.config = SimpleNamespace(enable_web_search=False,
+                                          enable_lean_tools=True)
+
+        def run(self):                    # 抽象方法实现（本测试不用）
+            return None
+
+    a = _A()
+    names = {t["function"]["name"] for t in a._tool_schemas()}
+    assert "lean_search" in names and "calc_verify" in names
+    a.config.enable_lean_tools = False
+    assert a._tool_schemas() == []
+
+
+def test_lean_tool_exec_dispatch():
+    """分发执行：calc_verify 直通工具③；未知工具返回可读文本不抛异常。"""
+    import json
+    from types import SimpleNamespace
+    from agent.base import BaseAgent
+
+    class _A(BaseAgent):
+        def __init__(self):
+            self.config = SimpleNamespace()
+            self.client = None
+
+        def run(self):                    # 抽象方法实现（本测试不用）
+            return None
+
+    a = _A()
+    d = json.loads(a._lean_tool_exec(None, "calc_verify",
+                                     {"expr": "2+2", "claimed": "4"}))
+    assert d["ok"] is True and d["n_ok"] == 1
+    assert "未知工具" in a._lean_tool_exec(None, "nope", {})

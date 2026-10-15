@@ -253,6 +253,8 @@ class AgentConfig(_AgentConfigBase):
     self_improve_objective_skip: bool = True  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
     theorem_hint: bool = True  # THEOREM_HINT — 定理检索注入（=0 关闭）
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
+    # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
+    enable_lean_tools: bool = True
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
     # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。
@@ -474,9 +476,13 @@ class AgentConfig(_AgentConfigBase):
     #   ★ 2026-10-14 第 3 道（4.3_lean_check）：Lean 逻辑判断·答案代回题目；
     #     部分淘汰落池、全拒标记不静默清池、不适用题豁免（沿用 3.6 口径）。
     five_gate_lean_check: bool = True
+    # ★ 2026-10-15（工具①观测通道）：4.3 调 lean_check 工具（默认关）
+    five_gate_lean_check_tool: bool = False
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——
     #     SymPy 精确判定；fail 淘汰 / unknown 放行 / 全拒回退保留。
     five_gate_math_check: bool = True
+    # ★ 2026-10-15（工具③观测通道）：4.4 等式逐条复算（默认关）
+    five_gate_math_check_calcverify: bool = False
     #   ★ 2026-10-14 第 5 道（4.5_vote）：先多答案判断（ctx.vote_multi_answer
     #     单一来源）→ 大模型投票（票数锁定 tier_votes 多票口径）。
     five_gate_vote: bool = True

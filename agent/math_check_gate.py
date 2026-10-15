@@ -22,6 +22,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from .switch_registry import get_bool as _sw_get_bool
 
 def _switch_enabled() -> bool:
@@ -30,6 +32,52 @@ def _switch_enabled() -> bool:
         return _sw_get_bool("five_gate_math_check")
     except Exception:  # noqa: BLE001
         return True
+
+
+def _calcverify_enabled() -> bool:
+    """读「4.4 工具③等式复算观测通道」开关（默认 False，云端 A/B 时开）。
+
+    ★ 2026-10-15（工具化定稿）：开启后对**存活候选的推理**提取"数值等式"
+    （如 ``19.9 + (10 - sqrt(9.9))**2 = 20``），逐条调工具③
+    ``tools/agent_toolkit.calc_verify`` 机械复算；算错的条目写 diag
+    （``ctx.math_calcverify``）与 trace —— **观测模式：暂不改淘汰**。
+    """
+    try:
+        return _sw_get_bool("five_gate_math_check_calcverify")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# 数值等式提取（2026-10-15 工具③）：两侧须以数字开头/结尾；白名单函数名之外的
+# 裸字母（变量）一律拒 —— 防止把 `x = 3` 这类赋值当"计算式"误报算错。
+_CALC_EQ_RE = re.compile(
+    r"(?<![A-Za-z0-9_.])"
+    r"([0-9][0-9A-Za-z.\s*+\-/()^]{2,120}?[0-9A-Za-z)])"
+    r"\s*=\s*"
+    r"([0-9][0-9A-Za-z.\s*+\-/()^]{0,120}?[0-9A-Za-z)])"
+    r"(?![A-Za-z0-9_])")
+_ALLOWED_FUNCS = ("sqrt", "abs", "floor", "ceil", "log", "exp", "sin",
+                  "cos", "tan", "pi", "ln", "pow", "e")
+
+
+def _looks_numeric(s: str) -> bool:
+    """去掉白名单函数名后不得残留裸字母（否则疑似含变量 ⇒ 拒收）。"""
+    t = s
+    for fn in sorted(_ALLOWED_FUNCS, key=len, reverse=True):
+        t = t.replace(fn, " ")
+    return not re.search(r"[A-Za-z]", t)
+
+
+def _extract_numeric_equations(text: str) -> list:
+    """从推理文本提取数值等式 [(lhs, rhs), ...]（最多 8 条）。"""
+    out = []
+    for m in _CALC_EQ_RE.finditer(text or ""):
+        lhs, rhs = m.group(1).strip(), m.group(2).strip()
+        if _looks_numeric(lhs) and _looks_numeric(rhs):
+            out.append((lhs, rhs))
+        if len(out) >= 8:
+            break
+    return out
 
 
 def math_check_stage(self, ctx) -> None:
@@ -116,6 +164,47 @@ def math_check_stage(self, ctx) -> None:
                         "4.4 计算检测：%d 候选 ⇒ 淘汰 %d / 保留 %d"
                         "（无法判定 %d）"
                         % (len(cands), len(rejected), len(kept), n_unknown))
+
+        # ★ 2026-10-15（工具③接线 · 观测模式）：对最终存活候选的推理做
+        #   "等式逐条机械复算"（工具③ calc_verify）——算错条目写 diag/record，
+        #   不影响淘汰（等云端验证后再升级为判定通道）。
+        if _calcverify_enabled() and kept:
+            try:
+                from tools.agent_toolkit import calc_verify as _cv
+                _n_eq, _bad = 0, []
+                for _c in kept:
+                    _eqs = _extract_numeric_equations(
+                        str(getattr(_c, "reasoning", "") or ""))
+                    if not _eqs:
+                        continue
+                    _n_eq += len(_eqs)
+                    _r = _cv([{"expr": a, "claimed": b}
+                              for a, b in _eqs[:8]])
+                    for _x in (_r.get("results") or []):
+                        if not _x.get("ok"):
+                            _bad.append({
+                                "id": getattr(_c, "id", None),
+                                "expr": str(_x.get("expr", ""))[:80],
+                                "claimed": str(_x.get("claimed", ""))[:40],
+                                "actual": str(_x.get("actual", ""))[:40],
+                                "detail": str(_x.get("detail", ""))[:140]})
+                ctx.math_calcverify = {"n_checked": _n_eq, "n_bad": len(_bad),
+                                       "bad": _bad[:8]}
+                if _bad:
+                    _x0 = _bad[0]
+                    self.record(ctx, "math_check",
+                                "4.4（工具③观测）：复算 %d 条等式，发现 %d 条"
+                                "**不一致**；样例 cid=%s: %s = %s → 实际 %s"
+                                % (_n_eq, len(_bad), _x0["id"], _x0["expr"],
+                                   _x0["claimed"], _x0["actual"]))
+                else:
+                    self.record(ctx, "math_check",
+                                "4.4（工具③观测）：复算 %d 条等式，全部一致"
+                                % _n_eq)
+            except Exception as _e_cv:  # noqa: BLE001  观测通道绝不阻断主链
+                self.record(ctx, "math_check",
+                            "4.4（工具③观测）异常（跳过）: %s: %s"
+                            % (type(_e_cv).__name__, str(_e_cv)[:100]))
 
         try:
             from .orchestrator__verify import _pool_empty_fallback as _pef

@@ -67,6 +67,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "`<tool_call><function=web_search><parameter=query>…` 时，解析 → 白名单校验 "
         "→ 真正执行 → 结果以 role=user 回填后继续。依据 smoke10：10 题共 93 次"
         "文本调用被丢弃（含题 000 的自纠错检索请求）。=0 回退旧行为做 A/B"),
+    "enable_lean_tools": (
+        "ENABLE_LEAN_TOOLS", "bool", True,
+        "Lean/Math 工具集注册（2026-10-15 工具化定稿 · 双通道）：大模型可直接调用 "
+        "lean_search / calc_verify / to_lean / lean_check（实现在 tools/agent_toolkit）；"
+        "=0 关闭做 A/B"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
@@ -515,11 +520,20 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.2 AI 对抗证伪（五道审核链第 2 道）：逐存活候选两层对抗验证——"
         "机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰；"
         "跳过/故障一律保留候选（防误杀）；=0 关闭做 A/B"),
+    "five_gate_lean_check_tool": (
+        "FIVE_GATE_LEAN_CHECK_TOOL", "bool", False,
+        "4.3 工具①观测通道（2026-10-15 工具化定稿）：开启后对存活候选调 "
+        "tools/agent_toolkit.lean_check 做第二意见（错误点/缺少点写 diag，"
+        "暂不改淘汰）；=1 开启（云端 A/B）"),
     "five_gate_lean_check": (
         "FIVE_GATE_LEAN_CHECK", "bool", True,
         "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "
         "LeanGate.apply 硬验证（题目+答案翻译为 Lean 命题编译判定）；"
         "部分淘汰落池、全拒标记不静默清池、不适用题豁免；=0 关闭做 A/B"),
+    "five_gate_math_check_calcverify": (
+        "FIVE_GATE_MATH_CHECK_CALCVERIFY", "bool", False,
+        "4.4 工具③观测通道（2026-10-15）：开启后对存活候选推理提取数值等式、"
+        "逐条 calc_verify 复算（算错条目写 diag，暂不改淘汰）；=1 开启（云端 A/B）"),
     "five_gate_math_check": (
         "FIVE_GATE_MATH_CHECK", "bool", True,
         "4.4 数学工具计算检测（五道审核链第 4 道）：候选级 SymPy 精确判定"

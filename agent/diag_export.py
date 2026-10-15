@@ -253,6 +253,9 @@ def _diag_blueprint_review(ctx, config) -> dict:
                              if isinstance(t, dict)
                              and t.get("step") == "vote_gate"],
         # ★ 2026-10-14（用户定案·重写通道）：4.6 池空重写（汇总 + 逐轮事件 + 诊断）
+        # ★ 2026-10-15（工具化定稿）：工具①②③的观测留痕
+        "lean_tool_check": list(getattr(ctx, "lean_tool_check", None) or []),
+        "math_calcverify": dict(getattr(ctx, "math_calcverify", None) or {}),
         "rewrite_gate": dict(getattr(ctx, "rewrite_gate", None) or {}),
         "rewrite_context": str(getattr(ctx, "rewrite_context", None) or "")[:800],
         "rewrite_gate_events": [str(t.get("content", ""))[:200]

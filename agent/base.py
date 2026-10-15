@@ -258,6 +258,43 @@ class BaseAgent(ABC):
     #   此前 `tools/web_search.py` 已实现但**全仓无调用者** ⇒ `tool_calls.web_search`
     #   恒为"未调用"、能力形同虚设（代码审计发现）。这里把它接进工具循环。
     #   由 `config.enable_web_search`（2026-10-01 起默认 True）控制是否注册。
+    # ★ 2026-10-15（工具化定稿 · 双通道 · 大模型直接调用）：
+    #   Lean/Math 工具集 schema —— 实现在独立板块 tools/agent_toolkit（低耦合），
+    #   本处仅注册给大模型（原生 tool_calls 协议）。
+    LEAN_TOOLS_SCHEMAS = (
+        {"type": "function", "function": {
+            "name": "lean_search",
+            "description": ("在 Mathlib 检索可能相关的定理（自然语言查询 → 定理列表 + "
+                            "思考方向建议）。用于定位正确的求解方向。"),
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "数学概念/子目标/猜想（自然语言）"},
+                "top_k": {"type": "integer", "description": "返回条数（默认 10）"}},
+                "required": ["query"]}}},
+        {"type": "function", "function": {
+            "name": "calc_verify",
+            "description": ("机械复算一个数值/符号等式：给出表达式与你的声称值，"
+                            "工具算出正确值并判定是否一致。用于自查每一步计算。"),
+            "parameters": {"type": "object", "properties": {
+                "expr": {"type": "string", "description": "算式（如 19.9+(10-sqrt(9.9))**2）"},
+                "claimed": {"type": "string", "description": "你声称的结果"}},
+                "required": ["expr"]}}},
+        {"type": "function", "function": {
+            "name": "to_lean",
+            "description": "把一段数学陈述翻译为 Lean 4 声明（供 lean_check 使用）。",
+            "parameters": {"type": "object", "properties": {
+                "statement": {"type": "string"}, "context": {"type": "string"}},
+                "required": ["statement"]}}},
+        {"type": "function", "function": {
+            "name": "lean_check",
+            "description": ("用 Lean 4 对一段推理/Lean 代码做逻辑检查，返回"
+                            "逻辑错误点与逻辑缺少点（供修正）。"),
+            "parameters": {"type": "object", "properties": {
+                "lean_code": {"type": "string"},
+                "reasoning": {"type": "string"},
+                "problem": {"type": "string"}},
+                "required": []}}},
+    )
+
     WEB_SEARCH_TOOL_SCHEMA = {
         "type": "function",
         "function": {
@@ -377,6 +414,13 @@ class BaseAgent(ABC):
         try:
             if getattr(self.config, "enable_web_search", False):
                 _tools.append(self.WEB_SEARCH_TOOL_SCHEMA)
+        except Exception:  # noqa: BLE001
+            pass
+        # ★ 2026-10-15（工具化定稿 · 双通道）：Lean/Math 工具集（默认注册；
+        #   enable_lean_tools=False 可关做 A/B）
+        try:
+            if getattr(self.config, "enable_lean_tools", True):
+                _tools.extend(self.LEAN_TOOLS_SCHEMAS)
         except Exception:  # noqa: BLE001
             pass
         return _tools
@@ -552,6 +596,47 @@ class BaseAgent(ABC):
         return _send_msgs
 
 
+    def _lean_tool_exec(self, ctx, _fname: str, args: dict) -> str:
+        """执行 Lean/Math 工具集（独立板块 tools/agent_toolkit）。
+
+        任何失败都返回可读文本（绝不抛异常打断求解）——与 web_search 同口径。
+        """
+        import json as _json
+        try:
+            if _fname == "lean_search":
+                from tools.agent_toolkit import leansearch as _f
+                r = _f(str(args.get("query", "") or ""),
+                       top_k=int(args.get("top_k", 10) or 10))
+                return _json.dumps({
+                    "ok": r.get("ok"), "backend": r.get("backend"),
+                    "direction": r.get("direction"),
+                    "theorems": [{"name": t.get("name"),
+                                  "informal": str(t.get("informal") or "")[:180]}
+                                 for t in (r.get("theorems") or [])[:8]]},
+                    ensure_ascii=False)
+            if _fname == "calc_verify":
+                from tools.agent_toolkit import calc_verify as _f
+                r = _f([{"expr": str(args.get("expr", "") or ""),
+                         "claimed": str(args.get("claimed", "") or "")}])
+                return _json.dumps(r, ensure_ascii=False)
+            if _fname == "to_lean":
+                from tools.agent_toolkit import to_lean as _f
+                r = _f(str(args.get("statement", "") or ""),
+                       context=str(args.get("context", "") or ""),
+                       client=getattr(self, "client", None))
+                return _json.dumps(r, ensure_ascii=False)
+            if _fname == "lean_check":
+                from tools.agent_toolkit import lean_check as _f
+                r = _f(lean_code=str(args.get("lean_code", "") or ""),
+                       reasoning=str(args.get("reasoning", "") or ""),
+                       problem=str(args.get("problem", "") or ""),
+                       client=getattr(self, "client", None),
+                       work_dir=str(getattr(self.config, "lean_project_dir", "") or ""))
+                return _json.dumps(r, ensure_ascii=False)
+        except Exception as e:  # noqa: BLE001
+            return "工具执行失败: %s: %s" % (type(e).__name__, str(e)[:160])
+        return "未知工具: %s" % _fname
+
     def _dispatch_tool_calls(self, ctx, msgs, resp):
         """执行原生 tool_calls（web_search）并以 tool 消息回填 msgs。"""
         import json
@@ -562,12 +647,16 @@ class BaseAgent(ABC):
                 args = json.loads(fn.get("arguments", "") or "{}")
             except Exception:  # noqa: BLE001
                 args = {}
-            # ★ 2026-09-16：按函数名分派（当前仅 web_search）
+            # ★ 2026-09-16：按函数名分派；★ 2026-10-15 扩展 Lean/Math 工具集
             _fname = str(fn.get("name", "") or "")
-            if _fname != "web_search":
+            if _fname == "web_search":
+                _q = str(args.get("query", "") or "")
+                result = self._web_search_tool_exec(_q)
+            elif _fname in ("lean_search", "calc_verify", "to_lean",
+                            "lean_check"):
+                result = self._lean_tool_exec(ctx, _fname, args)
+            else:
                 continue
-            _q = str(args.get("query", "") or "")
-            result = self._web_search_tool_exec(_q)
             _ev = "<web_search> %s -> %s" % (_q[:60], result[:50])
             msgs.append({
                 "role": "tool",
