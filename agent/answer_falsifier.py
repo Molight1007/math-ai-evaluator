@@ -134,7 +134,11 @@ class AnswerFalsifier:
             if not getattr(self.config, "enable_answer_falsifier", True):
                 return FalsifyResult(reason="证伪器已关闭")
             prob = problem or getattr(ctx, "problem", "") or ""
-            answer = str(getattr(candidate, "answer", "") or "").strip()
+            # ★ 2026-10-15（审核 S4）：优先取 4.0 规范化后的 answer_norm ——
+            #   句子形答案（"所以最小 d 是 48。"）的净化收益此前只覆盖
+            #   4.1/4.4/4.5，证伪处仍按原文处理。
+            answer = str(getattr(candidate, "answer_norm", None)
+                         or getattr(candidate, "answer", "") or "").strip()
             if not prob or not answer:
                 return FalsifyResult(reason="缺少题面或答案")
             # 纯文本/超长答案不做数值回带（证明题、集合答案等）

@@ -324,6 +324,15 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
             f"\n\n[本步结果校验反馈] {extra_hint}\n"
             f"请修正后重新给出【本步结果】。"
         )
+    # ★ 2026-10-15（审核 F1④ 修复）：题目目标锚注入（子目标步）——与 solver
+    #   主路径同款：让每个子目标求解都看得到「题目要什么」（此前只进蓝图）。
+    try:
+        from .problem_goal import render_problem_goal as _rpg_sg
+        _pg_txt = _rpg_sg(ctx)
+        if _pg_txt:
+            user_msg = user_msg + "\n\n" + _pg_txt
+    except Exception:  # noqa: BLE001
+        pass
     return user_msg
 
 

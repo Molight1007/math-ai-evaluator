@@ -30,6 +30,14 @@ def _parse(s: str):
     for bad in _FORBIDDEN:
         if bad in low:
             raise ValueError("forbidden-token: %s" % bad)
+    # ★ 2026-10-15（审核 S10）：幂塔/超大指数防护 —— `9**9**9`（右结合
+    #   ⇒ 9**387420489）级表达式会拖垮 SymPy。拒收（按"无法验证"处理）。
+    import re as _re_e
+    if _re_e.search(r"\*\*\s*\(?\s*\d{6,}", txt):
+        raise ValueError("exponent-too-large")
+    if _re_e.search(r"[\^*]{1,2}\s*[^*=+\-/()]{1,24}\*\*", txt) or \
+            _re_e.search(r"\^\s*[^^=+\-/()]{1,24}\^", txt):
+        raise ValueError("power-tower")
     tr = (standard_transformations
           + (implicit_multiplication_application, convert_xor))
     return parse_expr(txt, transformations=tr, evaluate=True,
@@ -37,7 +45,7 @@ def _parse(s: str):
                                   "sqrt": sympy.sqrt, "inf": sympy.oo})
 
 
-def _equal(a, b, tol: float) -> bool:
+def _equal(a, b, tol: float) -> "bool | None":
     """数学等价判定：数值按容差、符号按 simplify(a-b)==0。"""
     import sympy
     try:
@@ -51,7 +59,15 @@ def _equal(a, b, tol: float) -> bool:
         scale = max(1.0, abs(da), abs(db))
         return abs(da - db) <= tol * scale
     except Exception:  # noqa: BLE001
-        return False
+        pass
+    # ★ 2026-10-15（审核 S10）：简化非零且数值不可比 —— 含自由符号时**无法
+    #   判定**（返回 None，调用方计 n_err），绝不武断"算错"。
+    try:
+        if getattr(a, "free_symbols", None) or getattr(b, "free_symbols", None):
+            return None
+    except Exception:  # noqa: BLE001
+        pass
+    return False
 
 
 def _render(v) -> str:
@@ -120,10 +136,15 @@ def calc_verify(computations, tol: float = 1e-9) -> dict:
             n_err += 1
             results.append(rec)
             continue
-        if _equal(val, claimed, tol):
+        _eq = _equal(val, claimed, tol)
+        if _eq is True:
             rec["ok"] = True
             rec["detail"] = "一致"
             n_ok += 1
+        elif _eq is None:
+            # 含自由符号的差异 ⇒ 无法判定（计 n_err，不误报"算错"）
+            rec["detail"] = "无法判定（含自由符号的符号差异，未下结论）"
+            n_err += 1
         else:
             rec["detail"] = "**算错**：正确结果是 %s（声称 %s）" % (
                 _render(val), claimed_s.strip()[:60])

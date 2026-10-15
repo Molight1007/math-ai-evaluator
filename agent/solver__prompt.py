@@ -189,4 +189,20 @@ def _inject_initial_context(self, ctx: TaskContext, user_content: str) -> str:
                         "solver 主路径注入答案形态要求 %d 字符" % len(_afr_txt))
     except Exception:  # noqa: BLE001
         pass
+    # ★ 2026-10-15（审核 F1④ 修复）：**题目目标锚注入** —— 此前
+    #   `render_problem_goal` 只进蓝图/子目标规划，主求解路径看不到
+    #   「题目要什么」（审核结论：解答题注意力未聚焦"要求"）。此处把既有
+    #   产出接进主生成端（修复断链，非新机制——该函数 docstring 声明
+    #   "蓝图 / 子目标规划共用"，主求解属漏配）。
+    #   K11 红线由 render_problem_goal 自身保证（答案槽=假设、显式标注不得
+    #   当作已证结论）；位置置于形态要求之后、末尾之前（避免续写模式）。
+    try:
+        from .problem_goal import render_problem_goal as _rpg_sv
+        _pg_txt = _rpg_sv(ctx)
+        if _pg_txt:
+            user_content = user_content + "\n\n" + _pg_txt
+            self.record(ctx, "problem_goal",
+                        "solver 主路径注入题目目标锚 %d 字符" % len(_pg_txt))
+    except Exception:  # noqa: BLE001
+        pass
     return user_content

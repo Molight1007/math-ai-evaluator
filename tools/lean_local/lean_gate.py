@@ -490,8 +490,10 @@ class LeanGate:
             entry["cached_from_answer"] = True
         else:
             # 2026-09-17（Z3）：串行路径也走语义等价缓存
-            _z3k = self._verify_key(ctx.problem or "", cand.reasoning or "",
-                                    cand.answer or "", is_proof)
+            _z3k = self._verify_key(
+                ctx.problem or "", cand.reasoning or "",
+                (getattr(cand, "answer_norm", None) or cand.answer or ""),
+                is_proof)
             _z3hit = self._cache_get(ctx, _z3k)
             if _z3hit is not None:
                 report = _z3hit
@@ -500,7 +502,9 @@ class LeanGate:
                 report = bridge.verify_answer(
                     problem=ctx.problem or "",
                     reasoning=cand.reasoning or "",
-                    answer=cand.answer or "",
+                    # ★ 2026-10-15（审核 S4）：优先 4.0 规范化答案
+                    answer=(getattr(cand, "answer_norm", None)
+                            or cand.answer or ""),
                     domain=domain,
                     timeout=float(getattr(self.config, "lean_timeout", 60.0)),
                 )
