@@ -398,6 +398,10 @@ _SPEC = (
      lambda cfg, tier, _f="five_gate_rewrite", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "FIVE_GATE_REWRITE — 4.6 重写通道（池空：错误诊断→重建蓝图/子目标→重写）", None),
+    ("theorem_hint_backend",
+     lambda cfg, tier, _f="theorem_hint_backend", _d="leanexplore": getattr(cfg, _f, _d),
+     None, "str",
+     "THEOREM_HINT_BACKEND — 定理检索后端（leanexplore=工具② / legacy）", None),
     ("theorem_hint_block_max_chars",
      lambda cfg, tier, _f="theorem_hint_block_max_chars", _d=2500: getattr(cfg, _f, _d),
      None, "字符",
@@ -560,18 +564,8 @@ _SPEC = (
     # ==== 2026-10-07 开关注册制补齐（fix-switch-debt：6 个账外 gate 型 env）=======
     # 与 `agent/switch_registry.py::SWITCHES` 同名登记；开关型 used/capped=None，
     # 目的是让启动统计能把这些开关的生效值记录下来（注册制第③件）。
-    ("emergency_direct_max_tokens",
-     lambda cfg, tier, _f="emergency_direct_max_tokens", _d=8192: getattr(cfg, _f, _d),
-     None, "token",
-     "EMERGENCY_DIRECT_MAX_TOKENS — 紧急直答 max_tokens 上限", None),
-    ("emergency_answer_max_tokens",
-     lambda cfg, tier, _f="emergency_answer_max_tokens", _d=8192: getattr(cfg, _f, _d),
-     None, "token",
-     "EMERGENCY_ANSWER_MAX_TOKENS — 终答紧急兜底 max_tokens 上限", None),
-    ("final_answer_min_sec",
-     lambda cfg, tier, _f="final_answer_min_sec", _d=45.0: getattr(cfg, _f, _d),
-     None, "秒",
-     "FINAL_ANSWER_MIN_SEC — 终答紧急直答前置最小剩余秒数", None),
+    # ★ 2026-10-15：emergency_direct_max_tokens / emergency_answer_max_tokens /
+    #   final_answer_min_sec 已随直答兜底删除。
     ("rework_reserve_sec",
      lambda cfg, tier, _f="rework_reserve_sec", _d=300.0: getattr(cfg, _f, _d),
      None, "秒",

@@ -26,9 +26,9 @@ MathPilot — 数学推理智能体（多智能体版）
 调用契约防御（v2.3）：
     - sys.path 自举：无论以何种 cwd 运行，都能找到本包
     - solve(problem, metadata=None)：metadata 缺失时不崩溃
-    - 核心模块导入失败 → 降级到内置直答后端，保证永远有输出
-    - client.chat 响应归一化：兼容 str / dict / 对象 / 空值
-    - _validate_output：返回前强制校验 final_response 非空
+    - 核心模块初始化失败 → 抛异常（2026-10-15 用户定案：不做降级直答，
+      失败即暴露，避免"agent 链坏了仍用直答兜底掩盖错误"）
+    - _validate_output：返回前强制校验 final_response 非空 + 可 JSON 序列化
 
 ★ 2026-10-15：原「平台兼容层」（`__call__` / `run` 两个别名，用于平台以
   `agent(problem, metadata)` 或 `agent.run(...)` 形态调用）已删除 —— 已不打平台，
@@ -37,7 +37,6 @@ MathPilot — 数学推理智能体（多智能体版）
 
 import logging
 import os
-import re
 import sys
 
 # ---------------------------------------------------------------------------
@@ -49,58 +48,10 @@ if _ROOT not in sys.path:
 
 logger = logging.getLogger("MathPilot")
 
-# 2026-10-01 去重：原此处另有一份与 agent/base.py 逐字相同的 _normalize_chat_response（72 行）。
-# 改为**惰性委托** —— 保留本模块「agent 导入失败则降级直答后端」的既有设计，
-# 同时消除重复实现（两份函数体实测完全相同，仅签名注解与注释有别）。
-def _normalize_chat_response(resp):
-    from agent.base import _normalize_chat_response as _impl
-    return _impl(resp)
-
-
-
-# ============================================================
-# 2026-09-14：子目标结果的「像不像最终答案」判据
-# ------------------------------------------------------------
-# 背景（实测发现）：`_rescue_answer` 的来源②原先**直接把** `subgoal_trace[i].result`
-# 当答案返回，而子目标结果是**中间推导步**，不是最终答案。实况 official112-016
-# 交出去的是：
-#   「（该步含未用 <calc> 的易错运算结果，未经系统确认）|10 - sqrt(9.9)| < 1
-#     19.9 + (10 - sqrt(9.9))^2 = 20」
-# 它避开了「生成失败」占位符，却**伪装成答案**：判分同样是 0，但归因时极易误判成
-# "模型答的"，而且把系统提示串塞进了交给平台的答案字段。
-# ⇒ 只认两种"明确"形态，其余交给直答兜底。
-# ============================================================
-_SG_NOTICE_RE = re.compile(r"^\s*[（(][^）)]{0,120}[）)]\s*")   # 行首提示前缀
-_SG_NOTICE_HINT = ("未经系统确认", "该步含", "未用 <calc>", "系统提示", "未经验证")
-_SG_BOXED_RE = re.compile(r"\\boxed\s*\{([^{}]*)\}")
-_SG_SHORT_VALUE_MAX = 60
-
-
-def _subgoal_answer_candidate(text) -> str:
-    """从子目标结果里取「明确是最终答案」的值；取不到返回 ""。
-
-    只接受：
-      ① 含 `\\boxed{...}`（子目标自己收口的最终值）→ 取括号内内容；
-      ② 剥掉行首提示前缀后是个**短值**（≤60 字符且无换行）。
-    多行推导、带系统提示、过长的一律拒收。
-    """
-    if not isinstance(text, str) or not text.strip():
-        return ""
-    t = text.strip()
-    for _ in range(3):                     # 提示前缀可能叠了多层
-        m = _SG_NOTICE_RE.match(t)
-        if not m:
-            break
-        t = t[m.end():].strip()
-    if not t or any(h in t for h in _SG_NOTICE_HINT):
-        return ""
-    m = _SG_BOXED_RE.search(t)
-    if m:
-        return m.group(1).strip()
-    if len(t) <= _SG_SHORT_VALUE_MAX and "\n" not in t:
-        return t
-    return ""
-
+# ★ 2026-10-15（用户定案「不要降级兜底」）：
+#   原 `_normalize_chat_response`（惰性委托）与 `_subgoal_answer_candidate`（子目标
+#   结果形态判据）均**只为降级直答/抢救链服务**（`_fallback_solve` / `_rescue_answer`），
+#   该链已整段删除 ⇒ 二者成为死代码，随之删除。agent/base 的响应归一化实现不受影响。
 
 # ============================================================
 # 配置（AgentConfig 已搬到 user_agent__config.py，2026-10-08 拆分；此处 re-export 保契约，同一对象）
@@ -282,6 +233,7 @@ _CONFIG_OVERRIDE_KEYS = (
     "enable_subgoal_multi_agent", "subgoal_agents_n",
     # 2026-09-29：领域→定理检索（截图 #3+#4）
     "enable_theorem_hint", "theorem_hint_max_queries",
+    "theorem_hint_backend",
     # 易错点记忆注入（2026-09-06 A 档轻量经验）
     "enable_error_lessons",
     # Step 4 bug report 复核
@@ -330,8 +282,9 @@ _CONFIG_OVERRIDE_KEYS = (
     "stage_timer_reassign_revise",    # revise 耗时归属修正（默认 True）
     # ★ 2026-10-07 开关注册制补齐（fix-switch-debt）：
     #   ① 6 个账外 gate 型 env 的配置字段（默认值见 switch_registry 各条）；
-    "emergency_direct_max_tokens", "emergency_answer_max_tokens",
-    "final_answer_min_sec", "rework_reserve_sec",
+    #   ★ 2026-10-15：emergency_direct_max_tokens / emergency_answer_max_tokens /
+    #     final_answer_min_sec 已随直答兜底删除。
+    "rework_reserve_sec",
     "deep_max_rework", "objective_itemwise_plan",
     #   ② 9 条此前**漏加白名单**的键 ⇒ 相关开关的 CLI/kwargs **回退路径在
     #      代码层面不存在**（传参被 `__init__` 静默丢弃；本项目已因漏加
@@ -363,7 +316,7 @@ class ReasoningAgent:
     - 接收调用方注入的 client；
     - 组装配置（kwargs 覆盖 + 绑定进开关注册表 + 最小模式）；
     - 透传 solve 调用并维持返回格式不变；
-    - 契约防御：核心模块不可用时降级到内置直答后端。
+    - 契约防御：核心模块初始化失败即抛异常（2026-10-15 定案，不降级直答）。
     """
 
     def __init__(self, client, *args, **kwargs):
@@ -426,13 +379,12 @@ class ReasoningAgent:
         except Exception as _me:  # noqa: BLE001
             logger.warning("MINIMAL_MODE 处理异常（忽略，按常规模式跑）: %s", _me)
 
-        self.orchestrator = None
-        # 核心模块导入失败时不崩溃：置为 None，solve 时走 fallback backend
-        try:
-            from agent.orchestrator import Orchestrator
-            self.orchestrator = Orchestrator(client, self.config)
-        except Exception as e:  # pragma: no cover
-            logger.warning("Orchestrator 初始化失败，启用内置直答后端: %s", e)
+        # ★ 2026-10-15（用户定案）：核心模块初始化失败即抛异常，不做降级直答。
+        #   此前「失败 → 置 None → solve 走内置直答后端」会把 agent 链损坏
+        #   （import 失败 / Orchestrator 构造失败）静默吞掉、用直答兜底掩盖错误。
+        #   正确的启动方式 = 显式构造，失败即报错（调用方/评测层据此暴露问题）。
+        from agent.orchestrator import Orchestrator
+        self.orchestrator = Orchestrator(client, self.config)
 
         logger.info(
             "MathPilot ReasoningAgent (v2 simplified) initialized: "
@@ -446,110 +398,12 @@ class ReasoningAgent:
             self.config.use_scoring,
         )
 
-    # 内置直答后端（fallback backend）：核心流水线不可用时保证有输出
-    # ------------------------------------------------------------------
-    def _fallback_solve(self, problem: str) -> str:
-        """零依赖直答：直接要求模型给出最终答案，不经过 orchestrator。"""
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是数学解题专家。请解答下面的数学题，最后一行必须用"
-                        "【最终答案】:<答案> 的格式给出最终答案，答案只写数值、"
-                        "表达式或选项，不要多余解释。"
-                    ),
-                },
-                {"role": "user", "content": problem},
-            ]
-            resp = self.client.chat(
-                messages=messages,
-                temperature=0.0,
-                max_tokens=self.config.max_answer_tokens,
-            )
-            text = _normalize_chat_response(resp)
-            if not text:
-                return ""
-            # 提取【最终答案】行
-            import re
-            m = re.search(r"【最终答案】[:：]?\s*([\s\S]+)", text)
-            if m:
-                ans = m.group(1).strip().split("\n")[0].strip()
-                if ans:
-                    return ans
-            # 兜底：返回最后一个非空行
-            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-            if lines:
-                return lines[-1][:500]
-            return text.strip()[:500]
-        except Exception as e:  # pragma: no cover
-            logger.error("fallback_solve failed: %s", e)
-            return ""
-
-    # 2026-09-13 晚：答案"不可用"判据。与 `agent/formatter.py`, `agent/orchestrator.py`
-    # 的同名常量同源；**三处必须同步修改**。
-    # ⚠ 口径刻意收窄：**不含** `无解` / `暂无` —— 它们是**合法答案**（「该方程无解」
-    #   就是正确答案），旧版 `formatter._REFUSAL_RE` 里有，但那是"换个候选试试"的
-    #   宽松判据；这里决定的是"要不要推翻答案重新求"，误判会**覆盖正确解**
-    #   （独立验证者实测：唯一候选 answer='无解' 时被覆盖成 '7'）。
-    _DEGRADED_ANSWER_RE = re.compile(
-        r"生成失败|调用受限|拒绝回答|未给出有效解答|无法作答|子目标求解失败|"
-        r"我无法|无法求解|无法解决|不能解决|无法解答",
-        re.IGNORECASE,
-    )
-
-    @classmethod
-    def _is_degraded_answer(cls, text) -> bool:
-        """空答案 / 拒绝语 / 占位符 → True（视为"没有答案"）。"""
-        if not isinstance(text, str) or not text.strip():
-            return True
-        return bool(cls._DEGRADED_ANSWER_RE.search(text))
-
-    def _rescue_answer(self, problem: str, result: dict) -> str:
-        """最终兜底：绕过整条流水线，独立拿一个答案（2026-09-13 晚新增）。
-
-        用户硬要求「无论超没超时都要把答案生成出来」。本方法是最后一道，
-        顺序为：
-          ① 诊断里已产出的**候选答案残料**（`diag.pick_diag.cand_answers`）
-             —— 任何真实答案都比占位符好（占位符在平台必然判错）；
-          ② 子目标求解的**中间结果**（`diag.subgoal_trace[*].result`）——
-             子目标阶段在候选生成之前跑，若它跑过就有值；当候选全失败时，
-             它是唯一还活着的答案来源；
-          ③ `_fallback_solve` 直答（短 prompt + 小 max_tokens，一次调用）。
-        三者都拿不到返回 ""，由 `_validate_output` 写"未给出有效解答。"。
-        """
-        try:
-            diag = result.get("diag") or {}
-        except Exception:  # noqa: BLE001
-            diag = {}
-        # ① 候选答案残料
-        for _a in ((diag.get("pick_diag") or {}).get("cand_answers") or []):
-            if isinstance(_a, str) and not self._is_degraded_answer(_a):
-                return _a.strip()
-        # ② 子目标中间结果 —— ⚠ 2026-09-14 修复：**只接受"明确是最终答案"的取值**。
-        # 原实现直接返回 `subgoal_trace[i].result`，实测 016 交出的是一段
-        # "中间推导 + 系统提示前缀"，伪装成答案（判分 0，且污染归因）。
-        # 现在交给 `_subgoal_answer_candidate` 做形态校验，不合格就跳到来源③。
-        for _sg in (diag.get("subgoal_trace") or []):
-            if not isinstance(_sg, dict):
-                continue
-            _c = _subgoal_answer_candidate(_sg.get("result"))
-            # ⚠ 形态校验通过后**还必须过内容校验**：`_subgoal_answer_candidate` 只判
-            #   "像不像答案的形态"（boxed / 短单行），拒绝语类短串（如
-            #   `[子目标求解失败]`、`无法求解`）形态上是"短单行"、能骗过它。
-            #   2026-09-14 由集成探针实测抓到：漏这一步时场景 A 会交出
-            #   `[子目标求解失败]` —— 等于把占位符问题原样搬了个位置。
-            if _c and not self._is_degraded_answer(_c):
-                return _c
-        # ③ 直答
-        try:
-            ans = self._fallback_solve(problem)
-        except Exception as e:  # pragma: no cover
-            logger.error("rescue fallback_solve failed: %s", e)
-            ans = ""
-        if ans and isinstance(ans, str) and not self._is_degraded_answer(ans):
-            return ans.strip()
-        return ""
+    # ★ 2026-10-15（用户定案「不要降级兜底」）：以下整段已删除——
+    #   `_fallback_solve`（内置直答后端）、`_DEGRADED_ANSWER_RE` / `_is_degraded_answer`
+    #   （降级答案判据）、`_rescue_answer`（最终抢救直答）三件套。
+    #   删除理由：答不出就绕开整条流水线直答、或从残料里"抢救"答案，等于用
+    #   兜底掩盖模型/流水线的真实失败（「必须有答案」只隐藏错误）。现在的口径：
+    #   流水线交什么就是什么，占位符/空答案如实暴露，由评测判 0，不再抢救。
 
     def _validate_output(self, result: dict) -> dict:
         """返回前强制校验：final_response 非空且可 JSON 序列化。"""
@@ -580,56 +434,13 @@ class ReasoningAgent:
                 "trace": [{"stage": "input", "note": "empty problem"}],
             })
 
-        # 核心流水线可用 → 走 orchestrator
-        if self.orchestrator is not None:
-            try:
-                result = self.orchestrator.run(problem, metadata)
-                if result and isinstance(result, dict):
-                    result = self._validate_output(result)
-                    # 2026-09-13 晚（用户硬要求「无论超没超时都要把答案生成出来」）：
-                    # 最后一层兜底，**独立于 orchestrator 内部那条链**。
-                    # 依据：4 题实测里 010/016 的 `final_response` 退化成
-                    # `[生成失败] 调用受限或模型拒绝回答`，而 `_validate_output`
-                    # 只查"非空" ⇒ 占位符被原样放行、平台必然判错。
-                    if self._is_degraded_answer(result.get("final_response", "")):
-                        rescued = self._rescue_answer(problem, result)
-                        if rescued:
-                            result["final_response"] = rescued
-                            _tr = result.get("trace")
-                            if isinstance(_tr, list):
-                                _tr.append({
-                                    "agent": "ReasoningAgent",
-                                    "step": "final_rescue",
-                                    "content": "流水线答案不可用 → 最终兜底直答: "
-                                               + rescued[:120],
-                                })
-                        else:
-                            # ⚠ 2026-09-13 晚补齐（独立验证者抓到的缺口）：
-                            # 原实现这里只追加 trace、**不替换 final_response**
-                            # ⇒ `final_response` 仍是那个占位符，直接漏给平台。
-                            # 实测复现：mock orchestrator 返回占位符 + mock 直答超时
-                            # ⇒ exit 的 final_response 仍是
-                            # `[生成失败] 调用受限或模型拒绝回答`。
-                            # 现在三条来源（候选残料 / 子目标结果 / 直答）全耗尽时，
-                            # 写入**明确表示无答案**的终态文本，而不是流水线占位符。
-                            result["final_response"] = "未给出有效解答。"
-                            _tr = result.get("trace")
-                            if isinstance(_tr, list):
-                                _tr.append({
-                                    "agent": "ReasoningAgent",
-                                    "step": "final_rescue",
-                                    "content": "流水线答案不可用且兜底直答失败，"
-                                               "返回终态占位文本",
-                                })
-                    return result
-            except Exception as e:  # pragma: no cover
-                logger.error("orchestrator.run failed, fallback to direct backend: %s", e)
-
-        # 降级：内置直答后端
-        answer = self._fallback_solve(problem)
-        if not answer:
-            answer = "未给出有效解答。"
-        return self._validate_output({
-            "final_response": answer,
-            "trace": [{"stage": "fallback_direct", "note": "orchestrator unavailable"}],
-        })
+        # 核心流水线直接运行（2026-10-15 用户定案：异常向上抛，不做降级直答）。
+        # 此前 `orchestrator.run` 抛异常会 catch 后走直答后端、final_response 为
+        # 占位符会触发 `_rescue_answer` 抢救——这些"必须有答案"兜底只会隐藏
+        # 流水线/模型的真实失败。现在流水线交什么就是什么，失败即暴露。
+        result = self.orchestrator.run(problem, metadata)
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                "Orchestrator.run 返回异常类型（应返回 dict）: %s"
+                % type(result).__name__)
+        return self._validate_output(result)

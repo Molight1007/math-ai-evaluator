@@ -106,6 +106,9 @@ class AgentConfig(_AgentConfigBase):
     #     `agent.theorem_hint.run_hint_for(agent, ctx)`；A/B 开关语义不变。
     enable_theorem_hint: bool = True
     theorem_hint_max_queries: int = 2
+    # ★ 2026-10-15（工具②接线）：定理检索后端通道。leanexplore（默认）=
+    #   工具② tools/agent_toolkit.leansearch；legacy = 原 MathlibTheoremSearcher。
+    theorem_hint_backend: str = "leanexplore"
     # ---- 子目标结论 → 主求解 信息流（2026-10-02 阶段一，用户拍板设计）----
     # 用户原话：「…主求解一定要在子目标的基础上。」
     # 把 2.7/3_solve(P&E) 已求得的子目标结论（ctx.subgoal_trace）作为**中间数据**
@@ -254,9 +257,6 @@ class AgentConfig(_AgentConfigBase):
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
     # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。
     # 读取处仍需改为实时读注册表，见 agent/switch_registry.py 各条注释与交付清单。
-    emergency_direct_max_tokens: int = 8192   # EMERGENCY_DIRECT_MAX_TOKENS — 紧急直答 max_tokens
-    emergency_answer_max_tokens: int = 8192   # EMERGENCY_ANSWER_MAX_TOKENS — 终答紧急兜底 max_tokens
-    final_answer_min_sec: float = 45.0        # FINAL_ANSWER_MIN_SEC — 终答紧急直答前置最小剩余秒数
     rework_reserve_sec: float = 300.0         # REWORK_RESERVE_SEC — 6.5 重做预留秒数
     deep_max_rework: int = -1                 # DEEP_MAX_REWORK — 6.5 重做候选上限（deep；-1=无上限）
     objective_itemwise_plan: bool = True      # OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略

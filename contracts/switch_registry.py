@@ -292,6 +292,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "候选全被滤掉时**清空池并走兜底**（用户 Q32）；=0 回退 2026-09-18 "
         "「不清空池」旧行为"),
     # ---- 2026-10-12 批次 5：定理注入块长上限 ----
+    "theorem_hint_backend": (
+        "THEOREM_HINT_BACKEND", "str", "leanexplore",
+        "定理检索后端通道（2026-10-15 工具②接线）：leanexplore = 工具② "
+        "tools/agent_toolkit.leansearch（LeanExplore 主 + 离线降级，实测 "
+        "112 题命中 17.9%）；legacy = 原 MathlibTheoremSearcher（官方 API/源码扫描）"),
     "theorem_hint_block_max_chars": (
         "THEOREM_HINT_BLOCK_MAX_CHARS", "num", 2500,
         "定理注入块的字符上限（超限按相关度截断并标注未展开条数；"
@@ -481,18 +486,8 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # 不改行为** —— 每条的默认值**逐字照抄现存 env 读取处的字面默认**。
     # ⚠ 「读取侧」大多不在本次改动范围内（见交付清单）：读取处若仍是 `os.environ.get`
     #   或模块级常量，env 能生效（优先级不变）但 config 覆盖读不到，需改为实时读注册表。
-    "emergency_direct_max_tokens": (
-        "EMERGENCY_DIRECT_MAX_TOKENS", "num", 8192,
-        "紧急直答分支的单次 max_tokens 上限。读取处 agent/orchestrator.py:89"
-        "（模块级常量 `_EMERGENCY_DIRECT_MAX_TOKENS`，需改为实时读）"),
-    "emergency_answer_max_tokens": (
-        "EMERGENCY_ANSWER_MAX_TOKENS", "num", 8192,
-        "终答紧急兜底分支的单次 max_tokens 上限。读取处 agent/formatter.py:36"
-        "（模块级常量 `_EMERGENCY_ANSWER_MAX_TOKENS`，需改为实时读）"),
-    "final_answer_min_sec": (
-        "FINAL_ANSWER_MIN_SEC", "num", 45.0,
-        "终答紧急直答触发前要求的最小剩余秒数（低于则跳过、交上层兜底）。"
-        "读取处 agent/formatter.py:29（模块级常量 `_FINAL_ANSWER_MIN_SEC`，需改为实时读）"),
+    # ★ 2026-10-15（用户定案「删直答兜底」）：以下 3 个直答专用字段已随
+    #   `_emergency_direct_solve` / `_emergency_answer` 删除，无消费者，四表同步移除。
     "rework_reserve_sec": (
         "REWORK_RESERVE_SEC", "num", 300.0,
         "6.5 终审重做循环为「一次重做 + 复验」预留的秒数（防跨硬墙）。"

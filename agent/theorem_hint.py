@@ -638,33 +638,77 @@ def retrieve_theorems_for_question(
         return out
     out.queries = list(queries)
 
-    # ---- 依赖 tools.lean_local（**唯一**的 Lean 侧依赖点，且受 try 保护）----
+    # ---- 检索执行（2026-10-15 工具②接线）----
+    # 后端开关 theorem_hint_backend：
+    #   "leanexplore"（默认）= 工具② tools/agent_toolkit.leansearch
+    #        （LeanExplore 主通道 + 离线语料降级；实测官方预标注 112 题命中 17.9%）
+    #   "legacy"             = 原 MathlibTheoremSearcher（官方 API / 源码扫描）
+    _backend = "leanexplore"
     try:
-        from tools.lean_local.lean_search import MathlibTheoremSearcher
-    except Exception as e:  # noqa: BLE001
-        out.reason = f"lean_search 导入失败: {type(e).__name__}: {e}"
-        out.elapsed = time.time() - t0
-        logger.warning("[theorem_hint] %s", out.reason)
-        return out
+        from contracts.switch_registry import get_str as _sw_get_str
+        _backend = (str(_sw_get_str("theorem_hint_backend") or "").strip()
+                    or "leanexplore")
+    except Exception:  # noqa: BLE001  读不到开关 ⇒ 默认通道
+        pass
 
-    try:
-        searcher = MathlibTheoremSearcher()
-        st = searcher.status() or {}
-        if not st.get("available"):
-            out.reason = f"检索后端不可用: {st}"
+    _legacy_searcher = None
+    _tool_search = None
+    if _backend == "legacy":
+        try:
+            from tools.lean_local.lean_search import MathlibTheoremSearcher
+        except Exception as e:  # noqa: BLE001
+            out.reason = f"lean_search 导入失败: {type(e).__name__}: {e}"
+            out.elapsed = time.time() - t0
+            logger.warning("[theorem_hint] %s", out.reason)
+            return out
+        try:
+            _legacy_searcher = MathlibTheoremSearcher()
+            st = _legacy_searcher.status() or {}
+            if not st.get("available"):
+                out.reason = f"检索后端不可用: {st}"
+                out.elapsed = time.time() - t0
+                return out
+        except Exception as e:  # noqa: BLE001
+            out.reason = f"检索异常: {type(e).__name__}: {e}"
             out.elapsed = time.time() - t0
             return out
-        out.backend = "source_scan"      # 源码扫描后端（离线语料缺失时的唯一可用后端）
+        out.backend = "legacy_mathlib_search"
+    else:
+        try:
+            from tools.agent_toolkit import leansearch as _ls_tool
+        except Exception as e:  # noqa: BLE001
+            out.reason = f"工具②（leansearch）导入失败: {type(e).__name__}: {e}"
+            out.elapsed = time.time() - t0
+            logger.warning("[theorem_hint] %s", out.reason)
+            return out
+        _tool_search = _ls_tool
+        out.backend = "leanexplore_tool"
 
+    def _search_one(q: str):
+        """一次检索 → (归一化 results, backend_tag)；两条通道同一结构。"""
+        if _tool_search is not None:
+            r = _tool_search(q, top_k=top_k) or {}
+            items = [{"name": t.get("name", ""),
+                      "snippet": (t.get("statement")
+                                  or t.get("informal") or "")}
+                     for t in (r.get("theorems") or [])]
+            return items, str(r.get("backend") or "")
+        res = _legacy_searcher.search(q, limit=top_k) or {}
+        return list(res.get("results") or []), "legacy"
+
+    try:
         seen_names: set = set()
         hits: list = []
+        _be_seen = ""
         for q in queries:
             try:
-                res = searcher.search(q, limit=top_k) or {}
+                _results, _be = _search_one(q)
             except Exception as e:  # noqa: BLE001
                 logger.warning("[theorem_hint] query=%r 检索异常: %s", q, e)
                 continue
-            for i, item in enumerate(res.get("results") or [], start=1):
+            if _be:
+                _be_seen = _be
+            for i, item in enumerate(_results, start=1):
                 name = str(item.get("name") or "").strip()
                 if not name or name in seen_names:
                     continue
@@ -677,6 +721,9 @@ def retrieve_theorems_for_question(
                     # ★ 2026-10-04：把检索层已有的陈述片段带上来（此前被丢弃）
                     snippet=" ".join(str(item.get("snippet") or "").split())[:240],
                 ))
+        if _be_seen and _tool_search is not None:
+            # 记录实际生效的通道（含降级：leanexplore / offline）
+            out.backend = "leanexplore_tool:%s" % _be_seen
         # ★ 2026-09-29 修复（实测暴露）：多 query 结果必须**按位次重排**后再截断。
         #   原实现是「先到先得、跑满 top_k 就停」—— 但领域 query（第 1 条）本身就
         #   会返回 top_k 条，于是题干 query 的命中全被挤在后面。
