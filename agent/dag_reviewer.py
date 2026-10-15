@@ -527,15 +527,9 @@ class DagReviewerAgent(BaseAgent):
     def _llm_review_node(self, ctx: TaskContext, dag: BlueprintDAG,
                          node, results_map: dict) -> DagReviewResult:
         """LLM 深度评估单个节点的分解质量。"""
-        try:
-            from prompts.dag_review import (
-                DAG_REVIEW_SYSTEM, DAG_REVIEW_USER_TEMPLATE)
-            from utils.prefill import prefill_messages, stitch
-        except ImportError:
-            from submit.prompts.dag_review import (
-                DAG_REVIEW_SYSTEM, DAG_REVIEW_USER_TEMPLATE)
-            from submit.utils.prefill import prefill_messages, stitch
-
+        from prompts.dag_review import (
+            DAG_REVIEW_SYSTEM, DAG_REVIEW_USER_TEMPLATE)
+        from utils.prefill import prefill_messages, stitch
         # 上下文：父节点、兄弟节点、依赖节点 statement
         parent_stmts, child_stmts, dep_stmts = [], [], []
         for pid, pnode in dag.nodes.items():

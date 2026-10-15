@@ -32,10 +32,7 @@ def format_stage(self, ctx) -> None:
     #   无条件调用：`sync_pick_diag_to_final` 内部按开关 `final_answer_single_source`
     #   自行决定是否生效（OFF ⇒ 空操作），且任何异常自吞 ⇒ 无条件调用最简且不破坏行为。
     try:
-        try:
-            from .final_selector import sync_pick_diag_to_final
-        except ImportError:  # noqa: BLE001  平台扁平导入
-            from final_selector import sync_pick_diag_to_final
+        from .final_selector import sync_pick_diag_to_final
         sync_pick_diag_to_final(ctx, "postprocess")
     except Exception:  # noqa: BLE001  纯埋点同步，绝不阻断主流程
         pass

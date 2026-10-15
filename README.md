@@ -32,14 +32,14 @@ MathPilot 接收一道数学题文本与元信息，经过 **题型识别 → �
 
 ---
 
-## 二、接口合规说明（平台硬性要求）
+## 二、接口说明
 
-本仓库根目录的 `user_agent.py` 提供平台固定入口：
+本仓库根目录的 `user_agent.py` 提供统一求解入口（本地评测引擎亦由此装配）：
 
 ```python
 from user_agent import ReasoningAgent
 
-agent = ReasoningAgent(client=official_client)   # client 由平台注入
+agent = ReasoningAgent(client=llm_client)           # client 由调用方注入
 result = agent.solve(problem, metadata)          # -> dict
 ```
 
@@ -114,7 +114,7 @@ flowchart LR
 
 ```text
 赛事提交版/
-├── user_agent.py              # 平台固定入口：ReasoningAgent + AgentConfig
+├── user_agent.py              # 装配门面：ReasoningAgent（AgentConfig 自 user_agent__config re-export）
 ├── run_eval.py                # 本地评测脚本（答案匹配、领域统计、断点续跑）
 ├── requirements.txt           # 依赖清单
 ├── README.md                  # 本文件
@@ -257,7 +257,7 @@ python tests/test_runner_contract.py # 或直接运行 unittest 风格测试
 ## 九、提交前检查（checklist）
 
 - [ ] `user_agent.py` 可被正常 import
-- [ ] `ReasoningAgent(client=official_client)` 可正常初始化
+- [ ] `ReasoningAgent(client=llm_client)` 可正常初始化（唯一入口 `solve()`；`__call__`/`run` 别名已于 2026-10-15 删除）
 - [ ] `solve(problem, metadata)` 返回含非空 `final_response` 的 JSON 可序列化字典
 - [ ] `requirements.txt` 覆盖全部依赖
 - [ ] 无硬编码 API key、个人路径、调试标准答案

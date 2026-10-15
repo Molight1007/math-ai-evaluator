@@ -155,7 +155,7 @@ def agent_defaults():
     """读 AgentConfig 的字段默认值（用于不在 overrides 里的开关）。"""
     try:
         sys.path.insert(0, ROOT)
-        from user_agent import AgentConfig
+        from user_agent__config import AgentConfig
         c = AgentConfig()
         return {k: getattr(c, k) for k in dir(c) if not k.startswith("_")}
     except Exception:  # noqa: BLE001

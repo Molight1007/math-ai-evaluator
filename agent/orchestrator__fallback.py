@@ -21,11 +21,7 @@ import re as _re
 from .base import TaskContext, _normalize_chat_response
 from utils.extract import safe_json_serialize
 
-try:
-    from agent.artifact_store import put_ctx as _artifact_put
-except ImportError:
-    from artifact_store import put_ctx as _artifact_put
-
+from agent.artifact_store import put_ctx as _artifact_put
 
 def _emergency_direct_solve(self, problem: str) -> str:
     """紧急直答：用最精简 prompt 逼模型输出答案，绝不返回原题。

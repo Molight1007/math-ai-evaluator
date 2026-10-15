@@ -109,6 +109,90 @@ def _flatten_produces(value) -> str:
     return str(value).strip()
 
 
+# ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具」）：工具指派的**唯一白名单**。
+#   蓝图由 LLM 自由生成，`tool` 实测会给出 `Lean` / `lean4` / `sympy_expr` /
+#   `符号计算` / `证明` 等五花八门的写法 ⇒ 必须在此归一，下游只认下列四个键。
+#   `""` = 未声明（模型没写 / 写了无法识别），下游按「无工具指令」处理（等价 llm），
+#   **不做猜测性映射**——猜错会把叙述型步骤送进编译器，白白浪费一次重解。
+TOOL_WHITELIST = ("lean", "sympy", "numeric", "llm")
+
+# 别名表：同义写法 → 白名单键（键一律小写、去空白）
+TOOL_ALIASES = {
+    "lean": "lean", "lean4": "lean", "lean_4": "lean", "lean_proof": "lean",
+    "formal": "lean", "形式化": "lean", "形式化证明": "lean", "证明": "lean",
+    "sympy": "sympy", "symbolic": "sympy", "符号": "sympy", "符号计算": "sympy",
+    "symbolic_solve": "sympy",
+    "numeric": "numeric", "norm_num": "numeric", "numerical": "numeric",
+    "数值": "numeric", "数值计算": "numeric", "数值验证": "numeric",
+    "llm": "llm", "none": "llm", "text": "llm", "narrative": "llm",
+    "自然语言": "llm", "叙述": "llm", "推理": "llm",
+}
+
+
+def _normalize_tool(value) -> str:
+    """把模型给的 `tool` 归一为白名单键；无法识别返回 ""（=未声明）。
+
+    ★ 返回 "" 而非 "llm" 是刻意的："" 表示「模型没有给出有效指派」，
+    下游据此**不追加任何工具指令**（保持历史行为）；若强行映射成 llm，
+    会把"没写"和"明确写了 llm"混为一谈，trace 里也就看不出蓝图漏标了多少。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        # 模型偶有 ["lean","sympy"] 这类多写 —— 取第一个**可识别**的
+        for v in value:
+            _t = _normalize_tool(v)
+            if _t:
+                return _t
+        return ""
+    s = str(value).strip().lower()
+    if not s or s == "none":
+        return ""
+    if s in TOOL_WHITELIST:
+        return s
+    return TOOL_ALIASES.get(s, "")
+
+
+def _input_use_map(value) -> dict:
+    """把模型给的 `inputs` 抽成 **{上游 id: 用途文本}**（2026-10-15）。
+
+    为什么单列：`_as_id_list`（:64）为了下游 id 校验会把 `inputs` **摊平成 id 列表**，
+    里面 `{"id": "n1", "use": "..."}` 的 `use` 部分**被丢弃** ⇒ 求解侧只知道
+    "本步依赖 n1"，却不知道"**把 n1 的哪个结论当作什么条件来用**"
+    ⇒ 「承接关系」在提示词层永远只是句空话（这正是本次要修的缺口）。
+
+    与 `_as_id_list` **同源同宽容**：支持 dict / 字符串 / 逗号串三种形态；
+    纯字符串形态没有 `use` 可抽 ⇒ 该 id 记为空串（下游退化成"只列结果、不述用途"）。
+    """
+    out = {}
+    if value is None:
+        return out
+    if isinstance(value, dict):
+        # 形态：`{"n1": "把 n1 的零点作为…"}`（**id → 用途**）。
+        # 这是 `to_dict()` 的序列化形态 —— `to_dict` 把 `inputs` 写成纯 id 列表
+        # （`use` 文本无处安放），只有 `inputs_use` 字段能把它带回；`from_dict`
+        # 若只从 `inputs` 推导就会拿到 `{"n1": ""}` ⇒ 承接语义在回路中静默丢失。
+        return {str(k).strip(): _flatten_produces(v)
+                for k, v in value.items()
+                if str(k).strip() and str(k).strip().lower() != "none"}
+    items = value if isinstance(value, (list, tuple)) else [value]
+    for v in items:
+        if v is None:
+            continue
+        if isinstance(v, dict):
+            _id = v.get("id") or v.get("node") or v.get("ref") or ""
+            _id = str(_id).strip()
+            if not _id or _id.lower() == "none":
+                continue
+            # `use` 也可能是 dict（模型串用 produces 那套结构）→ 摊平
+            out[_id] = _flatten_produces(
+                v.get("use", v.get("purpose", v.get("how", ""))))
+        else:
+            for _id in _as_id_list([v]):
+                out.setdefault(_id, "")
+    return out
+
+
 # ============================================================
 # 数据结构
 # ============================================================
@@ -153,6 +237,22 @@ class BlueprintNode:
     #   **断链（inputs 对不上 produces）无法机械检测**（项目铁律早就要求）。
     inputs: list = field(default_factory=list)   # 消费的前序节点 id 列表
     method: str = ""                            # 怎么求（公式/手段），可空
+    # ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具，比如证明就用 lean」）：
+    #   `tool` = 该子目标**用什么工具求解**，取值见 `TOOL_WHITELIST`
+    #   （lean / sympy / numeric / llm）；"" = 模型未给出有效指派。
+    #   下游（`sub_goal_solver__solve._call_step`）据此**追加工具专属指令**：
+    #   lean ⇒ 必须吐 Lean 代码块（随后交本地编译器实编译）；
+    #   sympy ⇒ 必须吐可判真伪的等式断言（随后交 SymPy 判定）；
+    #   numeric ⇒ 必须吐纯数值等式（随后交 Lean norm_num 核验）；
+    #   llm ⇒ 走默认叙述推导，无额外机器核验。
+    tool: str = ""
+    # ★ 2026-10-15（用户要求「前一个子目标可以作为后一个子目标的条件」）：
+    #   `inputs_use` = **{上游节点 id: 本步如何把它当条件用}**。
+    #   `inputs` 只有 id、丢掉了 `use`（见 `_as_id_list`），而"承接"的全部信息
+    #   恰恰在 `use` 里 —— 本字段即承接语义的落点，由 `_input_use_map` 归一。
+    #   下传时（`to_subgoal_plan`）会**把 id 翻成子目标序号**，供求解侧渲染
+    #   「本步承接前提」块（上游产出了什么、本步把它当什么条件用）。
+    inputs_use: dict = field(default_factory=dict)
 
     @property
     def is_anticipatory(self) -> bool:
@@ -337,9 +437,19 @@ class BlueprintDAG:
             if with_deps:
                 deps = [p for d, p in _pos.items()
                         if d in self._preceding_leaves(nid, selected) and p != idx]
+                # ★ 2026-10-15（用户要求「前一个子目标可以作为后一个子目标的条件」）：
+                #   把节点**显式声明**的 `inputs` 也并进依赖边。
+                #   为什么必须并：求解侧 `_format_dep_results` **只认 `depends_on`**
+                #   来注入前序结果；而依赖锥是纯结构推导（同父的兄长子树），
+                #   模型声明的"我要用 n3 的结论"若不在锥里 ⇒ **根本不会被注入**
+                #   ⇒ 承接关系名存实亡（声明了却读不到上游结果）。
+                #   ⚠ 只取 `p < idx`（严格早于本步）：承接必须是**前序**条件，
+                #   反向/同位的引用会把拓扑序破坏成环。
+                deps += [p for d, p in _pos.items()
+                         if d in (getattr(node, "inputs", None) or []) and p < idx]
             else:
                 deps = []
-            deps.sort()
+            deps = sorted(set(deps))
             subgoals.append({
                 "id": idx,
                 "title": f"子目标{idx}: {self._short(node.statement)}",
@@ -360,8 +470,43 @@ class BlueprintDAG:
                                  if d in _pos and _pos[d] != idx),
                 "inputs_raw": [str(d) for d in (getattr(node, "inputs", None) or [])],
                 "method": str(getattr(node, "method", "") or "").strip(),
+                # ★ 2026-10-15 工具指派（见 BlueprintNode.tool）：
+                #   空串 = 蓝图未给出有效 tool ⇒ 下游不追加工具指令（历史行为）。
+                "tool": str(getattr(node, "tool", "") or "").strip().lower(),
+                # ★ 2026-10-15 承接语义（见 BlueprintNode.inputs_use）：
+                #   **键统一为子目标序号的字符串**（int 键经 JSON 落盘再读回会变成
+                #   str，两处形态不一致会让求解侧查表落空）；只保留**存活且严格
+                #   早于本步**的上游，与上方 deps 的合并口径一致。
+                "inputs_use": {
+                    str(_pos[d]): str(u).strip()
+                    for d, u in (getattr(node, "inputs_use", None) or {}).items()
+                    if d in _pos and _pos[d] < idx and str(u or "").strip()},
+                # 工具执行结果（求解侧回填；此处先占位，保证 trace/diag 字段稳定）
+                "tool_verdict": "",
                 "result": "",
             })
+        # 2.5) ★ 2026-10-15：承接前提的**下传形态**。
+        #   把 `inputs_use` 里的上游 id 翻成子目标序号，并把上游的**产出物与标题**
+        #   一并写进本子目标 ⇒ 求解侧 `_render_succession_block(sg)` 只依赖 `sg`
+        #   自身即可渲染（纯函数、可单测），不必再回查整张子目标表。
+        #   只收**存活**的上游（inputs_use 已在上一步按 `_pos[d] < idx` 过滤过）。
+        _by_id = {int(_s["id"]): _s for _s in subgoals}
+        for _s in subgoals:
+            _from = []
+            for _k, _u in (_s.get("inputs_use") or {}).items():
+                try:
+                    _up = _by_id.get(int(_k))
+                except (TypeError, ValueError):
+                    _up = None
+                if _up is None:
+                    continue
+                _from.append({
+                    "id": int(_k),
+                    "use": str(_u or "").strip(),
+                    "produces": str(_up.get("expected_output") or "").strip(),
+                    "title": str(_up.get("title") or "").strip(),
+                })
+            _s["inputs_from"] = _from
         return {
             "subgoals": subgoals,
             "merge_strategy": self.merge_strategy,
@@ -508,6 +653,13 @@ class BlueprintDAG:
                 children=kept_children if nid != root_id else [],
                 rationale=node.rationale,
                 produces=node.produces,     # ★ 2026-10-06：产出物必须随裁剪保留
+                # ★ 2026-10-15：以下字段此前**全部随裁剪丢失**（只留了 produces）⇒
+                #   被裁剪子树里的节点即使保留下来，也会丢掉角色（anticipatory 变
+                #   required ⇒ 混进求解链）、丢掉 inputs/method/tool ⇒ 承接与工具
+                #   指派在重写后静默失效。
+                node_role=node.node_role,
+                inputs=list(node.inputs), method=node.method,
+                tool=node.tool, inputs_use=dict(node.inputs_use),
             )
         return BlueprintDAG(
             nodes=nodes, root_id=self.root_id,
@@ -539,6 +691,17 @@ class BlueprintDAG:
                           for c in node.children],
                 rationale=node.rationale,
                 produces=node.produces,     # ★ 2026-10-06：产出物随子树嫁接保留
+                # ★ 2026-10-15：承接与工具指派随嫁接保留。
+                #   ⚠ `inputs` / `inputs_use` 的**键是节点 id**，而本循环正在给
+                #   新子树节点**统一加前缀重命名** ⇒ 引用必须同步加前缀，
+                #   否则重写后的承接关系会指向已被换掉的旧 id ⇒ 静默断链。
+                node_role=node.node_role,
+                inputs=[f"{id_prefix}_{c}" if c in new_dag.nodes else c
+                        for c in (node.inputs or [])],
+                method=node.method, tool=node.tool,
+                inputs_use={
+                    (f"{id_prefix}_{k}" if k in new_dag.nodes else k): v
+                    for k, v in (node.inputs_use or {}).items()},
             )
         # 先摘除 root_id 的旧子树（root 保留为锚点），避免旧节点残留
         base = self._prune_subtree(root_id) if root_id in self.nodes else self
@@ -549,6 +712,10 @@ class BlueprintDAG:
                 id=nid, node_type=node.node_type, statement=node.statement,
                 children=list(node.children), rationale=node.rationale,
                 produces=node.produces,     # ★ 2026-10-06：产出物随深拷贝保留
+                # ★ 2026-10-15：角色 / 承接 / 工具指派随深拷贝保留（此前全丢）
+                node_role=node.node_role,
+                inputs=list(node.inputs), method=node.method,
+                tool=node.tool, inputs_use=dict(node.inputs_use),
             )
         if root_id not in nodes:
             return None
@@ -591,7 +758,13 @@ class BlueprintDAG:
             "nodes": [
                 {"id": n.id, "type": n.node_type, "statement": n.statement,
                  "children": n.children, "rationale": n.rationale,
-                 "node_role": n.node_role, "produces": n.produces}
+                 "node_role": n.node_role, "produces": n.produces,
+                 # ★ 2026-10-15：承接（inputs/use）与工具指派（tool）随序列化保留
+                 #   —— `to_dict` → `from_dict` 是一条真实回路（子树重写 /
+                 #   `dag_reviewer` 的 `BlueprintDAG.from_dict(ctx.blueprint)`），
+                 #   此前这两个字段在回路上被静默丢弃。
+                 "inputs": list(n.inputs), "method": n.method,
+                 "tool": n.tool, "inputs_use": dict(n.inputs_use)}
                 for n in self.nodes.values()
             ],
         }
@@ -610,6 +783,19 @@ class BlueprintDAG:
                 node_role=nd.get("node_role", nd.get("role", "required")) or "required",
                 # ★ 2026-10-06：产出物（可核验对象）；旧序列化无该字段 → ""（不破坏）
                 produces=str(nd.get("produces", nd.get("output", "")) or ""),
+                # ★ 2026-10-15：补 `inputs` / `method` —— 此前 `from_dict` **根本不读**
+                #   这两个字段（只有 `parse_blueprint` 读），故经子树重写
+                #   （`_graft_subtree` → `from_dict`）回流的节点会**静默丢掉承接信息**
+                #   ⇒ 重写后的子树不再有 inputs，依赖边与承接前提双双失效。
+                inputs=_as_id_list(nd.get("inputs", nd.get("needs", []))),
+                method=str(nd.get("method", nd.get("how", "")) or ""),
+                tool=_normalize_tool(nd.get("tool", nd.get("use_tool", ""))),
+                # ★ 优先读显式序列化的 `inputs_use`（`to_dict` 写出的形态）；
+                #   缺失时才从 `inputs` 推导（此时 use 文本已不可得，退化为空串）。
+                inputs_use=_input_use_map(
+                    nd.get("inputs_use")
+                    if nd.get("inputs_use")
+                    else nd.get("inputs", nd.get("needs", []))),
             )
         return cls(
             nodes=nodes,

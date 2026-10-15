@@ -25,10 +25,7 @@ Step7 收编进本链出口（③客观验证/④模型对比按用户决策删�
 """
 from __future__ import annotations
 
-try:
-    from .switch_registry import get_bool as _sw_get_bool
-except ImportError:  # pragma: no cover  兼容非包内导入
-    from switch_registry import get_bool as _sw_get_bool
+from .switch_registry import get_bool as _sw_get_bool
 
 _PROBLEM_MAX = 4000
 _ANSWERS_MAX = 20   # 判多答时列给模型的最大候选数（与 final_selector 同量级）

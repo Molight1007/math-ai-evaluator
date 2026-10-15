@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 MathPilot — 数学推理智能体（多智能体版）
 ==========================================================
@@ -13,21 +14,25 @@ MathPilot — 数学推理智能体（多智能体版）
     不做复杂回环，每道题 LLM 调用控制在 7 次以内。
 
 硬性接口规范（不可修改）：
-    agent = ReasoningAgent(client=official_client)
+    agent = ReasoningAgent(client=llm_client)
     result = agent.solve(problem, metadata)  # -> dict
 
 注意事项：
-    - 禁止硬编码 API Key，client 由平台统一注入
+    - 禁止硬编码 API Key，client 由调用方（评测引擎）注入
     - 禁止使用绝对路径，所有文件读取使用相对路径
     - solve 返回的字典必须支持 JSON 序列化
     - final_response 不可为空
 
-平台契约防御（v2.3）：
-    - sys.path 自举：无论平台以何种 cwd 运行，都能找到本包
+调用契约防御（v2.3）：
+    - sys.path 自举：无论以何种 cwd 运行，都能找到本包
     - solve(problem, metadata=None)：metadata 缺失时不崩溃
     - 核心模块导入失败 → 降级到内置直答后端，保证永远有输出
     - client.chat 响应归一化：兼容 str / dict / 对象 / 空值
     - _validate_output：返回前强制校验 final_response 非空
+
+★ 2026-10-15：原「平台兼容层」（`__call__` / `run` 两个别名，用于平台以
+  `agent(problem, metadata)` 或 `agent.run(...)` 形态调用）已删除 —— 已不打平台，
+  统一走 `solve()`。本地评测（`run_eval__engine.py::ReasoningAgent`）不受影响。
 """
 
 import logging
@@ -207,6 +212,8 @@ _CONFIG_OVERRIDE_KEYS = (
     "blueprint_deps_enabled",
     # 2026-09-20：OR 节点展开策略开关（默认 False = 保持历史行为）
     "blueprint_or_expand_all",
+    # 2026-10-15：子目标承接 + 工具指派（用户「证明就用 lean」）
+    "blueprint_node_contract", "blueprint_tool_exec", "blueprint_lean_max_per_q",
     # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
     #   `enable_dag_replan` / `dag_replan_gate` / `enable_skeleton_review` /
     #   `skeleton_review_max_rounds` / `dag_replan_lean_check` / `dag_lean_max_nodes`
@@ -340,17 +347,23 @@ _CONFIG_OVERRIDE_KEYS = (
 
 
 # ============================================================
-# ReasoningAgent 平台入口（薄壳）
+# ReasoningAgent 装配门面（薄壳；本地评测引擎的入口）
+#
+# ⚠ 本类是**本地评测的唯一装配点**，不是"平台专用代码"：
+#    · `run_eval__engine.py::ReasoningAgent(self.llm_client, **overrides)` 依赖它；
+#    · `_finalize_backend` 里 `bind_config(self.config)` 是全仓**唯一**生产调用点，
+#      删掉 ⇒ CLI/kwargs 传入的配置全部静默失效（2026-10-02 修过的 bug 会复活）；
+#    · `_CONFIG_OVERRIDE_KEYS` 是四表之一的覆盖白名单宿主。
 # ============================================================
 class ReasoningAgent:
     """
-    MathPilot 数学智能体主类（平台固定入口）。
+    MathPilot 数学智能体主类（装配门面；唯一调用入口是 `solve()`）。
 
     solve() 的内部实现已委托给多智能体 Orchestrator，本类仅负责：
-    - 接收平台注入的 client；
-    - 组装配置；
+    - 接收调用方注入的 client；
+    - 组装配置（kwargs 覆盖 + 绑定进开关注册表 + 最小模式）；
     - 透传 solve 调用并维持返回格式不变；
-    - 平台契约防御：核心模块不可用时降级到内置直答后端。
+    - 契约防御：核心模块不可用时降级到内置直答后端。
     """
 
     def __init__(self, client, *args, **kwargs):
@@ -550,7 +563,7 @@ class ReasoningAgent:
 
     def solve(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
         """
-        求解单道数学题（平台固定调用入口）。
+        求解单道数学题（唯一调用入口；原 `__call__` / `run` 平台别名已删）。
 
         参数:
             problem: 原始数学题目文本
@@ -620,11 +633,3 @@ class ReasoningAgent:
             "final_response": answer,
             "trace": [{"stage": "fallback_direct", "note": "orchestrator unavailable"}],
         })
-
-    # 兼容平台直接调用 agent(problem, metadata) 的场景
-    def __call__(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
-        return self.solve(problem, metadata, *args, **kwargs)
-
-    # 兼容平台调用 agent.run(problem, metadata) 的场景
-    def run(self, problem: str, metadata: dict = None, *args, **kwargs) -> dict:
-        return self.solve(problem, metadata, *args, **kwargs)

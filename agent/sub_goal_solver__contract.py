@@ -293,10 +293,7 @@ def _verify_candidates_objective(answers: list) -> int:
     if not answers or len(answers) < 2:
         return -1
     try:
-        try:
-            from .answer_oracle import AnswerOracle
-        except ImportError:
-            from answer_oracle import AnswerOracle
+        from .answer_oracle import AnswerOracle
         # ⚠ `verify_computational` 是**实例方法**（内部 `self.is_parseable`）——
         #   必须用实例调用，不能 `AnswerOracle.verify_computational(cand, ...)`
         #   （那会把 cand 当成 self ⇒ AttributeError ⇒ 静默判不出）。

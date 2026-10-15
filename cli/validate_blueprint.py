@@ -31,7 +31,7 @@ sys.path.insert(0, _ROOT)
 
 from agent.base import TaskContext, Budget  # noqa: E402
 from agent.blueprint_planner import BlueprintPlannerAgent  # noqa: E402
-from user_agent import AgentConfig  # noqa: E402
+from user_agent__config import AgentConfig  # noqa: E402
 from cli.leap_eval import load_bench, make_client  # noqa: E402
 
 

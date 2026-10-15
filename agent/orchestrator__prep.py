@@ -64,18 +64,12 @@ def judge_question_type(self, ctx) -> None:
     """
     if not getattr(self.config, "enable_type_llm", True):
         return
-    try:
-        from agent.question_type import (classify_question_type as _cq,
-                                        type_path_plan as _tpp,
-                                        parse_type_json as _ptj,
-                                        merge_type_decision as _mtd,
-                                        TYPE_LLM_SYSTEM as _TS,
-                                        TYPE_LLM_USER as _TU)
-    except ImportError:
-        from question_type import (  # type: ignore
-            classify_question_type as _cq, type_path_plan as _tpp,
-            parse_type_json as _ptj, merge_type_decision as _mtd,
-            TYPE_LLM_SYSTEM as _TS, TYPE_LLM_USER as _TU)
+    from agent.question_type import (classify_question_type as _cq,
+                                    type_path_plan as _tpp,
+                                    parse_type_json as _ptj,
+                                    merge_type_decision as _mtd,
+                                    TYPE_LLM_SYSTEM as _TS,
+                                    TYPE_LLM_USER as _TU)
     _rule = ""
     try:
         _rule = str(_cq(getattr(ctx, "problem", "") or "") or "").strip().lower()

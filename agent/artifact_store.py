@@ -46,12 +46,8 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-try:  # 包内（agent/）与提交包（submit/ 扁平）双路径兼容
-    from agent.switch_registry import bind_field as _bind_field
-    from agent.switch_registry import get_bool as _get_bool
-except ImportError:  # pragma: no cover
-    from switch_registry import bind_field as _bind_field
-    from switch_registry import get_bool as _get_bool
+from agent.switch_registry import bind_field as _bind_field
+from agent.switch_registry import get_bool as _get_bool
 
 logger = logging.getLogger("MathPilot")
 

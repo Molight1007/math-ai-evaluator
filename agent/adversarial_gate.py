@@ -25,11 +25,7 @@
 """
 from __future__ import annotations
 
-try:
-    from .switch_registry import get_bool as _sw_get_bool
-except ImportError:  # pragma: no cover  兼容非包内导入
-    from switch_registry import get_bool as _sw_get_bool
-
+from .switch_registry import get_bool as _sw_get_bool
 
 def _switch_enabled() -> bool:
     """读「五道链·第 2 道对抗证伪」开关（默认 True，=0 关闭做 A/B）。"""

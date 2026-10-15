@@ -401,3 +401,188 @@ def _fix_lean_mul(expr: str) -> str:
     e = re.sub(r"\*\s*\*", "*", e)
     e = re.sub(r"\(\s*\*\s*\(", "(", e)
     return e.strip()
+
+
+# ============================================================
+# ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具，比如证明就用 lean」）
+#   工具指派的**兑现层**：把蓝图在节点上声明的 `tool` 变成真正的机器核验。
+# ============================================================
+# 背景：声明本身只是数据（`BlueprintNode.tool` → `sg["tool"]`），
+#   `prompt/工具指令` 只保证模型**产出对应形态**；本组函数负责**真跑一次工具**：
+#     lean    → 本文件 `_lean_block_verify`（本地 Lean 4 实编译，子目标级**首个**入口）
+#     sympy   → `_sympy_verify_pairs`（SymPy 判等式真伪）
+#     numeric → 既有 `_numeric_lean_verify`（Lean norm_num / ring）
+#     llm     → 无机器核验（默认叙述路径）
+# 失败一律**反馈给模型重解一次**（与 S1-lite 同口径），绝不直接丢弃结果 ——
+#   本项目铁律：校验失败要带反馈修正，不是把对的改错。
+_LEAN_FENCE_RE = re.compile(r"```lean\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
+    """按蓝图声明的 `tool` 跑一次机器核验，返回反馈文本（空=通过/未执行/放行）。
+
+    返回空串（**静默放行**，不产生额外开销）的情形：
+      ① 开关 `blueprint_tool_exec` 关闭；② 本步结果为空 / 已是失败标记 / 时间到；
+      ③ `tool` 为空或 `llm`（默认叙述路径，本就无机器核验）；
+      ④ 本步没产出该工具可消费的形态（没写 lean 块 / 没写等式断言）；
+      ⑤ 该工具在本机不可用（无本地 Lean / 无 SymPy）或已达每题核验上限。
+
+    ★ 可观测：顺带把 `sg["tool_ran"]` / `sg["tool_verdict"]` 写回本子目标
+      （`tool_verdict`：""=未声明或未执行；"pass"=有可核验形态且未报失败
+      ——**含工具不可用时的静默放行**；"fail"=工具确实报了失败）。
+    """
+    def _mark(ran: bool, failed: bool) -> None:
+        try:
+            sg["tool_ran"] = bool(ran)
+            sg["tool_verdict"] = "fail" if failed else ("pass" if ran else "")
+        except Exception:  # noqa: BLE001  可观测字段写失败不影响主流程
+            pass
+
+    try:
+        from contracts.switch_registry import get_bool
+        if not get_bool("blueprint_tool_exec"):
+            _mark(False, False)
+            return ""
+    except Exception:  # noqa: BLE001
+        pass
+    if not result or str(result).startswith("[子目标") or ctx.gen_time_up():
+        _mark(False, False)
+        return ""
+    tool = str((sg or {}).get("tool") or "").strip().lower()
+    if not tool or tool == "llm":
+        _mark(False, False)
+        return ""
+    if tool == "numeric":
+        if not self._extract_lean_assert_pairs(result):
+            _mark(False, False)
+            return ""
+        _fb = self._numeric_lean_verify(ctx, result)
+        _mark(True, bool(_fb))
+        return _fb
+    if tool == "sympy":
+        if not self._extract_check_asserts(result):
+            # 结论契约行 `本步结论: 等式 = L = R` 也算可核验形态
+            m = re.search(r"本步结论:\s*等式\s*=\s*(.+)", str(result or ""))
+            if not m:
+                _mark(False, False)
+                return ""
+            if len([p for p in m.group(1).split("=") if p.strip()]) != 2:
+                _mark(False, False)
+                return ""
+        _fb = _sympy_verify_pairs(self, result)
+        _mark(True, bool(_fb))
+        return _fb
+    if tool == "lean":
+        if not _LEAN_FENCE_RE.search(str(result or "")):
+            _mark(False, False)
+            return ""
+        _fb = _lean_block_verify(self, ctx, result)
+        _mark(True, bool(_fb))
+        return _fb
+    _mark(False, False)
+    return ""
+
+
+def _sympy_verify_pairs(self, result: str) -> str:
+    """SymPy 核验本步的等式断言（tool=sympy 的兑现）。返回反馈；空=通过/无可验。
+
+    断言来源（两处，按优先级）：
+      ① `<check>L = R</check>`（`_extract_check_asserts`）
+      ② 结论契约行 `本步结论: 等式 = L = R`
+    ★ 只把 `_sympy_judge` 判为 **fail** 的算问题 —— `unknown`（含赋值式
+      `x = 5`）按该函数既定的防误报红线一律放行，绝不据此打回。
+    """
+    pairs = list(self._extract_check_asserts(result) or [])
+    if not pairs:
+        m = re.search(r"本步结论:\s*等式\s*=\s*(.+)", str(result or ""))
+        if m:
+            parts = [p.strip() for p in m.group(1).strip().split("=")]
+            if len(parts) == 2 and parts[0] and parts[1]:
+                pairs = [(parts[0], parts[1])]
+    if not pairs:
+        return ""
+    bad = []
+    for L, R in pairs[:4]:
+        try:
+            verdict, info = self._sympy_judge(L, R)
+        except Exception:  # noqa: BLE001  判定异常 → 放行，不误伤
+            continue
+        if verdict == "fail":
+            bad.append("「%s = %s」%s" % (L, R, "（%s）" % info if info else ""))
+    if not bad:
+        return ""
+    return ("【SymPy 符号核验未通过】蓝图把本步指派为符号计算，以下等式经 SymPy "
+            "判定**不成立**，请重新推导并修正后给出【本步结果】："
+            + "；".join(bad) + "。"
+            "（若该式本就是本步求得的赋值结果而非恒等断言，请改写成恒等式或"
+            "直接说明结论，不要用等式断言的形式声明它）")
+
+
+def _lean_block_verify(self, ctx: TaskContext, result: str) -> str:
+    """编译本步产出的 ```lean 代码块（tool=lean 的兑现）。返回反馈；空=通过/放行。
+
+    ★ 这是子目标级 Lean 验证的**首个入口**：此前 Lean 只在 4.3 整题/候选级跑，
+      子目标粒度上"声明用 Lean 证明"没有任何执行落点。
+
+    三重静默放行（缺任一即返回 ""，绝不误伤正常结果）：
+      · 本机无 Lean（`bridge.lean_available` 为假，平台侧常见）；
+      · 本步没产出 `lean` 代码块（模型判定为"无法形式化"，见工具指令第 3 条）；
+      · 每题编译次数达上限（`blueprint_lean_max_per_q`，默认 2）—— 防止证明类
+        子目标密集时把单题预算烧在编译器上。
+    ⚠ `allow_sorry=True`（与既有 `_numeric_lean_verify` 同口径）：`sorry` 只作
+      警告、不当错误，避免因模型写了 `by sorry` 就把本步整段否掉 —— 真正要拦的
+      是**语法/类型/战术失败**这类硬错误。
+    """
+    blocks = _LEAN_FENCE_RE.findall(str(result or ""))
+    if not blocks:
+        return ""
+    code = "\n".join(blocks).strip()
+    if not code or len(code) > 8000:
+        return ""
+    meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
+    cnt = int(meta.get("sg_lean_count", 0) or 0)
+    cap = max(1, int(getattr(self.config, "blueprint_lean_max_per_q", 2) or 2))
+    if cnt >= cap:
+        return ""
+    try:
+        from tools.lean_local.lean_bridge import LeanBridge
+        from tools.lean_local.lean_bridge import _trash_lean_file
+    except Exception:  # noqa: BLE001
+        return ""
+    try:
+        bridge = LeanBridge(self.client, self.config)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not getattr(bridge, "lean_available", False):
+        return ""
+    work_dir = getattr(bridge, "_lean_project_dir", "") or ""
+    if not work_dir:
+        return ""
+    meta["sg_lean_count"] = cnt + 1
+    fname = "sglean_%d_%d.lean" % (os.getpid(),
+                                   int(time.time() * 1000) % 1000000)
+    try:
+        r = bridge._compile(code, work_dir, lean_filename=fname,
+                            allow_sorry=True)
+    except Exception:  # noqa: BLE001  编译器异常 ≠ 本步出错 → 放行
+        return ""
+    finally:
+        try:
+            _trash_lean_file(work_dir, fname)
+        except Exception:  # noqa: BLE001
+            pass
+    if not r or r.get("ok"):
+        return ""
+    err_text = str(r.get("error", "") or "")
+    msgs = []
+    for m in re.finditer(r":(\d+):(\d+):\s*error:\s*([^\n]*)", err_text):
+        line = "第 %s 行：%s" % (m.group(1), m.group(3).strip()[:160])
+        if line not in msgs:
+            msgs.append(line)
+    if not msgs:
+        return ""      # 无结构化 error 行 ⇒ 视为环境噪声，放行
+    return ("【Lean 编译未通过】蓝图把本步指派为形式化证明，你给出的 Lean 代码"
+            "在本机编译器上未能通过，请修正后重新给出【本步结果】："
+            + "；".join(msgs[:3]) + "。"
+            "（若本步命题确实无法形式化，请按工具指令写明「本步无法形式化：原因」"
+            "并给出普通数学证明，不要反复提交编译不过的代码）")

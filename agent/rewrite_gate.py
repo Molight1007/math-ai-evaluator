@@ -26,10 +26,7 @@
 """
 from __future__ import annotations
 
-try:
-    from .switch_registry import get_bool as _sw_get_bool
-except ImportError:  # pragma: no cover  兼容非包内导入
-    from switch_registry import get_bool as _sw_get_bool
+from .switch_registry import get_bool as _sw_get_bool
 
 _PROBLEM_MAX = 4000
 _ERRORS_MAX = 3000

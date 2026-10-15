@@ -16,20 +16,14 @@ from typing import Optional
 
 from .base import TaskContext
 
-try:
-    from prompts.sub_goal import (
-        SUBGOAL_CONCLUSION_CONTRACT,
-        SUBGOAL_STEP_SYSTEM,
-        SUBGOAL_STEP_USER_TEMPLATE,
-    )
-    from utils.prefill import prefill_messages, stitch
-except ImportError:
-    from submit.prompts.sub_goal import (
-        SUBGOAL_CONCLUSION_CONTRACT,
-        SUBGOAL_STEP_SYSTEM,
-        SUBGOAL_STEP_USER_TEMPLATE,
-    )
-    from submit.utils.prefill import prefill_messages, stitch
+from prompts.sub_goal import (
+    SUBGOAL_CONCLUSION_CONTRACT,
+    SUBGOAL_STEP_SYSTEM,
+    SUBGOAL_STEP_USER_TEMPLATE,
+    SUBGOAL_TOOL_INSTRUCTIONS,      # 2026-10-15：蓝图 tool 指派 → 工具指令
+    SUBGOAL_SUCCESSION_TEMPLATE,    # 2026-10-15：承接前提块
+)
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -45,12 +39,7 @@ def _improve_subgoal_result(self, ctx, sg, prev_result):
         from prompts.sub_goal import (SUBGOAL_IMPROVE_SYSTEM as _IS,
                                      SUBGOAL_IMPROVE_USER_TEMPLATE as _IU)
     except ImportError:
-        try:
-            from submit.prompts.sub_goal import (  # type: ignore
-                SUBGOAL_IMPROVE_SYSTEM as _IS,
-                SUBGOAL_IMPROVE_USER_TEMPLATE as _IU)
-        except ImportError:
-            return ""
+        return ""
     _sg_title = str(sg.get("description") or sg.get("title") or "")
     try:
         raw = self.llm(ctx, [
@@ -101,10 +90,7 @@ def _solve_subgoal(self, ctx: TaskContext, sg: dict,
     try:
         from agent.question_type import render_type_path_hint as _rtp
     except ImportError:
-        try:
-            from question_type import render_type_path_hint as _rtp  # type: ignore
-        except ImportError:
-            _rtp = None
+        _rtp = None
     if _rtp is not None:
         try:
             _tph = _rtp(getattr(ctx, "type_path", None))
@@ -193,6 +179,52 @@ def _solve_subgoal(self, ctx: TaskContext, sg: dict,
     return step_result
 
 
+def _node_contract_on() -> bool:
+    """蓝图**节点契约**开关是否生效（2026-10-15）：tool 指派 + 承接前提。
+
+    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    与全项目开关口径一致；注册表不可用时退回 True（研究期默认启用新契约）。
+    """
+    try:
+        from contracts.switch_registry import get_bool
+        return bool(get_bool("blueprint_node_contract"))
+    except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
+        return True
+
+
+def _render_succession_block(sg: dict) -> str:
+    """渲染「本步承接前提」块（2026-10-15，用户要求「前一个是后一个的条件」）。
+
+    `sg["inputs_from"]` 由 `BlueprintDAG.to_subgoal_plan` 下传：
+    `[{"id": 上游子目标序号, "use": 本步怎么把它当条件用,
+       "produces": 上游产出物, "title": 上游标题}]`。
+
+    为什么必须单独渲染一段：此前"承接"只活在蓝图的 `inputs[i].use` 里，
+    **从没进过求解提示词** ⇒ 模型看到的是一串上游结果文本，却不知道本步该把
+    其中哪一条当作**条件**来用 ⇒ 承接关系在提示词层是空的（有声明、无兑现）。
+    """
+    items = list((sg or {}).get("inputs_from") or [])
+    if not items:
+        return ""
+    lines = []
+    for it in items[:4]:
+        if not isinstance(it, dict):
+            continue
+        _id = it.get("id", "?")
+        _title = str(it.get("title") or "").strip()
+        _use = str(it.get("use") or "").strip()
+        _prod = str(it.get("produces") or "").strip()
+        seg = "  · 承接子目标 #%s「%s」" % (_id, _title)
+        if _prod:
+            seg += " 产出的「%s」" % _prod
+        if _use:
+            seg += " —— 本步 %s" % _use
+        lines.append(seg)
+    if not lines:
+        return ""
+    return SUBGOAL_SUCCESSION_TEMPLATE.format(items="\n".join(lines))
+
+
 def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
                           plan_summary: str, prev_results: str,
                           extra_hint: str) -> str:
@@ -256,6 +288,22 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
             self.record(ctx, "blueprint_lock_guard",
                         f"子目标注入字段（title/description）内嵌 {_n_mask} 处断言数值"
                         " → 已屏蔽为占位符（K11 注入点守卫）")
+    # ★ 2026-10-15（用户要求「前一个子目标可以作为后一个子目标的条件」）：
+    #   把蓝图声明的承接关系渲染成**显式前提块**，注入【前面步骤的结果】区。
+    #   位置刻意选在该区**顶部**（承接前提要先于上游结果原文被读到）；
+    #   **不放 user 末尾** —— 2026-08-29 教训：改动提示词收尾结构会让模型
+    #   进入续写模式、泄漏占位符。
+    #   承接块里含上游 `produces`，同样可能是被写死的待求量 ⇒ 一并过 K11 掩码。
+    if _node_contract_on():
+        _succ = _render_succession_block(sg)
+        if _succ:
+            if _k11_mask_on():
+                _succ, _n_succ = _mask_asserted_values(_succ)
+                if _n_succ:
+                    self.record(ctx, "blueprint_lock_guard",
+                                f"子目标承接前提块内嵌 {_n_succ} 处断言数值"
+                                " → 已屏蔽为占位符（K11 注入点守卫）")
+            prev_results = _succ + "\n" + (prev_results or "")
     user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
         problem=_prob_for_step + _obj_inj,
         subgoal_plan_summary=plan_summary,
@@ -358,6 +406,17 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     #   续写模式、泄漏占位符），system 追加无此风险。
     if _conclusion_contract_on():
         _step_system = _step_system + "\n" + SUBGOAL_CONCLUSION_CONTRACT
+    # ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具，比如证明就用 lean」）：
+    #   按蓝图在节点上声明的 `tool` 追加**工具专属指令** —— 让本步产出该工具
+    #   **能消费的形态**（lean 代码块 / 可判真伪的等式 / 纯数值等式），
+    #   随后由 `sg_tool_exec` 把声明兑现成真正的机器核验。
+    #   放 system（与结论契约同处）：user 尾部追加有历史风险（2026-08-29 续写模式）。
+    #   `tool` 为空 / "llm" ⇒ 不追加任何指令（保持历史行为，零回归面）。
+    if _node_contract_on() and sg:
+        _tool = str(sg.get("tool") or "").strip().lower()
+        _tool_ins = SUBGOAL_TOOL_INSTRUCTIONS.get(_tool, "")
+        if _tool_ins:
+            _step_system = _step_system + "\n" + _tool_ins
 
     # ★ 2026-09-30（截图 #8）：**多 agent 求解子目标**。
     #   用户原话：「多 agent 拿子目标的求解能不能换成多 agent？

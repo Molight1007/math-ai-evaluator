@@ -43,7 +43,7 @@ from agent.blueprint_planner import BlueprintDAG, BlueprintPlannerAgent
 from tools.lean_local.lean_translator import LeanTranslatorAgent
 from tools.lean_local.lean_refiner import LeanRefinerAgent
 from tools.lean_local.lean_pre_verifier import LeanPreVerifier
-from user_agent import AgentConfig
+from user_agent__config import AgentConfig
 
 DEFAULT_BENCH = os.path.join(_ROOT, "superhuman", "imobench", "lean_proof_bench.csv")
 

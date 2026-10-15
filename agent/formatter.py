@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 答案规范化智能体（FormatterAgent）
 ==================================
@@ -34,10 +35,7 @@ from .formatter__rank import (  # noqa: F401
 # ★ 2026-10-07（fix-tail-gaps）：本文件两处选择题判据原为裸
 #   `_os.environ.get("OBJECTIVE_*", ...) == "1"`，改走本注册制实时读
 #   （默认值与注册表逐条核对一致，见 switch_registry.SWITCHES）。
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
+from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -323,10 +321,7 @@ class FormatterAgent(BaseAgent):
                 #   纳入「五层 = 终答唯一出口」（单答案 ⇒ 直接采用、**不调 LLM**；
                 #   开关 OFF ⇒ skipped ⇒ 原样，完全回退）。
                 try:
-                    try:
-                        from .final_selector import adopt_single
-                    except ImportError:
-                        from final_selector import adopt_single
+                    from .final_selector import adopt_single
                     _r = adopt_single(ctx, direct, reason="formatter_emergency")
                     if not _r.get("skipped"):
                         _d2 = str(_r.get("answer") or "").strip()
@@ -376,10 +371,7 @@ class FormatterAgent(BaseAgent):
         #   OFF ⇒ 逐字保持改动前（`picked = _picked_final[:60]`）做 A/B。
         _ss_on = False
         try:
-            try:
-                from .final_selector import _single_source_enabled
-            except ImportError:
-                from final_selector import _single_source_enabled
+            from .final_selector import _single_source_enabled
             _ss_on = bool(_single_source_enabled())
         except Exception:  # noqa: BLE001
             _ss_on = False
@@ -401,10 +393,7 @@ class FormatterAgent(BaseAgent):
         # ★ 2026-10-07（问题 2.2）：把 `picked` 归入哪个 cluster 写进记录
         #   （未归入则写明原因）—— 回应「picked 必须能追溯到某个 cluster」。
         try:
-            try:
-                from .final_selector import record_pick_cluster, _verify_aware_enabled
-            except ImportError:
-                from final_selector import record_pick_cluster, _verify_aware_enabled
+            from .final_selector import record_pick_cluster, _verify_aware_enabled
             if _verify_aware_enabled():
                 record_pick_cluster(ctx)
         except Exception:  # noqa: BLE001

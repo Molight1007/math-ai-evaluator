@@ -154,12 +154,8 @@ class LeanRefinerAgent(BaseAgent):
         """调用 LLM 生成证明（返回证明体文本；失败返回空串）。"""
         if self._llm_calls >= MAX_REFINE_LLM_CALLS:
             return ""
-        try:
-            from tools.lean_local.prompts.lean_refiner import (
-                LEAN_REFINE_SYSTEM, LEAN_REFINE_USER_TEMPLATE)
-        except ImportError:
-            from submit.prompts.lean_refiner import (
-                LEAN_REFINE_SYSTEM, LEAN_REFINE_USER_TEMPLATE)
+        from tools.lean_local.prompts.lean_refiner import (
+            LEAN_REFINE_SYSTEM, LEAN_REFINE_USER_TEMPLATE)
         user_msg = LEAN_REFINE_USER_TEMPLATE.format(
             problem=problem, theorem=theorem, statement=statement,
             lemma_block=lemma_block, theorem_block=theorem_block,

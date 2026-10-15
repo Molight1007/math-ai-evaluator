@@ -155,10 +155,7 @@ def _maybe_final_select(self, ctx: TaskContext):
         **共用同一决策**（同一 ctx 不会选出两个终答）。
         """
     try:
-        try:
-            from .final_selector import SynthCandidate, run_cached
-        except ImportError:
-            from final_selector import SynthCandidate, run_cached
+        from .final_selector import SynthCandidate, run_cached
         res = run_cached(ctx, self.llm, self.record)
         try:
             ctx._final_select_diag = dict(res.get("diag") or {})

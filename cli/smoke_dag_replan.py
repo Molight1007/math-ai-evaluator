@@ -253,7 +253,7 @@ def run_real_smoke() -> bool:
 # 工具
 # ============================================================
 def _make_config():
-    from user_agent import AgentConfig
+    from user_agent__config import AgentConfig
     cfg = AgentConfig()
     # 显式开启 DAG 相关开关（与生产配置一致）
     cfg.use_blueprint = True

@@ -21,11 +21,7 @@
 """
 from __future__ import annotations
 
-try:
-    from .switch_registry import get_bool as _sw_get_bool
-except ImportError:  # pragma: no cover  兼容非包内导入
-    from switch_registry import get_bool as _sw_get_bool
-
+from .switch_registry import get_bool as _sw_get_bool
 # 单候选自审的输入截断（防超长上下文；题目 4000 / 推理 6000 与既有阶段同量级）
 _PROBLEM_MAX = 4000
 _REASONING_MAX = 6000

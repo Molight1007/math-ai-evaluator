@@ -15,11 +15,7 @@ _phase_deadline_restore(@staticmethod)
 """
 from __future__ import annotations
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
-
+from agent.switch_registry import get_bool as _sw_bool
 
 def _self_improve_applicable(self, ctx) -> bool:
     """3.3 自改进的**题型门控**（2026-09-11）。

@@ -315,6 +315,18 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "BLUEPRINT_OR_EXPAND_ALL", "bool", False,
         "蓝图 OR 节点是否展开**全部**备选分支（默认 False = 只取首分支/保持历史行为；"
         "置 True 会显著放大子目标规模，需 A/B）"),
+    # ---- 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具」）----
+    "blueprint_node_contract": (
+        "BLUEPRINT_NODE_CONTRACT", "bool", True,
+        "蓝图**节点契约**：① 每个节点声明 `tool`（lean/sympy/numeric/llm，证明类用 lean）；"
+        "② `inputs[i].use` 声明「把上游哪个结论当成本步的什么条件」并下传为子目标"
+        "`inputs_from`。开 ⇒ 求解侧按 tool 追加工具指令、并把承接前提注入 step 提示词；"
+        "关 ⇒ 回退（tool/inputs 只落盘不兑现）"),
+    "blueprint_tool_exec": (
+        "BLUEPRINT_TOOL_EXEC", "bool", True,
+        "把蓝图声明的 `tool` **兑现成真正的机器核验**（lean 交本地编译器实编译 / "
+        "sympy 判等式 / numeric 跑 norm_num）；未过带反馈重解**一次**，仍不过保留"
+        "首解并留痕。关 ⇒ 只声明不执行（纯提示词增强，零机器开销）"),
     # ---- agent/sub_goal_solver.py 引理记忆（2026-10-04 补登记）----
     "use_lemma_accumulation": (
         "USE_LEMMA_ACCUMULATION", "bool", True,

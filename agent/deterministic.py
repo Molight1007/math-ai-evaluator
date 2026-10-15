@@ -2,13 +2,8 @@ from __future__ import annotations
 
 # 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-try:
-    from agent.switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-except ImportError:
-    from switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-
+from agent.switch_registry import (
+    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 """
 确定性验证通道（DeterministicChecker）
 =====================================
@@ -614,12 +609,9 @@ def verify_answer_exact(expr: str, answer: str, mapping: dict | None = None) -> 
     """
     try:
         from utils.math_eval import safe_eval_subst, to_exact_number
-    except ImportError:  # 提交包（submit/）路径兜底
-        try:
-            from math_eval import safe_eval_subst, to_exact_number
-        except ImportError:
-            return {"verdict": "unknown", "evidence": "math_eval 不可用",
-                    "value": None, "method": "exact_subst"}
+    except ImportError:  # 模块不可用时降级（绝不阻断）
+        return {"verdict": "unknown", "evidence": "math_eval 不可用",
+                "value": None, "method": "exact_subst"}
     if not expr or not str(expr).strip():
         return {"verdict": "unknown", "evidence": "表达式为空",
                 "value": None, "method": "exact_subst"}

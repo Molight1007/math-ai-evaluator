@@ -139,11 +139,8 @@ def evaluate_payload(payload) -> tuple[str | None, str]:
         return None, f"表达式 {expr!r} 未使用所声明的变量，疑似已自行代入，弃权"
     try:
         from utils.math_eval import safe_eval_subst, to_exact_number
-    except ImportError:  # 提交包（submit/）路径兜底
-        try:
-            from math_eval import safe_eval_subst, to_exact_number
-        except ImportError:
-            return None, "math_eval 不可用"
+    except ImportError:  # 模块不可用时降级（绝不阻断）
+        return None, "math_eval 不可用"
     got = safe_eval_subst(expr, mapping)
     if got.startswith(("WARN:", "ERROR:")):
         return None, f"代入求值未成功: {got[:80]}"

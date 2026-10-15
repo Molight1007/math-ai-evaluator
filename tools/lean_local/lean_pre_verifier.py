@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Lean 前置形式化验证智能体（LeanPreVerifier）
 ===========================================
@@ -216,10 +217,7 @@ class LeanPreVerifier(BaseAgent):
 
         返回自然语言骨架（编号子目标列表）；生成失败返回空串（调用方降级）。
         """
-        try:
-            from tools.lean_local.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
-        except ImportError:
-            from submit.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
+        from tools.lean_local.prompts.lean_pre_verify import LEAN_SKETCH_SYSTEM, LEAN_SKETCH_USER
         formal_spec_block = ""
         if ctx.formal_spec:
             formal_spec_block = ("## 题目的形式化理解（已知条件→结论）\n"

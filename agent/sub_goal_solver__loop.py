@@ -125,6 +125,42 @@ def sg_adaptive_recover(self, ctx, sg, step_result, subgoal_plan_summary,
     return step_result
 
 
+def sg_tool_exec(self, ctx, sg, step_result, subgoal_plan_summary,
+                 prev_results) -> str:
+    """按蓝图声明的 `tool` 跑一次机器核验；未过则**带反馈重解一次**（2026-10-15）。
+
+    与 `sg_light_check_resolve`（0-LLM **通用**校验）同构，但判据来自**蓝图声明**
+    而非通用规则：声明 lean 就真去编译、声明 sympy 就真去判等式、声明 numeric
+    就真去跑 norm_num。此前这些工具只有"模型恰好写了断言时被动触发"一条路径，
+    而 lean 在子目标粒度上**根本没有执行入口** ⇒ 声明等于空文。
+
+    ★ 重解**只有一次**（与 S1-lite 同口径）：仍不过就保留首解并留痕 `fail`，
+      绝不无限循环，也绝不因机器核验失败就把结果丢弃（本项目铁律：校验失败
+      要带反馈修正，不是把对的改错）。
+    """
+    if not step_result or step_result.startswith("[子目标"):
+        return step_result
+    _tool = str((sg or {}).get("tool") or "").strip().lower()
+    if not _tool or _tool == "llm":
+        return step_result          # 默认叙述路径，无机器核验
+    _fb = self._tool_declared_verify(ctx, sg, step_result)
+    if not _fb:
+        return step_result
+    self.record(ctx, "subgoal_tool",
+                f"子目标 #{sg['id']}「{sg['title']}」工具核验未过"
+                f"（tool={_tool}）: {_fb[:120]}，带反馈重解一次")
+    _retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results,
+                                 extra_hint=_fb)
+    if _retry and not _retry.startswith("[子目标"):
+        # 二次核验：过了就记 pass，仍不过保留重解结果并留痕 fail
+        _fb2 = self._tool_declared_verify(ctx, sg, _retry)
+        if not _fb2:
+            self.record(ctx, "subgoal_tool",
+                        f"子目标 #{sg['id']} 工具核验重解后通过（tool={_tool}）")
+        return _retry
+    return step_result
+
+
 def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> int:
     """逐个求解子目标并落盘；返回累计前序注入字符数 `_ctx_inject_chars`。"""
     from .sub_goal_solver import _artifact_append
@@ -234,6 +270,12 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
                 step_result = retry
 
         step_result = sg_light_check_resolve(
+            self, ctx, sg, step_result, subgoal_plan_summary, prev_results)
+        # ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具，比如证明就用 lean」）：
+        #   把蓝图声明的 tool 兑现成真正的机器核验。
+        #   位置必须在 `_strip_check_tags` **之前** —— sympy/numeric 的判据就是
+        #   `<check>` 断言，剥掉标签后就无从核验了。
+        step_result = sg_tool_exec(
             self, ctx, sg, step_result, subgoal_plan_summary, prev_results)
         step_result = sg_adaptive_recover(
             self, ctx, sg, step_result, subgoal_plan_summary, prev_results)

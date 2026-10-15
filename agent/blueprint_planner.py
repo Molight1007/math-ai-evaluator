@@ -39,22 +39,17 @@ from .blueprint_planner__dag import (  # noqa: F401
     cap_subgoals_keep_last,
     _flatten_produces,
     _as_id_list,
+    _normalize_tool,      # 2026-10-15：工具指派白名单归一（parse_blueprint 用）
+    _input_use_map,       # 2026-10-15：inputs 的 use（承接语义）抽取
     BlueprintNode,
     BlueprintDAG,
 )
 
-try:
-    from prompts.blueprint import (
-        BLUEPRINT_DAG_SYSTEM,
-        BLUEPRINT_DAG_USER_TEMPLATE,
-    )
-    from utils.prefill import prefill_messages, stitch
-except ImportError:  # 提交包（submit/）路径兜底
-    from submit.prompts.blueprint import (
-        BLUEPRINT_DAG_SYSTEM,
-        BLUEPRINT_DAG_USER_TEMPLATE,
-    )
-    from submit.utils.prefill import prefill_messages, stitch
+from prompts.blueprint import (
+    BLUEPRINT_DAG_SYSTEM,
+    BLUEPRINT_DAG_USER_TEMPLATE,
+)
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 
@@ -204,6 +199,20 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             #   偶尔写成 dict（{object, use}）的形态摊平为文本。
             inputs=_as_id_list(nd.get("inputs", nd.get("needs", []))),
             method=str(nd.get("method", nd.get("how", "")) or ""),
+            # ★ 2026-10-15（用户要求「为每一个子目标设定工具，证明就用 lean」）：
+            #   读取模型声明的 `tool`（白名单归一，见 `_normalize_tool`；
+            #   无法识别 ⇒ "" = 未指派，下游不加工具指令）。
+            #   此前 `prompts/blueprint.py` 还没要求该字段，本次同步补上解析。
+            tool=_normalize_tool(nd.get("tool", nd.get("use_tool", ""))),
+            # ★ 2026-10-15（用户要求「前一个子目标作为后一个的条件」）：
+            #   `use` 是承接语义的唯一载体（`_as_id_list` 会把它丢掉），单独抽成
+            #   {上游 id: 用途} 一并落到节点上。
+            #   `_input_use_map` 同时吃两种形态：提示词要求的 `inputs[].use` 列表，
+            #   以及偶尔出现的 `inputs_use` 字典（`to_dict` 回灌形态）。
+            inputs_use=_input_use_map(
+                nd.get("inputs_use")
+                if nd.get("inputs_use")
+                else nd.get("inputs", nd.get("needs", []))),
             produces=_flatten_produces(
                 nd.get("produces", nd.get("output",
                        nd.get("expected_output", "")))),
@@ -312,10 +321,7 @@ class BlueprintPlannerAgent(BaseAgent):
 
         if prior_dag_json:
             # 迭代式自改进轮（2026-10-12 批次 2）：把上一轮 DAG 原样喂回，要求改进。
-            try:
-                from prompts.blueprint import BLUEPRINT_IMPROVE_USER_TEMPLATE as _BUIT
-            except ImportError:
-                from submit.prompts.blueprint import BLUEPRINT_IMPROVE_USER_TEMPLATE as _BUIT
+            from prompts.blueprint import BLUEPRINT_IMPROVE_USER_TEMPLATE as _BUIT
             user_msg = _BUIT.format(problem=problem_text,
                                     prior_dag=str(prior_dag_json)[:8000])
         else:
@@ -411,11 +417,7 @@ class BlueprintPlannerAgent(BaseAgent):
         if ctx.is_time_critical():
             self.record(ctx, "blueprint_replan", "预算不足，跳过整树重生成")
             return None
-        try:
-            from prompts.blueprint import BLUEPRINT_REPLAN_USER_TEMPLATE
-        except ImportError:
-            from submit.prompts.blueprint import BLUEPRINT_REPLAN_USER_TEMPLATE
-
+        from prompts.blueprint import BLUEPRINT_REPLAN_USER_TEMPLATE
         # 反馈块 = 拒收节点 + hint，逐条列出
         feedback_block_lines = list(feedback_lines or [])
         if extra_context:
@@ -510,11 +512,7 @@ class BlueprintPlannerAgent(BaseAgent):
             return None
         if not rejected_ids:
             return None
-        try:
-            from prompts.blueprint import BLUEPRINT_SUBTREE_USER_TEMPLATE
-        except ImportError:
-            from submit.prompts.blueprint import BLUEPRINT_SUBTREE_USER_TEMPLATE
-
+        from prompts.blueprint import BLUEPRINT_SUBTREE_USER_TEMPLATE
         lca = prior_dag._lca(rejected_ids)
         if lca is None:
             return None

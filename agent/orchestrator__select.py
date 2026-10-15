@@ -28,10 +28,7 @@ from .formatter import (
     _attach_support as _formatter_attach_support,
 )
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
+from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -144,10 +141,7 @@ def _maybe_final_select(self, ctx: TaskContext) -> "str | None":
         开关 OFF / 无候选 / 异常 ⇒ 返回 None ⇒ 调用方**回退既有择优**。
         """
     try:
-        try:
-            from .final_selector import run_cached
-        except ImportError:
-            from final_selector import run_cached
+        from .final_selector import run_cached
         res = run_cached(ctx, self.llm, self.record)
         try:
             ctx._final_select_diag = dict(res.get("diag") or {})
@@ -298,10 +292,7 @@ def _set_final_response(ctx: TaskContext, ans: str, reason: str = "") -> bool:
     #   不调 LLM**（保护项：兜底路径不变慢/不变不稳）。开关 OFF ⇒ `skipped`
     #   ⇒ 原样写入（完全回退）。保持 `@staticmethod`（测试按静态签名调用）。
     try:
-        try:
-            from .final_selector import adopt_single
-        except ImportError:
-            from final_selector import adopt_single
+        from .final_selector import adopt_single
         _r = adopt_single(ctx, a, reason=str(reason or ""))
         if not _r.get("skipped"):
             _a2 = str(_r.get("answer") or "").strip()

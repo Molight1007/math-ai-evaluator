@@ -8,10 +8,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
+from agent.switch_registry import get_bool as _sw_bool
 
 _TEXT_FN_RE = re.compile(r"<function\s*=\s*([A-Za-z_]\w*)\s*>", re.I)
 _TEXT_PARAM_RE = re.compile(

@@ -70,17 +70,10 @@ import logging
 import re
 from typing import Any, Callable, List, Optional, Tuple
 
-try:
-    from prompts.final_select import (
-        MULTI_ANSWER_JUDGE_SYSTEM, MULTI_ANSWER_JUDGE_USER,
-        COMPARE_JUDGE_SYSTEM, COMPARE_JUDGE_USER,
-    )
-except ImportError:  # 兼容 sys.path 直跑
-    from final_select import (  # type: ignore
-        MULTI_ANSWER_JUDGE_SYSTEM, MULTI_ANSWER_JUDGE_USER,
-        COMPARE_JUDGE_SYSTEM, COMPARE_JUDGE_USER,
-    )
-
+from prompts.final_select import (
+    MULTI_ANSWER_JUDGE_SYSTEM, MULTI_ANSWER_JUDGE_USER,
+    COMPARE_JUDGE_SYSTEM, COMPARE_JUDGE_USER,
+)
 logger = logging.getLogger("MathPilot")
 
 # 2026-10-08 批 F1：「答案归一/等价/脏答案 + LLM 输出解析」纯函数簇已搬到
@@ -464,10 +457,7 @@ def _select_from_survivors(ctx, uniq, problem, llm, steps, diag, _rec,
             "steps": steps, "diag": diag, "cand": c}
 
 def _switch_enabled() -> bool:
-    try:
-        from agent.switch_registry import get_bool as _swb
-    except ImportError:
-        from switch_registry import get_bool as _swb
+    from agent.switch_registry import get_bool as _swb
     try:
         return bool(_swb("enable_final_answer_selection"))
     except Exception:  # noqa: BLE001
@@ -479,10 +469,7 @@ def _single_source_enabled() -> bool:
 
     OFF ⇒ 完全回退改动前（`picked` 仍是决策值/截断值），便于 A/B。
     """
-    try:
-        from agent.switch_registry import get_bool as _swb
-    except ImportError:
-        from switch_registry import get_bool as _swb
+    from agent.switch_registry import get_bool as _swb
     try:
         return bool(_swb("final_answer_single_source"))
     except Exception:  # noqa: BLE001
@@ -494,10 +481,7 @@ def _verify_aware_enabled() -> bool:
 
     OFF ⇒ 回退改动前（未验证候选照旧参与 ④⑤ 且投票并列按推理长度裁决）。
     """
-    try:
-        from agent.switch_registry import get_bool as _swb
-    except ImportError:
-        from switch_registry import get_bool as _swb
+    from agent.switch_registry import get_bool as _swb
     try:
         return bool(_swb("final_select_verify_aware"))
     except Exception:  # noqa: BLE001
@@ -512,10 +496,7 @@ def _answer_form_score(ans) -> int:
     try:
         from agent.formatter import _answer_form_score as _afs
     except ImportError:
-        try:
-            from formatter import _answer_form_score as _afs
-        except ImportError:
-            return 0
+        return 0
     try:
         return int(_afs(ans))
     except Exception:  # noqa: BLE001

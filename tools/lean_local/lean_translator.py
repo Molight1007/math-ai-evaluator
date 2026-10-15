@@ -137,12 +137,8 @@ class LeanTranslatorAgent(BaseAgent):
         direct = build_declaration(node_id, statement)
         if direct:
             return direct
-        try:
-            from tools.lean_local.prompts.lean_translator import (
-                LEAN_NODE_TRANSLATE_SYSTEM, LEAN_NODE_TRANSLATE_USER_TEMPLATE)
-        except ImportError:
-            from submit.prompts.lean_translator import (
-                LEAN_NODE_TRANSLATE_SYSTEM, LEAN_NODE_TRANSLATE_USER_TEMPLATE)
+        from tools.lean_local.prompts.lean_translator import (
+            LEAN_NODE_TRANSLATE_SYSTEM, LEAN_NODE_TRANSLATE_USER_TEMPLATE)
         user_msg = LEAN_NODE_TRANSLATE_USER_TEMPLATE.format(
             problem=problem or ctx.problem, node_statement=statement,
             node_id=node_id)

@@ -32,11 +32,7 @@ import re
 
 # ---- 开关读取（注册制：env > config > 默认；与 AgentConfig.five_gate_normalize
 #      的默认值 True 逐字一致，详见 contracts/switch_registry.py）----
-try:
-    from .switch_registry import get_bool as _sw_get_bool
-except ImportError:  # pragma: no cover  兼容非包内导入
-    from switch_registry import get_bool as _sw_get_bool
-
+from .switch_registry import get_bool as _sw_get_bool
 # 纯数值：整数 / 小数 / 分数 / 百分数 / 科学计数（LaTeX 壳已由归一化剥掉）
 _NUMERIC_RE = re.compile(
     r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)"

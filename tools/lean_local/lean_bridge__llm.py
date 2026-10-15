@@ -203,11 +203,7 @@ class _LLMStage:
             try:
                 from utils.prefill import prefill_messages as _pfm, stitch as _st
             except ImportError:
-                try:
-                    from submit.utils.prefill import (
-                        prefill_messages as _pfm, stitch as _st)
-                except ImportError:
-                    _pfm = _st = None
+                _pfm = _st = None
             if _pfm is not None:
                 msgs = _pfm(messages, seed)
                 stitch = _st
@@ -360,12 +356,8 @@ class _LLMStage:
         feedback 非空时，把上一次编译错误回传给书生，要求重新理解题目并修正形式化。
         转化失败（LLM 空返回 / JSON 解析失败 / 无 lean_code）返回 None。
         """
-        try:
-            from tools.lean_local.prompts.lean_pre_verify import (
-                LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
-        except ImportError:  # 提交包（submit/）路径兜底
-            from submit.prompts.lean_pre_verify import (
-                LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
+        from tools.lean_local.prompts.lean_pre_verify import (
+            LEAN_FORMALIZE_PROBLEM_SYSTEM, LEAN_FORMALIZE_PROBLEM_USER)
         feedback_block = ""
         if feedback:
             feedback_block = ("## 上一次形式化声明编译失败（请重新理解题目并修正）\n"
@@ -398,12 +390,8 @@ class _LLMStage:
 
         feedback 非空时回传上一次编译错误，要求重新生成骨架。
         """
-        try:
-            from tools.lean_local.prompts.lean_pre_verify import (
-                LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
-        except ImportError:
-            from submit.prompts.lean_pre_verify import (
-                LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
+        from tools.lean_local.prompts.lean_pre_verify import (
+            LEAN_FORMALIZE_SKETCH_SYSTEM, LEAN_FORMALIZE_SKETCH_USER)
         feedback_block = ""
         if feedback:
             feedback_block = ("## 上一次骨架 Lean 声明编译失败（请修正骨架的形式化）\n"

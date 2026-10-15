@@ -16,24 +16,14 @@ import time
 
 from .base import TaskContext
 
-try:
-    from prompts.sub_goal import (
-        SUBGOAL_CROSSCHECK_SYSTEM,
-        SUBGOAL_CROSSCHECK_USER_TEMPLATE,
-        SUBGOAL_MERGE_SYSTEM,
-        SUBGOAL_MERGE_USER_TEMPLATE,
-    )
-    from utils.extract import extract_final_answer, smart_fallback_answer
-    from utils.prefill import prefill_messages, stitch
-except ImportError:
-    from submit.prompts.sub_goal import (
-        SUBGOAL_CROSSCHECK_SYSTEM,
-        SUBGOAL_CROSSCHECK_USER_TEMPLATE,
-        SUBGOAL_MERGE_SYSTEM,
-        SUBGOAL_MERGE_USER_TEMPLATE,
-    )
-    from submit.utils.extract import extract_final_answer, smart_fallback_answer
-    from submit.utils.prefill import prefill_messages, stitch
+from prompts.sub_goal import (
+    SUBGOAL_CROSSCHECK_SYSTEM,
+    SUBGOAL_CROSSCHECK_USER_TEMPLATE,
+    SUBGOAL_MERGE_SYSTEM,
+    SUBGOAL_MERGE_USER_TEMPLATE,
+)
+from utils.extract import extract_final_answer, smart_fallback_answer
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 

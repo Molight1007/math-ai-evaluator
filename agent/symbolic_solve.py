@@ -32,10 +32,7 @@ from dataclasses import dataclass, field
 # 2026-10-01 去重：原此处另有一份与 agent/symbolic_model.py 逐字相同的
 # _first_json_object（29 行）。本模块存在两种导入方式（
 # 与 ），故用双路径 try/except。
-try:
-    from .symbolic_model import _first_json_object
-except ImportError:                      # 扁平导入时的回退
-    from symbolic_model import _first_json_object
+from .symbolic_model import _first_json_object
 
 logger = logging.getLogger("MathPilot.SymbolicSolve")
 
@@ -407,10 +404,7 @@ def _solve_core(equations: list, target: str, params: dict) -> tuple[str | None,
     try:
         from utils.math_eval import to_exact_number
     except ImportError:
-        try:
-            from math_eval import to_exact_number
-        except ImportError:
-            to_exact_number = None
+        to_exact_number = None
 
     if to_exact_number is not None and to_exact_number(text) is not None:
         exact = text

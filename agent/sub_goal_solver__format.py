@@ -81,6 +81,12 @@ def _build_trace_item(sg: dict, step_result: str, reused: bool = False) -> dict:
         # ---- 2026-10-07 `<check>` 协议违规（问题 2.9，可见化）----
         "check_protocol_violations": list(
             sg.get("check_protocol_violations") or []),
+        # ---- 2026-10-15 蓝图 tool 指派（用户「证明就用 lean」）----
+        # 使"蓝图声明了什么工具、该工具是否真的跑过、结果如何"**可事后核验**，
+        # 否则声明与执行两头都是黑盒，无法判断这个功能到底生效没有。
+        "tool": sg.get("tool", ""),
+        "tool_ran": bool(sg.get("tool_ran", False)),
+        "tool_verdict": sg.get("tool_verdict", ""),
     }
     if reused:
         item["reused"] = True

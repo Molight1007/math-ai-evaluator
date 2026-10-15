@@ -35,11 +35,7 @@ from utils.extract import (
 
 # 开关读取统一走 switch_registry（与 solver.py 同一来源；此处直接导入，
 # 不再经由 solver.py re-export）。
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
-
+from agent.switch_registry import get_bool as _sw_bool
 
 def _improve_loop(self, ctx: TaskContext, targets: list) -> int:
     """段 4–尾：逐候选自改进主循环，返回本轮成功改进个数。"""

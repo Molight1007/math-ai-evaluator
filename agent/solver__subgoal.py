@@ -21,10 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:                      # 仅类型标注用，避免运行期导入
     from .base import TaskContext
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:                    # 提交包（submit/）路径兜底
-    from switch_registry import get_bool as _sw_bool
+from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 

@@ -14,20 +14,12 @@ import re
 
 from .base import TaskContext
 
-try:
-    from prompts.sub_goal import (
-        SUBGOAL_PLAN_SYSTEM,
-        SUBGOAL_PLAN_USER_TEMPLATE,
-    )
-    from prompts.policy import get_domain_hint
-    from utils.prefill import prefill_messages, stitch
-except ImportError:
-    from submit.prompts.sub_goal import (
-        SUBGOAL_PLAN_SYSTEM,
-        SUBGOAL_PLAN_USER_TEMPLATE,
-    )
-    from submit.prompts.policy import get_domain_hint
-    from submit.utils.prefill import prefill_messages, stitch
+from prompts.sub_goal import (
+    SUBGOAL_PLAN_SYSTEM,
+    SUBGOAL_PLAN_USER_TEMPLATE,
+)
+from prompts.policy import get_domain_hint
+from utils.prefill import prefill_messages, stitch
 
 logger = logging.getLogger("MathPilot")
 

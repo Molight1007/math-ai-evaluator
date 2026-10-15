@@ -288,6 +288,16 @@ _SPEC = (
      lambda cfg, tier, _f="blueprint_or_expand_all", _d=False: getattr(cfg, _f, _d),
      None, "bool",
      "BLUEPRINT_OR_EXPAND_ALL — 蓝图 OR 节点是否展开全部分支（默认 False）", None),
+    ("blueprint_node_contract",
+     lambda cfg, tier, _f="blueprint_node_contract", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "BLUEPRINT_NODE_CONTRACT — 蓝图节点契约（每子目标 tool 指派 + inputs.use "
+     "承接语义下传；默认 True）", None),
+    ("blueprint_tool_exec",
+     lambda cfg, tier, _f="blueprint_tool_exec", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "BLUEPRINT_TOOL_EXEC — 把声明的 tool 兑现成机器核验（lean 实编译 / sympy "
+     "判等式 / numeric 跑 norm_num；默认 True）", None),
     ("use_lemma_accumulation",
      lambda cfg, tier, _f="use_lemma_accumulation", _d=True: getattr(cfg, _f, _d),
      None, "bool",

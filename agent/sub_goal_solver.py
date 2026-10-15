@@ -16,23 +16,14 @@
 
 # 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-try:
-    from agent.switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-except ImportError:
-    from switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-
+from agent.switch_registry import (
+    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 # 2026-10-02 中间结果存储层（老师：「每个中间结果都要存」）：子目标结果**即时落盘**。
 # 只加不改：写盘失败静默（append_ctx 永不抛异常），不影响求解与合并。
 # ⚠ 2026-10-08 批1-B增：`_artifact_append` 的直接消费方已迁到
 #   `agent/sub_goal_solver__loop.py`（函数内 `from .sub_goal_solver import
 #   _artifact_append` 惰性引用）⇒ **本导入须保留**（单一来源，勿按"未使用"清理）。
-try:
-    from agent.artifact_store import append_ctx as _artifact_append
-except ImportError:
-    from artifact_store import append_ctx as _artifact_append
-
+from agent.artifact_store import append_ctx as _artifact_append
 import logging
 import re
 import time
@@ -668,6 +659,12 @@ class SubGoalSolverAgent(BaseAgent):
 
     _lean_backup_fails = _sgs_lean._lean_backup_fails
 
+    # ---------- ★ 2026-10-15 蓝图 tool 指派的兑现层 ----------
+    # 蓝图在节点上声明 `tool`（lean/sympy/numeric/llm），这里把它接成实例方法，
+    # 供 `sub_goal_solver__loop.sg_tool_exec` 调用（`self._tool_declared_verify`）。
+    _tool_declared_verify = _sgs_lean._tool_declared_verify
+    _sympy_verify_pairs = _sgs_lean._sympy_verify_pairs
+    _lean_block_verify = _sgs_lean._lean_block_verify
 
     # ---------- ③ 子目标交叉核对（2026-09-08 老师建议3）----------
     # 老师建议："子目标交叉核对机制"——不同子目标对同一量给出互相矛盾的结论

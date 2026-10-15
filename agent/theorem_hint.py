@@ -29,13 +29,8 @@ from __future__ import annotations
 
 # 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-try:
-    from agent.switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-except ImportError:
-    from switch_registry import (
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-
+from agent.switch_registry import (
+    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 import logging
 import os
 import re

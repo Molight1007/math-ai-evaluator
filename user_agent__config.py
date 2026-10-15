@@ -570,6 +570,18 @@ class AgentConfig(_AgentConfigBase):
     # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
     # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
     blueprint_or_expand_all: bool = False
+    # ★ 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具，证明就用 lean」）：
+    #   ① `blueprint_node_contract`：**节点契约** —— 蓝图每个节点声明 `tool`
+    #      （lean/sympy/numeric/llm），并用 `inputs[i].use` 声明「把上游的哪个
+    #      结论当作本步的什么条件」；两者下传到子目标（`tool` / `inputs_from`），
+    #      求解侧据此追加工具指令与承接前提。关 ⇒ 只落盘不兑现（A/B 对照组）。
+    #   ② `blueprint_tool_exec`：把声明**兑现成机器核验**（lean 实编译 / sympy
+    #      判等式 / numeric 跑 norm_num），未过带反馈重解一次。关 ⇒ 零机器开销。
+    blueprint_node_contract: bool = True
+    blueprint_tool_exec: bool = True
+    # 每题子目标级 Lean 实编译次数上限（防证明类子目标密集时把预算烧在编译器上；
+    # 与既有 `lean_numeric_max_per_q` 同口径，但计的是**子目标级**编译）
+    blueprint_lean_max_per_q: int = 2
     # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：
     #   以下 6 个开关**整组撤除** —— 均为默认关闭（False）的蓝图评审/重规划机制，
     #   在生产路径上从不执行（读取点的 getattr 兜底值亦为假），仅

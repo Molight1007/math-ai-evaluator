@@ -29,11 +29,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:                      # 仅类型标注用，避免运行期导入
     from .base import TaskContext
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:                    # 提交包（submit/）路径兜底
-    from switch_registry import get_bool as _sw_bool
-
+from agent.switch_registry import get_bool as _sw_bool
 from prompts.symbolic_model import (
     SYMBOLIC_MODEL_SYSTEM, SYMBOLIC_MODEL_USER, SYMBOLIC_JSON_SEED,
     SYMBOLIC_SOLVE_SYSTEM, SYMBOLIC_SOLVE_USER, SYMBOLIC_SOLVE_SEED,
@@ -43,35 +39,24 @@ from prompts.symbolic_model import (
 
 try:
     from .symbolic_model import parse_symbolic_payload, evaluate_payload
-except ImportError:                    # 提交包（submit/）路径兜底
-    try:
-        from symbolic_model import parse_symbolic_payload, evaluate_payload
-    except ImportError:
-        parse_symbolic_payload = None
-        evaluate_payload = None
+except ImportError:                    # 模块不可用时降级（绝不阻断）
+    parse_symbolic_payload = None
+    evaluate_payload = None
 
 try:
     from .symbolic_solve import (
         strip_given_numbers, parse_symbolic_solve, validate_payload,
         solve_with_tool)
-except ImportError:                    # 提交包（submit/）路径兜底
-    try:
-        from symbolic_solve import (
-            strip_given_numbers, parse_symbolic_solve, validate_payload,
-            solve_with_tool)
-    except ImportError:
-        strip_given_numbers = None
-        parse_symbolic_solve = None
-        validate_payload = None
-        solve_with_tool = None
+except ImportError:                    # 模块不可用时降级（绝不阻断）
+    strip_given_numbers = None
+    parse_symbolic_solve = None
+    validate_payload = None
+    solve_with_tool = None
 
 try:
     from utils.math_eval import to_exact_number
-except ImportError:                    # 提交包（submit/）路径兜底
-    try:
-        from math_eval import to_exact_number
-    except ImportError:
-        to_exact_number = None
+except ImportError:                    # 模块不可用时降级（绝不阻断）
+    to_exact_number = None
 
 from utils.extract import extract_final_answer
 
@@ -150,11 +135,8 @@ def _maybe_expression_eval(self, ctx: TaskContext, resp: str,
                 "(%s)" % _v, sub)
         try:
             from utils.math_eval import safe_eval as _safe_eval_fn
-        except ImportError:  # 提交包（submit/）路径兜底
-            try:
-                from math_eval import safe_eval as _safe_eval_fn
-            except ImportError:
-                return resp, answer
+        except ImportError:  # 模块不可用时降级（绝不阻断）
+            return resp, answer
         raw = str(_safe_eval_fn(sub) or "")
         # 2026-09-12 定型前审核修复：**只采纳纯数值结果**。
         # 原实现用 findall 抓"最后一个数字"，当工具结果不是纯数值时会抓
@@ -217,10 +199,7 @@ def _maybe_symbolic_crosscheck(self, ctx: TaskContext, resp: str,
         problem = (getattr(ctx, "problem", "") or "").strip()
         if not problem:
             return resp, answer
-        try:
-            from .question_type import classify_question_type
-        except ImportError:
-            from question_type import classify_question_type
+        from .question_type import classify_question_type
         if classify_question_type(problem) == "证明题":
             return resp, answer             # 证明题无数值答案，不适用
         if ctx is not None and ctx.gen_time_up():
@@ -306,10 +285,7 @@ def _maybe_symbolic_solve(self, ctx: TaskContext, resp: str,
         want = to_exact_number(answer)
         if want is None:
             return resp, answer
-        try:
-            from .question_type import classify_question_type
-        except ImportError:
-            from question_type import classify_question_type
+        from .question_type import classify_question_type
         if classify_question_type(problem) == "证明题":
             return resp, answer
         if ctx.gen_time_up():

@@ -17,10 +17,7 @@ from __future__ import annotations
 
 import logging
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
+from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 

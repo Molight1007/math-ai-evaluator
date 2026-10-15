@@ -5,14 +5,9 @@ from __future__ import annotations
 # 把题意理解 / 蓝图 / 子目标 / 候选 / verdict / Lean / 终答**多存一份**到
 # results/<run_id>/<qid>/。只加不改：不删分支、不改判定、不动返回值；
 # 每一处调用都**永不抛异常**（失败只落一条 trace，绝不阻断主链）。
-try:
-    from agent.artifact_store import (
-        put_ctx as _artifact_put, append_ctx as _artifact_append,
-        attach as _artifact_attach)
-except ImportError:
-    from artifact_store import (
-        put_ctx as _artifact_put, append_ctx as _artifact_append,
-        attach as _artifact_attach)
+from agent.artifact_store import (
+    put_ctx as _artifact_put, append_ctx as _artifact_append,
+    attach as _artifact_attach)
 """
 编排器（Orchestrator）—— 简化版
 ================================
