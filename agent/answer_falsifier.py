@@ -211,11 +211,11 @@ class AnswerFalsifier:
             ctx.metadata = meta
             return True
         except Exception as exc:  # noqa: BLE001
-            # 异常 ⇒ 计数不可用。研究期口径是"不限"，故放行；但必须留痕 ——
-            # 否则"证伪静默消失"无法归因（正是本项目反复吃的坑）。
-            logger.warning("[falsifier] 次数计数异常（放行本次）: %s: %s",
-                           type(exc).__name__, exc)
-            return True
+            # ★ 2026-10-15（用户定案「删降级/保底」）：记账异常不再"放行本次"
+            #   —— 异常本身是代码缺陷，报错暴露（原降级放行会掩盖）。
+            raise RuntimeError(
+                "[falsifier] 次数计数异常: %s: %s"
+                % (type(exc).__name__, exc)) from exc
 
     # ------------------------------------------------------------------
     # LLM：取证伪证书

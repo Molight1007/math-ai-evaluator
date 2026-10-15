@@ -117,8 +117,11 @@ class AuditGate(BaseAgent):
                         "verdict": "unknown", "applicable": False,
                         "note": "解答题：确定性判别重写已关（deterministic_solution_check=0）"
                                 "且 Level2 rubric 不适用 ⇒ 本闸门对该题型结构性无输出，早退"})
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as _e_rc:  # noqa: BLE001
+                    # ★ 2026-10-15（审核修复）：不再无痕 pass —— 记错误信息
+                    self.record(ctx, "audit_gate",
+                                "记录 skipped 明细失败（不阻断）: %s: %s"
+                                % (type(_e_rc).__name__, str(_e_rc)[:100]))
                 self.record(ctx, "audit_gate",
                             "非证明题早退（solution_check 关闭 + 结构性无输出）")
                 return {"ok": True, "skipped": "non_proof"}

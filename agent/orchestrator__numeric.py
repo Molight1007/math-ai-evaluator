@@ -294,35 +294,46 @@ def _ask_for_form(self, ctx, cur: str, asks_all: bool) -> str:
         return ""
 
 
-def _lean_crosscheck_number(self, ctx, latex_expr: str, value: str) -> bool:
+def _lean_crosscheck_number(self, ctx, latex_expr: str, value: str) -> "bool | None":
     """B1（2026-09-11）：用 lean-lsp-mcp 独立复算，与 SymPy 结果交叉验证。
 
         仅验证"数值等式"：``example : ((<expr>) : ℚ) = <value> := by norm_num``。
-        - 全本地、不联网；环境缺失/异常一律返回 True（**静默降级，不阻断主链路**）。
+        - ★ 2026-10-15（用户定案「删降级/保底」）：三态返回 ——
+          True=校验通过 / False=Lean 认为不成立 / None=**未校验**（开关关、
+          环境缺失、执行异常、输入不适用）。原实现「异常→return True」把
+          "没校验"伪装成"通过"（掩盖），现全部改为 None + 记录未校验原因。
         - 返回 False 表示"Lean 认为该等式不成立" → 由调用方记录（可作硬信号）。
         价值：Lean 的 ℕ/ℤ/ℚ 语义精确，可捕捉 SymPy 在语义/精度上的偏差。
         """
     if not _sw_bool("lean_xcheck_numeric"):
-        return True
+        return None                      # 开关关 = 未校验（≠ 通过）
     try:
         from tools.lean_local.lean_bridge import mcp_run_code
-    except Exception:  # noqa: BLE001
-        return True
+    except Exception as _e_imp:  # noqa: BLE001
+        self.record(ctx, "numericize",
+                    "P2 Lean 交叉校验未执行（导入失败）: %s: %s"
+                    % (type(_e_imp).__name__, str(_e_imp)[:120]))
+        return None
     _cfg = getattr(self, "config", None)   # 测试以 __new__ 构造时无 config
     _wd = str(getattr(_cfg, "lean_project_dir", "") or "")
     if not _wd or not os.path.isdir(_wd):
-        return True
+        self.record(ctx, "numericize",
+                    "P2 Lean 交叉校验未执行（lean_project_dir 无效）")
+        return None
     le = (latex_expr or "").replace("\\cdot", "*").replace("\\times", "*")
     le = _re.sub(r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", le)
     le = le.replace("{", "(").replace("}", ")").strip()
     if not le or len(le) > 120:
-        return True
+        return None                      # 输入不适用 = 未校验
     code = (f"import Mathlib.Tactic\n"
             f"example : (({le}) : ℚ) = ({value}) := by norm_num\n")
     try:
         res = mcp_run_code(code, _wd, timeout=90.0)
-    except Exception:  # noqa: BLE001
-        return True
+    except Exception as _e_run:  # noqa: BLE001
+        self.record(ctx, "numericize",
+                    "P2 Lean 交叉校验未执行（执行异常）: %s: %s"
+                    % (type(_e_run).__name__, str(_e_run)[:120]))
+        return None
     if res.get("ok"):
         self.record(ctx, "numericize",
                     f"P2 Lean 交叉校验通过：{le} = {value}")

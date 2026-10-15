@@ -668,13 +668,19 @@ class LeanGate:
                 self._cache_put(ctx, _z3k, report)
             except Exception as e:  # noqa: BLE001
                 entry["error"] = str(e)[:200]
-                entry["degraded"] = "exception_lenient"
+                entry["degraded"] = "exception_fatal"
                 self._record_ctx(ctx, entry)
-                return True
+                # ★ 2026-10-15（用户定案「删降级/保底」）：验证异常不再降级放行
+                #   —— 收集错误信息后**报错**（失败暴露，不掩盖）。
+                raise RuntimeError(
+                    "LeanGate.gate_final_answer 验证异常（不再降级放行）: "
+                    "%s: %s" % (type(e).__name__, str(e)[:160])) from e
         if report is None:
-            entry["degraded"] = "no_report"
+            entry["degraded"] = "no_report_fatal"
             self._record_ctx(ctx, entry)
-            return True
+            # ★ 2026-10-15（用户定案）：无验证报告不再降级放行 —— 报错暴露。
+            raise RuntimeError(
+                "LeanGate.gate_final_answer 无验证报告（不再降级放行）")
         # ★★ 2026-10-07：把验证器诊断（成因/是否编译通过）带进 final_gate 记录，
         #   使「无法核验（形式化不充分）」与「证明失败」在最终闸门处同样可区分；
         #   并对自证类成因单独落一条 trace（见 `_note_self_proof_trace`）。

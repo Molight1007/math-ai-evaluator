@@ -158,8 +158,11 @@ def self_audit_stage(self, ctx) -> None:
         try:
             from .orchestrator__verify import _pool_empty_fallback as _pef
             _pef(self, ctx, "4.1_self_audit")
-        except Exception:  # noqa: BLE001  兜底检查失败不影响主流程
-            pass
+        except Exception as _e_pef:  # noqa: BLE001
+            # ★ 2026-10-15（审核修复）：不再无痕 pass —— 记错误信息（可归因）
+            self.record(ctx, "self_audit",
+                        "pool_empty_fallback 失败（不阻断）: %s: %s"
+                        % (type(_e_pef).__name__, str(_e_pef)[:100]))
     except Exception as _e:  # noqa: BLE001  增益环节绝不阻断主链
         self.record(ctx, "self_audit",
                     f"4.1 自审异常（跳过，不阻断）: "
