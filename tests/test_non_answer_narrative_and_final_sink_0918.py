@@ -121,5 +121,8 @@ def test_all_final_response_writes_are_guarded():
         assert bare not in src, "仍有未过闸门的裸写：%s" % bare
     # 且必须存在单一入口
     assert "def _set_final_response" in src
-    assert "adopt_single(" in _src("agent/formatter.py")
+    # 2026-10-15：formatter 的 adopt_single 调用（紧急直答 `_try_emergency`）已随
+    # 直答兜底删除；统一入口仍在：orchestrator__select._set_final_response 委托 →
+    # final_selector.adopt_single（定义 + 消费均在）。
     assert "adopt_single(" in _src("agent/orchestrator__select.py")
+    assert "def adopt_single" in _src("agent/final_selector.py")

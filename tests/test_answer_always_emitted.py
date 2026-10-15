@@ -35,23 +35,21 @@ PLACEHOLDER = "[生成失败] 调用受限或模型拒绝回答"
 class TestPlaceholderIsRecognized(unittest.TestCase):
     """占位符必须被**三处**判据同时识别为"不可用答案"。"""
 
-    def test_three_copies_of_regex_agree(self) -> None:
+    def test_remaining_copies_of_regex_agree(self) -> None:
+        # ★ 2026-10-15：user_agent 那份 `_DEGRADED_ANSWER_RE` 已随降级兜底删除；
+        #   此处只校验 formatter / orchestrator 两份同源仍能识别占位符。
         from agent.formatter import _MISSING_ANSWER_RE
         from agent.orchestrator import _DEGRADED_ANSWER_RE
-        from user_agent import ReasoningAgent
 
         for name, rx in (
             ("formatter._MISSING_ANSWER_RE", _MISSING_ANSWER_RE),
             ("orchestrator._DEGRADED_ANSWER_RE", _DEGRADED_ANSWER_RE),
-            ("user_agent.ReasoningAgent._DEGRADED_ANSWER_RE",
-             ReasoningAgent._DEGRADED_ANSWER_RE),
         ):
             with self.subTest(rx=name):
                 self.assertRegex(PLACEHOLDER, rx)
                 # 「未给出有效解答」是 user_agent 写的终极终态，也要认
                 self.assertRegex("未给出有效解答。", rx)
                 # ⚠ 窄口径：`无解` / `暂无` 是**合法答案**，绝不能被判为"无答案"
-                # （独立验证者实测：`无解` 被误判 ⇒ 正确答案被直答覆盖成 '7'）
                 self.assertIsNone(rx.search("无解"), "误判合法答案「无解」")
                 self.assertIsNone(rx.search("暂无"), "误判合法答案「暂无」")
 
@@ -65,15 +63,8 @@ class TestPlaceholderIsRecognized(unittest.TestCase):
             for rx in (_REFUSAL_RE, _DEGRADED_ANSWER_RE):
                 self.assertIsNone(rx.search(good), "误判正常答案: %r" % good)
 
-    def test_is_degraded_answer(self) -> None:
-        from user_agent import ReasoningAgent
-        f = ReasoningAgent._is_degraded_answer
-        self.assertTrue(f(""))
-        self.assertTrue(f("   "))
-        self.assertTrue(f(None))
-        self.assertTrue(f(PLACEHOLDER))
-        self.assertFalse(f("20460"))
-        self.assertFalse(f("A"))
+    # ★ 2026-10-15：`test_is_degraded_answer` 已删 —— `ReasoningAgent._is_degraded_answer`
+    #   随降级兜底（直答/抢救）链删除。
 
 
 class TestHasUsableCandidate(unittest.TestCase):
@@ -162,120 +153,10 @@ class TestTimeoutIsNotRetried(unittest.TestCase):
         self.assertEqual(len(sleeps), 2)
 
 
-class TestRescueFailureDoesNotLeakPlaceholder(unittest.TestCase):
-    """**关键回归**（独立验证者抓到的缺口）。
-
-    `solve()` 里原来的顺序是「先 `_validate_output`，再判不可用 → rescue」，
-    而 rescue **失败**时只追加 trace、**不替换** `final_response`
-    ⇒ 占位符仍然漏给平台。复现条件正是 010/016 的原始现场：
-    orchestrator 交出占位答案 **且** 直答也失败（服务端持续超时）。
-    """
-
-    @staticmethod
-    def _agent(run_result, chat):
-        from user_agent import ReasoningAgent
-        a = object.__new__(ReasoningAgent)          # 不跑 __init__，只装必需属性
-        a.orchestrator = SimpleNamespace(
-            run=lambda problem, metadata: dict(run_result))
-        a.config = SimpleNamespace(max_answer_tokens=64)
-        a.client = SimpleNamespace(chat=chat)
-        return a
-
-    @staticmethod
-    def _dead_chat(**kwargs):
-        raise requests.exceptions.Timeout("simulated dead server")
-
-    def test_placeholder_with_dead_llm_is_replaced(self) -> None:
-        """占位符 + 直答超时 ⇒ 必须换成终态文本，绝不能返回占位符。"""
-        a = self._agent({"final_response": PLACEHOLDER, "trace": [], "diag": {}},
-                        self._dead_chat)
-        out = a.solve("求 1+1 的值")
-        self.assertNotIn("生成失败", out["final_response"])
-        self.assertNotIn("调用受限", out["final_response"])
-        self.assertEqual(out["final_response"], "未给出有效解答。")
-
-    def test_rescue_prefers_candidate_residue(self) -> None:
-        a = self._agent({
-            "final_response": PLACEHOLDER, "trace": [],
-            "diag": {"pick_diag": {"cand_answers": [PLACEHOLDER, "20460"]}},
-        }, self._dead_chat)
-        self.assertEqual(a.solve("求值")["final_response"], "20460")
-
-    def test_rescue_uses_subgoal_result(self) -> None:
-        a = self._agent({
-            "final_response": PLACEHOLDER, "trace": [],
-            "diag": {"subgoal_trace": [{"result": "x = 21"}]},
-        }, self._dead_chat)
-        self.assertEqual(a.solve("求 x")["final_response"], "x = 21")
-
-    def test_rescue_falls_back_to_direct_solve(self) -> None:
-        a = self._agent({"final_response": PLACEHOLDER, "trace": [], "diag": {}},
-                        lambda **kw: "【最终答案】: 42")
-        self.assertEqual(a.solve("求值")["final_response"], "42")
-
-    def test_good_answer_is_untouched(self) -> None:
-        """正常答案绝不能被兜底逻辑改写（零后悔）。"""
-        a = self._agent({"final_response": "20460", "trace": [], "diag": {}},
-                        self._dead_chat)
-        self.assertEqual(a.solve("求值")["final_response"], "20460")
-
-    def test_no_solution_answer_is_untouched(self) -> None:
-        """「无解」是合法答案 —— 不得被误判为"没有答案"而覆盖。"""
-        a = self._agent({"final_response": "无解", "trace": [], "diag": {}},
-                        lambda **kw: "7")
-        self.assertEqual(a.solve("求值")["final_response"], "无解")
-
-
-class TestSubgoalResidueMustLookLikeAnAnswer(unittest.TestCase):
-    """**2026-09-14 修复回归**：来源②不得把「子目标中间推导」当答案交出去。
-
-    实况 official112-016 的 `predicted` 逐字等于 `diag.subgoal_trace[1].result`：
-        （该步含未用 <calc> 的易错运算结果，未经系统确认）|10 - sqrt(9.9)| < 1
-        19.9 + (10 - sqrt(9.9))^2 = 20
-    ⇒ 它避开了「生成失败」占位符，却**伪装成答案**（判分同为 0，归因时还会误判成
-    "模型答的"，并把系统提示串塞进提交给平台的答案字段）。
-    """
-
-    # 真实数据，勿改（回归锚点）
-    REAL_016_RESULT = ("（该步含未用 <calc> 的易错运算结果，未经系统确认）"
-                       "|10 - sqrt(9.9)| < 1\n19.9 + (10 - sqrt(9.9))^2 = 20")
-
-    def test_real_016_fragment_is_rejected(self) -> None:
-        from user_agent import _subgoal_answer_candidate
-        self.assertEqual(_subgoal_answer_candidate(self.REAL_016_RESULT), "")
-
-    def test_short_value_is_accepted(self) -> None:
-        from user_agent import _subgoal_answer_candidate
-        self.assertEqual(_subgoal_answer_candidate("20460"), "20460")
-        self.assertEqual(_subgoal_answer_candidate("x = 21"), "x = 21")
-
-    def test_boxed_value_is_accepted(self) -> None:
-        from user_agent import _subgoal_answer_candidate
-        self.assertEqual(_subgoal_answer_candidate(r"所以 \boxed{21}"), "21")
-        # 带提示前缀 + boxed：剥前缀后仍应取出
-        self.assertEqual(
-            _subgoal_answer_candidate("（该步未经系统确认）\\boxed{21}"), "21")
-
-    def test_multiline_derivation_is_rejected(self) -> None:
-        from user_agent import _subgoal_answer_candidate
-        self.assertEqual(_subgoal_answer_candidate("a = 1\nb = 2\nc = 3"), "")
-        self.assertEqual(_subgoal_answer_candidate(""), "")
-        self.assertEqual(_subgoal_answer_candidate(None), "")
-
-    def test_long_single_line_is_rejected(self) -> None:
-        from user_agent import _subgoal_answer_candidate
-        self.assertEqual(_subgoal_answer_candidate("x" * 120), "")
-
-    def test_rescue_skips_junk_subgoal_and_uses_direct_solve(self) -> None:
-        """只有垃圾子目标结果时，应跳过它、走直答，而不是把它当答案。"""
-        from user_agent import ReasoningAgent
-        a = object.__new__(ReasoningAgent)
-        a.orchestrator = SimpleNamespace(run=lambda p, m: {
-            "final_response": PLACEHOLDER, "trace": [],
-            "diag": {"subgoal_trace": [{"result": self.REAL_016_RESULT}]},
-        })
-        a.config = SimpleNamespace(max_answer_tokens=64)
-        a.client = SimpleNamespace(chat=lambda **kw: "【最终答案】: 21")
-        out = a.solve("求值")
-        self.assertEqual(out["final_response"], "21")
-        self.assertNotIn("未经系统确认", out["final_response"])
+# ★ 2026-10-15（用户定案「不要降级兜底」）：
+#   以下两个测试类已删 —— `TestRescueFailureDoesNotLeakPlaceholder`（锁
+#   `_rescue_answer` 抢救链）与 `TestSubgoalResidueMustLookLikeAnAnswer`
+#   （锁 `_subgoal_answer_candidate` 形态判据）随「必须有答案」兜底
+#   （`_fallback_solve` / `_rescue_answer` / `_is_degraded_answer` /
+#   `_subgoal_answer_candidate`）一并删除。删除后：流水线交什么就是什么，
+#   占位符/空答案如实暴露，不再由入口侧抢救。

@@ -28,10 +28,10 @@ import logging
 import time
 import re as _re
 
-# 2026-09-13 晚：拒绝/占位符答案的正则。与 `agent/formatter.py` 与
-# `user_agent.ReasoningAgent._DEGRADED_ANSWER_RE` 同源，此处独立一份是为了避免
-# orchestrator↔formatter 的导入顺序纠缠（formatter 已被本文件 import，反向引用成环）。
-# 三处**必须同步修改**。
+# 2026-09-13 晚：拒绝/占位符答案的正则。与 `agent/formatter.py` 同源，此处独立
+# 一份是为了避免 orchestrator↔formatter 的导入顺序纠缠（formatter 已被本文件
+# import，反向引用成环）。两处**必须同步修改**。
+# （2026-10-15：user_agent 那份已随降级兜底删除）
 # ⚠ 口径刻意收窄：**不含** `无解` / `暂无` —— 它们是**合法答案**（「该方程无解」就是
 #   正确答案）。`formatter._REFUSAL_RE` 里保留这两个词是 HEAD 既有语义（用于"换个
 #   候选试试"），但这里决定的是"有没有可用候选"，误判会让 `_fallback_direct`
@@ -127,14 +127,12 @@ from . import orchestrator__select as _orch_select
 from . import orchestrator__fallback as _orch_fallback
 from . import orchestrator__budget as _orch_budget
 from . import orchestrator__lean as _orch_lean
-# 2026-10-09 批16：orchestrator 的 7 个模块级工具函数已搬到
-# agent/orchestrator__helpers.py（_sw_bool_or / _sw_num_or /
-# _emergency_direct_max_tokens / _load_lean_modules / _answer_fingerprint /
-# _merge_review_into_feedback / _collect_tool_findings）。此处**原位 re-export**，
-# 既有 `from agent.orchestrator import <名>` 调用点（tests/test_feedback_review.py、
-# orchestrator__revise/verify/final_gate/fallback 的惰性 import）零改动。
+# 2026-10-09 批16：orchestrator 的模块级工具函数已搬到
+# agent/orchestrator__helpers.py。此处**原位 re-export**，既有
+# `from agent.orchestrator import <名>` 调用点零改动。
+# （2026-10-15：`_emergency_direct_max_tokens` 已随直答兜底删除）
 from .orchestrator__helpers import (  # noqa: F401
-    _sw_bool_or, _sw_num_or, _emergency_direct_max_tokens,
+    _sw_bool_or, _sw_num_or,
     _load_lean_modules, _answer_fingerprint, _merge_review_into_feedback,
     _collect_tool_findings)
 # ★ 2026-10-14：5_revise_or_fallback 段已删（用户决策②「全删」）⇒ 不再 import。
@@ -405,22 +403,18 @@ class Orchestrator(BaseAgent):
             #   （阶段名是稳定契约，此处仅留痕）。
             # 单题 20 分钟硬限：超时直接跳过（保留已有候选/兜底产出）
             if ctx.is_timed_out():
-                self.record(ctx, "timeout", "单题超过 20 分钟，跳过处理")
-                # 2026-09-02 bug 修复：超时分支先看已有候选（比瞎直答可靠），
-                # 003 1206s 超时直接 emergency_direct_solve → "No such function"
-                # 裸奔（无推理、无 Lean 把关）的根因。
+                self.record(ctx, "timeout", "单题超过硬限，跳过处理")
+                # 超时分支先看已有候选（这是智能体已产出的答案，非直答）；
+                # 无候选 ⇒ 收集错误信息 + 报错（2026-10-15 定案，不再直答）。
                 answer = self._pick_best_from_candidates(ctx)
-                if not answer:
-                    answer = self._emergency_direct_solve(ctx.problem)
-                if not answer:
-                    answer = "未给出有效解答。"
-                # ★ 2026-10-02 hook 08（超时早返回分支）：终答同样落盘（只加不改）。
-                _artifact_put(ctx, "08_final", {
-                    "final_response": answer, "timeout": True})
-                return safe_json_serialize({
-                    "final_response": answer, "trace": ctx.trace,
-                    "diag": self._collect_diag(ctx),
-                })
+                if answer:
+                    _artifact_put(ctx, "08_final", {
+                        "final_response": answer, "timeout": True})
+                    return safe_json_serialize({
+                        "final_response": answer, "trace": ctx.trace,
+                        "diag": self._collect_diag(ctx),
+                    })
+                return self._raise_solve_error(ctx, "timeout_no_candidate")
             # 2026-10-01：比赛期「全卷时间池按比例降级」已按研究期标尺删除
             # （审计 A 级第 1 条）。原 ratio>0.95 / >0.8 三档会静默置
             # `ctx.state.emergency`，级联关闭 P1 强制重解、2.6 前置验证、
@@ -761,12 +755,6 @@ class Orchestrator(BaseAgent):
     def _pick_best_from_candidates(self, ctx: TaskContext) -> str:
         return _orch_select._pick_best_from_candidates(self, ctx)
 
-    _DIRECT_SYS = (
-        "你是数学解题专家。请解答下面这道题。"
-        "最后一行必须以【最终答案】: <答案> 的格式给出最终答案，"
-        "答案只写数值、表达式或选项字母，不要写任何解释或推理。"
-    )
-
     @staticmethod
     def _set_final_response(ctx: TaskContext, ans: str, reason: str = "") -> bool:
         return _orch_select._set_final_response(ctx, ans, reason)
@@ -774,11 +762,14 @@ class Orchestrator(BaseAgent):
     def _collect_diag(self, ctx: TaskContext) -> dict:
         return _orch_select._collect_diag(self, ctx)
 
-    def _emergency_direct_solve(self, problem: str) -> str:
-        return _orch_fallback._emergency_direct_solve(self, problem)
+    # ★ 2026-10-15（用户定案「删直答兜底」）：
+    #   `_DIRECT_SYS` / `_emergency_direct_solve` / `_fallback_direct` 已随直答链
+    #   删除；新增「错误信息收集 + 报错」两个方法（无候选/超时/异常时用）。
+    def _collect_solve_error(self, ctx: TaskContext, reason: str, exc=None) -> dict:
+        return _orch_fallback._collect_solve_error(self, ctx, reason, exc)
 
-    def _fallback_direct(self, ctx: TaskContext) -> dict:
-        return _orch_fallback._fallback_direct(self, ctx)
+    def _raise_solve_error(self, ctx: TaskContext, reason: str, exc=None):
+        return _orch_fallback._raise_solve_error(self, ctx, reason, exc)
 
     def _fallback(self, ctx: TaskContext, problem: str, exc: Exception) -> dict:
         return _orch_fallback._fallback(self, ctx, problem, exc)

@@ -22,7 +22,6 @@ from .base import TaskContext
 from .formatter__rank import _rank_key
 from .formatter import (
     _REFUSAL_RE, _INCOMPLETE_RE,
-    _final_answer_min_sec, _emergency_answer_max_tokens,
 )
 
 logger = logging.getLogger("MathPilot")
@@ -149,55 +148,10 @@ def _repair_truncated(self, ctx: TaskContext, answer: str) -> str:
     return answer
 
 
-def _emergency_answer(self, ctx: TaskContext) -> str:
-    """2026-09-02 占位符兜底：最精简直答（prefill 答案前置，防截断）。
-
-        主流程子目标全失败时 final 可能是占位符，续写救不回；
-        直接让模型只输出【最终答案】，一次调用拿可用答案。
-        """
-    try:
-        from .base import _normalize_chat_response
-        from utils.prefill import prefill_messages, stitch
-        sys_p = ("你是数学解题器。请直接给出题目的最终答案"
-                 "（数值/表达式/集合），不要任何解释或推导过程。"
-                 "格式：【最终答案】: <答案>")
-        # 2026-09-13 超时护栏（既有失败语义 = 返回 ""，调用方原样输出）。
-        # 2026-09-13 晚改判据（用户硬要求「无论超没超时都要把答案生成出来」）：
-        # 原判据 `is_timed_out() or gen_time_up()` 把这条**最后的答案产出路径**
-        # 也一起关掉了 —— 实测 010/016 剩余 -30s / -105s 时必然跳过，只能交占位符。
-        # 现改为：
-        #   · 硬墙（is_timed_out）已过或余量 < 45s → 仍跳过（跨硬墙会被平台杀
-        #     进程组、整题计 C，代价比交白卷更大）；
-        #   · 生成侧软截止（gen_time_up）**不再拦截** —— 它是为"验证"预留的余量，
-        #     而执行到这里时验证阶段早已结束，没有可牺牲的下游了。
-        # ★ 2026-10-07（C）：改为**调用时实时读**（原先 import 期常量）。
-        _min_sec = _final_answer_min_sec()
-        if ctx.is_timed_out() or ctx.time_remaining() < _min_sec:
-            self.record(ctx, "finalize",
-                        f"紧急直答：余量不足（{ctx.time_remaining():.0f}s < "
-                        f"{_min_sec:.0f}s），跳过（交上层最终兜底）")
-            return ""
-        resp = self.client.chat(
-            messages=prefill_messages(
-                [{"role": "system", "content": sys_p},
-                 {"role": "user", "content": ctx.problem}],
-                "【最终答案】: ",
-            ),
-            temperature=0.0, max_tokens=_emergency_answer_max_tokens(),
-        )
-        text = _normalize_chat_response(resp)
-        if not text:
-            return ""
-        text = stitch("【最终答案】: ", text)
-        m = re.search(r"【最终答案】[:：]?\s*([\s\S]+)", text)
-        ans = m.group(1).strip() if m else text.strip()
-        # 去掉多余换行/包装，取首个完整行
-        ans = ans.split("\n")[0].strip()
-        if ans and not is_truncated_answer(ans):
-            return ans
-        return ""
-    except Exception:  # noqa: BLE001
-        return ""
+# ★ 2026-10-15（用户定案「删直答兜底」）：`_emergency_answer`（占位符 → 最精简
+#   直答）已删除 —— 答案占位/空时不再向 LLM 直答，如实暴露由评测判 0。
+#   `_pick_fallback`（换候选，从智能体已产出候选里挑）与 `_repair_truncated`
+#   （截断补全）、`_diagnose_and_repair`（纯规则终检）保留，性质不同。
 
 
 def _diagnose_and_repair(answer: str, ctx: TaskContext) -> str:

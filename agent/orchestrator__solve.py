@@ -284,10 +284,9 @@ def solve_stage(self, ctx, tier: str) -> object:
     ])
 
     if not self._has_usable_candidate(ctx):
-        # 2026-09-13 晚：判据从 `not ctx.candidates` 放宽为"无**可用**候选"。
-        # 旧判据只看池子空不空，而 solver 原先会塞占位候选 ⇒ 池子非空但
-        # 全是占位符，这条兜底（以及 `_emergency_direct_solve`）永远不触发。
+        # 2026-10-15（用户定案「删直答兜底」）：原「无可用候选 → _fallback_direct
+        # 直答」已删除；改为收集错误信息并报错（失败即暴露，不再直答掩盖）。
         self.record(ctx, "control",
-                    "Solver 未产出可用候选（空/占位符），触发兜底直接求解")
-        return self._fallback_direct(ctx)
+                    "Solver 未产出可用候选（空/占位符），收集错误信息并报错")
+        return self._raise_solve_error(ctx, "no_usable_candidate")
     return _SOLVE_CONTINUE

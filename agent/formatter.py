@@ -16,7 +16,6 @@ BUG 修复：
 """
 
 import logging
-import os
 import re
 
 from .base import BaseAgent, TaskContext
@@ -39,53 +38,9 @@ from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
-# 2026-09-13 晚：紧急直答（最终兜底）所需的最小剩余时间（秒）。
-# 这是"无论超没超时都要产出答案"的最后一环 —— 留 45s 让它有机会跑完一次
-# 短直答（prefill 答案前置 + 小 max_tokens，实测正常 1–3s）。
-#
-# ★★ 2026-10-07 修复（B 类裸 env 登记 · C）：原为**模块级 import 期求值**
-#   `_FINAL_ANSWER_MIN_SEC = float(os.getenv(...))`，本函数下方同类常量亦如此。
-#   两个隐患：① 报告要还原"当时用的默认值"得靠 diag 快照，而 import 期求值后
-#   快照**看不到**它；② 仓库里存在「先 import 模块、再 os.environ.update」的写法
-#   （cli/run_phase0_eval.py / debug_one_trace.py / run_small_ds.py）⇒ import 期
-#   求值会让后设的环境变量**静默失效**。改为**调用时实时读**，默认值不变（45 / 8192）。
-_DEFAULT_FINAL_ANSWER_MIN_SEC = 45.0
-_DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS = 8192
-
-
-def _final_answer_min_sec() -> float:
-    """调用时实时读「紧急直答最小剩余时间」（秒）。
-
-    读取优先级：switch_registry（env > config > default）> 直接读 env > 默认 45。
-    该字段**尚未登记**进 switch_registry（登记属共享文件，由主理人统一处理），
-    故当前走 env 分支；登记后自动切换到注册表口径（默认值保持 45）。
-    """
-    try:
-        from .switch_registry import SWITCHES, get_num as _sw_num
-        if "final_answer_min_sec" in SWITCHES:
-            return float(_sw_num("final_answer_min_sec"))
-    except Exception:  # noqa: BLE001  未登记 / 导入失败 → 回退直读 env
-        pass
-    try:
-        return float(os.getenv("FINAL_ANSWER_MIN_SEC",
-                               str(_DEFAULT_FINAL_ANSWER_MIN_SEC)))
-    except (TypeError, ValueError):
-        return _DEFAULT_FINAL_ANSWER_MIN_SEC
-
-
-def _emergency_answer_max_tokens() -> int:
-    """调用时实时读「紧急直答输出上限（token）」。默认值保持 8192（2026-10-02 DeepSeek 适配）。"""
-    try:
-        from .switch_registry import SWITCHES, get_num as _sw_num
-        if "emergency_answer_max_tokens" in SWITCHES:
-            return int(_sw_num("emergency_answer_max_tokens"))
-    except Exception:  # noqa: BLE001  未登记 / 导入失败 → 回退直读 env
-        pass
-    try:
-        return int(float(os.getenv("EMERGENCY_ANSWER_MAX_TOKENS",
-                                   str(_DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS))))
-    except (TypeError, ValueError):
-        return _DEFAULT_EMERGENCY_ANSWER_MAX_TOKENS
+# ★ 2026-10-15（用户定案「删直答兜底」）：`_final_answer_min_sec` /
+#   `_emergency_answer_max_tokens`（紧急直答的参数配置）已随 `_emergency_answer`
+#   删除 —— 无消费者。原为「调用时实时读 env/注册表」的开关，现整段移除。
 
 # 拒绝回答/不完整答案的模式（2026-09-02 加"子目标求解失败"占位符：
 # 占位符直接当最终答案 = 50% 错题（009/053/004/022 等），必须触发换候选兜底）
@@ -105,8 +60,8 @@ _REFUSAL_RE = re.compile(
 # 它们是合法答案（「该方程无解」就是正确答案），用它们触发 `_emergency_answer`
 # 会让直答**覆盖正确解**（独立验证者实测：answer='无解' 被覆盖成 '7'）。
 # `_REFUSAL_RE` 的宽松口径仅用于"换个候选试试"（第 89 行），语义不同故分开。
-# ⚠ 本常量与 `agent/orchestrator.py::_DEGRADED_ANSWER_RE`、
-#   `user_agent.ReasoningAgent._DEGRADED_ANSWER_RE` **必须保持同一口径**。
+# ⚠ 本常量与 `agent/orchestrator.py::_DEGRADED_ANSWER_RE` **必须保持同一口径**
+#   （2026-10-15：user_agent 那份已随降级兜底删除，现为两处）。
 _MISSING_ANSWER_RE = re.compile(
     r"生成失败|调用受限|拒绝回答|未给出有效解答|无法作答|子目标求解失败|"
     r"我无法|无法求解|无法解决|不能解决|无法解答",
@@ -168,7 +123,14 @@ class FormatterAgent(BaseAgent):
         # 修复：检出截断 → 用 LLM 续写补全（最多 2 次），仍失败才原样返回。
         answer = self._repair_truncated(ctx, answer)
 
-        answer = self._try_emergency(ctx, answer)
+        # ★ 2026-10-15（用户定案「删直答兜底」）：原 `_try_emergency`（占位符→
+        #   紧急直答）已删。答案为空/占位符时不再向 LLM 直答，如实暴露由评测判 0；
+        #   仅记录一条错误信息供归因。
+        _ans_txt = (answer or "").strip()
+        if (not _ans_txt) or _looks_like_non_answer(_ans_txt) \
+                or _MISSING_ANSWER_RE.search(_ans_txt):
+            self.record(ctx, "solve_error",
+                        "终答不可用（空/占位符/非答案形态）：如实返回，不再直答")
 
         self._write_final_response(ctx, answer)
 
@@ -182,65 +144,35 @@ class FormatterAgent(BaseAgent):
         return ctx
 
     def _select_answer(self, ctx: TaskContext) -> tuple:
-        # 2026-09-02 bug 修复：0 票兜底路径（orchestrator 5) 段）预设的答案
-        # （direct_solve 直答结果）优先——该路径候选全 0 票不可信，重选候选
-        # 反而会把直答的好答案换掉。预设答案仍需过拒绝/占位/截断检查。
-        # 2026-09-17 补强（实测 10 题中 5 题命中本路径；且 best=None 导致
-        # `ctx._pick_diag` 永不写入，答案来源事后无法追溯）：
-        #   ① 直答 preset 必须**自身合法**才允许早退 —— 命中 `_looks_like_non_answer`
-        #      （工具标签 / 推理碎片 / 空）或拒绝 / 不完整 / 占位正则时，改走 `_pick_best`；
-        #   ② 两条分支都保证 `ctx._pick_diag` 有值，来源可追溯。
-        preset = (getattr(ctx, 'final_response', '') or '')
-        #   ⚠ 判据**有意不含 `_REFUSAL_RE`**：该正则含 `无解` / `暂无`，
-        #     而"无解"是**合法**数学答案（见本文件既有口径），纳入会把正确答案
-        #     误判为脏答案而改走 _pick_best，属于"修复引入误杀"。
-        _preset_ok = bool(preset.strip()) and not (
-            _looks_like_non_answer(preset)
-            or _INCOMPLETE_RE.search(preset)
-            or _MISSING_ANSWER_RE.search(preset)
-        )
-        if (getattr(ctx, '_zero_vote_fallback', False) and _preset_ok):
-            answer = preset
-            confidence = 0.0
-            best = None
-            try:
-                ctx._pick_diag = {
-                    "branch": "zero_vote_fallback_direct",
-                    "picked": (preset or "")[:60],
-                }
-            except Exception:  # noqa: BLE001
-                pass
-        else:
-            best = self._pick_best(ctx)
-            if best is None:
-                # BUG-1 修复：绝不输出"无法求解"，也绝不把原题当答案。
-                if ctx.candidates:
-                    best = max(ctx.candidates, key=_rank_key)
-                    # 2026-09-20 修复：删掉 `len(best.answer) > 2` 闸门。
-                    # 本文件 247-250 / 487-489 / 814-816 均已论证"单字符是合法且
-                    # 完整的答案"，唯此处漏改 ⇒ 答案 `A`/`7` 会被替换成推理尾部
-                    # 500 字散文，客观题必然判错。与 251 行统一为"仅空/纯空白才回退"。
-                    answer = best.answer if (best.answer or "").strip() else (
-                        (best.reasoning or "")[-500:])
-                else:
-                    answer = ""
-                confidence = 0.0
+        # ★ 2026-10-15（用户定案「删直答兜底」）：原「0 票直答兜底」分支已删 ——
+        #   `ctx._zero_vote_fallback` 的写入点随 5_revise/直答链删除，此分支恒死；
+        #   直答 preset（`ctx.final_response` 由直答预设）的来源也不复存在。
+        #   现在直接 `_pick_best` 选答。
+        best = self._pick_best(ctx)
+        if best is None:
+            # BUG-1 修复：绝不输出"无法求解"，也绝不把原题当答案。
+            if ctx.candidates:
+                best = max(ctx.candidates, key=_rank_key)
+                # 2026-09-20 修复：删掉 `len(best.answer) > 2` 闸门。
+                # 单字符是合法且完整的答案，仅空/纯空白才回退推理尾部。
+                answer = best.answer if (best.answer or "").strip() else (
+                    (best.reasoning or "")[-500:])
             else:
-                answer = getattr(best, "answer", "") or ""
-                # 2026-09-12 定型前审核修复：原判据 `not answer or len(answer) < 2`
-                # 会把**单字符答案**（选项字母 `A`/`C`、判断题值、个位数）整条丢弃，
-                # 换成推理尾部 500 字 → 客观题必然判错（题库中选项字母类答案占比可观）。
-                # 单字符是**合法且完整**的答案，只在空（或纯空白）时才回退推理尾部。
-                if not answer.strip():
-                    answer = (getattr(best, "reasoning", "") or "")[-500:]
-                confidence = getattr(best, "confidence", 0.0)
-                # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
-                best_cluster = getattr(ctx, '_best_cluster', None)
-                if best_cluster and getattr(best_cluster, 'confidence', 0.0) > 0:
-                    confidence = best_cluster.confidence
+                answer = ""
+            confidence = 0.0
+        else:
+            answer = getattr(best, "answer", "") or ""
+            # 2026-09-12 定型前审核修复：单字符是**合法且完整**的答案，
+            # 只在空（或纯空白）时才回退推理尾部。
+            if not answer.strip():
+                answer = (getattr(best, "reasoning", "") or "")[-500:]
+            confidence = getattr(best, "confidence", 0.0)
+            # 如果来自聚类路径，优先使用簇的置信度（更可靠：基于多票共识）
+            best_cluster = getattr(ctx, '_best_cluster', None)
+            if best_cluster and getattr(best_cluster, 'confidence', 0.0) > 0:
+                confidence = best_cluster.confidence
 
-        # 2026-09-17：兜底埋点 —— 无论走直答还是 `_pick_best`，都保证 `_pick_diag`
-        # 有值，便于事后追溯答案来源（此前零票兜底分支 best=None ⇒ 永不写入）。
+        # 2026-09-17：兜底埋点 —— 保证 `_pick_diag` 有值，答案来源可追溯。
         if not getattr(ctx, "_pick_diag", None):
             try:
                 ctx._pick_diag = {
@@ -304,37 +236,9 @@ class FormatterAgent(BaseAgent):
                 confidence = 0.0
         return answer, confidence
 
-    def _try_emergency(self, ctx: TaskContext, answer: str) -> str:
-        # 2026-09-02 占位符兜底：子目标求解失败的占位符（50% 错题根源）
-        # 续写无意义 → 走紧急直答重新求一次最终答案
-        # 2026-09-13 晚扩面（用户硬要求「无论超没超时都要把答案生成出来」）：
-        # 触发条件从"只认 [子目标求解失败]"扩到「空答案 / 任何拒绝占位符」。
-        # 依据：上一轮实测 010/016 的最终答案就是 `[生成失败] 调用受限或模型拒绝回答`，
-        # 而这条兜底路径因条件太窄**从未被触发** ⇒ 占位符被原样交出去。
-        # 现在只要最终答案不可用，就再博一次直答；直答也拿不到才交给上层最终兜底。
-        _ans_txt = (answer or "").strip()
-        if ((not _ans_txt) or _looks_like_non_answer(_ans_txt)
-                or _MISSING_ANSWER_RE.search(_ans_txt)):
-            direct = self._emergency_answer(ctx)
-            if direct and not _MISSING_ANSWER_RE.search(direct):
-                # ★ 2026-10-02 阶段二-2（team-lead Q4-①）：紧急直答属**池外直答**，
-                #   纳入「五层 = 终答唯一出口」（单答案 ⇒ 直接采用、**不调 LLM**；
-                #   开关 OFF ⇒ skipped ⇒ 原样，完全回退）。
-                try:
-                    from .final_selector import adopt_single
-                    _r = adopt_single(ctx, direct, reason="formatter_emergency")
-                    if not _r.get("skipped"):
-                        _d2 = str(_r.get("answer") or "").strip()
-                        if _d2:
-                            direct = _d2
-                except Exception:  # noqa: BLE001  五层异常不得阻断兜底直答
-                    pass
-                self.record(ctx, "finalize", f"占位符答案 → 紧急直答: {direct[:120]}")
-                answer = direct
-            else:
-                self.record(ctx, "finalize",
-                            "答案不可用（空/占位符）且紧急直答未得，交上层最终兜底")
-        return answer
+    # ★ 2026-10-15（用户定案「删直答兜底」）：`_try_emergency`（占位符/空答案 →
+    #   紧急直答 `_emergency_answer`）已删除 —— 答案不可用时如实暴露，不再直答。
+    #   （原逻辑见 git 历史；调用点 run() 已改为记录错误信息。）
 
     def _write_final_response(self, ctx: TaskContext, answer: str) -> None:
         # ★ 2026-09-18（审核发现）：**这是 `ctx.final_response` 的第 4 个直写点**。
@@ -751,9 +655,7 @@ class FormatterAgent(BaseAgent):
         from .formatter__fallback import _repair_truncated as _impl
         return _impl(self, ctx, answer)
 
-    def _emergency_answer(self, ctx: TaskContext) -> str:
-        from .formatter__fallback import _emergency_answer as _impl
-        return _impl(self, ctx)
+    # ★ 2026-10-15：`_emergency_answer`（紧急直答）已随直答兜底删除。
 
     @staticmethod
     def _diagnose_and_repair(answer: str, ctx: TaskContext) -> str:

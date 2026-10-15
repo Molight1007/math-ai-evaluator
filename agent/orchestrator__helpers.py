@@ -21,7 +21,7 @@ _collect_tool_findings
     `from agent.orchestrator import <名>` 调用点（tests/test_feedback_review.py 与
     orchestrator__revise/verify/final_gate/fallback 的惰性 import）零改动。
 
-依赖：switch_registry 的容错读取（_sw_bool/_sw_num）；`os`（紧急直答上限读 env）。
+依赖：switch_registry 的容错读取（_sw_bool/_sw_num）。
 本模块**不**在顶层 import orchestrator（仅 `_load_lean_modules` 内惰性 import），
 故可被 orchestrator 顶层安全 import，无循环导入。
 """
@@ -30,9 +30,8 @@ from __future__ import annotations
 # 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 from agent.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+    get_bool as _sw_bool, get_num as _sw_num)
 import logging
-import os
 
 logger = logging.getLogger("MathPilot")
 
@@ -67,26 +66,8 @@ def _sw_num_or(field: str, default: float) -> float:
 # 2026-10-02 DeepSeek 适配：env 默认 1024 ⇒ 8192。原值基于「直答只需一行 + prefill
 # 抑制思维块」的 Intern-S 时代假设，对 reasoning 模型必然截断（reasoning 先吃满
 # 预算、正文为空）。仍可用 EMERGENCY_DIRECT_MAX_TOKENS 覆盖。
-#
-# ★ 2026-10-07 修（问题总账 §2.6 / §2.3「B 类裸 env 未登记 + import 期求值」）：
-#   原为模块级常量 `_EMERGENCY_DIRECT_MAX_TOKENS = int(os.getenv(...))` ——
-#   ① import 期求值 ⇒ 若"先 import 后改 env"（仓库里 `cli/run_phase0_eval.py`
-#      等正是这种写法）会**静默失效**；② 常量不入注册表 ⇒ diag 的 switch_snapshot
-#      看不到、报告还原不出来。
-#   现改为**调用时**经注册表读取（`emergency_direct_max_tokens`，字段已于
-#   2026-10-07 由 fix-switch-debt 登记进 switch_registry，默认 8192；读取优先级
-#   env > config > 默认）。注册未落时回退到"调用时读 env"（与旧常量行为一致，
-#   仅修掉 import 期冻结）。
-def _emergency_direct_max_tokens() -> int:
-    """紧急直答分支的 `max_tokens` 上限（调用时实时读取，见上方说明）。"""
-    try:
-        _env_default = int(os.getenv("EMERGENCY_DIRECT_MAX_TOKENS", "8192"))
-    except (TypeError, ValueError):
-        _env_default = 8192
-    try:
-        return int(_sw_num_or("emergency_direct_max_tokens", float(_env_default)))
-    except Exception:  # noqa: BLE001
-        return _env_default
+# ★ 2026-10-15（用户定案「删直答兜底」）：`_emergency_direct_max_tokens`（紧急直答
+#   参数）已随 `_emergency_direct_solve` / `_fallback_direct` 删除 —— 无消费者。
 
 
 def _load_lean_modules() -> bool:
