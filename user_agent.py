@@ -101,6 +101,7 @@ _CONFIG_OVERRIDE_KEYS = (
     #   / `calc_mandatory` / `calc_hard_only` / `answer_selfcheck_enabled`
     #   / `subgoal_calc_router` 六键一并从白名单移除。
     "subgoal_reuse_done",  # 2026-09-12 已完成子目标跨 run() 复用
+    "subgoal_collab_mode", "subgoal_collab_regen_rounds",
     "subgoal_adaptive_recover",  # 2026-09-12 子目标失败二选一（重做/重规划）
     # 2026-09-12 定型前审核修复：以下 5 个键此前**不在白名单** → 尽管
     # run_eval.py 有对应 argparse，kwargs 覆盖会在 __init__ 里被静默

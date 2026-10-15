@@ -72,6 +72,14 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "Lean/Math 工具集注册（2026-10-15 工具化定稿 · 双通道）：大模型可直接调用 "
         "lean_search / calc_verify / to_lean / lean_check（实现在 tools/agent_toolkit）；"
         "=0 关闭做 A/B"),
+    "subgoal_collab_mode": (
+        "SUBGOAL_COLLAB_MODE", "bool", False,
+        "子目标三角色协作求解（2026-10-15 用户定案）：求解/审核/规划三 agent 合作 "
+        "+ 审核用工具①③ + 3 遍「在现有基础上再生成」+ 规划预取与蓝图回传；"
+        "=1 启用；=0（默认）走旧逐步求解，可 A/B"),
+    "subgoal_collab_regen_rounds": (
+        "SUBGOAL_COLLAB_REGEN_ROUNDS", "num", 3,
+        "子目标协作求解的生成遍数（默认 3；1=关闭迭代；上限 5）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

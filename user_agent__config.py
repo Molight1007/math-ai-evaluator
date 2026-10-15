@@ -255,6 +255,9 @@ class AgentConfig(_AgentConfigBase):
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
     # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
     enable_lean_tools: bool = True
+    # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认关，可 A/B）
+    subgoal_collab_mode: bool = False
+    subgoal_collab_regen_rounds: int = 3
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
     # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。

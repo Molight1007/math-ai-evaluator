@@ -412,8 +412,24 @@ class SubGoalSolverAgent(BaseAgent):
         # 阶段二：逐步求解每个子目标
         subgoal_plan_summary = build_plan_summary(self, ctx, subgoals, merge_strategy)
         results_map = {}  # subgoal_id → result_text
-        _ctx_inject_chars = solve_subgoals(
-            self, ctx, subgoals, subgoal_plan_summary, results_map)
+        # ★ 2026-10-15（用户定案 · 三角色协作）：开关 subgoal_collab_mode 开启时，
+        #   逐步求解走 agent/subgoal_collab.py（求解/审核/规划三角色合作 +
+        #   3 遍「在现有基础上再生成」+ 规划预取 + 蓝图回传）；默认 Off（可 A/B）。
+        _collab_on = False
+        try:
+            from .subgoal_collab import _enabled as _collab_enabled
+            _collab_on = _collab_enabled(self)
+        except Exception:  # noqa: BLE001
+            _collab_on = False
+        if _collab_on:
+            from .subgoal_collab import solve_subgoals_collab as _collab_solve
+            self.record(ctx, "subgoal",
+                        "逐步求解走三角色协作（subgoal_collab_mode=1）")
+            _ctx_inject_chars = _collab_solve(
+                self, ctx, subgoals, subgoal_plan_summary, results_map)
+        else:
+            _ctx_inject_chars = solve_subgoals(
+                self, ctx, subgoals, subgoal_plan_summary, results_map)
 
         # 阶段三：结论合并
         # 2026-09-04 保护：预算已尽且一个子目标都没解出（典型：或chestrator 后续

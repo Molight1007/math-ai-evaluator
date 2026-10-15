@@ -256,6 +256,10 @@ def _diag_blueprint_review(ctx, config) -> dict:
         # ★ 2026-10-15（工具化定稿）：工具①②③的观测留痕
         "lean_tool_check": list(getattr(ctx, "lean_tool_check", None) or []),
         "math_calcverify": dict(getattr(ctx, "math_calcverify", None) or {}),
+        # ★ 2026-10-15（用户定案 · 三角色协作）：子目标协作求解全景
+        "subgoal_collab": dict(getattr(ctx, "subgoal_collab_diag", None) or {}),
+        "subgoal_blueprint_updates": list(
+            getattr(ctx, "subgoal_blueprint_updates", None) or [])[:8],
         "rewrite_gate": dict(getattr(ctx, "rewrite_gate", None) or {}),
         "rewrite_context": str(getattr(ctx, "rewrite_context", None) or "")[:800],
         "rewrite_gate_events": [str(t.get("content", ""))[:200]
