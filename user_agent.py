@@ -214,6 +214,8 @@ _CONFIG_OVERRIDE_KEYS = (
     "blueprint_or_expand_all",
     # 2026-10-15：子目标承接 + 工具指派（用户「证明就用 lean」）
     "blueprint_node_contract", "blueprint_tool_exec", "blueprint_lean_max_per_q",
+    # 2026-10-15：蓝图叶子级形式化下传（用户「把 lean 内化到蓝图构建里面」）
+    "blueprint_lean_sig",
     # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
     #   `enable_dag_replan` / `dag_replan_gate` / `enable_skeleton_review` /
     #   `skeleton_review_max_rounds` / `dag_replan_lean_check` / `dag_lean_max_nodes`
@@ -231,6 +233,8 @@ _CONFIG_OVERRIDE_KEYS = (
     "enable_lean_before_vote",
     "enable_theorem_query_llm",
     "subgoal_self_improve_rounds",
+    # 2026-10-15（用户「2 与 3 之间建一个环」）：求解期动态倒推 + 递归层数上限
+    "subgoal_dynamic_backward", "subgoal_backward_max_depth",
     "enable_type_llm",
     "theorem_hint_block_max_chars",
     "theorem_hint_top_k_by_stage",

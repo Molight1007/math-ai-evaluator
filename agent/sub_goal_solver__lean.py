@@ -417,6 +417,49 @@ def _fix_lean_mul(expr: str) -> str:
 #   本项目铁律：校验失败要带反馈修正，不是把对的改错。
 _LEAN_FENCE_RE = re.compile(r"```lean\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 
+# 签名尾部占位证明：`:= by sorry` / `:= sorry` / `by sorry`（宽容匹配）
+_SIG_SORRY_TAIL_RE = re.compile(
+    r"(?::=)?\s*(?:by\s+)?sorry\s*[.\s]*$", re.IGNORECASE)
+# 完整 Lean 声明的标志（模型已自行写全 ⇒ 不再拼接签名）
+_LEAN_DECL_RE = re.compile(
+    r"^\s*(?:import|theorem|lemma|example|def|abbrev|instance|namespace|open|"
+    r"section|variable)\b", re.MULTILINE)
+
+
+def _compose_formal_sig(formal_sig: str, code: str) -> str:
+    """把蓝图给的**签名**与求解侧给出的**证明体**拼成可编译的 Lean 代码。
+
+    背景（2026-10-15，用户：「把 lean 内化到蓝图构建里面」）：
+      蓝图在 `tool=lean` 的叶子上给出 `formal_sig`（形如
+      `example : (2:ℕ)^10 = 1024 := by sorry`），求解环节按指令把 `sorry`
+      换成证明脚本。但模型的输出形态不唯一，两种都要能编译：
+
+      ① 回**完整声明**（`example … := by norm_num`）—— 直接原样返回；
+      ② 只回**证明体**（如 `norm_num` 或几行 tactic）—— 与签名拼成
+         `example … := by <证明体>`。
+
+    判定：「代码里是否已有 Lean 声明/导入关键字」（`_LEAN_DECL_RE`）——
+      · 有 ⇒ 形态 ①，原样返回，**绝不重复拼接**（否则会出现两个声明）；
+      · 无 ⇒ 形态 ②，剥掉签名尾部的 `sorry` 占位后拼接。
+
+    ⚠ 任何异常 / 空签名一律返回原 `code`（**静默回落**，绝不阻断编译）。
+    """
+    if not formal_sig or not code:
+        return code
+    try:
+        if _LEAN_DECL_RE.search(code):
+            return code
+        head = _SIG_SORRY_TAIL_RE.sub("", formal_sig).rstrip()
+        if not head:
+            return code
+        body = "\n".join("  " + ln if ln.strip() else ln
+                         for ln in code.replace("\r\n", "\n").split("\n"))
+        if head.endswith(":="):
+            return head + " by\n" + body
+        return head + " := by\n" + body
+    except Exception:  # noqa: BLE001  拼接失败 ≠ 本步出错 → 回落原代码
+        return code
+
 
 def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
     """按蓝图声明的 `tool` 跑一次机器核验，返回反馈文本（空=通过/未执行/放行）。
@@ -476,7 +519,7 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
         if not _LEAN_FENCE_RE.search(str(result or "")):
             _mark(False, False)
             return ""
-        _fb = _lean_block_verify(self, ctx, result)
+        _fb = _lean_block_verify(self, ctx, result, sg)
         _mark(True, bool(_fb))
         return _fb
     _mark(False, False)
@@ -518,11 +561,19 @@ def _sympy_verify_pairs(self, result: str) -> str:
             "直接说明结论，不要用等式断言的形式声明它）")
 
 
-def _lean_block_verify(self, ctx: TaskContext, result: str) -> str:
+def _lean_block_verify(self, ctx: TaskContext, result: str,
+                       sg: dict | None = None) -> str:
     """编译本步产出的 ```lean 代码块（tool=lean 的兑现）。返回反馈；空=通过/放行。
 
     ★ 这是子目标级 Lean 验证的**首个入口**：此前 Lean 只在 4.3 整题/候选级跑，
       子目标粒度上"声明用 Lean 证明"没有任何执行落点。
+
+    ★★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」——叶子级形式化下传）：
+      传入 `sg` 后，若该子目标带着蓝图给的 `formal_sig`，则**拼接后再编译** ——
+      求解侧只回证明体（或回完整声明）都能编译（见 `_compose_formal_sig`）。
+      同时补上 **Mathlib import 归一化**：模型惯写 `import Mathlib.Tactic`，而本机
+      Mathlib 是**部分编译布局**（无聚合入口 olean）⇒ 不归一化必然编译失败
+      （此前 `_mathlib_ready()` 在本机恒 False 掩盖了该缺口，见 lean_bridge__env）。
 
     三重静默放行（缺任一即返回 ""，绝不误伤正常结果）：
       · 本机无 Lean（`bridge.lean_available` 为假，平台侧常见）；
@@ -537,6 +588,8 @@ def _lean_block_verify(self, ctx: TaskContext, result: str) -> str:
     if not blocks:
         return ""
     code = "\n".join(blocks).strip()
+    # ★ 2026-10-15：与蓝图签名拼接（求解侧只回证明体时也能成完整声明）
+    code = _compose_formal_sig(str((sg or {}).get("formal_sig") or ""), code)
     if not code or len(code) > 8000:
         return ""
     meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
@@ -561,6 +614,16 @@ def _lean_block_verify(self, ctx: TaskContext, result: str) -> str:
     meta["sg_lean_count"] = cnt + 1
     fname = "sglean_%d_%d.lean" % (os.getpid(),
                                    int(time.time() * 1000) % 1000000)
+    # ★ 2026-10-15：Mathlib import 归一化 —— 模型惯写 `import Mathlib.Tactic`，
+    #   而本机/部分编译布局下**没有**聚合入口 olean ⇒ 必须改写为可用的具体模块
+    #   导入集（`CORE_MATHLIB_IMPORTS`），否则本步必然编译失败。
+    #   守卫与 `LeanBridge.verify*` 一致：仅当 Mathlib 就绪时才归一化。
+    try:
+        from tools.lean_local.lean_bridge import _prepend_mathlib_import
+        if bridge._mathlib_ready():
+            code = _prepend_mathlib_import(code)
+    except Exception:  # noqa: BLE001  归一化不可用 → 用原代码（不阻断）
+        pass
     try:
         r = bridge._compile(code, work_dir, lean_filename=fname,
                             allow_sorry=True)

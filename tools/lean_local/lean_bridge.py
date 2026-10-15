@@ -70,6 +70,7 @@ from tools.lean_local.lean_bridge__env import (  # noqa: F401
     _repo_closure_roots,
     _detect_lean_executable,
     _detect_lean_project_dir,
+    _detect_lake_executable,
     _closure_roots,
     _has_mathlib_tactics,
     _mathlib_tactic_entry_available,
@@ -1273,9 +1274,13 @@ class LeanBridge:
             os.path.isfile(os.path.join(work_dir, f))
             for f in ("lakefile.toml", "lakefile.lean", "lake-manifest.json"))
         if is_lake_project:
-            # 用 elan lake 绝对路径（避免 subprocess PATH 解析问题）
-            elan_lake = os.path.expanduser(r"~\.elan\bin\lake.exe")
-            exe = elan_lake if os.path.isfile(elan_lake) else "lake"
+            # 用探测到的 lake 绝对路径（避免 subprocess PATH 解析问题）。
+            # ★ 2026-10-15：原只认 `~/.elan/bin/lake.exe`，否则回落裸 `"lake"`
+            #   （依赖 PATH）。本机 elan 未安、lake 不在 PATH ⇒ 该分支必然
+            #   FileNotFoundError，所有「work_dir 是 lake 工程」的编译全失败。
+            #   现改为统一走 `_detect_lake_executable()`（含 `LEAN_ENV_DIR` /
+            #   同级 `lean-env/` 工具链 bin 与 lean.exe 同目录的 lake）。
+            exe = _detect_lake_executable() or "lake"
         else:
             exe = self._lean_executable
             # 非 lake 工程（比赛环境临时目录）：优先用探测到的 lean.exe 直编。

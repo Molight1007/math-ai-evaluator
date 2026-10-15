@@ -40,6 +40,7 @@ from .blueprint_planner__dag import (  # noqa: F401
     _flatten_produces,
     _as_id_list,
     _normalize_tool,      # 2026-10-15：工具指派白名单归一（parse_blueprint 用）
+    _flatten_formal_sig,  # 2026-10-15：Lean 形式化陈述归一（tool=lean 叶子用）
     _input_use_map,       # 2026-10-15：inputs 的 use（承接语义）抽取
     BlueprintNode,
     BlueprintDAG,
@@ -204,6 +205,16 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             #   无法识别 ⇒ "" = 未指派，下游不加工具指令）。
             #   此前 `prompts/blueprint.py` 还没要求该字段，本次同步补上解析。
             tool=_normalize_tool(nd.get("tool", nd.get("use_tool", ""))),
+            # ★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」）：
+            #   读取 `tool == "lean"` 节点由蓝图给出的 **Lean 形式化陈述**
+            #   （签名部分，见 `BlueprintNode.formal_sig`）。非 lean 节点忽略该键
+            #   （模型可能在其它节点上乱写，一律丢弃，避免下游误注入）。
+            #   兼容别名 `lean_sig` / `signature`。空值 = 形式化失败 ⇒ 下游回落。
+            formal_sig=(_flatten_formal_sig(
+                nd.get("formal_sig", nd.get("lean_sig",
+                                           nd.get("signature", ""))))
+                if _normalize_tool(nd.get("tool", nd.get("use_tool", ""))) == "lean"
+                else ""),
             # ★ 2026-10-15（用户要求「前一个子目标作为后一个的条件」）：
             #   `use` 是承接语义的唯一载体（`_as_id_list` 会把它丢掉），单独抽成
             #   {上游 id: 用途} 一并落到节点上。
