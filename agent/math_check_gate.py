@@ -97,6 +97,47 @@ def _extract_numeric_equations(text: str) -> list:
     return out
 
 
+_CALC_INEQ_RE = None
+
+
+def _extract_inequalities(text: str) -> list:
+    """从推理文本提取**可机器复算的不等式** [(lhs, rhs, op), ...]（最多 8 条）。
+
+    ★ 2026-10-17（用户要求「计算错误要靠工具检」）：原工具只验数值等式，
+      017 型错误（``a^2+3b^2 >= 4|a||b|^3`` 为假）不在检测范围。
+    ★ 安全边界（防误杀题面条件）：**两侧都必须含运算符/函数**（`^ * / + - sqrt abs`
+      等）；`n >= 2` / `k >= 1` 这类纯条件（两侧只有变量/常数）**不提取**。
+    """
+    global _CALC_INEQ_RE
+    import re as _re
+    if _CALC_INEQ_RE is None:
+        _CALC_INEQ_RE = _re.compile(
+            r"([^\n=<>]{2,80}?)\s*(>=|<=|≥|≤|>|<)\s*([^\n=<>]{1,80})")
+    _OPS = {">=": "ge", "<=": "le", "≥": "ge", "≤": "le", ">": "gt", "<": "lt"}
+    _LOOKS = _re.compile(r"[\^*+\-/]|sqrt|abs|\\frac")
+    def _clean(x: str) -> str:
+        # 去中文前后缀（"由 a^2" / " 可得…"）并把 |expr| 归一化为 Abs(expr)
+        x = _re.sub(r"[\u4e00-\u9fff，。；、：（）【】]+", " ", x).strip()
+        x = _re.sub(r"\|([^|]+)\|", r"Abs(\1)", x)
+        x = _re.sub(r"[.…·]+\s*$", "", x).strip()   # 去省略号尾巴（"…可得..."）
+        return x
+
+    out = []
+    for m in _CALC_INEQ_RE.finditer(text or ""):
+        lhs, op, rhs = _clean(m.group(1)), m.group(2), _clean(m.group(3))
+        if not lhs or not rhs:
+            continue
+        # 两侧都必须"像表达式"（含运算符/函数）——纯变量/常数视为题面条件
+        if not _LOOKS.search(lhs) or not _LOOKS.search(rhs):
+            continue
+        if len(lhs) > 70 or len(rhs) > 70:
+            continue
+        out.append((lhs, rhs, _OPS[op]))
+        if len(out) >= 8:
+            break
+    return out
+
+
 def math_check_stage(self, ctx) -> None:
     """4.4 阶段入口（orchestrator 一行委托；``self`` 即 Orchestrator 实例）。
 
@@ -131,6 +172,37 @@ def math_check_stage(self, ctx) -> None:
                 self.record(ctx, "math_check",
                             "cid=%s 计算检测异常（放行）: %s: %s"
                             % (cid, type(_e_d).__name__, str(_e_d)[:120]))
+            # ★ 2026-10-17（用户要求「计算过程交给工具检」）：工具③逐式复算
+            #   推理里的等式 + 不等式；**确有反例/算错 ⇒ 淘汰**（带证据）；
+            #   无法判定（n_err）⇒ 放行（不误杀）。
+            try:
+                from tools.agent_toolkit.calc_verify import calc_verify as _cv
+                _txt = str(getattr(c, "reasoning", "") or "")
+                _eqs = _extract_numeric_equations(_txt)
+                _ineq = _extract_inequalities(_txt)
+                _items = [{"expr": a, "claimed": b} for a, b in _eqs[:8]]
+                _items += [{"expr": a, "claimed": b, "op": op}
+                           for a, b, op in _ineq[:8]]
+                if _items:
+                    _rv = _cv(_items)
+                    _nb = int(_rv.get("n_bad") or 0)
+                    if _nb > 0:
+                        _r0 = next((x for x in (_rv.get("results") or [])
+                                    if not x.get("ok") and "不成立" in str(x.get("detail"))
+                                    or "算错" in str(x.get("detail"))), {})
+                        n_fail += 1
+                        rejected.append({
+                            "id": cid, "kind": kind, "answer": ans[:160],
+                            "method": "calc_verify",
+                            "evidence": str(_r0.get("detail") or "")[:300]})
+                        self.record(ctx, "math_check",
+                                    "cid=%s 工具③逐式复算：%d 条不一致 ⇒ 淘汰；样例 %s"
+                                    % (cid, _nb, str(_r0.get("detail") or "")[:160]))
+                        continue
+            except Exception as _e_cv:  # noqa: BLE001
+                self.record(ctx, "math_check",
+                            "cid=%s 工具③复算异常（放行）: %s: %s"
+                            % (cid, type(_e_cv).__name__, str(_e_cv)[:100]))
             _v = str(det.get("verdict") or "unknown")
             if _v == "fail":
                 n_fail += 1

@@ -145,12 +145,18 @@ def review_agent(solver, ctx, sg: dict, out_text: str) -> dict:
 
     # —— 工具③：计算板块逐条复算 ——
     try:
-        from .math_check_gate import _extract_numeric_equations
-        eqs = _extract_numeric_equations(blocks.get("calc", "") or out_text)
-        if eqs:
+        from .math_check_gate import (_extract_numeric_equations,
+                                      _extract_inequalities)
+        _calc_txt = blocks.get("calc", "") or out_text
+        eqs = _extract_numeric_equations(_calc_txt)
+        ineqs = _extract_inequalities(_calc_txt)
+        if eqs or ineqs:
             from tools.agent_toolkit import calc_verify
-            r = calc_verify([{"expr": a, "claimed": b} for a, b in eqs[:8]])
-            tool_report["calc"] = {"n": len(eqs), "n_bad": r.get("n_bad", 0)}
+            _items = [{"expr": a, "claimed": b} for a, b in eqs[:8]]
+            _items += [{"expr": a, "claimed": b, "op": op}
+                       for a, b, op in ineqs[:8]]
+            r = calc_verify(_items)
+            tool_report["calc"] = {"n": len(_items), "n_bad": r.get("n_bad", 0)}
             for x in (r.get("results") or []):
                 if not x.get("ok"):
                     issues.append("计算错误：%s = %s 实际为 %s"
