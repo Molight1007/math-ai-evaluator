@@ -360,6 +360,16 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
             user_msg = user_msg + "\n\n" + _pg_txt
     except Exception:  # noqa: BLE001
         pass
+    # ★ 2026-10-17：题面歧义提醒（子目标步同款；不 record 防噪）
+    try:
+        _amb = list(getattr(ctx, "problem_ambiguities", None) or [])
+        if _amb:
+            user_msg = user_msg + (
+                "\n\n【题面歧义提醒（题意理解阶段发现，必须正面处理）】\n"
+                + "\n".join("- " + str(a)[:220] for a in _amb[:4])
+                + "\n⚠ 本步求解前先明确你采用哪种解读、依据是题面哪句话。")
+    except Exception:  # noqa: BLE001
+        pass
     return user_msg
 
 

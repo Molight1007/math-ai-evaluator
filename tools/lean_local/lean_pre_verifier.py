@@ -349,8 +349,23 @@ class LeanPreVerifier(BaseAgent):
                    if out["answer_slot"] else "（空）",
                    len(a_gaps), len(b_gaps)))
 
-        out["verdict"] = ("ok" if (out["terminal_state"] or out["answer_slot"])
-                          else "unknown")
+        # ★ 2026-10-17（p0b5_r3 089 实测）：原判定**只看有没有终态**、完全忽略
+        #   gaps_a ⇒ 「发现题面歧义」仍判 ok、且模型默默做了一个错误假设
+        #   （"某市民没座"被读成单剧院超员）。现：
+        #   · 把 A 类缺口（题面没给/歧义）存入 ctx.problem_ambiguities，
+        #     由求解端**显式要求模型说明解读依据**（不得默默假设）；
+        #   · verdict 增加 `assumption_required`（仅诊断用，无流程门控）。
+        try:
+            ctx.problem_ambiguities = [
+                str(g.get("detail"))[:300] for g in (out["gaps_a"] or [])
+                if isinstance(g, dict) and g.get("detail")]
+        except Exception:  # noqa: BLE001
+            pass
+        if out["gaps_a"]:
+            out["verdict"] = "assumption_required"
+        else:
+            out["verdict"] = ("ok" if (out["terminal_state"] or out["answer_slot"])
+                              else "unknown")
         ctx.understanding_chain = out
         ctx.understanding_rounds = out["rounds"]
         self.record(ctx, "understanding_chain",
