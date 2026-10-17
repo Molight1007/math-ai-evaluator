@@ -34,7 +34,14 @@ _TRUE_TOKENS = {"true", "1", "yes", "y", "是", "对", "有", "有错误"}
 
 
 def parse_self_audit_json(raw) -> dict:
-    """容错解析自审输出。返回 {} 表示无法解析（调用方**保留**候选）。"""
+    """容错解析自审输出。返回 {} 表示无法解析（调用方**保留**候选）。
+
+    ★ 2026-10-17 修复（p0b5_r3 实测：84/88 候选 unparsed = 95%）：
+      原实现取「第一个 `{` 到最后一个 `}`」再 json.loads —— 模型输出
+      「推理文本 + JSON」或「多个 JSON 片段」时，该切片跨段**必然非法**
+      ⇒ 解析恒失败。现改用 `JSONDecoder.raw_decode` 从每个 `{` 位置逐个尝试，
+      取第一个能独立解析成 dict 且含 `logic_error` 的对象（可跳过前导推理）。
+    """
     if not raw:
         return {}
     txt = str(raw).strip()
@@ -43,24 +50,35 @@ def parse_self_audit_json(raw) -> dict:
         txt = txt.strip("`")
         if txt.lower().startswith("json"):
             txt = txt[4:]
-    try:
-        import json as _json_sa
-        _m = txt[txt.find("{"):txt.rfind("}") + 1] if "{" in txt else ""
-        if not _m:
-            return {}
-        d = _json_sa.loads(_m)
-        if not isinstance(d, dict) or "logic_error" not in d:
-            return {}
-        _v = d.get("logic_error")
-        if isinstance(_v, str):
-            d["logic_error"] = _v.strip().lower() in _TRUE_TOKENS
-        else:
-            d["logic_error"] = bool(_v)
-        d["error_desc"] = str(d.get("error_desc") or "").strip()
-        d["error_at"] = str(d.get("error_at") or "").strip()
-        return d
-    except Exception:  # noqa: BLE001  解析失败 ⇒ 保留候选
+    import json as _json_sa
+    _dec = _json_sa.JSONDecoder()
+    d = None
+    _pos = 0
+    while True:
+        _i = txt.find("{", _pos)
+        if _i < 0:
+            break
+        try:
+            _obj, _end = _dec.raw_decode(txt[_i:])
+        except Exception:  # noqa: BLE001  该位置不是合法 JSON，试下一个 `{`
+            _pos = _i + 1
+            continue
+        if isinstance(_obj, dict) and "logic_error" in _obj:
+            # ★ 取**最后一个**含 logic_error 的合法对象：模型常见形态是
+            #   「先举例格式 JSON / 再给实际结论 JSON」，结论在后；
+            #   纯「推理 + JSON」时 JSON 也在末尾 —— 两者都覆盖。
+            d = _obj
+        _pos = _i + 1
+    if d is None:
         return {}
+    _v = d.get("logic_error")
+    if isinstance(_v, str):
+        d["logic_error"] = _v.strip().lower() in _TRUE_TOKENS
+    else:
+        d["logic_error"] = bool(_v)
+    d["error_desc"] = str(d.get("error_desc") or "").strip()
+    d["error_at"] = str(d.get("error_at") or "").strip()
+    return d
 
 
 def _switch_enabled() -> bool:
