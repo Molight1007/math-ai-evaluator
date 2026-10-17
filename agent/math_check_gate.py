@@ -114,7 +114,10 @@ def _extract_inequalities(text: str) -> list:
         _CALC_INEQ_RE = _re.compile(
             r"([^\n=<>]{2,80}?)\s*(>=|<=|≥|≤|>|<)\s*([^\n=<>]{1,80})")
     _OPS = {">=": "ge", "<=": "le", "≥": "ge", "≤": "le", ">": "gt", "<": "lt"}
-    _LOOKS = _re.compile(r"[\^*+\-/]|sqrt|abs|\\frac")
+    # ★ 2026-10-17 审核：原判据含 `+ -`，会把题面条件 `x >= -1` 当可复算式
+    #   （候选答案若违反该"条件"就被误杀）。改为**强运算符**（乘幂/除/函数），
+    #   且只要求**任一侧**命中（另一侧允许纯数字/变量，如 `x^2-1 >= 0` 的 `0`）。
+    _LOOKS = _re.compile(r"[\^*/]|sqrt|abs|frac")
     def _clean(x: str) -> str:
         # 去中文前后缀（"由 a^2" / " 可得…"）并把 |expr| 归一化为 Abs(expr)
         x = _re.sub(r"[\u4e00-\u9fff，。；、：（）【】]+", " ", x).strip()
@@ -127,11 +130,15 @@ def _extract_inequalities(text: str) -> list:
         lhs, op, rhs = _clean(m.group(1)), m.group(2), _clean(m.group(3))
         if not lhs or not rhs:
             continue
-        # 两侧都必须"像表达式"（含运算符/函数）——纯变量/常数视为题面条件
-        if not _LOOKS.search(lhs) or not _LOOKS.search(rhs):
+        # 任一侧含强运算符即可；另一侧限长（纯数字/变量/短式）
+        if not (_LOOKS.search(lhs) or _LOOKS.search(rhs)):
             continue
         if len(lhs) > 70 or len(rhs) > 70:
             continue
+        # 纯条件形态（两侧都只有数字/变量/正负号，如 `x >= -1`）⇒ 跳过
+        if not (_LOOKS.search(lhs) and _LOOKS.search(rhs)):
+            if len(lhs) > 24 or len(rhs) > 24:
+                continue
         out.append((lhs, rhs, _OPS[op]))
         if len(out) >= 8:
             break
@@ -187,9 +194,12 @@ def math_check_stage(self, ctx) -> None:
                     _rv = _cv(_items)
                     _nb = int(_rv.get("n_bad") or 0)
                     if _nb > 0:
+                        # ★ 2026-10-17 审核：原写法 `A and B or C` 因优先级等价于
+                        #   `(A and B) or C`——C 命中时即使 ok=True 也会被选为证据。
                         _r0 = next((x for x in (_rv.get("results") or [])
-                                    if not x.get("ok") and "不成立" in str(x.get("detail"))
-                                    or "算错" in str(x.get("detail"))), {})
+                                    if (not x.get("ok"))
+                                    and ("不成立" in str(x.get("detail"))
+                                         or "算错" in str(x.get("detail")))), {})
                         n_fail += 1
                         rejected.append({
                             "id": cid, "kind": kind, "answer": ans[:160],

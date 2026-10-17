@@ -147,7 +147,10 @@ def review_agent(solver, ctx, sg: dict, out_text: str) -> dict:
     try:
         from .math_check_gate import (_extract_numeric_equations,
                                       _extract_inequalities)
-        _calc_txt = blocks.get("calc", "") or out_text
+        # ★ 2026-10-17 审核：原只取「计算」板块——若模型把算式写在「逻辑推导」节
+        #   会漏检。改为两板块合并（仍优先 calc，再拼 logic）。
+        _calc_txt = ((blocks.get("calc", "") or "")
+                     + "\n" + (blocks.get("logic", "") or "")).strip() or out_text
         eqs = _extract_numeric_equations(_calc_txt)
         ineqs = _extract_inequalities(_calc_txt)
         if eqs or ineqs:

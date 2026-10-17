@@ -141,20 +141,35 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
     # ③ 随机代值找反例（只用于确证 False；找不到不等价于成立）
     #   ★ 用 `d_raw`（未 simplify 的原始差）：simplify 可能引入 Piecewise，
     #     其 subs/float 会失败导致 40 组全跳过（实测 017 型因此漏判）。
+    #   ★ 2026-10-17 审核（防误杀条件不等式）：代值分两组——
+    #     · **全正区**（20 组）：出现反例 ⇒ 判 False（017 型即在此被抓）；
+    #     · 全负/混合区（20 组）：**只记疑不判错** —— 形如 `x+1/x>=2`（前提 x>0）
+    #       的**真命题**在负数区必出"反例"，但那不构成命题为假（工具不知道前提）。
     try:
         import random
         syms = sorted(d_raw.free_symbols, key=lambda x: str(x))[:3]
-        for _ in range(40):
-            subs = {}
+
+        def _sample(pos: bool) -> dict:
+            _s = {}
             for sy in syms:
-                subs[sy] = _sympy.Rational(random.randint(-5, 5),
-                                           random.randint(1, 3))
+                _v = random.randint(1, 5) * (1 if pos else -1)
+                _s[sy] = _sympy.Rational(_v, random.randint(1, 3))
+            return _s
+
+        for _ in range(20):                       # 全正区：可判 False
             try:
-                v = float(_sympy.N(d_raw.subs(subs)))
+                v = float(_sympy.N(d_raw.subs(_sample(True))))
             except Exception:
                 continue
             if not _judge(v):
                 return False
+        for _ in range(20):                       # 负/混合区：只记疑
+            try:
+                v = float(_sympy.N(d_raw.subs(_sample(False))))
+            except Exception:
+                continue
+            if not _judge(v):
+                return None
     except Exception:
         pass
     return None
