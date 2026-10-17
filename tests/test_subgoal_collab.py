@@ -135,8 +135,13 @@ def test_planning_agent_prefetch_and_blueprint():
     assert ctx.subgoal_blueprint_updates[0]["update"].startswith("补充")
 
 
-def test_solve_subgoals_collab_end_to_end():
-    """端到端（stub）：2 个子目标 → 每个 3 遍求解 + 预取规划 + 结果写入。"""
+def test_solve_subgoals_collab_end_to_end(monkeypatch):
+    """端到端（stub）：2 个子目标 → 每个 3 遍求解 + 预取规划 + 结果写入。
+
+    ★ 2026-10-17：本用例关闭「生成前自审」（自审有独立单测）——否则每次
+    迭代会多消耗一次 LLM 回复、打乱 replies 序列。
+    """
+    monkeypatch.setenv("SUBGOAL_REGEN_SELF_REVIEW", "0")
     # llm 调用序列：规划(预取) → sg1 求解×3 → [审核 LLM] → 规划 → sg2 求解×3 → 审核 …
     replies = [
         "## 下一个子目标计划\n计划0\n## 蓝图补充\n无",   # 预取
@@ -173,3 +178,26 @@ def test_solve_subgoals_collab_reuse_cache():
     assert results_map["s1"] == "缓存结论"
     # 仅预取规划的一次 LLM（无求解调用）；再断言未出现"①求解"事件
     assert not any("①求解" in m for _, m in s.events)
+
+
+def test_quick_self_review_no_issue():
+    """自审输出「无」⇒ 返回空串（不干扰迭代）。"""
+    from agent.subgoal_collab import quick_self_review
+    s = _Solver(["无"])
+    assert quick_self_review(s, _Ctx(), {"title": "t"}, "上一轮解答") == ""
+
+
+def test_quick_self_review_returns_issues():
+    from agent.subgoal_collab import quick_self_review
+    s = _Solver(["- 第2步：把 a^2+b^2 误当作 (a+b)^2"])
+    out = quick_self_review(s, _Ctx(), {"title": "t"}, "上一轮解答")
+    assert "第2步" in out
+
+
+def test_solve_agent_injects_prev_issues():
+    """3 遍迭代时，自审问题必须进入 extra_hint（用户：先审核再生成）。"""
+    s = _Solver(["## 结论\nX"])
+    solve_agent(s, _Ctx(), {"title": "t"}, "plan", prev="旧产出",
+                rnd=1, prev_issues="- 第3步符号错")
+    assert "自审发现的上一轮问题" in s.last_hint
+    assert "第3步符号错" in s.last_hint

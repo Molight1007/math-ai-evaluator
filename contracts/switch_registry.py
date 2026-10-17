@@ -89,6 +89,17 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "SELF_IMPROVE_STAGE", "bool", False,
         "3.3 候选级「无条件自改进」总开关（2026-10-17 用户定案内化：默认 False="
         "由蓝图 3 遍 + 子目标 3 遍覆盖；置 True 恢复旧阶段）。"),
+    "cross_model_falsify": (
+        "CROSS_MODEL_FALSIFY", "bool", True,
+        "跨模型独立检错（2026-10-17 用户定案）：对机检+同模型证伪都放行的候选，"
+        "调第二模型（DeepSeek）独立判断；wrong 即淘汰。失败/超时放行。"),
+    "cross_model_timeout": (
+        "CROSS_MODEL_TIMEOUT", "num", 90,
+        "跨模型检错的单次 HTTP 超时（秒）"),
+    "subgoal_regen_self_review": (
+        "SUBGOAL_REGEN_SELF_REVIEW", "bool", True,
+        "子目标 3 遍迭代的「生成前自审」（2026-10-17 用户定案：先自己审核再生成；"
+        "3 遍本身保留，用于最大化推理）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

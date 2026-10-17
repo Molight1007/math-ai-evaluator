@@ -101,8 +101,40 @@ def split_blocks(text: str) -> dict:
 
 
 # ---------------------------------------------------------------- ① 求解 agent
+_SELF_REVIEW_SYS = (
+    "你是数学解答的**自审员**。只做一件事：找出给定解答里的**逻辑/计算错误**。\n"
+    "输出要求：若无错误，只输出「无」；若有错误，逐条列出（每条一行，以 `- ` 开头），"
+    "每条给出**具体位置 + 错在哪**。不要重做、不要改写、不要评价解答是否详细。\n"
+    "⚠ 「缺少推导 / 简略 / 没写证明过程」**不算错误**。")
+
+
+def quick_self_review(solver, ctx, sg: dict, prev: str) -> str:
+    """3 遍迭代的**生成前自审**（2026-10-17 用户定案：先自己审核再生成）。
+
+    返回问题清单文本（空串 = 无问题）。不触发工具（工具审核在 3 遍之后）。
+    """
+    if not str(prev or "").strip():
+        return ""
+    try:
+        out = _llm(solver, ctx, _SELF_REVIEW_SYS,
+                   "【子目标】%s\n\n【待审解答】\n%s"
+                   % (str(sg.get("title") or "")[:120], str(prev)[-6000:]),
+                   temp=0.0)
+    except Exception as _e:  # noqa: BLE001
+        return ""
+    t = str(out or "").strip()
+    if not t or t.strip("。.！!") in ("无", "没有", "无错误", "未发现错误"):
+        return ""
+    try:
+        solver.record(ctx, "subgoal_collab",
+                      "（生成前）自审：%s" % t[:160].replace("\n", " "))
+    except Exception:  # noqa: BLE001
+        pass
+    return t[:2000]
+
+
 def solve_agent(solver, ctx, sg: dict, plan: str, prev: str = "",
-                rnd: int = 0, prev_results: str = "") -> str:
+                rnd: int = 0, prev_results: str = "", prev_issues: str = "") -> str:
     """求解一个子目标（★ 2026-10-15 审核修复 F1：**复用旧链单步求解**）。
 
     旧链 `_solve_subgoal` 承载全部注入与机制（承接块 / formal_sig / 定理线索 /
@@ -116,6 +148,11 @@ def solve_agent(solver, ctx, sg: dict, plan: str, prev: str = "",
     if prev and rnd > 0:
         _hint = (_hint + "\n\n【上一轮产出——请在此基础上继续深化：补齐遗漏、"
                  "加强严谨性、核对每一处计算；不要推倒重来】\n" + prev[-6000:])
+    if prev_issues and rnd > 0:
+        _hint += ("\n\n【自审发现的上一轮问题（必须逐条处理）】\n"
+                  + str(prev_issues)[:2500]
+                  + "\n（若你认为某条不成立，请明确说明理由；否则修正后"
+                    "重给完整三节。）")
     try:
         out = solver._solve_subgoal(ctx, sg, _hint, prev_results, _hint) or ""
     except Exception as _e:  # noqa: BLE001  单步失败不抛（由调用方记/降级链处理）
@@ -325,8 +362,19 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
         _t0 = time.time()
         _out = ""
         for _r in range(_n):
+            # ★ 2026-10-17（用户定案）：3 遍保持（目的是最大化激发推理），
+            #   但**每遍生成前先自审上一轮**；检错的关键在 3 遍之后的 Lean+工具。
+            _issues = ""
+            if _r > 0 and _out:
+                try:
+                    from .switch_registry import get_bool as _gb
+                    if _gb("subgoal_regen_self_review"):
+                        _issues = quick_self_review(solver, ctx, sg, _out)
+                except Exception:  # noqa: BLE001
+                    pass
             _out = solve_agent(solver, ctx, sg, _next_plan, prev=_out,
-                               rnd=_r, prev_results=_done_digest)
+                               rnd=_r, prev_results=_done_digest,
+                               prev_issues=_issues)
 
         # ★ 2026-10-15 审核修复（F2）：动态倒推（拆图补前提；内部双闸门
         #   `sg_missing_premise` 自判触发）——与旧循环同位置（recover 之后）。

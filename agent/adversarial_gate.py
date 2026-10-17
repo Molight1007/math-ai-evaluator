@@ -108,6 +108,47 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                                 % (cid, type(_e_p).__name__, str(_e_p)[:120]))
 
             _rej = _machine_rej or _llm_rej
+            # ★ 2026-10-17（用户定案「加一个其他大模型检错」）：生成/自审/证伪
+            #   都是同一模型 ⇒ 盲区相同。对**前两道都放行**的候选，调第二模型
+            #   （DeepSeek）独立检错（附带题面约束/歧义点）；wrong ⇒ 淘汰；
+            #   失败/超时 ⇒ 放行并记 trace（不降级判错）。
+            if _rej is None and _sw_get_bool("cross_model_falsify"):
+                try:
+                    from .cross_model_check import cross_check as _cross_check
+                    _cons = list(getattr(ctx, "problem_ambiguities", None) or [])
+                    _uc = getattr(ctx, "understanding_chain", None)
+                    if isinstance(_uc, dict) and _uc.get("terminal_state"):
+                        _cons.append(str(_uc["terminal_state"])[:300])
+                    _ccr = _cross_check(
+                        problem=prob,
+                        answer=str(getattr(c, "answer_norm", None)
+                                   or getattr(c, "answer", "") or ""),
+                        reasoning=str(getattr(c, "reasoning", "") or ""),
+                        constraints=_cons,
+                        timeout=float(getattr(self.config,
+                                              "cross_model_timeout", 90) or 90))
+                    _st = getattr(ctx, "cross_model_stats", None)
+                    if not isinstance(_st, dict):
+                        _st = {}
+                        ctx.cross_model_stats = _st
+                    _vk = str(_ccr.get("verdict") or "unknown")
+                    _st[_vk] = int(_st.get(_vk, 0)) + 1
+                    if _vk == "wrong":
+                        _rej = {"by": "cross_model",
+                                "reason": str(_ccr.get("evidence") or "")[:300],
+                                "assumption": str(_ccr.get("assumption") or "")[:200],
+                                "model": str(_ccr.get("model") or "")}
+                        self.record(ctx, "adversarial_gate",
+                                    "cid=%s 跨模型独立检错：判错 ⇒ 淘汰；理由 %s"
+                                    % (cid, str(_ccr.get("evidence") or "")[:160]))
+                    elif _vk == "unknown":
+                        self.record(ctx, "adversarial_gate",
+                                    "cid=%s 跨模型检查未定（放行）: %s"
+                                    % (cid, str(_ccr.get("error") or "")[:120]))
+                except Exception as _e_c:  # noqa: BLE001
+                    self.record(ctx, "adversarial_gate",
+                                "cid=%s 跨模型检查异常（放行）: %s: %s"
+                                % (cid, type(_e_c).__name__, str(_e_c)[:120]))
             if _rej is None:
                 kept.append(c)
                 self.record(ctx, "adversarial_gate",
