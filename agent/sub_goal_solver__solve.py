@@ -305,8 +305,35 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
                                 f"子目标承接前提块内嵌 {_n_succ} 处断言数值"
                                 " → 已屏蔽为占位符（K11 注入点守卫）")
             prev_results = _succ + "\n" + (prev_results or "")
+    # ★ 2026-10-17（用户要求「子目标划分逻辑/计算 + 计算类强制返回算式」）：
+    #   按子目标类型生成**验证纪律**——计算类强制逐行可复算式子（工具③逐行复算、
+    #   算错打回）；逻辑类要求可形式化陈述（Lean 检查）；derive/未标注 ⇒ 两者都要。
+    #   ⚠ 类型是"引导"，不是"排他"：审核侧（collab review）对两类都跑工具。
+    _sg_type = str(sg.get("type") or "").strip().lower()
+    _calc_disc = (
+        "【计算纪律】本步属**计算类**：\n"
+        "  · 【计算】节必须**逐行**写出可机器复算的式子：`LHS = RHS` 或 `LHS >= RHS`；\n"
+        "  · 只用 ASCII 数学语法：sqrt(...) / abs(...) / ^ 或 ** / * /；"
+        "微积分写 integrate(expr, x) / diff(expr, x)，概率写 binomial(n, k)；\n"
+        "  · **不得含中文、不得只给结论数值**——系统会逐行用 SymPy 复算，算错立即打回重解。")
+    _logic_disc = (
+        "【逻辑纪律】本步属**逻辑类**：\n"
+        "  · 结论必须是**可形式化的明确数学陈述**（量词清楚：对任意 / 存在 / 充要）；\n"
+        "  · 推理链每一步给出依据（引用的定理/条件），不得跳步到结论；\n"
+        "  · 系统会用 Lean 检查陈述与类型是否病态。")
+    if _sg_type in ("compute", "numeric", "calculation"):
+        _type_discipline = _calc_disc
+    elif _sg_type in ("prove", "logical", "verify", "proof"):
+        _type_discipline = _logic_disc
+    elif _sg_type in ("derive", "推导", "derivation"):
+        _type_discipline = _calc_disc + "\n" + _logic_disc
+    else:
+        _type_discipline = (
+            "【类型纪律】本步类型未标注：请**同时**给出可复算算式（计算证据）与"
+            "可形式化结论陈述（逻辑证据）——审核会分别用计算工具与 Lean 检查。")
     user_msg = SUBGOAL_STEP_USER_TEMPLATE.format(
         problem=_prob_for_step + _obj_inj,
+        type_discipline=_type_discipline,
         subgoal_plan_summary=plan_summary,
         previous_results=prev_results,
         lemma_context=lemma_context,
