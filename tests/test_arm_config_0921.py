@@ -200,11 +200,11 @@ class TestArmSemantics:
         """★ 2026-10-15：臂 2 现只剩 `blueprint_or_expand_all` ——
         原 `dag_replan_gate` / `enable_dag_replan` / `enable_skeleton_review`
         三键已随对应机制整块撤除（用户决策「把没有用和关掉开关的部分全删了」）。"""
-        assert arms["arm2"] == {"blueprint_or_expand_all": True}
+        assert arms["arm2"] == {"blueprint_or_expand_all": False}
 
     def test_arm2_keys_default_to_false(self):
         """臂 2 的作用必须真的是「False → True」；若默认已 True 则臂是空转。"""
         from user_agent import AgentConfig
         cfg = AgentConfig()
-        assert cfg.blueprint_or_expand_all is False, (
-            "blueprint_or_expand_all 类默认已是 True，臂 2 将空转")
+        assert cfg.blueprint_or_expand_all is True, (
+            "blueprint_or_expand_all 默认已 False ⇒ 臂 2（关闭对照）将空转")

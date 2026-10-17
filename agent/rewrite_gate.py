@@ -119,7 +119,10 @@ def _collect_rejected_brief(ctx) -> str:
 
 def _reset_plan_state(ctx) -> None:
     """重置规划/求解状态，使「重建蓝图和子目标」真实重跑（而非复用旧产物）。"""
-    for _f in ("blueprint_plan", "blueprint_nodes"):
+    # ★ 2026-10-17（p0b5_r3 审核）：原实现漏清 `_subgoal_done`（子目标结果缓存）
+    #   ⇒ 重写时旧子目标指纹命中缓存、直接复用旧结果 ⇒ 产出候选与上一轮相同
+    #   （题6/7 重写后仍是旧的 \boxed{4}/\boxed{76} 的根因）。一并清除。
+    for _f in ("blueprint_plan", "blueprint_nodes", "_subgoal_done"):
         try:
             setattr(ctx, _f, None)
         except Exception:  # noqa: BLE001

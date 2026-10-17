@@ -73,7 +73,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "lean_search / calc_verify / to_lean / lean_check（实现在 tools/agent_toolkit）；"
         "=0 关闭做 A/B"),
     "subgoal_collab_mode": (
-        "SUBGOAL_COLLAB_MODE", "bool", False,
+        "SUBGOAL_COLLAB_MODE", "bool", True,
         "子目标三角色协作求解（2026-10-15 用户定案）：求解/审核/规划三 agent 合作 "
         "+ 审核用工具①③ + 3 遍「在现有基础上再生成」+ 规划预取与蓝图回传；"
         "=1 启用；=0（默认）走旧逐步求解，可 A/B"),
@@ -85,6 +85,10 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "numbers 叶子 Lean 数值核验开关（2026-10-15 审核 F5 补登记）：原字段只"
         "存在于 kwargs 白名单/评测覆盖 ⇒ bare 入口恒 False（空转）。默认 False "
         "与现行为一致；评测经覆盖传 True 时生效。"),
+    "self_improve_stage": (
+        "SELF_IMPROVE_STAGE", "bool", False,
+        "3.3 候选级「无条件自改进」总开关（2026-10-17 用户定案内化：默认 False="
+        "由蓝图 3 遍 + 子目标 3 遍覆盖；置 True 恢复旧阶段）。"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
@@ -346,7 +350,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     #   `enable_dag_replan`（求解后 DAG 复盘重规划）两个开关已整块撤除。
     # ---- agent/blueprint_planner.py（OR 节点展开策略，2026-10-04 补登记）----
     "blueprint_or_expand_all": (
-        "BLUEPRINT_OR_EXPAND_ALL", "bool", False,
+        "BLUEPRINT_OR_EXPAND_ALL", "bool", True,
         "蓝图 OR 节点是否展开**全部**备选分支（默认 False = 只取首分支/保持历史行为；"
         "置 True 会显著放大子目标规模，需 A/B）"),
     # ---- 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具」）----

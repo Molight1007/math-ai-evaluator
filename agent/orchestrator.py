@@ -93,6 +93,7 @@ from .rewrite_gate import rewrite_stage  # noqa: F401
 from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
 # 2026-10-07 阶段C4a：2.7_subgoal_main 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from contracts.switch_registry import get_bool as _sw_bool
 from .orchestrator__solve import subgoal_main_path  # noqa: F401
 # 2026-10-07 阶段C4b：3.2_complete 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
@@ -514,8 +515,13 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "3.2_complete")
         complete_truncated(self, ctx, tier)
 
-        self._stage_start(ctx, "3.3_improve")
-        self_improve_step(self, ctx)
+        # ★ 2026-10-17（用户定案「内化」）：3.3 的「无条件自改进」已内化为
+        #   **蓝图 3 遍 + 子目标 3 遍**（blueprint_multi_gen_rounds /
+        #   subgoal_collab_regen_rounds，默认均 3）⇒ 本阶段默认**跳过**
+        #   （阶段名保留于 stage_audit 契约；开关 self_improve_stage 可恢复）。
+        if _sw_bool("self_improve_stage"):
+            self._stage_start(ctx, "3.3_improve")
+            self_improve_step(self, ctx)
 
         self._stage_start(ctx, "3.4_collab")
         collaborative_deep_improve(self, ctx, tier)

@@ -255,10 +255,12 @@ class AgentConfig(_AgentConfigBase):
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
     # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
     enable_lean_tools: bool = True
+    # ★ 2026-10-17（用户定案内化）：3.3 无条件自改进（默认 False）
+    self_improve_stage: bool = False
     # ★ 2026-10-15（审核 F5 补登记）：numbers 叶子 Lean 数值核验（默认 False）
     enable_numeric_lean_verify: bool = False
     # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认关，可 A/B）
-    subgoal_collab_mode: bool = False
+    subgoal_collab_mode: bool = True
     subgoal_collab_regen_rounds: int = 3
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
@@ -588,7 +590,7 @@ class AgentConfig(_AgentConfigBase):
     # 退化为 AND 的单分支 ⇒ 蓝图路径**结构性不存在"独立求解分支"**，这正是
     # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
     # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
-    blueprint_or_expand_all: bool = False
+    blueprint_or_expand_all: bool = True
     # ★ 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具，证明就用 lean」）：
     #   ① `blueprint_node_contract`：**节点契约** —— 蓝图每个节点声明 `tool`
     #      （lean/sympy/numeric/llm），并用 `inputs[i].use` 声明「把上游的哪个
