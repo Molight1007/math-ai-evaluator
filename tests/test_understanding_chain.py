@@ -105,7 +105,9 @@ def test_single_round_terminal_slot_and_gaps_only():
     ctx = _mk_ctx()
     v.run_understanding_chain(ctx)
     out = ctx.understanding_chain
-    assert out["verdict"] == "ok"
+    # ★ 2026-10-17（089 误读修复）：gaps_a 非空 ⇒ verdict=assumption_required
+    #   （原实现只看到"有终态"就判 ok，忽略题面歧义）
+    assert out["verdict"] == "assumption_required"
     assert out["rounds"] == 1
     assert out["terminal_state"] == "n 为最大可行值"
     assert out["answer_slot"] == "待求量 n_max"
