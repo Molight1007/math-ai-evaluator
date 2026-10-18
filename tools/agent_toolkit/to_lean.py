@@ -12,7 +12,20 @@ from __future__ import annotations
 
 import re
 
-_SYS = (
+_SYS_HAMMER = (
+    "你是 Lean 4 / Mathlib 形式化翻译器。把用户给出的数学陈述翻译为**一个** "
+    "Lean 4 声明（theorem / lemma / def），要求：\n"
+    "1) 只输出代码块，不要解释；\n"
+    "2) 声明体写**自动化证明尝试链**（不要手写分步证明，交给 Lean 策略）：\n"
+    "   `:= by first | omega | linarith | nlinarith | norm_num | ring | positivity "
+    "| decide | tauto | simp | aesop | grind | sorry`\n"
+    "   （按顺序尝试，全部失败时以 `sorry` 兜底——系统会识别 `sorry` 并判「未证明」）；\n"
+    "3) 使用 `import Mathlib` 级别的可用记号；拿不准的记号改用 Mathlib 里"
+    "语义最接近的现成定义；\n"
+    "4) 第一行给一行注释 `-- 翻译注记：<不确定点，没有就写 无>`。"
+)
+
+_SYS_LEGACY = (
     "你是 Lean 4 / Mathlib 形式化翻译器。把用户给出的数学陈述翻译为**一个** "
     "Lean 4 声明（theorem / lemma / def），要求：\n"
     "1) 只输出代码块，不要解释；\n"
@@ -22,13 +35,25 @@ _SYS = (
     "4) 第一行给一行注释 `-- 翻译注记：<不确定点，没有就写 无>`。"
 )
 
+
+def _choose_sys() -> str:
+    """★ 2026-10-18：`lean_hammer` 开关（默认 True）——开=先试自动化策略链
+    （零成本，实测可解决过半目标），关=旧行为（`by sorry` 只验陈述）。
+    读取失败按默认开处理（与注册表默认一致）。"""
+    try:
+        from contracts.switch_registry import get_bool as _g
+        return _SYS_HAMMER if _g("lean_hammer") else _SYS_LEGACY
+    except Exception:  # noqa: BLE001
+        return _SYS_HAMMER
+
+
 _USER = """【题目/上下文】
 {context}
 
 【要翻译的陈述】
 {statement}
 
-请翻译为 Lean 4 声明（sorry 占位）。"""
+请翻译为 Lean 4 声明。"""
 
 _FENCE_RE = re.compile(r"```(?:lean4?|)\s*([\s\S]*?)```", re.IGNORECASE)
 _DECL_RE = re.compile(r"^\s*(?:noncomputable\s+)?(?:private\s+|protected\s+)?"
@@ -64,7 +89,7 @@ def to_lean(statement: str, context: str = "", client=None,
                 "error": "llm-client-missing（翻译需调用方注入 client）"}
     try:
         resp = client.chat(
-            messages=[{"role": "system", "content": _SYS},
+            messages=[{"role": "system", "content": _choose_sys()},
                       {"role": "user", "content": _USER.format(
                           context=(context or "")[:4000],
                           statement=statement[:6000])}],

@@ -100,6 +100,13 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "SUBGOAL_REGEN_SELF_REVIEW", "bool", True,
         "子目标 3 遍迭代的「生成前自审」（2026-10-17 用户定案：先自己审核再生成；"
         "3 遍本身保留，用于最大化推理）"),
+    "lean_hammer": (
+        "LEAN_HAMMER", "bool", True,
+        "Lean 代回先试自动化策略链（omega/linarith/nlinarith/norm_num/ring/"
+        "positivity/decide/tauto/simp/aesop/grind），失败再 sorry；关=旧行为"),
+    "answer_shape_strict": (
+        "ANSWER_SHAPE_STRICT", "bool", True,
+        "4.0 答案形态严格校验：条件式/命题式（含「且/∧/∀/∃」）不算答案"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
