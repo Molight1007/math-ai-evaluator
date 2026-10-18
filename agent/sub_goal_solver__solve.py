@@ -360,6 +360,17 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
             user_msg = user_msg + "\n\n" + _pg_txt
     except Exception:  # noqa: BLE001
         pass
+    # ★ 2026-10-18：关键注意点（子目标步同款，不 record 防噪）
+    try:
+        from contracts.switch_registry import get_bool as _gb
+        _on = _gb("attention_focus_enabled")
+        _focus = list(getattr(ctx, "attention_focus", None) or [])
+        if _on and _focus:
+            user_msg = user_msg + (
+                "\n\n【本题关键注意点（先读，本步对照）】\n"
+                + "\n".join("- " + str(f)[:160] for f in _focus[:5]))
+    except Exception:  # noqa: BLE001
+        pass
     # ★ 2026-10-17：题面歧义提醒（子目标步同款；不 record 防噪）
     try:
         _amb = list(getattr(ctx, "problem_ambiguities", None) or [])

@@ -340,6 +340,10 @@ class LeanPreVerifier(BaseAgent):
                 str(payload.get("answer_slot") or ""), aggressive=True)
             a_gaps, b_gaps = split_gaps(payload.get("gaps"))
             out["gaps_a"], out["gaps_b"] = a_gaps, b_gaps
+            out["attention_focus"] = [
+                str(f)[:120] for f in (payload.get("attention_focus") or [])
+                if str(f).strip()][:5]
+            ctx.attention_focus = out["attention_focus"]
             ctx.understanding_gaps = a_gaps + b_gaps
             self.record(
                 ctx, "understanding_chain",

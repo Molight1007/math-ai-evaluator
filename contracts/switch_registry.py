@@ -111,6 +111,9 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "SMT_FALSIFY", "bool", True,
         "4.2 证伪增加 SMT(Z3) 通道：验证「蕴含式断言」是否有反例（覆盖逻辑命题类"
         "错误 008/015）"),
+    "attention_focus_enabled": (
+        "ATTENTION_FOCUS_ENABLED", "bool", True,
+        "2.6 题意理解产出「关键注意点」，注入求解/子目标 prompt 顶部（注意力引导）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

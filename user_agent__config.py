@@ -258,6 +258,7 @@ class AgentConfig(_AgentConfigBase):
     # ★ 2026-10-18：Lean 自动化策略链 + 4.0 答案形态严格校验
     lean_hammer: bool = True
     smt_falsify: bool = True
+    attention_focus_enabled: bool = True
     answer_shape_strict: bool = True
     # ★ 2026-10-17（用户定案）：跨模型独立检错 + 子目标生成前自审
     cross_model_falsify: bool = True

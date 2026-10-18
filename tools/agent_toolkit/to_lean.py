@@ -18,7 +18,7 @@ _SYS_HAMMER = (
     "1) 只输出代码块，不要解释；\n"
     "2) 声明体写**自动化证明尝试链**（不要手写分步证明，交给 Lean 策略）：\n"
     "   `:= by first | omega | linarith | nlinarith | norm_num | ring | positivity "
-    "| decide | tauto | simp | aesop | grind | sorry`\n"
+    "| decide | tauto | sorry`\n"
     "   （按顺序尝试，全部失败时以 `sorry` 兜底——系统会识别 `sorry` 并判「未证明」）；\n"
     "3) 使用 `import Mathlib` 级别的可用记号；拿不准的记号改用 Mathlib 里"
     "语义最接近的现成定义；\n"
