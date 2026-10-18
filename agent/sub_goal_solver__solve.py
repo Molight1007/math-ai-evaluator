@@ -456,6 +456,14 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     # 放 system 而非 user：user_msg 由上层模板构造，改动面更小、风险更低。
     if getattr(self.config, 'enable_theorem_hint', True):
         _th = (getattr(ctx, 'theorem_hint_block', '') or '').strip()
+        # ★ 2026-10-18：按**本子目标**检索的定理块优先（比全局块更相关）；失败回退全局
+        try:
+            from .theorem_hint import search_for_subgoal as _sfs
+            _ps = _sfs(ctx, sg)
+            if _ps:
+                _th = _ps
+        except Exception:  # noqa: BLE001
+            pass
         if _th:
             _step_system = _step_system + "\n\n" + _th
     # ★★ 2026-10-06（子目标交付重写 A）：结论契约注入（开关

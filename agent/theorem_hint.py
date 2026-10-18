@@ -743,6 +743,49 @@ def retrieve_theorems_for_question(
     return out
 
 
+def search_for_subgoal(ctx, sg, top_k: int = 6) -> str:
+    """★ 2026-10-18（用户「每个子目标都用 leansearch」）：按**子目标文本**检索
+    定理（而非全局一次），返回渲染好的定理块；失败/无结果返回空串（调用方回退
+    全局块）。结果按子目标 id 缓存（3 遍迭代同一子目标只检索一次）。
+    """
+    try:
+        from contracts.switch_registry import get_bool as _g
+        if not _g("subgoal_theorem_search"):
+            return ""
+        from tools.agent_toolkit import leansearch as _ls
+    except Exception:  # noqa: BLE001
+        return ""
+    _txt = " ".join(str(sg.get(k) or "") for k in ("title", "description")).strip()
+    if not _txt:
+        return ""
+    _cache = getattr(ctx, "_subgoal_hints", None)
+    if not isinstance(_cache, dict):
+        _cache = {}
+        try:
+            ctx._subgoal_hints = _cache
+        except Exception:  # noqa: BLE001
+            pass
+    _key = str(sg.get("id") or _txt[:40])
+    if _key in _cache:
+        return _cache[_key]
+    block = ""
+    try:
+        r = _ls(_txt, top_k=int(top_k)) or {}
+        items = [TheoremHit(
+            name=str(t.get("name") or ""),
+            short=str(t.get("name") or "").rsplit(".", 1)[-1],
+            source=_txt, rank=i + 1,
+            snippet=str(t.get("statement") or t.get("informal") or ""))
+            for i, t in enumerate((r.get("theorems") or [])[:top_k])
+            if str(t.get("name") or "")]
+        block = (TheoremRetrieval(ok=True, hits=items)
+                 .render_hint_block(max_items=top_k)) if items else ""
+    except Exception as e:  # noqa: BLE001  检索是增益，绝不阻断
+        logger.warning("[theorem_hint] per-subgoal 检索异常: %s", str(e)[:120])
+    _cache[_key] = block
+    return block
+
+
 def run_hint_for(agent, ctx) -> None:
     """在**任意 Agent 上下文**里执行一次定理检索，并把结果写回 ``ctx``。
 

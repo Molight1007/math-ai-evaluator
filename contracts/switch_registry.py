@@ -114,6 +114,9 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "attention_focus_enabled": (
         "ATTENTION_FOCUS_ENABLED", "bool", True,
         "2.6 题意理解产出「关键注意点」，注入求解/子目标 prompt 顶部（注意力引导）"),
+    "subgoal_theorem_search": (
+        "SUBGOAL_THEOREM_SEARCH", "bool", True,
+        "每个子目标按自身文本单独检索定理（per-subgoal，比全局一次更相关）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

@@ -259,6 +259,7 @@ class AgentConfig(_AgentConfigBase):
     lean_hammer: bool = True
     smt_falsify: bool = True
     attention_focus_enabled: bool = True
+    subgoal_theorem_search: bool = True
     answer_shape_strict: bool = True
     # ★ 2026-10-17（用户定案）：跨模型独立检错 + 子目标生成前自审
     cross_model_falsify: bool = True
