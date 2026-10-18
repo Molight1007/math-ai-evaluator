@@ -340,8 +340,12 @@ class LeanPreVerifier(BaseAgent):
                 str(payload.get("answer_slot") or ""), aggressive=True)
             a_gaps, b_gaps = split_gaps(payload.get("gaps"))
             out["gaps_a"], out["gaps_b"] = a_gaps, b_gaps
+            # ★ 2026-10-18 审核：attention_focus 也必须走**答案掩码**——
+            #   2.6 提示词虽要求「只写风险不写答案」，但模型可能违规写入具体数值，
+            #   直接注入求解 prompt 会重蹈 K11「答案泄漏」覆辙。
             out["attention_focus"] = [
-                str(f)[:120] for f in (payload.get("attention_focus") or [])
+                str(_mask_answer_values(str(f)))[:120]
+                for f in (payload.get("attention_focus") or [])
                 if str(f).strip()][:5]
             ctx.attention_focus = out["attention_focus"]
             ctx.understanding_gaps = a_gaps + b_gaps
