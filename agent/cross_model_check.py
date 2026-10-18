@@ -109,7 +109,9 @@ def cross_check(problem: str, answer: str, reasoning: str = "",
         "messages": [{"role": "system", "content": _SYSTEM},
                      {"role": "user", "content": user}],
         "temperature": 0.0,
-        "max_tokens": 2048,
+        # ★ 2026-10-18（p0b5_r4 实测：8/8 次 unparseable）：DeepSeek 是推理模型，
+        #   2048 会被推理过程吃光、`content` 返回空 ⇒ 解析恒失败。实测给 8192。
+        "max_tokens": 8192,
         "stream": False,
     }).encode("utf-8")
     req = urllib.request.Request(
@@ -120,8 +122,21 @@ def cross_check(problem: str, answer: str, reasoning: str = "",
         with urllib.request.urlopen(req, timeout=float(timeout)) as resp:
             raw = resp.read().decode("utf-8", "replace")
         data = json.loads(raw)
-        txt = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        _ch = (data.get("choices") or [{}])[0]
+        _msg = _ch.get("message", {}) or {}
+        txt = _msg.get("content", "") or ""
+        _rc = _msg.get("reasoning_content", "") or ""
+        _fr = _ch.get("finish_reason", "")
+        # content 为空/无 JSON 时，退回在推理内容里找（推理模型常见：内容全在
+        # reasoning_content，content 只剩空串或被截断）
         d = _parse_json(txt)
+        if not d and _rc:
+            d = _parse_json(_rc)
+        if not d:
+            return {"verdict": "unknown", "evidence": "",
+                    "error": "unparseable(content_len=%d, reasoning_len=%d, finish=%s)"
+                             % (len(txt), len(_rc), _fr),
+                    "model": mdl}
     except Exception as exc:  # noqa: BLE001  失败不阻断、不判错
         return {"verdict": "unknown", "evidence": "",
                 "error": "%s: %s" % (type(exc).__name__, str(exc)[:160]),

@@ -201,6 +201,10 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                          if isinstance(t, dict)
                                          and t.get("step") == "blueprint_self_review"],
         #   ② 分环节定理注入条数（stage → 实际条数）
+        # ★ 2026-10-18：跨模型检错统计（wrong/ok/unknown 计数；未触发则为 None）
+        "cross_model_stats": (dict(getattr(ctx, "cross_model_stats", None))
+                              if isinstance(getattr(ctx, "cross_model_stats", None), dict)
+                              else None),
         "theorem_hint_stage_usage": dict(
             getattr(ctx, "theorem_hint_stage_usage", None) or {}),
         # ★ 2026-10-13（§3 方案 A）：题型判题决策（rule/llm/overrides）+ 路径分流
