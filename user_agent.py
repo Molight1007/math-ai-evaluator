@@ -88,7 +88,7 @@ _CONFIG_OVERRIDE_KEYS = (
     #   `verify_reserve_seconds`：orchestrator 注释称"可覆盖生成侧预留"。
     "enable_question_type_hint", "verify_reserve_seconds",
     "enable_web_search",
-    "self_improve_stage", "cross_model_falsify", "cross_model_timeout", "subgoal_regen_self_review", "lean_hammer", "answer_shape_strict", "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
+    "self_improve_stage", "cross_model_falsify", "cross_model_timeout", "subgoal_regen_self_review", "smt_falsify", "lean_hammer", "answer_shape_strict", "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
     "lean_dedup_by_answer",  # 2026-09-17 Lean 同答案去重缓存（默认 False）
     # ★★ 2026-09-16 审计修复（**关键断链**）：以下三键此前
     #   **有 argparse、有 AgentConfig 声明，却不在白名单** ⇒

@@ -107,6 +107,10 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "answer_shape_strict": (
         "ANSWER_SHAPE_STRICT", "bool", True,
         "4.0 答案形态严格校验：条件式/命题式（含「且/∧/∀/∃」）不算答案"),
+    "smt_falsify": (
+        "SMT_FALSIFY", "bool", True,
+        "4.2 证伪增加 SMT(Z3) 通道：验证「蕴含式断言」是否有反例（覆盖逻辑命题类"
+        "错误 008/015）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,

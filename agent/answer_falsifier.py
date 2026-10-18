@@ -96,6 +96,10 @@ _CERT_PROMPT = """你是数学证明的「证伪员」。给你一道题和一�
    `checks` 留空数组 —— **不要编造等式**。
 5. 可选：给一段 Lean 4 代码 `lean_code`，声明该候选满足题目条件
    （若不满足，Lean 将编译失败，从而背书你的证伪）。无法给出就填空串。
+6. 若候选的**错误是一条「蕴含式断言」**（形如"若 A 则 B"的推理错误，数值回带无法暴露），
+   把它用 **SMT-LIB（Lisp 前缀）** 写成 `implication` 字段：用 declare-const/declare-fun
+   声明变量，末尾一条 `(assert (not (=> A B)))`；系统用 Z3 判定，sat（有反例）即证伪。
+   只用 Z3 标准算子（Int/Real/and/or/not/=>/<=/>=/=/*/+/-）；无法形式化就填空串。
 
 只输出一个 JSON 对象，不要解释性前后缀、不要 Markdown 围栏：
 {
@@ -103,7 +107,8 @@ _CERT_PROMPT = """你是数学证明的「证伪员」。给你一道题和一�
     {"desc": "来自条件：…", "lhs": "…", "rhs": "…"}
   ],
   "witness": "…",
-  "lean_code": "…"
+  "lean_code": "…",
+  "implication": "…"
 }"""
 
 
@@ -159,6 +164,16 @@ class AnswerFalsifier:
 
             fails, detail_lines = self._sympy_refute(checks)
             if not fails:
+                # ★ 2026-10-18：SymPy 未证伪时，若证书带「蕴含式断言」，用 SMT 再验
+                #   ——sat（有反例）即证伪（覆盖逻辑命题类错误 008/015）。
+                _smt = self._smt_refute(ctx, cert)
+                if _smt is not None:
+                    return FalsifyResult(
+                        verdict="incorrect",
+                        reason="蕴含式断言被 SMT 反例证伪",
+                        witness=str(_smt.get("model") or "")[:300],
+                        checks=[dict(c, verdict="pass") for c in checks],
+                        oracle_type="sympy+smt")
                 return FalsifyResult(
                     reason="代入后未发现矛盾（不构成证伪）",
                     checks=[dict(c, verdict="pass") for c in checks],
@@ -187,6 +202,33 @@ class AnswerFalsifier:
         except Exception as e:  # noqa: BLE001  异常一律放行
             logger.warning("证伪器异常（放行）：%s", str(e)[:200])
             return FalsifyResult(reason="证伪器异常")
+
+    def _smt_refute(self, ctx, cert) -> dict | None:
+        """对证书的 `implication` 字段做 SMT 验证；sat（有反例）返回 dict，否则 None。
+
+        ★ 2026-10-18（用户定案「检测机制缺失」）：覆盖 SymPy 无法验的**逻辑命题类**
+        错误（008「有界⇒总变差有界」、015「非单调⇒等值点」）。未装 z3 / 失败 /
+        无法形式化 ⇒ 一律 None（放行，不误杀）。
+        """
+        try:
+            from .switch_registry import get_bool as _g
+            if not _g("smt_falsify"):
+                return None
+        except Exception:  # noqa: BLE001
+            return None
+        _imp = str((cert or {}).get("implication") or "").strip()
+        if not _imp:
+            return None
+        try:
+            from tools.agent_toolkit.smt_check import verify_smt
+            r = verify_smt(_imp)
+            if r.get("verdict") == "sat":
+                logger.info("SMT 证伪：蕴含式断言存在反例 %s", r.get("model"))
+                return r
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.warning("SMT 证伪异常（放行）：%s", str(e)[:160])
+            return None
 
     # ------------------------------------------------------------------
     # 次数上限（与 numeric_lean 同口径，按题计数）
