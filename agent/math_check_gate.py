@@ -234,16 +234,28 @@ def math_check_stage(self, ctx) -> None:
                                "、kind=%s" % kind if kind else ""))
 
         if rejected and not kept:
-            # 全拒 ⇒ 回退保留（宁 unknown 不误杀；与 AuditGate 口径一致）
-            kept = cands
+            # ★ 2026-10-18（p0b5_r4 实测 3 题：010/013/017 均受害）：原
+            #   「全拒 ⇒ 回退保留原候选池（宁 unknown 不误杀）」是**降级**——
+            #   工具③已明确算出候选算错（010 的正确结果是 2 = 标准答案），
+            #   回退等于把**已证伪的错答案**放回去让投票选中。
+            #   用户口径「不要隐藏错误」⇒ 删除回退：全拒即清空，交由 4.6 重写。
+            ctx.candidates = []
+            ctx.audit_reject_feedback = list(
+                getattr(ctx, "audit_reject_feedback", None) or []) + [
+                    "[计算检测] cid=%s: %s（%s）"
+                    % (r["id"], r["evidence"], r["method"]) for r in rejected]
+            ctx.math_check_rejected = list(
+                getattr(ctx, "math_check_rejected", None) or []) + rejected
             ctx.math_check = {
-                "n": len(cands), "n_rejected": 0, "n_fail": n_fail,
-                "n_unknown": n_unknown, "all_rejected_fallback": True,
-                "would_reject_ids": [r["id"] for r in rejected],
+                "n": len(cands), "n_rejected": len(rejected), "n_fail": n_fail,
+                "n_unknown": n_unknown, "all_rejected_fallback": False,
+                "rejected_ids": [r["id"] for r in rejected],
+                "rejected_evidence": [str(r.get("evidence"))[:240]
+                                      for r in rejected][:4],
             }
             self.record(ctx, "math_check",
-                        "⚠ 4.4 计算检测：%d 个候选**全部未通过** ⇒ 回退保留"
-                        "原候选池（宁 unknown 不误杀）" % len(cands))
+                        "4.4 计算检测：%d 个候选**全部算错** ⇒ 清空候选池"
+                        "（不回退；交由 4.6 重写）" % len(cands))
         else:
             if rejected:
                 ctx.candidates = kept

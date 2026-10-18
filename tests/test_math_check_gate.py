@@ -63,7 +63,13 @@ def test_fail_rejected_unknown_kept():
     assert any("计算检测" in fb for fb in ctx.audit_reject_feedback)
 
 
-def test_all_fail_falls_back_keep_all():
+def test_all_fail_clears_pool_no_fallback():
+    """★ 2026-10-18（p0b5_r4：010/013/017 三题受害）：全算错不再回退。
+
+    原「全 fail ⇒ 回退保留」会把工具③已证明算错的候选放回投票池
+    （010 的正确结果 2 被算出，却因回退选了 0）。用户口径「不要隐藏错误」
+    ⇒ 全拒即清空池、把证据写进 audit_reject_feedback 供 4.6 重写使用。
+    """
     det = _Det([
         {"verdict": "fail", "method": "substitution", "evidence": "e1"},
         {"verdict": "fail", "method": "parse", "evidence": "e2"},
@@ -71,10 +77,12 @@ def test_all_fail_falls_back_keep_all():
     stub = _Stub(det)
     ctx = _Ctx([_c(1), _c(2)])
     math_check_stage(stub, ctx)
-    assert [c.id for c in ctx.candidates] == [1, 2]      # 回退保留
-    assert ctx.math_check["all_rejected_fallback"] is True
-    assert ctx.math_check["would_reject_ids"] == [1, 2]
-    assert any("全部未通过" in m for _, m in stub.events)
+    assert ctx.candidates == []                          # 不回退
+    assert ctx.math_check["all_rejected_fallback"] is False
+    assert ctx.math_check["rejected_ids"] == [1, 2]
+    assert any("全部算错" in m for _, m in stub.events)
+    fb = getattr(ctx, "audit_reject_feedback", None) or []
+    assert any("计算检测" in str(x) for x in fb)          # 证据进重写反馈
 
 
 def test_exception_treated_unknown():

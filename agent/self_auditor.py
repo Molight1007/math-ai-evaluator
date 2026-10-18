@@ -70,6 +70,16 @@ def parse_self_audit_json(raw) -> dict:
             d = _obj
         _pos = _i + 1
     if d is None:
+        # ★ 2026-10-18（p0b5_r4：自审 12/12 unparsed——模型不按 JSON 输出）：
+        #   保守兜底——只认**明确表达「无逻辑错误」**的回答；说「有错但不给
+        #   JSON」仍记为 unparsed（保留候选，绝不因格式问题淘汰）。
+        _low = txt.lower()
+        _no = any(k in _low for k in ("无逻辑错误", "没有逻辑错误", "未发现逻辑错误",
+                                      "no logic error", "no error found"))
+        _yes = any(k in _low for k in ("存在逻辑错误", "逻辑错误：", "有逻辑错误",
+                                       "logic error:"))
+        if _no and not _yes:
+            return {"logic_error": False, "error_desc": "", "error_at": ""}
         return {}
     _v = d.get("logic_error")
     if isinstance(_v, str):
