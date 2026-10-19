@@ -120,7 +120,7 @@ def quick_self_review(solver, ctx, sg: dict, prev: str) -> str:
                    "【子目标】%s\n\n【待审解答】\n%s"
                    % (str(sg.get("title") or "")[:120], str(prev)[-6000:]),
                    temp=0.0)
-    except Exception as _e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return ""
     t = str(out or "").strip()
     if not t or t.strip("。.！!") in ("无", "没有", "无错误", "未发现错误"):
