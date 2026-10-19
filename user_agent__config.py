@@ -260,6 +260,8 @@ class AgentConfig(_AgentConfigBase):
     smt_falsify: bool = True
     attention_focus_enabled: bool = True
     subgoal_theorem_search: bool = True
+    rewrite_on_low_conf: bool = True
+    rewrite_conf_threshold: float = 0.0
     answer_shape_strict: bool = True
     # ★ 2026-10-17（用户定案）：跨模型独立检错 + 子目标生成前自审
     cross_model_falsify: bool = True

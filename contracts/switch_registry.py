@@ -117,6 +117,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "subgoal_theorem_search": (
         "SUBGOAL_THEOREM_SEARCH", "bool", True,
         "每个子目标按自身文本单独检索定理（per-subgoal，比全局一次更相关）"),
+    "rewrite_on_low_conf": (
+        "REWRITE_ON_LOW_CONF", "bool", True,
+        "4.6 重写触发扩展：池非空但「有淘汰证据 且 投票置信度 0」也重写（不放行错答案）"),
+    "rewrite_conf_threshold": (
+        "REWRITE_CONF_THRESHOLD", "num", 0.0,
+        "重写触发的置信度阈值（vote_correct/vote_total ≤ 此值 才考虑重写；默认 0）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
