@@ -17,13 +17,13 @@
 # 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 from agent.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+    get_bool as _sw_bool)
 # 2026-10-02 中间结果存储层（老师：「每个中间结果都要存」）：子目标结果**即时落盘**。
 # 只加不改：写盘失败静默（append_ctx 永不抛异常），不影响求解与合并。
 # ⚠ 2026-10-08 批1-B增：`_artifact_append` 的直接消费方已迁到
 #   `agent/sub_goal_solver__loop.py`（函数内 `from .sub_goal_solver import
 #   _artifact_append` 惰性引用）⇒ **本导入须保留**（单一来源，勿按"未使用"清理）。
-from agent.artifact_store import append_ctx as _artifact_append
+from agent.artifact_store import append_ctx as _artifact_append  # noqa: F401  跳板 re-export（subgoal_collab/loop 惰性引用）
 import logging
 import re
 import time
@@ -34,7 +34,8 @@ import time
 #   `from .sub_goal_solver import _pool_gate_v2_on` 惰性引用）⇒ **本导入须保留**
 #   （单一来源 = 本模块，勿按"未使用"清理 —— 与 `_artifact_append` 同口径）。
 from .base import (
-    BaseAgent, TaskContext, Candidate, next_candidate_id, _pool_gate_v2_on)
+    BaseAgent, TaskContext, Candidate, next_candidate_id,
+    _pool_gate_v2_on)  # noqa: F401  _pool_gate_v2_on 跳板 re-export（sub_goal_solver__pool 惰性引用）
 
 # 2026-10-08 批1：run 的两段已抽到同包模块（逐字搬）。
 from .sub_goal_solver__stage import wire_subgoal_stage_budget  # noqa: F401

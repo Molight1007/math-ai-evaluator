@@ -18,7 +18,6 @@ if _ROOT not in sys.path:
 
 import gzip
 import json
-import tempfile
 
 import pytest
 

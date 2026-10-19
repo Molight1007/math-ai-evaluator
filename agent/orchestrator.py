@@ -6,8 +6,7 @@ from __future__ import annotations
 # results/<run_id>/<qid>/。只加不改：不删分支、不改判定、不动返回值；
 # 每一处调用都**永不抛异常**（失败只落一条 trace，绝不阻断主链）。
 from agent.artifact_store import (
-    put_ctx as _artifact_put, append_ctx as _artifact_append,
-    attach as _artifact_attach)
+    put_ctx as _artifact_put, attach as _artifact_attach)
 """
 编排器（Orchestrator）—— 简化版
 ================================
@@ -43,22 +42,20 @@ _DEGRADED_ANSWER_RE = _re.compile(
 )
 
 
-from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_response
+from .base import BaseAgent, TaskContext, Budget
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
 # ★ 2026-10-06：`_clip_review_prose` **直接 import 复用**（不复制正则）——
 #   复核清单与 verifier 深复核原文需同一道清洗口径，两处各写一份必然分叉
 #   （仓库既有教训）。verifier 不 import orchestrator ⇒ 无循环导入。
-from .verifier import VerifierAgent, _clip_review_prose
+from .verifier import VerifierAgent
 # ★ 2026-10-07（问题总账 §2.6「择优逻辑口径分叉」）：终答兜底择优**复用** formatter
 #   的统一排序键 `_rank_key`（票数→独立复现数→置信度→答案形态→答案更短），
 #   以及配套的 `_attach_support`（把"独立复现数"挂到候选上）。**只读引用，不改
 #   formatter.py**。formatter 不 import orchestrator ⇒ 无循环导入。
 from .formatter import (
-    FormatterAgent,
-    _rank_key as _formatter_rank_key,
-    _attach_support as _formatter_attach_support)
+    FormatterAgent)
 from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
 from .audit_gate import AuditGate

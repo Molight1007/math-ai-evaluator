@@ -5,7 +5,7 @@ from __future__ import annotations
 # ★ 2026-10-07 架构解耦（阶段 B2）：注册表已下沉到零依赖的 `contracts/`
 # ⇒ 本模块直接 import `contracts.switch_registry`，**不再依赖 agent/**。
 from contracts.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+    get_bool as _sw_bool, get_num as _sw_num)
 """
 Lean 验证桥接层（agent/lean_bridge.py）
 ========================================

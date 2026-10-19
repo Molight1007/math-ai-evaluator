@@ -32,7 +32,7 @@ import os
 import random
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:

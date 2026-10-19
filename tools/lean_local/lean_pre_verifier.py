@@ -37,9 +37,7 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 """
 
 import logging
-import os
 import re
-import time
 
 # ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
 # `contracts/protocols.py`（Protocol）导入。`BaseAgent` 保留（本类**真继承**它）。
