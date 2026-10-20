@@ -35,8 +35,11 @@ def _parse(s: str):
     import re as _re_e
     if _re_e.search(r"\*\*\s*\(?\s*\d{6,}", txt):
         raise ValueError("exponent-too-large")
-    if _re_e.search(r"[\^*]{1,2}\s*[^*=+\-/()]{1,24}\*\*", txt) or \
-            _re_e.search(r"\^\s*[^^=+\-/()]{1,24}\^", txt):
+    # ★ 2026-10-17 修正：原正则过宽，把 `a**2 + 3*b**2`（两个独立幂）也误判为
+    #   幂塔（实测 017 型不等式因此直接"无法解析"）。现只抓**直接嵌套**：
+    #   `**` 右操作数是标识符/数字且**紧跟另一个 `**`**（如 9**9**9 / a**2**3）。
+    if _re_e.search(r"\*\*\s*[\w.]*\s*\*\*", txt) or \
+            _re_e.search(r"\^\s*[\w.]*\s*\^", txt):
         raise ValueError("power-tower")
     tr = (standard_transformations
           + (implicit_multiplication_application, convert_xor))
@@ -85,6 +88,93 @@ def _render(v) -> str:
     return str(v)
 
 
+def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
+    """判定 ``lhs op rhs``（op: ge/le/gt/lt）—— True 成立 / False 有反例 / None 无法判定。
+
+    ★ 2026-10-17（用户要求「让工具检错计算过程」）：原工具只验**数值等式**，
+      017 类错误（``a^2+3b^2 >= 4|a||b|^3`` 为假）根本不在检测范围。
+      本函数三重判定：
+        ① 常数化简（simplify(lhs-rhs) 无自由符号 ⇒ 直接判）；
+        ② 符号性质（sympy 的 is_nonnegative / is_nonpositive）；
+        ③ **随机代值找反例**（40 组，命中即确证 False）——这是抓 017 的关键。
+      任一步不能定 ⇒ None（调用方计 n_err，绝不误杀）。
+    """
+    import sympy as _sympy                 # ★ 局部导入（原代码未定义 _sympy，
+                                           #   异常被 except 吞掉 ⇒ 恒返回 None）
+    try:
+        a = _parse(str(lhs))
+        b = _parse(str(rhs))
+        d_raw = a - b                     # 代值用原始差式（simplify 可能变 Piecewise）
+        d = _sympy.simplify(d_raw)
+    except Exception:
+        return None
+
+    def _judge(v: float) -> bool:
+        if op == "ge":
+            return v >= -tol
+        if op == "le":
+            return v <= tol
+        if op == "gt":
+            return v > tol
+        return v < -tol
+
+    # ① 常数
+    if not getattr(d, "free_symbols", None):
+        try:
+            return _judge(float(d))
+        except Exception:
+            pass
+    # ② 符号性质（先原式、再因式分解——AM-GM 类 `a^2+b^2-2ab` 分解成
+    #   `(a-b)^2` 后才能被 sympy 判为非负）
+    try:
+        for _e in (d, _sympy.factor(d)):
+            if op in ("ge", "gt"):
+                _p = _e.is_positive if op == "gt" else _e.is_nonnegative
+            else:
+                _p = _e.is_negative if op == "lt" else _e.is_nonpositive
+            if _p is True:
+                return True
+            if _p is False:
+                return False
+    except Exception:
+        pass
+    # ③ 随机代值找反例（只用于确证 False；找不到不等价于成立）
+    #   ★ 用 `d_raw`（未 simplify 的原始差）：simplify 可能引入 Piecewise，
+    #     其 subs/float 会失败导致 40 组全跳过（实测 017 型因此漏判）。
+    #   ★ 2026-10-17 审核（防误杀条件不等式）：代值分两组——
+    #     · **全正区**（20 组）：出现反例 ⇒ 判 False（017 型即在此被抓）；
+    #     · 全负/混合区（20 组）：**只记疑不判错** —— 形如 `x+1/x>=2`（前提 x>0）
+    #       的**真命题**在负数区必出"反例"，但那不构成命题为假（工具不知道前提）。
+    try:
+        import random
+        syms = sorted(d_raw.free_symbols, key=lambda x: str(x))[:3]
+
+        def _sample(pos: bool) -> dict:
+            _s = {}
+            for sy in syms:
+                _v = random.randint(1, 5) * (1 if pos else -1)
+                _s[sy] = _sympy.Rational(_v, random.randint(1, 3))
+            return _s
+
+        for _ in range(20):                       # 全正区：可判 False
+            try:
+                v = float(_sympy.N(d_raw.subs(_sample(True))))
+            except Exception:
+                continue
+            if not _judge(v):
+                return False
+        for _ in range(20):                       # 负/混合区：只记疑
+            try:
+                v = float(_sympy.N(d_raw.subs(_sample(False))))
+            except Exception:
+                continue
+            if not _judge(v):
+                return None
+    except Exception:
+        pass
+    return None
+
+
 def calc_verify(computations, tol: float = 1e-9) -> dict:
     """逐条机械复算。
 
@@ -127,6 +217,30 @@ def calc_verify(computations, tol: float = 1e-9) -> dict:
             rec["ok"] = True
             rec["detail"] = "已复算（无声称值可比）"
             n_ok += 1
+            results.append(rec)
+            continue
+        _op = str(item.get("op") or "").strip().lower()
+        if _op in ("ge", "le", "gt", "lt") and claimed_s.strip():
+            try:
+                claimed = _parse(claimed_s)
+            except Exception as exc:  # noqa: BLE001
+                rec["detail"] = "声称值无法解析（未做判定）：%s" % str(exc)[:120]
+                n_err += 1
+                results.append(rec)
+                continue
+            _iv = _verify_inequality(val, claimed, _op, tol)
+            _op_txt = {"ge": ">=", "le": "<=", "gt": ">", "lt": "<"}[_op]
+            if _iv is True:
+                rec["ok"] = True
+                rec["detail"] = "不等式成立"
+                n_ok += 1
+            elif _iv is None:
+                rec["detail"] = "不等式无法判定（符号/代值均未定，未下结论）"
+                n_err += 1
+            else:
+                rec["detail"] = ("**不等式不成立**：%s %s %s 有反例（已由随机代值确证）"
+                                 % (_render(val), _op_txt, claimed_s.strip()[:60]))
+                n_bad += 1
             results.append(rec)
             continue
         try:

@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections import Counter
 
 
 def _load(p: str) -> dict:

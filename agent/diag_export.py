@@ -201,6 +201,10 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                          if isinstance(t, dict)
                                          and t.get("step") == "blueprint_self_review"],
         #   ② 分环节定理注入条数（stage → 实际条数）
+        # ★ 2026-10-18：跨模型检错统计（wrong/ok/unknown 计数；未触发则为 None）
+        "cross_model_stats": (dict(getattr(ctx, "cross_model_stats", None))
+                              if isinstance(getattr(ctx, "cross_model_stats", None), dict)
+                              else None),
         "theorem_hint_stage_usage": dict(
             getattr(ctx, "theorem_hint_stage_usage", None) or {}),
         # ★ 2026-10-13（§3 方案 A）：题型判题决策（rule/llm/overrides）+ 路径分流
@@ -344,9 +348,14 @@ def _diag_blueprint_review(ctx, config) -> dict:
                                 if isinstance(t, dict)
                                 and t.get("step") == "falsify_miss"],
         # 被客观证伪的候选答案原文（供审计"证伪器到底剔除了什么"）
+        # ★ 2026-10-17 修复（p0b5_r3 实测崩溃）：本列表可能混入**字符串**
+        #   （证伪淘汰链在不同路径 append 的形态不一）——原实现一律 `x.get`
+        #   ⇒ AttributeError 在 diag 导出阶段抛出、整题结果被 fallback 吞成
+        #   ERROR（2/10 题因此丢答案）。现按元素类型容错。
         "falsified_answers": [
-            str(x.get("answer"))[:160] for x in
-            ((ctx.metadata or {}).get("falsified_answers") or [])
+            (str(x.get("answer"))[:160] if isinstance(x, dict)
+             else str(x)[:160])
+            for x in ((ctx.metadata or {}).get("falsified_answers") or [])
         ] if isinstance(getattr(ctx, "metadata", None), dict) else [],
     }
 

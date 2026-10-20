@@ -65,6 +65,13 @@ def _looks_single_item(item: str) -> bool:
     return bool(re.search(r"[0-9A-Za-z]", s)) and not re.search(r"[，。；：\n]", s)
 
 
+# ★ 2026-10-18（p0b5_r4-015 实测：答案被写成 `\boxed{n ≥ 2 且 n 为正整数}`，
+#   条件式被当成答案进入投票）。判据：含「且 / 并且 / ∧ / ∀ / ∃ / 对所有」
+#   ⇒ 非答案形态（unparseable，不参与三/四道）。
+#   ⚠ 不把「或」列入：多答案常写作 `x=1 或 x=2`，拒掉会误杀。
+_COND_SHAPE_RE = re.compile(r"(且|并且|∧|∀|∃|对于所有|对所有)")
+
+
 def classify_answer_kind(norm: str, is_proof: bool = False) -> str:
     """对**已归一化**的答案文本做形态分类（纯函数，便于单测覆盖）。
 
@@ -87,6 +94,14 @@ def classify_answer_kind(norm: str, is_proof: bool = False) -> str:
         pass
     if _NUMERIC_RE.match(s):
         return "numeric"
+    # 条件式/命题式（如 `n >= 2 且 n 为正整数`）不是答案 ⇒ 不参与三/四道
+    # 开关 answer_shape_strict（默认 True；关=恢复旧行为）
+    try:
+        _strict = _sw_get_bool("answer_shape_strict")
+    except Exception:  # noqa: BLE001
+        _strict = True
+    if _strict and _COND_SHAPE_RE.search(s):
+        return "unparseable"
     items = [p for p in s.split(",")]
     if 2 <= len(items) <= _MULTI_MAX_ITEMS:
         ok = sum(1 for it in items if _looks_single_item(it))

@@ -37,9 +37,7 @@ Lean 前置形式化验证智能体（LeanPreVerifier）
 """
 
 import logging
-import os
 import re
-import time
 
 # ★ 2026-10-07 架构解耦（阶段 B1）：`TaskContext` 仅作类型注解 ⇒ 改从零依赖的
 # `contracts/protocols.py`（Protocol）导入。`BaseAgent` 保留（本类**真继承**它）。
@@ -340,6 +338,14 @@ class LeanPreVerifier(BaseAgent):
                 str(payload.get("answer_slot") or ""), aggressive=True)
             a_gaps, b_gaps = split_gaps(payload.get("gaps"))
             out["gaps_a"], out["gaps_b"] = a_gaps, b_gaps
+            # ★ 2026-10-18 审核：attention_focus 也必须走**答案掩码**——
+            #   2.6 提示词虽要求「只写风险不写答案」，但模型可能违规写入具体数值，
+            #   直接注入求解 prompt 会重蹈 K11「答案泄漏」覆辙。
+            out["attention_focus"] = [
+                str(_mask_answer_values(str(f)))[:120]
+                for f in (payload.get("attention_focus") or [])
+                if str(f).strip()][:5]
+            ctx.attention_focus = out["attention_focus"]
             ctx.understanding_gaps = a_gaps + b_gaps
             self.record(
                 ctx, "understanding_chain",
@@ -349,8 +355,23 @@ class LeanPreVerifier(BaseAgent):
                    if out["answer_slot"] else "（空）",
                    len(a_gaps), len(b_gaps)))
 
-        out["verdict"] = ("ok" if (out["terminal_state"] or out["answer_slot"])
-                          else "unknown")
+        # ★ 2026-10-17（p0b5_r3 089 实测）：原判定**只看有没有终态**、完全忽略
+        #   gaps_a ⇒ 「发现题面歧义」仍判 ok、且模型默默做了一个错误假设
+        #   （"某市民没座"被读成单剧院超员）。现：
+        #   · 把 A 类缺口（题面没给/歧义）存入 ctx.problem_ambiguities，
+        #     由求解端**显式要求模型说明解读依据**（不得默默假设）；
+        #   · verdict 增加 `assumption_required`（仅诊断用，无流程门控）。
+        try:
+            ctx.problem_ambiguities = [
+                str(g.get("detail"))[:300] for g in (out["gaps_a"] or [])
+                if isinstance(g, dict) and g.get("detail")]
+        except Exception:  # noqa: BLE001
+            pass
+        if out["gaps_a"]:
+            out["verdict"] = "assumption_required"
+        else:
+            out["verdict"] = ("ok" if (out["terminal_state"] or out["answer_slot"])
+                              else "unknown")
         ctx.understanding_chain = out
         ctx.understanding_rounds = out["rounds"]
         self.record(ctx, "understanding_chain",

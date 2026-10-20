@@ -124,7 +124,7 @@ def _ask_premise(self, ctx, sg: dict, missing: str, prev_results: str) -> dict:
             ctx,
             [{"role": "system", "content": system},
              {"role": "user", "content": user}],
-            0.2, 2048,
+            0.2, 8192,
         )
     except Exception as e:  # noqa: BLE001  LLM 故障不该拖垮求解
         return {"ok": False, "reason": f"倒推调用异常: {str(e)[:100]}"}

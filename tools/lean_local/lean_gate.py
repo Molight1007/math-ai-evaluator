@@ -35,10 +35,9 @@ from __future__ import annotations
 # ★ 2026-10-07 架构解耦（阶段 B2）：注册表已下沉到零依赖的 `contracts/`
 # ⇒ 本模块直接 import `contracts.switch_registry`（开关依赖不再指向 agent）。
 from contracts.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+    get_bool as _sw_bool)
 
 import logging
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
@@ -391,22 +390,17 @@ class LeanGate:
                     str(getattr(cand, "answer", "") or "")) or "").strip()
             except Exception:  # noqa: BLE001
                 _dedup_key = ""
-        # B：验证空转止损 —— 已连续 _stop 个 unknown（翻译/形式化失效传染），
-        # 剩余候选不再逐个整题 verify（PB-002 实证 6 候选 563s 全 unknown 白烧）。
-        # 剩余候选按当前 unknown 策略处理：strict 拒（不进 kept）/默认 lenient 保候选。
-        if _stop > 1 and _unknown_streak >= _stop and n_candidates > _stop + 1:
-            entry["degraded"] = "verify_stop"
-            entry["reason"] = (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
-                               "（验证器失效），止损跳过整题 verify")
-            if self.strict:
-                feedbacks.append(
-                    f"[Lean 硬验证] 候选 {cand.id} 跳过验证（unknown 止损，"
-                    "strict 保守拒绝）")
-                # strict 模式：不进 kept
-            else:
-                kept.append(cand)
-            self._record_ctx(ctx, entry)
-            return _unknown_streak
+        # ★ 2026-10-17（用户定案「删降级/保底」）：原「连续 N 个 unknown ⇒
+        #   剩余候选**止损跳过** verify」是为**省时间牺牲核验**的降级机制
+        #   （历史以"6 候选 563s 全 unknown 白烧"为由引入）。用户口径
+        #   「不要嫌花费时间长」⇒ 现只记录现象，**继续逐个验证**，不跳过。
+        if _stop > 1 and _unknown_streak >= _stop:
+            self._record_ctx(ctx, {
+                "id": cand.id, "verdict": "unknown",
+                "degraded": "unknown_streak_observed",
+                "reason": (f"连续 {_unknown_streak} 个候选 Lean 验证 unknown"
+                           "（验证器失效迹象）——按用户口径继续逐个验证（不跳过）"),
+            })
         # ★ 2026-09-17（Z5）：**非数学对象答案直接跳过验证**。
         # 实测日志里 `答案 '</tool_call>'`、`答案 '步骤8：重新思考——正确的下界构造'`
         # 都被送进 Lean（`verify_answer` 只挡空串与选项字母，中文步骤名/散文未挡），

@@ -64,8 +64,10 @@ ARMS: dict = {
     #   保留 `blueprint_or_expand_all` —— 即原 §⑥ 的可改项 B：验证「OR 节点展开
     #   全部备选分支」是否修复「子目标链锁定错值」的上游结构原因。
     #   （旧注释里「蓝图结构修复 + 评审链恢复」的评审链部分已不复存在。）
+    # ★ 2026-10-17（用户决策「展开看看效果」）：`blueprint_or_expand_all`
+    #   默认值已翻 True ⇒ 本臂反转为**关闭对照**（arm2 = 单分支回归基线）。
     "arm2": {
-        "blueprint_or_expand_all": True,
+        "blueprint_or_expand_all": False,
     },
 
     # 臂 1：standard 档升配（standard 覆盖 89/112 题却只有 **1 票**验证）

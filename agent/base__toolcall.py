@@ -26,10 +26,14 @@ def _text_toolcall_fallback_enabled() -> bool:
 # 文本通道**执行白名单**（2026-10-07）
 # ------------------------------------------------------------
 # ⚠ 安全约束：走文本通道**不放宽任何权限** —— 这里只允许执行「原生通道同样
-#   注册给模型」的工具（当前仅 `web_search`，见 `llm_with_tools._tools`）。
-#   白名单外的一律不执行，只留痕（`unknown_function:<name>`）。
-#   这样即便模型凭空捏造 `<function=os_system>`，也不会被执行。
-_TEXT_TOOLCALL_WHITELIST = ("web_search",)
+#   注册给模型」的工具。
+#   ★ 2026-10-17 修复（p0b5_r3 实测：12 条文本调用被吞）：白名单原只有
+#     web_search，而 2026-10-15 新增的 4 个工具（lean_search / calc_verify /
+#     to_lean / lean_check，`enable_lean_tools`）**已注册给原生通道**却未同步
+#     进白名单 ⇒ 模型写文本 `<tool_call>` 时一律不执行、只留痕。
+#     现按「原生注册集」同步（agent/base.py 的 _lean_tool_exec 注册表同源）。
+_TEXT_TOOLCALL_WHITELIST = ("web_search", "lean_search", "calc_verify",
+                           "to_lean", "lean_check")
 # 白名单工具的**必填参数**（与 `WEB_SEARCH_TOOL_SCHEMA.parameters.required` 一致）。
 # 缺失/空白 ⇒ 不执行（避免用空检索式打网络）。
 _TEXT_TOOLCALL_REQUIRED = {"web_search": "query"}

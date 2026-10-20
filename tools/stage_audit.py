@@ -25,7 +25,6 @@ import json
 import os
 import re
 import statistics as st
-import sys
 from collections import Counter, defaultdict
 
 # ---------------------------------------------------------------- 阶段意图表

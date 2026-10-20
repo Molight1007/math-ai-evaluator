@@ -38,7 +38,6 @@ import re
 import threading
 import time
 import urllib.parse
-from typing import Optional
 
 logger = logging.getLogger("MathPilot.WebSearch")
 

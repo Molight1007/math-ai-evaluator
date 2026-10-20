@@ -206,7 +206,7 @@ class LeanCompileTest(unittest.TestCase):
 
     def test_compile_lean_missing_binary(self):
         # Lean 环境缺失 → 返回 ok=False 且含错误信息，不抛异常
-        import tempfile, os
+        import tempfile
         with tempfile.TemporaryDirectory() as d:
             res = _compile_lean("theorem x : True := by trivial", d,
                                 lean_executable="nonexistent_bin_xyz",

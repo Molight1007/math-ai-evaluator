@@ -119,7 +119,10 @@ def _collect_rejected_brief(ctx) -> str:
 
 def _reset_plan_state(ctx) -> None:
     """重置规划/求解状态，使「重建蓝图和子目标」真实重跑（而非复用旧产物）。"""
-    for _f in ("blueprint_plan", "blueprint_nodes"):
+    # ★ 2026-10-17（p0b5_r3 审核）：原实现漏清 `_subgoal_done`（子目标结果缓存）
+    #   ⇒ 重写时旧子目标指纹命中缓存、直接复用旧结果 ⇒ 产出候选与上一轮相同
+    #   （题6/7 重写后仍是旧的 \boxed{4}/\boxed{76} 的根因）。一并清除。
+    for _f in ("blueprint_plan", "blueprint_nodes", "_subgoal_done"):
         try:
             setattr(ctx, _f, None)
         except Exception:  # noqa: BLE001
@@ -131,6 +134,43 @@ def _reset_plan_state(ctx) -> None:
         pass
 
 
+def _best_confidence(ctx) -> "float | None":
+    """投票最佳候选的置信度 = vote_correct / vote_total；无投票信息返回 None。"""
+    try:
+        _bc = (getattr(ctx, "vote_gate", None) or {}).get("best_cluster") or {}
+        _c = _bc.get("vote_correct"); _t = _bc.get("vote_total")
+        if _c is None or _t is None or int(_t) <= 0:
+            return None
+        return float(_c) / float(_t)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _should_rewrite(self, ctx) -> bool:
+    """★ 2026-10-19（用户「检出错误 → 返回错误 → 重做，不放行错答案」）：
+    重写触发条件由「池空」扩展到「池空 或 (有淘汰证据 且 最佳候选置信度为 0)」。
+
+    · 池空 ⇒ 重写（原行为）；
+    · 池非空但 4.2/4.4 检出过错、且投票最佳候选「0 正确票」⇒ 也重写（带回错误反馈）；
+    · 无投票信息 / 置信度 > 阈值 / 无淘汰证据 ⇒ 不重写（避免每题都重写、成本失控）。
+    """
+    if not getattr(ctx, "candidates", None):
+        return True
+    try:
+        from .switch_registry import get_bool as _g
+        if not _g("rewrite_on_low_conf"):
+            return False
+    except Exception:  # noqa: BLE001
+        pass
+    _thr = float(getattr(self.config, "rewrite_conf_threshold", 0.0) or 0.0)
+    _conf = _best_confidence(ctx)
+    if _conf is None or _conf > _thr:
+        return False
+    _ad = getattr(ctx, "adversarial_gate", None) or {}
+    _mc = getattr(ctx, "math_check", None) or {}
+    return bool((_ad.get("n_rejected") or 0) > 0 or (_mc.get("n_fail") or 0) > 0)
+
+
 def rewrite_stage(self, ctx, tier: str) -> None:
     """4.6 阶段入口（orchestrator 一行委托；``self`` 即 Orchestrator 实例）。"""
     try:
@@ -138,9 +178,12 @@ def rewrite_stage(self, ctx, tier: str) -> None:
             self.record(ctx, "rewrite",
                         "4.6 重写：开关关闭（five_gate_rewrite=0）")
             return
-        if getattr(ctx, "candidates", None):
-            self.record(ctx, "rewrite", "4.6 重写：候选池非空，无需重写")
+        if not _should_rewrite(self, ctx):
+            self.record(ctx, "rewrite", "4.6 重写：候选池非空且无重写信号，无需重写")
             return
+        if getattr(ctx, "candidates", None):
+            self.record(ctx, "rewrite",
+                        "4.6 重写：候选池非空但置信度 0 且存在淘汰证据 ⇒ 带反馈重写")
 
         # 延迟导入各阶段函数（重写成功后让新候选重过五道链；不触发本阶段自身）
         from .answer_normalizer import normalize_stage

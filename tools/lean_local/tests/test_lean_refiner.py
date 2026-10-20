@@ -17,7 +17,6 @@ from tools.lean_local.lean_refiner import (
     LeanRefinerAgent, extract_sorry_blocks, strip_sorry_block,
     replace_sorry_with_proof, MAX_REFINE_ATTEMPTS,
 )
-from agent.lemma_memory import LemmaMemory
 
 
 def make_ctx(problem="证明 x^2 ≥ 0") -> TaskContext:

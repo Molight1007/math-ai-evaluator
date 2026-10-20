@@ -27,8 +27,8 @@ class AgentConfig(_AgentConfigBase):
     # 2026-09-04：max_tokens_cap=0 关闭 base.llm 二次裁剪
     max_tokens_cap: int = 0            # 内部 token 裁剪上限：0=不裁剪（base.llm 语义）
     # ★ 2026-10-20：输出**保底**上限。推理模型先写 Thinking 再写正文，
-    #   ≤2048 的"短输出"设计会被思考吃光（服务器实测 212 次截断的主因）。
-    #   只抬不降；0 = 关闭保底。
+    #   ≤2048 的"短输出"设计全部会被思考吃掉（实测 212 次截断的主因）。
+    #   0 = 关闭保底；默认 4096 只抬不降（不影响投票这类短任务的速度）。
     llm_min_max_tokens: int = 4096
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     # ★ 2026-09-16 删除两个**死字段**（全仓 0 读取点，已实测确认）：
@@ -180,12 +180,7 @@ class AgentConfig(_AgentConfigBase):
     # （reasoning 先吃满预算、正文为空）。
     adversarial_max_tokens: int = 8192
     adversarial_max_reasoning: int = 2400
-    # ---- 2026-10-20：审核侧「义务账本」（蓝图倒推链反向投影）----
-    # 4.1/4.2 原先只喂「题目 + 解答 + 答案」，审查者不知道该题**应当**建立哪些
-    # 事实，只能拿"完整证明的默认模板"去套 ⇒ 蓝图有意省略的环节被读成「跳步」
-    # （p0b5_r5：49 条淘汰里 15 条打中 gold）。=True 时把 `ctx.blueprint` 的
-    # 倒推链反演成带编号的义务清单注入审查，并要求报错指认所在义务；
-    # 明确指认「不落在任何义务上」的硬类型错误不再淘汰。=0 退回老口径做 A/B。
+    # 2026-10-20：审核侧义务账本（蓝图倒推链反演），见 agent/obligation_ledger.py
     audit_obligation_ledger: bool = True
     # ---- 验证增强链时间护栏（2026-09-07：治 4.5_oracle / 4.6_adv 烧穿 6.5）----
     # 冒烟 v2 实证：3.3/3.6 止损省下的时间被 4.5 Oracle(365s)/4.6 对抗(372s)
@@ -266,10 +261,24 @@ class AgentConfig(_AgentConfigBase):
     toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
     # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
     enable_lean_tools: bool = True
+    # ★ 2026-10-18：Lean 自动化策略链 + 4.0 答案形态严格校验
+    lean_hammer: bool = True
+    smt_falsify: bool = True
+    attention_focus_enabled: bool = True
+    subgoal_theorem_search: bool = True
+    rewrite_on_low_conf: bool = True
+    rewrite_conf_threshold: float = 0.0
+    answer_shape_strict: bool = True
+    # ★ 2026-10-17（用户定案）：跨模型独立检错 + 子目标生成前自审
+    cross_model_falsify: bool = True
+    cross_model_timeout: float = 90.0
+    subgoal_regen_self_review: bool = True
+    # ★ 2026-10-17（用户定案内化）：3.3 无条件自改进（默认 False）
+    self_improve_stage: bool = False
     # ★ 2026-10-15（审核 F5 补登记）：numbers 叶子 Lean 数值核验（默认 False）
     enable_numeric_lean_verify: bool = False
     # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认关，可 A/B）
-    subgoal_collab_mode: bool = False
+    subgoal_collab_mode: bool = True
     subgoal_collab_regen_rounds: int = 3
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
@@ -599,7 +608,7 @@ class AgentConfig(_AgentConfigBase):
     # 退化为 AND 的单分支 ⇒ 蓝图路径**结构性不存在"独立求解分支"**，这正是
     # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
     # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
-    blueprint_or_expand_all: bool = False
+    blueprint_or_expand_all: bool = True
     # ★ 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具，证明就用 lean」）：
     #   ① `blueprint_node_contract`：**节点契约** —— 蓝图每个节点声明 `tool`
     #      （lean/sympy/numeric/llm），并用 `inputs[i].use` 声明「把上游的哪个

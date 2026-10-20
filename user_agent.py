@@ -88,7 +88,7 @@ _CONFIG_OVERRIDE_KEYS = (
     #   `verify_reserve_seconds`：orchestrator 注释称"可覆盖生成侧预留"。
     "enable_question_type_hint", "verify_reserve_seconds",
     "enable_web_search",
-    "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
+    "self_improve_stage", "cross_model_falsify", "cross_model_timeout", "subgoal_regen_self_review", "rewrite_on_low_conf", "rewrite_conf_threshold", "subgoal_theorem_search", "attention_focus_enabled", "smt_falsify", "lean_hammer", "answer_shape_strict", "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
     "lean_dedup_by_answer",  # 2026-09-17 Lean 同答案去重缓存（默认 False）
     # ★★ 2026-09-16 审计修复（**关键断链**）：以下三键此前
     #   **有 argparse、有 AgentConfig 声明，却不在白名单** ⇒
@@ -196,7 +196,7 @@ _CONFIG_OVERRIDE_KEYS = (
     "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
     "five_gate_math_check_calcverify",
     "five_gate_rewrite",
-    # 2026-10-20：审核侧义务账本（蓝图倒推链 → 4.1/4.2 的判定依据）
+    # 2026-10-20：审核侧义务账本总开关（4.1 自审 + 4.2 证伪共用）
     "audit_obligation_ledger",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。

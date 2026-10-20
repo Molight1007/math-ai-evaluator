@@ -284,9 +284,10 @@ def solve_stage(self, ctx, tier: str) -> object:
     ])
 
     if not self._has_usable_candidate(ctx):
-        # 2026-10-15（用户定案「删直答兜底」）：原「无可用候选 → _fallback_direct
-        # 直答」已删除；改为收集错误信息并报错（失败即暴露，不再直答掩盖）。
+        # ★ 2026-10-19（097 早退根因）：原「无候选 → 直接抛 no_usable_candidate」
+        #   在 3_solve 后就中断流程，导致 4.6 池空重写根本没机会跑（097=292s 早退）。
+        #   改为**继续**：4.0~4.5 对空池零成本跳过，4.6 触发「池空重写」；重写仍空
+        #   时由 final_selector 的 no_usable_candidate 分支兜底（失败仍暴露，不直答）。
         self.record(ctx, "control",
-                    "Solver 未产出可用候选（空/占位符），收集错误信息并报错")
-        return self._raise_solve_error(ctx, "no_usable_candidate")
+                    "Solver 未产出可用候选（空），继续走五道链（4.6 池空重写）")
     return _SOLVE_CONTINUE

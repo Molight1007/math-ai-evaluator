@@ -64,7 +64,7 @@ from cli.test_report__sections import (  # noqa: E402
 # ================================================================
 # 路径 / 可执行文件常量
 # ================================================================
-MK = r"D:\mathpilot_work\tools\_mkdocx.py"
+MK = r"D:\mathpilot_work\tools\_build_docx.py"
 PY = r"D:\python\python.exe"
 OUT_DIR_DEFAULT = os.path.join(ROOT, "测试结果")
 TESTSEET_DEFAULT = os.path.join(ROOT, "题库", "official112_本地测试题库", "official112_full.jsonl")
@@ -344,6 +344,16 @@ def _stage_dashboard_rows(recs):
         if stage == "3_solve":
             nc = len(_as_list(r.get("candidates")))
             return nc > 0, "候选 %d 个" % nc
+        # ★ 2026-10-17 修复（p0b5_r3 判读失真）：3.3_improve 原**无达标分支**
+        #   ⇒ `_pass_for` 恒返回 None ⇒ 报告显示「未触发」，而 diag 里
+        #   `n_self_improved` 实际有值（本轮 improved=6.0/7 题）。现按
+        #   「该题是否跑了 3.3（stage_timers 有键）+ 是否真改进了」判。
+        if stage == "3.3_improve":
+            _stv = _as_dict(d.get("stage_timers"))
+            if "3.3_improve" not in _stv:
+                return None, "未运行（该题不适用）"
+            _ni = int(_num_or_zero(d.get("n_self_improved")))
+            return _ni > 0, "improved=%d" % _ni
         # ★ 2026-10-14（五道链定案）：⑥~⑪ 改为五道链阶段；旧链阶段分支已删。
         if stage == "4.0_normalize":
             return bool(_as_dict(d.get("answer_normalize"))), "规范化完成"

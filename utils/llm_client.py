@@ -7,7 +7,7 @@ from __future__ import annotations
 #   `utils/` 由此不再依赖 `agent/`（分层规则禁止 utils→agent/tools；contracts 不在禁令内）。
 #   读取点仍在本文件内（与改前一致）⇒ 行为零变更。
 from contracts.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
+    get_bool as _sw_bool, get_num as _sw_num)
 """
 轻量级 OpenAI 兼容 LLM 客户端
 ==============================

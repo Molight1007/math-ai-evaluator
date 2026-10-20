@@ -72,7 +72,6 @@ from typing import Any, Callable, List, Optional, Tuple
 
 from prompts.final_select import (
     MULTI_ANSWER_JUDGE_SYSTEM, MULTI_ANSWER_JUDGE_USER,
-    COMPARE_JUDGE_SYSTEM, COMPARE_JUDGE_USER,
 )
 logger = logging.getLogger("MathPilot")
 

@@ -6,8 +6,7 @@ from __future__ import annotations
 # results/<run_id>/<qid>/。只加不改：不删分支、不改判定、不动返回值；
 # 每一处调用都**永不抛异常**（失败只落一条 trace，绝不阻断主链）。
 from agent.artifact_store import (
-    put_ctx as _artifact_put, append_ctx as _artifact_append,
-    attach as _artifact_attach)
+    put_ctx as _artifact_put, attach as _artifact_attach)
 """
 编排器（Orchestrator）—— 简化版
 ================================
@@ -43,22 +42,20 @@ _DEGRADED_ANSWER_RE = _re.compile(
 )
 
 
-from .base import BaseAgent, TaskContext, Budget, Verdict, _normalize_chat_response
+from .base import BaseAgent, TaskContext, Budget
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
 from .sub_goal_solver import SubGoalSolverAgent
 # ★ 2026-10-06：`_clip_review_prose` **直接 import 复用**（不复制正则）——
 #   复核清单与 verifier 深复核原文需同一道清洗口径，两处各写一份必然分叉
 #   （仓库既有教训）。verifier 不 import orchestrator ⇒ 无循环导入。
-from .verifier import VerifierAgent, _clip_review_prose
+from .verifier import VerifierAgent
 # ★ 2026-10-07（问题总账 §2.6「择优逻辑口径分叉」）：终答兜底择优**复用** formatter
 #   的统一排序键 `_rank_key`（票数→独立复现数→置信度→答案形态→答案更短），
 #   以及配套的 `_attach_support`（把"独立复现数"挂到候选上）。**只读引用，不改
 #   formatter.py**。formatter 不 import orchestrator ⇒ 无循环导入。
 from .formatter import (
-    FormatterAgent,
-    _rank_key as _formatter_rank_key,
-    _attach_support as _formatter_attach_support)
+    FormatterAgent)
 from .collaborative_solver import CollaborativeSolver
 from .adversarial_verifier import AdversarialVerifier
 from .audit_gate import AuditGate
@@ -93,6 +90,7 @@ from .rewrite_gate import rewrite_stage  # noqa: F401
 from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
 # 2026-10-07 阶段C4a：2.7_subgoal_main 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
+from contracts.switch_registry import get_bool as _sw_bool
 from .orchestrator__solve import subgoal_main_path  # noqa: F401
 # 2026-10-07 阶段C4b：3.2_complete 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
@@ -514,8 +512,13 @@ class Orchestrator(BaseAgent):
         self._stage_start(ctx, "3.2_complete")
         complete_truncated(self, ctx, tier)
 
-        self._stage_start(ctx, "3.3_improve")
-        self_improve_step(self, ctx)
+        # ★ 2026-10-17（用户定案「内化」）：3.3 的「无条件自改进」已内化为
+        #   **蓝图 3 遍 + 子目标 3 遍**（blueprint_multi_gen_rounds /
+        #   subgoal_collab_regen_rounds，默认均 3）⇒ 本阶段默认**跳过**
+        #   （阶段名保留于 stage_audit 契约；开关 self_improve_stage 可恢复）。
+        if _sw_bool("self_improve_stage"):
+            self._stage_start(ctx, "3.3_improve")
+            self_improve_step(self, ctx)
 
         self._stage_start(ctx, "3.4_collab")
         collaborative_deep_improve(self, ctx, tier)

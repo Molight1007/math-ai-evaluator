@@ -29,7 +29,7 @@ import sys
 import time
 import warnings
 from collections import Counter, defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 warnings.filterwarnings("ignore")  # run_eval/sympy 的 deprecation 噪音会淹没台账输出
 

@@ -97,6 +97,54 @@ def _extract_numeric_equations(text: str) -> list:
     return out
 
 
+_CALC_INEQ_RE = None
+
+
+def _extract_inequalities(text: str) -> list:
+    """从推理文本提取**可机器复算的不等式** [(lhs, rhs, op), ...]（最多 8 条）。
+
+    ★ 2026-10-17（用户要求「计算错误要靠工具检」）：原工具只验数值等式，
+      017 型错误（``a^2+3b^2 >= 4|a||b|^3`` 为假）不在检测范围。
+    ★ 安全边界（防误杀题面条件）：**两侧都必须含运算符/函数**（`^ * / + - sqrt abs`
+      等）；`n >= 2` / `k >= 1` 这类纯条件（两侧只有变量/常数）**不提取**。
+    """
+    global _CALC_INEQ_RE
+    import re as _re
+    if _CALC_INEQ_RE is None:
+        _CALC_INEQ_RE = _re.compile(
+            r"([^\n=<>]{2,80}?)\s*(>=|<=|≥|≤|>|<)\s*([^\n=<>]{1,80})")
+    _OPS = {">=": "ge", "<=": "le", "≥": "ge", "≤": "le", ">": "gt", "<": "lt"}
+    # ★ 2026-10-17 审核：原判据含 `+ -`，会把题面条件 `x >= -1` 当可复算式
+    #   （候选答案若违反该"条件"就被误杀）。改为**强运算符**（乘幂/除/函数），
+    #   且只要求**任一侧**命中（另一侧允许纯数字/变量，如 `x^2-1 >= 0` 的 `0`）。
+    _LOOKS = _re.compile(r"[\^*/]|sqrt|abs|frac")
+    def _clean(x: str) -> str:
+        # 去中文前后缀（"由 a^2" / " 可得…"）并把 |expr| 归一化为 Abs(expr)
+        x = _re.sub(r"[\u4e00-\u9fff，。；、：（）【】]+", " ", x).strip()
+        x = _re.sub(r"\|([^|]+)\|", r"Abs(\1)", x)
+        x = _re.sub(r"[.…·]+\s*$", "", x).strip()   # 去省略号尾巴（"…可得..."）
+        return x
+
+    out = []
+    for m in _CALC_INEQ_RE.finditer(text or ""):
+        lhs, op, rhs = _clean(m.group(1)), m.group(2), _clean(m.group(3))
+        if not lhs or not rhs:
+            continue
+        # 任一侧含强运算符即可；另一侧限长（纯数字/变量/短式）
+        if not (_LOOKS.search(lhs) or _LOOKS.search(rhs)):
+            continue
+        if len(lhs) > 70 or len(rhs) > 70:
+            continue
+        # 纯条件形态（两侧都只有数字/变量/正负号，如 `x >= -1`）⇒ 跳过
+        if not (_LOOKS.search(lhs) and _LOOKS.search(rhs)):
+            if len(lhs) > 24 or len(rhs) > 24:
+                continue
+        out.append((lhs, rhs, _OPS[op]))
+        if len(out) >= 8:
+            break
+    return out
+
+
 def math_check_stage(self, ctx) -> None:
     """4.4 阶段入口（orchestrator 一行委托；``self`` 即 Orchestrator 实例）。
 
@@ -131,6 +179,40 @@ def math_check_stage(self, ctx) -> None:
                 self.record(ctx, "math_check",
                             "cid=%s 计算检测异常（放行）: %s: %s"
                             % (cid, type(_e_d).__name__, str(_e_d)[:120]))
+            # ★ 2026-10-17（用户要求「计算过程交给工具检」）：工具③逐式复算
+            #   推理里的等式 + 不等式；**确有反例/算错 ⇒ 淘汰**（带证据）；
+            #   无法判定（n_err）⇒ 放行（不误杀）。
+            try:
+                from tools.agent_toolkit.calc_verify import calc_verify as _cv
+                _txt = str(getattr(c, "reasoning", "") or "")
+                _eqs = _extract_numeric_equations(_txt)
+                _ineq = _extract_inequalities(_txt)
+                _items = [{"expr": a, "claimed": b} for a, b in _eqs[:8]]
+                _items += [{"expr": a, "claimed": b, "op": op}
+                           for a, b, op in _ineq[:8]]
+                if _items:
+                    _rv = _cv(_items)
+                    _nb = int(_rv.get("n_bad") or 0)
+                    if _nb > 0:
+                        # ★ 2026-10-17 审核：原写法 `A and B or C` 因优先级等价于
+                        #   `(A and B) or C`——C 命中时即使 ok=True 也会被选为证据。
+                        _r0 = next((x for x in (_rv.get("results") or [])
+                                    if (not x.get("ok"))
+                                    and ("不成立" in str(x.get("detail"))
+                                         or "算错" in str(x.get("detail")))), {})
+                        n_fail += 1
+                        rejected.append({
+                            "id": cid, "kind": kind, "answer": ans[:160],
+                            "method": "calc_verify",
+                            "evidence": str(_r0.get("detail") or "")[:300]})
+                        self.record(ctx, "math_check",
+                                    "cid=%s 工具③逐式复算：%d 条不一致 ⇒ 淘汰；样例 %s"
+                                    % (cid, _nb, str(_r0.get("detail") or "")[:160]))
+                        continue
+            except Exception as _e_cv:  # noqa: BLE001
+                self.record(ctx, "math_check",
+                            "cid=%s 工具③复算异常（放行）: %s: %s"
+                            % (cid, type(_e_cv).__name__, str(_e_cv)[:100]))
             _v = str(det.get("verdict") or "unknown")
             if _v == "fail":
                 n_fail += 1
@@ -152,16 +234,28 @@ def math_check_stage(self, ctx) -> None:
                                "、kind=%s" % kind if kind else ""))
 
         if rejected and not kept:
-            # 全拒 ⇒ 回退保留（宁 unknown 不误杀；与 AuditGate 口径一致）
-            kept = cands
+            # ★ 2026-10-18（p0b5_r4 实测 3 题：010/013/017 均受害）：原
+            #   「全拒 ⇒ 回退保留原候选池（宁 unknown 不误杀）」是**降级**——
+            #   工具③已明确算出候选算错（010 的正确结果是 2 = 标准答案），
+            #   回退等于把**已证伪的错答案**放回去让投票选中。
+            #   用户口径「不要隐藏错误」⇒ 删除回退：全拒即清空，交由 4.6 重写。
+            ctx.candidates = []
+            ctx.audit_reject_feedback = list(
+                getattr(ctx, "audit_reject_feedback", None) or []) + [
+                    "[计算检测] cid=%s: %s（%s）"
+                    % (r["id"], r["evidence"], r["method"]) for r in rejected]
+            ctx.math_check_rejected = list(
+                getattr(ctx, "math_check_rejected", None) or []) + rejected
             ctx.math_check = {
-                "n": len(cands), "n_rejected": 0, "n_fail": n_fail,
-                "n_unknown": n_unknown, "all_rejected_fallback": True,
-                "would_reject_ids": [r["id"] for r in rejected],
+                "n": len(cands), "n_rejected": len(rejected), "n_fail": n_fail,
+                "n_unknown": n_unknown, "all_rejected_fallback": False,
+                "rejected_ids": [r["id"] for r in rejected],
+                "rejected_evidence": [str(r.get("evidence"))[:240]
+                                      for r in rejected][:4],
             }
             self.record(ctx, "math_check",
-                        "⚠ 4.4 计算检测：%d 个候选**全部未通过** ⇒ 回退保留"
-                        "原候选池（宁 unknown 不误杀）" % len(cands))
+                        "4.4 计算检测：%d 个候选**全部算错** ⇒ 清空候选池"
+                        "（不回退；交由 4.6 重写）" % len(cands))
         else:
             if rejected:
                 ctx.candidates = kept

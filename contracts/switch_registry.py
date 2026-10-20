@@ -73,7 +73,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "lean_search / calc_verify / to_lean / lean_check（实现在 tools/agent_toolkit）；"
         "=0 关闭做 A/B"),
     "subgoal_collab_mode": (
-        "SUBGOAL_COLLAB_MODE", "bool", False,
+        "SUBGOAL_COLLAB_MODE", "bool", True,
         "子目标三角色协作求解（2026-10-15 用户定案）：求解/审核/规划三 agent 合作 "
         "+ 审核用工具①③ + 3 遍「在现有基础上再生成」+ 规划预取与蓝图回传；"
         "=1 启用；=0（默认）走旧逐步求解，可 A/B"),
@@ -85,6 +85,44 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "numbers 叶子 Lean 数值核验开关（2026-10-15 审核 F5 补登记）：原字段只"
         "存在于 kwargs 白名单/评测覆盖 ⇒ bare 入口恒 False（空转）。默认 False "
         "与现行为一致；评测经覆盖传 True 时生效。"),
+    "self_improve_stage": (
+        "SELF_IMPROVE_STAGE", "bool", False,
+        "3.3 候选级「无条件自改进」总开关（2026-10-17 用户定案内化：默认 False="
+        "由蓝图 3 遍 + 子目标 3 遍覆盖；置 True 恢复旧阶段）。"),
+    "cross_model_falsify": (
+        "CROSS_MODEL_FALSIFY", "bool", True,
+        "跨模型独立检错（2026-10-17 用户定案）：对机检+同模型证伪都放行的候选，"
+        "调第二模型（DeepSeek）独立判断；wrong 即淘汰。失败/超时放行。"),
+    "cross_model_timeout": (
+        "CROSS_MODEL_TIMEOUT", "num", 90,
+        "跨模型检错的单次 HTTP 超时（秒）"),
+    "subgoal_regen_self_review": (
+        "SUBGOAL_REGEN_SELF_REVIEW", "bool", True,
+        "子目标 3 遍迭代的「生成前自审」（2026-10-17 用户定案：先自己审核再生成；"
+        "3 遍本身保留，用于最大化推理）"),
+    "lean_hammer": (
+        "LEAN_HAMMER", "bool", True,
+        "Lean 代回先试自动化策略链（omega/linarith/nlinarith/norm_num/ring/"
+        "positivity/decide/tauto/simp/aesop/grind），失败再 sorry；关=旧行为"),
+    "answer_shape_strict": (
+        "ANSWER_SHAPE_STRICT", "bool", True,
+        "4.0 答案形态严格校验：条件式/命题式（含「且/∧/∀/∃」）不算答案"),
+    "smt_falsify": (
+        "SMT_FALSIFY", "bool", True,
+        "4.2 证伪增加 SMT(Z3) 通道：验证「蕴含式断言」是否有反例（覆盖逻辑命题类"
+        "错误 008/015）"),
+    "attention_focus_enabled": (
+        "ATTENTION_FOCUS_ENABLED", "bool", True,
+        "2.6 题意理解产出「关键注意点」，注入求解/子目标 prompt 顶部（注意力引导）"),
+    "subgoal_theorem_search": (
+        "SUBGOAL_THEOREM_SEARCH", "bool", True,
+        "每个子目标按自身文本单独检索定理（per-subgoal，比全局一次更相关）"),
+    "rewrite_on_low_conf": (
+        "REWRITE_ON_LOW_CONF", "bool", True,
+        "4.6 重写触发扩展：池非空但「有淘汰证据 且 投票置信度 0」也重写（不放行错答案）"),
+    "rewrite_conf_threshold": (
+        "REWRITE_CONF_THRESHOLD", "num", 0.0,
+        "重写触发的置信度阈值（vote_correct/vote_total ≤ 此值 才考虑重写；默认 0）"),
     # ---- agent/deterministic.py ----
     "deterministic_timeout_sec": (
         "DETERMINISTIC_TIMEOUT_SEC", "num", 5.0,
@@ -346,7 +384,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     #   `enable_dag_replan`（求解后 DAG 复盘重规划）两个开关已整块撤除。
     # ---- agent/blueprint_planner.py（OR 节点展开策略，2026-10-04 补登记）----
     "blueprint_or_expand_all": (
-        "BLUEPRINT_OR_EXPAND_ALL", "bool", False,
+        "BLUEPRINT_OR_EXPAND_ALL", "bool", True,
         "蓝图 OR 节点是否展开**全部**备选分支（默认 False = 只取首分支/保持历史行为；"
         "置 True 会显著放大子目标规模，需 A/B）"),
     # ---- 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具」）----
@@ -552,17 +590,17 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.2 AI 对抗证伪（五道审核链第 2 道）：逐存活候选两层对抗验证——"
         "机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰；"
         "跳过/故障一律保留候选（防误杀）；=0 关闭做 A/B"),
+    "audit_obligation_ledger": (
+        "AUDIT_OBLIGATION_LEDGER", "bool", True,
+        "审核侧义务账本（2026-10-20）：把蓝图倒推链反演成「本题应建立哪些事实」"
+        "的清单，注入 4.1 自审与 4.2 证伪 prompt；审查者指认的义务在清单里"
+        "查不到 ⇒ 视为评论了蓝图未要求的内容，不淘汰候选。"
+        "=0 退回「只喂题目/解答/答案」的老口径，用于 A/B"),
     "five_gate_lean_check_tool": (
         "FIVE_GATE_LEAN_CHECK_TOOL", "bool", False,
         "4.3 工具①观测通道（2026-10-15 工具化定稿）：开启后对存活候选调 "
         "tools/agent_toolkit.lean_check 做第二意见（错误点/缺少点写 diag，"
         "暂不改淘汰）；=1 开启（云端 A/B）"),
-    "audit_obligation_ledger": (
-        "AUDIT_OBLIGATION_LEDGER", "bool", True,
-        "审核侧义务账本（4.1/4.2 共用）：把 ctx.blueprint 的倒推链反演成带编号的"
-        "义务清单注入审查 prompt，要求报错指认落在哪条义务上；明确指认「不落在"
-        "任何义务上」的硬类型错误不淘汰；无蓝图/开关关时行为与历史完全一致；"
-        "=0 退回「只喂题目+解答+答案」的老口径做 A/B"),
     "five_gate_lean_check": (
         "FIVE_GATE_LEAN_CHECK", "bool", True,
         "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "

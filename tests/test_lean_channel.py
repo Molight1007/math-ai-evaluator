@@ -195,10 +195,12 @@ def test_apply_stops_after_2_unknown(monkeypatch):
     ctx.domain = "证明题"
     ctx.question_type = ""
     kept, fb = gate.apply(ctx, "standard", _mk_cands(6))
-    assert calls["n"] == 2, "连续 2 unknown 后应止损，不再逐个 verify"
-    assert len(kept) == 6, "lenient_pass + verify_stop 都应保留候选"
-    stops = [e for e in ctx.lean_gate if e.get("degraded") == "verify_stop"]
-    assert len(stops) == 4, "剩余 4 候选应标记 verify_stop"
+    # ★ 2026-10-17（用户定案「删降级/保底」）：不再"止损跳过"，全部候选逐个验证
+    assert calls["n"] == 6, "无止损：6 个候选应全部逐个 verify"
+    assert len(kept) == 6, "lenient：unknown 全保留"
+    obs = [e for e in ctx.lean_gate
+           if e.get("degraded") == "unknown_streak_observed"]
+    assert obs, "连续 unknown 只记录现象，不跳过验证"
     assert not fb
 
 
@@ -240,7 +242,8 @@ def test_apply_valid_resets_streak(monkeypatch):
     kept, _ = gate.apply(ctx, "standard", _mk_cands(6))
     # 1 unknown(1) → 2 valid(清零) → 3 unknown(1) → 4 unknown(2,达阈值)
     # → 5、6 verify_stop。verify 调用 = 候选 1-4 = 4 次
-    assert calls["n"] == 4, f"valid 清零后应从候选 3 重新计数，实际 {calls['n']}"
+    # ★ 2026-10-17：无止损 ⇒ 6 个候选全部验证
+    assert calls["n"] == 6, f"无止损：应全验 6 个，实际 {calls['n']}"
     assert len(kept) == 6
 
 
@@ -250,9 +253,9 @@ def test_apply_stop_strict_rejects_rest(monkeypatch):
     ctx = TaskContext(problem="证明题题干", metadata={})
     ctx.domain = "证明题"
     kept, fb = gate.apply(ctx, "standard", _mk_cands(6))
-    assert calls["n"] == 2
-    assert len(kept) == 0, "strict：验证过与 verify_stop 的 unknown 全拒"
-    assert len(fb) == 6, "6 候选全产生拒绝反馈（2 验证 + 4 止损）"
+    assert calls["n"] == 6, "无止损：全部验证"
+    assert len(kept) == 0, "strict：unknown 全拒"
+    assert len(fb) == 6, "6 候选全产生拒绝反馈（全部验证）"
 
 
 # ----------------------------------------------------------------------
@@ -307,8 +310,6 @@ def test_apply_parallel_prefetch_same_outcome(monkeypatch):
     p = _run_gate(monkeypatch, True, allunk)
     assert s[1] == p[1], "止损后的 kept 必须一致"
     assert s[2] == p[2], "止损后的埋点必须一致"
-    assert s[0] == 2, "串行：连续 2 unknown 即止损"
-    from tools.lean_local.lean_bridge import lean_parallelism
-    _k = lean_parallelism()
-    assert p[0] <= 2 + _k - 1, f"并行超验量应 ≤K-1（实际 {p[0]}, K={_k}）"
-    assert p[0] < 6, "并行也必须止损，不得逐候选全验"
+    # ★ 2026-10-17：无止损 ⇒ 串行/并行都全验 6 个
+    assert s[0] == 6, "无止损：串行全验 6 个"
+    assert p[0] == 6, "无止损：并行也全验 6 个"

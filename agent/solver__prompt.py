@@ -205,4 +205,33 @@ def _inject_initial_context(self, ctx: TaskContext, user_content: str) -> str:
                         "solver 主路径注入题目目标锚 %d 字符" % len(_pg_txt))
     except Exception:  # noqa: BLE001
         pass
+    # ★ 2026-10-18（用户方向一「注意力引导」）：题意理解产出的**关键注意点**
+    #   前置注入——放在题目/目标锚之后、其余注入之前，让注意力先锚定陷阱。
+    try:
+        from contracts.switch_registry import get_bool as _gb
+        _on = _gb("attention_focus_enabled")
+        _focus = list(getattr(ctx, "attention_focus", None) or [])
+        if _on and _focus:
+            user_content = user_content + (
+                "\n\n【本题关键注意点（先读，求解全程对照）】\n"
+                + "\n".join("- " + str(f)[:160] for f in _focus[:5]))
+            self.record(ctx, "understanding_chain",
+                        "solver 注入关键注意点 %d 条" % len(_focus))
+    except Exception:  # noqa: BLE001
+        pass
+    # ★ 2026-10-17（用户要求「题意误读要用工具/前置理解抓」）：题意理解阶段
+    #   发现的**题面歧义**必须显式进求解提示词——要求模型**先声明解读与
+    #   题面依据**，不得默默假设（089 型误读的直接来源）。
+    try:
+        _amb = list(getattr(ctx, "problem_ambiguities", None) or [])
+        if _amb:
+            user_content = user_content + (
+                "\n\n【题面歧义提醒（题意理解阶段发现，必须正面处理）】\n"
+                + "\n".join("- " + str(a)[:220] for a in _amb[:4])
+                + "\n⚠ 求解前必须**先明确说明你采用哪种解读、依据是题面哪句话**；"
+                  "不得默默假设。若不同解读会给出不同答案，请明确说明你的选择。")
+            self.record(ctx, "understanding_chain",
+                        "solver 注入题面歧义提醒 %d 条" % len(_amb))
+    except Exception:  # noqa: BLE001
+        pass
     return user_content
