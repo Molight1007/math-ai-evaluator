@@ -8,7 +8,8 @@
   ① **机检证伪**（`AnswerFalsifier`）：LLM 构造证伪证书（数值回带等式）→
      SymPy 精确判定拿到反例 ⇒ 淘汰（最高精度，带可机检 witness）；
   ② **LLM 对抗生成**（`AdversarialVerifier.probe`）：假设答案错误、反向寻找
-     反例或第一个错误步骤；`is_actionable`（找到错误且有具体位置/反例）⇒ 淘汰。
+     反例或第一个错误步骤；`is_actionable`（**答案错**类，带具体位置/反例）⇒ 淘汰；
+     `is_soft`（跳步 / 边界未讨论 / 题意形式偏差）⇒ **不淘汰**，只留痕（2026-10-20）。
 
 判定纪律（防误杀，与既有对抗链同口径）：
   · 机检证伪以 `res.is_incorrect` 为准（证伪器内部已做"任何不确定 ⇒ 放行"）；
@@ -61,7 +62,7 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
             AdversarialVerifier(self.client, self.config)
         prob = str(getattr(ctx, "problem", "") or "")
 
-        kept, rejected = [], []
+        kept, rejected, soft = [], [], []
         n_skipped, n_failed = 0, 0
 
         for c in cands:
@@ -96,6 +97,20 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                                 getattr(pr, "confidence", 0.0) or 0.0),
                             "feedback": str(pr.to_feedback() or "")[:600],
                         }
+                    elif getattr(pr, "is_soft", False):
+                        # 2026-10-20：过程性问题（跳步/边界未讨论/题意形式偏差）
+                        #   不构成答案错误 ⇒ 放行 + 留痕，不进 rejected。
+                        _st = str(getattr(pr, "error_type", "") or "") or "?"
+                        soft.append({
+                            "id": cid,
+                            "error_type": _st,
+                            "confidence": float(
+                                getattr(pr, "confidence", 0.0) or 0.0),
+                            "note": str(pr.to_feedback() or "")[:300],
+                        })
+                        self.record(ctx, "adversarial_gate",
+                                    "cid=%s 仅过程瑕疵（%s）⇒ 不淘汰，放行"
+                                    % (cid, _st))
                     elif getattr(pr, "skipped", ""):
                         n_skipped += 1
                         self.record(ctx, "adversarial_gate",
@@ -147,8 +162,13 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
             except Exception:  # noqa: BLE001  元数据写入失败不影响淘汰结果
                 pass
 
+        if soft:
+            ctx.adversarial_gate_soft = list(
+                getattr(ctx, "adversarial_gate_soft", None) or []) + soft
         ctx.adversarial_gate = {
             "n": len(cands),
+            "n_soft": len(soft),
+            "soft_ids": [s["id"] for s in soft],
             "n_rejected": len(rejected),
             "n_machine": sum(1 for r in rejected if r["by"] == "machine"),
             "n_llm": sum(1 for r in rejected if r["by"] == "llm"),
@@ -159,10 +179,10 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
         self.record(
             ctx, "adversarial_gate",
             "4.2 对抗证伪：%d 候选 ⇒ 证伪淘汰 %d（机检 %d / LLM %d）"
-            "（跳过 %d、故障 %d）"
+            "（跳过 %d、故障 %d、过程瑕疵放行 %d）"
             % (len(cands), len(rejected),
                ctx.adversarial_gate["n_machine"], ctx.adversarial_gate["n_llm"],
-               n_skipped, n_failed))
+               n_skipped, n_failed, len(soft)))
 
         try:
             from .orchestrator__verify import _pool_empty_fallback as _pef

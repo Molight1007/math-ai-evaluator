@@ -557,6 +557,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.3 工具①观测通道（2026-10-15 工具化定稿）：开启后对存活候选调 "
         "tools/agent_toolkit.lean_check 做第二意见（错误点/缺少点写 diag，"
         "暂不改淘汰）；=1 开启（云端 A/B）"),
+    "audit_obligation_ledger": (
+        "AUDIT_OBLIGATION_LEDGER", "bool", True,
+        "审核侧义务账本（4.1/4.2 共用）：把 ctx.blueprint 的倒推链反演成带编号的"
+        "义务清单注入审查 prompt，要求报错指认落在哪条义务上；明确指认「不落在"
+        "任何义务上」的硬类型错误不淘汰；无蓝图/开关关时行为与历史完全一致；"
+        "=0 退回「只喂题目+解答+答案」的老口径做 A/B"),
     "five_gate_lean_check": (
         "FIVE_GATE_LEAN_CHECK", "bool", True,
         "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "

@@ -235,7 +235,7 @@ class AnswerFalsifier:
         #   实测本处曾撞 finish_reason=length（DeepSeek CoT 长，证伪 JSON 被腰斩）。
         #   ⚠ 该点经包装方法 self._chat(..., max_tokens=2048) 间接传值，
         #     原先 13 处清单 + 首版全仓扫（只扫 llm/chat 直接调用）均漏掉。
-        raw = self._chat(ctx, msgs, max_tokens=8192)
+        raw = self._chat(ctx, msgs, max_tokens=16384)
         return self._parse_json(raw)
 
     def _chat(self, ctx, msgs, max_tokens: int) -> str:

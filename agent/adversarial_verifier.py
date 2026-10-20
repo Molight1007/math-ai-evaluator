@@ -61,6 +61,18 @@ ERROR_CHECKLIST = (
 
 _ERROR_TYPES = tuple(k for k, _ in ERROR_CHECKLIST)
 
+# ★ 2026-10-20（用户定案）：「过程不完整」≠「答案错」。
+#   以下三类只说明论证写得简略 / 覆盖不全 / 答案形式不符，**不构成答案错误**，
+#   不得作为淘汰候选的依据 —— 降级为软信号（留痕，可作重写提示），不淘汰。
+#   依据（p0b5_r5，2026-10-20）：official112-019 池中 8 个候选去重后答案只有 4
+#   （= gold），却因 skipped_step / misread_requirement 被累计拒 9 次 ⇒ 池空 ⇒
+#   输出「未给出有效解答」。同一模式在 015（候选 2）、008（候选 603729）上复现。
+#   ⚠ prompt 侧的同类硬约束（2026-10-17）早已存在，但模型仍会回这些类型 ——
+#     契约必须由代码兑现，不能靠提示词自觉。
+SOFT_ERROR_TYPES = frozenset({
+    "skipped_step", "boundary_missed", "misread_requirement",
+})
+
 # 模型常常用中文或自造词回类型（实测出现过"计算错误"），
 # 归一化不了就会污染 #16 的错误类型统计，故给一份中英别名表兜底。
 _ERROR_ALIASES = (
@@ -85,23 +97,41 @@ _ADVERSARY_SYSTEM = (
     "你的任务不是确认答案正确，而是**尽力证明它是错的**。\n"
     "默认立场：给定的答案是错误的，你要找出它错在哪里。\n"
     "只有当你用尽方法仍找不到任何错误时，才承认它可能对。\n"
-    "你是严谨的对手，不是附和者——但也不能凭空捏造错误。"
+    "你是严谨的对手，不是附和者——但也不能凭空捏造错误。\n\n"
+    "⚠ 硬约束（2026-10-17 用户定案：4.2 是「对抗证伪」，证伪=找到具体错误）：\n"
+    "**「缺少推导 / 跳步 / 解答简略 / 未给出证明过程」不构成错误**，"
+    "不得作为判 found=true 的理由；\n"
+    "只有能指出**具体的数学错误**时才判 found=true，即至少满足其一：\n"
+    "  · 某一步的推导/不等式/等式在数学上不成立（可指出错在哪）；\n"
+    "  · 最终结论与题面条件矛盾；\n"
+    "  · 能给出满足题面但使结论失败的具体反例；\n"
+    "  · 计算确实算错（给出正确值）。\n"
+    "若只是看不出它怎么推出来的、或觉得不够详细，一律判 found=false。\n"
+    "★ 判断标准不是「一份完整证明通常长什么样」，而是**本题的义务清单**：\n"
+    "  清单（若提供）列出本题应当建立的事实，以及哪些前提题面已给、"
+    "哪些已由前序结论建立。清单之外的省略**不算缺陷**，"
+    "已由前序建立的结论**不要求重复推导**。"
 )
 
 _ADVERSARY_TEMPLATE = (
     "【题目】\n{problem}\n\n"
+    "{obligations}"
     "【待审查的解答】\n{reasoning}\n\n"
     "【该解答给出的最终答案】\n{answer}\n\n"
     "请按以下 {n} 类错误逐项排查，尽力找出答案的错误：\n{checklist}\n\n"
     "对每一类，判断是否存在该类型错误。若找到错误，必须给出：\n"
     "  - 出错的具体步骤（原文摘录，不要改写）\n"
     "  - 具体错在哪、正确应该是什么\n"
-    "  - 若可能，给出一个反例或具体反证\n\n"
+    "  - 若可能，给出一个反例或具体反证\n"
+    "  - 这个错误发生在**哪一条义务**上（清单编号）\n"
+    "⚠ 若你指不出它落在清单里的哪一条，说明你评论的可能是本题并不要求的内容，"
+    "此时请把 obligation_id 填 none，不要硬套一个编号。\n\n"
     "只输出 JSON，不要任何多余文字：\n"
     '{{"found": <true 表示找到错误 / false 表示未找到>, '
     '"error_type": "<{types} 之一，未找到时为空字符串>", '
     '"error_step": "<出错步骤原文，未找到时为空字符串>", '
     '"counterexample": "<反例或反证，没有则空字符串>", '
+    '"obligation_id": "<O1/O2…；不落在任何义务上填 none；无清单时填空字符串>", '
     '"confidence": <0到1之间的小数>, '
     '"reasoning": "<一句话说明你的判断依据>"}}'
 )
@@ -126,15 +156,62 @@ class AdversarialResult:
     raw: str = ""                       # 原始返回（排障用）
     parsed: bool = False                # JSON 是否被成功解析
     skipped: str = ""                   # 跳过原因（空 = 正常执行）
+    # ★ 2026-10-20（用户：「把蓝图倒推过程反过来输出给 4 部分」）：
+    #   `obligation_id` = 审查者指认的「该错误落在哪一条义务上」（O1/O2…，或 "none"）。
+    #   `obligation_mapped` = 该引用能否在账本里找到（None=本次未用账本）。
+    #   判据见 `is_actionable`：**明确宣称"不落在任何义务上"**的硬类型错误不予淘汰。
+    obligation_id: str = ""
+    obligation_mapped: bool = False
+    ledger_used: bool = False
+
+    @property
+    def obligation_note(self) -> str:
+        """排障用的账本判定说明（空 = 未启用账本）。"""
+        if not self.ledger_used:
+            return ""
+        if not self.obligation_id:
+            return "账本：审查者未指认义务（不据此放宽）"
+        return ("账本：指认 %s（%s）"
+                % (self.obligation_id,
+                   "已对上" if self.obligation_mapped else "不在账本内"))
+
+    @property
+    def is_soft(self) -> bool:
+        """找到的是「过程/形式问题」（跳步、边界遗漏、题意偏差），不是答案错。
+
+        2026-10-20：这类结果**不淘汰候选**，只留痕（名单见 SOFT_ERROR_TYPES）。
+        """
+        return (self.found
+                and bool(self.error_step or self.counterexample)
+                and self.error_type in SOFT_ERROR_TYPES)
 
     @property
     def is_actionable(self) -> bool:
-        """是否足以触发 revise —— 找到错误且有具体位置才可信。"""
-        return self.found and bool(self.error_step or self.counterexample)
+        """是否足以触发**淘汰** —— 只认「答案错」类证据。
+
+        2026-10-20（用户定案）：「证明写得简略」不等于「答案错」。原先只要
+        ``found and (error_step or counterexample)`` 就淘汰，等于让被要求
+        「尽力找错」的审查者靠「跳步」把正确答案判死（p0b5_r5：15/49 条
+        淘汰记录打中的是 gold 本身）。
+        """
+        if not (self.found and bool(self.error_step or self.counterexample)):
+            return False
+        if self.error_type in SOFT_ERROR_TYPES:
+            return False
+        # ★ 2026-10-20 义务账本门（仅硬类型、且本次真的注入了账本时生效）：
+        #   审查者若**明确宣称**该错误不落在本题任何一条义务上（obligation_id
+        #   填 none / 填了账本里不存在的编号），说明它评论的是蓝图并未要求的东西
+        #   —— 这正是「证更强的命题」型误杀，不予淘汰。
+        #   ⚠ 只惩罚「明确指认失败」，**不惩罚漏填**（漏填按原行为淘汰）：
+        #     宁可漏杀，不可误伤（与 low-confidence 的处理口径一致）。
+        if (self.ledger_used and self.obligation_id
+                and not self.obligation_mapped):
+            return False
+        return True
 
     def to_feedback(self) -> str:
-        """转成可注入 revise 通道的反馈文本。"""
-        if not self.is_actionable:
+        """转成可注入 revise 通道的反馈文本（软信号也要有文本，供重写提示）。"""
+        if not (self.is_actionable or self.is_soft):
             return ""
         label = dict(ERROR_CHECKLIST).get(self.error_type, self.error_type or "未知类型")
         parts = [f"[对抗式审查] 检出「{label}」"]
@@ -158,6 +235,10 @@ class AdversarialVerifier(BaseAgent):
                             ("deep", "standard"))
         self._min_conf = float(getattr(config, "adversarial_min_confidence", 0.5))
         self._max_reasoning = int(getattr(config, "adversarial_max_reasoning", 2400))
+        # ★ 2026-10-20：是否把蓝图倒推链反演成「义务账本」注入审查（见
+        #   `agent/obligation_ledger.py`）。=0 退回「只喂题目/解答/答案」的老口径。
+        self._use_ledger = bool(
+            getattr(config, "audit_obligation_ledger", True))
 
     # ------------------------------------------------------------------
     # BaseAgent 接口（pipeline 形态入口）
@@ -212,8 +293,19 @@ class AdversarialVerifier(BaseAgent):
         if not reasoning.strip():
             return AdversarialResult(skipped="empty_reasoning")
 
+        ledger, ledger_text = None, ""
+        if self._use_ledger:
+            try:
+                from .obligation_ledger import build_ledger, render_for_audit
+                ledger = build_ledger(getattr(ctx, "blueprint", None))
+                ledger_text = render_for_audit(ledger)
+            except Exception as _e_l:  # noqa: BLE001  账本失败绝不阻断审查
+                logger.debug("[adversarial] 义务账本构建失败（退回无账本口径）: %s",
+                             str(_e_l)[:120])
+                ledger, ledger_text = None, ""
+
         try:
-            raw = self._call_probe(ctx, reasoning, answer)
+            raw = self._call_probe(ctx, reasoning, answer, ledger_text=ledger_text)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[adversarial] 对抗式审查调用失败（降级为未找到）: %s",
                            str(exc)[:120])
@@ -223,6 +315,10 @@ class AdversarialVerifier(BaseAgent):
             return AdversarialResult(skipped="empty_response")
 
         result = self._parse(raw)
+        if ledger_text:
+            from .obligation_ledger import has_obligation
+            result.ledger_used = True
+            result.obligation_mapped = has_obligation(ledger, result.obligation_id)
         # 低置信度的"找到"不采信：宁可漏掉，不可误伤
         if result.found and result.confidence < self._min_conf:
             logger.debug("[adversarial] 检出但置信度 %.2f < %.2f，不采信",
@@ -233,15 +329,22 @@ class AdversarialVerifier(BaseAgent):
     # ------------------------------------------------------------------
     # 内部：调用与解析
     # ------------------------------------------------------------------
-    def _call_probe(self, ctx: TaskContext, reasoning: str, answer: str) -> str:
-        """调用模型做对抗式审查（走 prefill 压缩，避免 CoT 吃满 max_tokens）。"""
+    def _call_probe(self, ctx: TaskContext, reasoning: str, answer: str,
+                    ledger_text: str = "") -> str:
+        """调用模型做对抗式审查（走 prefill 压缩，避免 CoT 吃满 max_tokens）。
+
+        ``ledger_text``：蓝图倒推链反演出的义务清单（空 = 本题无蓝图 / 开关关闭，
+        此时 prompt 与历史口径完全一致）。
+        """
         # 2026-09-04 修复：utils.llm 不存在（曾致 prefill 从未生效、审查静默降级）
         from utils.prefill import prefill_messages
 
         checklist = "\n".join(
             f"{i}. {name}：{desc}" for i, (name, desc) in enumerate(ERROR_CHECKLIST, 1))
+        _lblock = (ledger_text.rstrip() + "\n\n") if ledger_text else ""
         user = _ADVERSARY_TEMPLATE.format(
             problem=str(getattr(ctx, "problem", ""))[:2000],
+            obligations=_lblock,
             reasoning=reasoning[-self._max_reasoning:],
             answer=answer[:300],
             n=len(ERROR_CHECKLIST),
@@ -338,6 +441,7 @@ class AdversarialVerifier(BaseAgent):
             counterexample=str(data.get("counterexample") or "").strip(),
             confidence=max(0.0, min(1.0, conf)),
             reasoning=str(data.get("reasoning") or "").strip(),
+            obligation_id=str(data.get("obligation_id") or "").strip(),
             raw=text,
             parsed=True,
         )

@@ -196,6 +196,8 @@ _CONFIG_OVERRIDE_KEYS = (
     "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
     "five_gate_math_check_calcverify",
     "five_gate_rewrite",
+    # 2026-10-20：审核侧义务账本（蓝图倒推链 → 4.1/4.2 的判定依据）
+    "audit_obligation_ledger",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。
     # tier_* 六键保留（仍被 solver / orchestrator 以 .get(tier) 读取，见
