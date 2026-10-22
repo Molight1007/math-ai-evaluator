@@ -63,6 +63,79 @@ def _probe_batch(prober, ctx, cand, tier: str, n: int) -> list:
     return out
 
 
+def _llm_falsify_one(orch, ctx, cand, cid, tier, prober, grounding: bool,
+                     fvotes: int) -> dict:
+    """单个候选的 LLM 对抗判定（并发采 ``fvotes`` 票）。
+
+    2026-10-22 从 `adversarial_gate_stage` 抽出（原函数 260 行超项目硬线 150）。
+    判定纪律逐字保留：
+      · **任一次** actionable 且证据落地 ⇒ 淘汰；
+      · 证据无法落地的票只记 `ungrounded` 并继续看下一票；
+      · 过程瑕疵（is_soft）与跳过只在**全部票都未命中**时才计入。
+
+    返回 ``{"rej","soft","skip","failed","ungrounded"}``。
+    """
+    out = {"rej": None, "soft": None, "skip": "", "failed": False,
+           "ungrounded": []}
+    soft_hit = None
+    for vi, pr in enumerate(_probe_batch(prober, ctx, cand, tier, fvotes)):
+        if isinstance(pr, Exception):
+            if vi == 0:
+                out["failed"] = True
+                orch.record(ctx, "adversarial_gate",
+                            "cid=%s 对抗探测异常（保留候选）: %s: %s"
+                            % (cid, type(pr).__name__, str(pr)[:120]))
+            continue
+        if getattr(pr, "is_actionable", False):
+            estep = str(getattr(pr, "error_step", "") or "")
+            gok, _gr, gmiss = (None, 0.0, [])
+            if grounding:
+                from .evidence_grounding import check_quote
+                if estep:
+                    gok, _gr, gmiss = check_quote(
+                        estep, str(getattr(cand, "reasoning", "") or ""))
+            if grounding and gok is not True:
+                # 证据无法落地 ⇒ 本次不成立，但继续看下一票（可能给出可核对证据）
+                out["ungrounded"].append({
+                    "id": cid,
+                    "answer": str(getattr(cand, "answer_norm", None)
+                                  or getattr(cand, "answer", "") or "")[:120],
+                    "error_step": estep[:120],
+                    "error_type": str(getattr(pr, "error_type", "") or ""),
+                    "note": ("missing" if not estep
+                             else "not_found:%s" % "|".join(gmiss[:2])),
+                })
+                orch.record(ctx, "adversarial_gate",
+                            "cid=%s 证伪证据无法落地（第 %d 票）⇒ 本次不计：%r"
+                            % (cid, vi + 1, estep[:40]))
+                continue
+            out["rej"] = {
+                "by": "llm",
+                "error_type": str(getattr(pr, "error_type", "") or ""),
+                "confidence": float(getattr(pr, "confidence", 0.0) or 0.0),
+                "feedback": str(pr.to_feedback() or "")[:600],
+            }
+            return out
+        if getattr(pr, "is_soft", False):
+            if soft_hit is None:
+                soft_hit = pr
+            continue                  # 过程瑕疵不算结论，继续找硬错
+        if getattr(pr, "skipped", ""):
+            out["skip"] = out["skip"] or str(getattr(pr, "skipped", ""))
+    if soft_hit is not None:
+        st = str(getattr(soft_hit, "error_type", "") or "") or "?"
+        out["soft"] = {
+            "id": cid,
+            "error_type": st,
+            "confidence": float(getattr(soft_hit, "confidence", 0.0) or 0.0),
+            "note": str(soft_hit.to_feedback() or "")[:300],
+        }
+        out["skip"] = ""      # 与原逻辑一致：soft 与 skip 互斥，soft 优先
+        orch.record(ctx, "adversarial_gate",
+                    "cid=%s 仅过程瑕疵（%s）⇒ 不淘汰，放行" % (cid, st))
+    return out
+
+
 def _grounding_enabled() -> bool:
     """读「证据落地校验」开关（默认 True，与 4.1 同一开关）。
 
@@ -143,82 +216,19 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                             % (cid, type(_e_f).__name__, str(_e_f)[:120]))
 
             # ② LLM 对抗生成（机检已判错则不再调用，省一次重证）
-            # ★ 2026-10-22（多次采样）：实测单次探测不稳定 —— 同一错误候选连跑
-            #   3 次得「证伪 / 放过 / 放过」。现采 `_fvotes` 次，**任一次**
-            #   actionable 且证据落地即淘汰；过程瑕疵与跳过只在全部未命中时才计。
+            #    2026-10-22：判定细节抽到 `_llm_falsify_one`（原函数 260 行超硬线）。
             _llm_rej = None
             if _machine_rej is None:
-                _soft_hit = None
-                _skip_hit = ""
-                _probes = _probe_batch(_prober, ctx, c, tier, _fvotes)
-                for _vi, _pr in enumerate(_probes):
-                    if isinstance(_pr, Exception):
-                        if _vi == 0:
-                            n_failed += 1
-                            self.record(ctx, "adversarial_gate",
-                                        "cid=%s 对抗探测异常（保留候选）: %s: %s"
-                                        % (cid, type(_pr).__name__, str(_pr)[:120]))
-                        continue
-                    pr = _pr
-                    if getattr(pr, "is_actionable", False):
-                        _estep = str(getattr(pr, "error_step", "") or "")
-                        _gok, _gr, _gmiss = (None, 0.0, [])
-                        if _grounding:
-                            from .evidence_grounding import check_quote
-                            if _estep:
-                                _gok, _gr, _gmiss = check_quote(
-                                    _estep, str(getattr(c, "reasoning", "") or ""))
-                        if _grounding and _gok is not True:
-                            # 证据无法落地（位置缺失 / 原文里找不到）⇒ 本次不成立，
-                            # 但**继续采样**：下一票可能给出可核对的证据。
-                            ungrounded.append({
-                                "id": cid, "answer": str(
-                                    getattr(c, "answer_norm", None)
-                                    or getattr(c, "answer", "") or "")[:120],
-                                "error_step": _estep[:120],
-                                "error_type": str(getattr(pr, "error_type", "") or ""),
-                                "note": ("missing" if not _estep
-                                         else "not_found:%s" % "|".join(_gmiss[:2])),
-                            })
-                            self.record(ctx, "adversarial_gate",
-                                        "cid=%s 证伪证据无法落地（第 %d 票）⇒ 本次不计：%r"
-                                        % (cid, _vi + 1, _estep[:40]))
-                            continue
-                        _llm_rej = {
-                            "by": "llm",
-                            "error_type": str(getattr(pr, "error_type", "") or ""),
-                            "confidence": float(
-                                getattr(pr, "confidence", 0.0) or 0.0),
-                            "feedback": str(pr.to_feedback() or "")[:600],
-                        }
-                        break
-                    if getattr(pr, "is_soft", False):
-                        if _soft_hit is None:
-                            _soft_hit = pr
-                        continue          # 过程瑕疵不算结论，继续找硬错
-                    if getattr(pr, "skipped", ""):
-                        _skip_hit = _skip_hit or str(getattr(pr, "skipped", ""))
-                        continue
-                if _llm_rej is None:
-                    if _soft_hit is not None:
-                        # 2026-10-20：过程性问题（跳步/边界未讨论/题意形式偏差）
-                        #   不构成答案错误 ⇒ 放行 + 留痕，不进 rejected。
-                        _st = str(getattr(_soft_hit, "error_type", "") or "") or "?"
-                        soft.append({
-                            "id": cid,
-                            "error_type": _st,
-                            "confidence": float(
-                                getattr(_soft_hit, "confidence", 0.0) or 0.0),
-                            "note": str(_soft_hit.to_feedback() or "")[:300],
-                        })
-                        self.record(ctx, "adversarial_gate",
-                                    "cid=%s 仅过程瑕疵（%s）⇒ 不淘汰，放行"
-                                    % (cid, _st))
-                    elif _skip_hit:
-                        n_skipped += 1
-                        self.record(ctx, "adversarial_gate",
-                                    "cid=%s 对抗探测跳过（保留）: %s"
-                                    % (cid, _skip_hit))
+                _r2 = _llm_falsify_one(self, ctx, c, cid, tier, _prober,
+                                       _grounding, _fvotes)
+                _llm_rej = _r2["rej"]
+                if _r2["soft"] is not None:
+                    soft.append(_r2["soft"])
+                if _r2["skip"]:
+                    n_skipped += 1
+                if _r2["failed"]:
+                    n_failed += 1
+                ungrounded.extend(_r2["ungrounded"])
 
             _rej = _machine_rej or _llm_rej
             # ★ 2026-10-17（用户定案「加一个其他大模型检错」）：生成/自审/证伪

@@ -61,6 +61,19 @@ logger = logging.getLogger("MathPilot")
 _LEANSEARCH_WARNED = False
 
 
+def _evidences_refutation(kind: str) -> bool:
+    """该失败原因是否足以支撑「答案错」的淘汰（只有 refuted 可以）。
+
+    薄封装 `lean_failure.evidences_refutation`：把 import 失败兜底放在这里，
+    保证 gate 逻辑在注册表/模块缺失时仍可运行（默认按"不足以淘汰"处理）。
+    """
+    try:
+        from tools.lean_local.lean_failure import evidences_refutation
+        return bool(evidences_refutation(kind))
+    except Exception:  # noqa: BLE001
+        return str(kind or "") == "refuted"
+
+
 def _failure_kind_split_enabled() -> bool:
     """读「按编译失败原因分级」开关（注册名 ``lean_failure_kind_split``，默认 True）。
 
@@ -575,7 +588,7 @@ class LeanGate:
             _fk = str(getattr(report, "failure_kind", "") or "")
             if _fk:
                 entry["failure_kind"] = _fk
-            if _fk and _fk != "refuted" and _failure_kind_split_enabled():
+            if _fk and not _evidences_refutation(_fk) and _failure_kind_split_enabled():
                 entry["verdict"] = "unknown"
                 entry["degraded"] = "lean_" + _fk
                 _unknown_streak += 1
