@@ -619,6 +619,10 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "unproved（代码合法但没证出）/ translation（生成的代码不合法）/ env"
         "（环境缺依赖）与答案对错无关，改判 unknown 并标 degraded=lean_<kind>；"
         "=0 回到旧行为（proof_invalid 一律淘汰），供 A/B 对照"),
+    "blueprint_subtree_regen": (
+        "BLUEPRINT_SUBTREE_REGEN", "bool", True,
+        "蓝图自审用局部子树重写（2026-10-22 接线回补）：regenerate_subtree 只重写"
+        "被拒节点的 LCA 子树、其余保留，且 LCA 触根时自动退化为整树；=0 回到纯整树重写"),
     "subgoal_failed_retry_rounds": (
         "SUBGOAL_FAILED_RETRY_ROUNDS", "num", 2,
         "子目标未产出有效结论时的重做轮数（2026-10-22）：实测 628 个子目标里 "

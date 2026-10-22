@@ -131,6 +131,21 @@ def extract_json(text: str) -> Optional[dict]:
     return None
 
 
+def _subtree_regen_enabled() -> bool:
+    """读「蓝图自审用局部子树重写」开关（``blueprint_subtree_regen``，默认 True）。
+
+    ★ 2026-10-22：`regenerate_subtree`（只重写被拒节点所在的 LCA 子树、其余保留）
+      此前实现完整但**全仓无调用**——历史备份里 `sub_goal_solver.py` 有三处，
+      重构时丢了接线。接回后：拒绝率高时由它自己判断 LCA 是否触根，触根则退化为
+      整树重写，因此与旧行为兼容。=0 回到纯整树重写（A/B 对照）。
+    """
+    try:
+        from .switch_registry import get_bool as _g
+        return bool(_g("blueprint_subtree_regen"))
+    except Exception:  # noqa: BLE001  注册表不可用 ⇒ 新语义
+        return True
+
+
 def _effective_problem(ctx) -> str:
     """题目文本（含「重写通道」注入）。★ 2026-10-14（五道链定案）：
 
@@ -696,11 +711,27 @@ class BlueprintPlannerAgent(BaseAgent):
             lines = []
             for nid in rejected[:10]:
                 node = dag.nodes.get(nid)
-                lines.append("节点 %s（%s）应改进：" % (
-                    nid, (getattr(node, "statement", "") or "")[:80]))
-            new_dag = self.regenerate_with_feedback(
-                ctx, dag, lines, extra_context="【自审（第 4 次）】",
-                max_attempts=1)
+                # ★ 2026-10-22：加 `[nid]` 前缀 —— `regenerate_subtree` 靠它筛出
+                #   "位于被重写子树内"的反馈（减少无关噪声）；整树路径不解析格式。
+                lines.append("[%s] %s" % (
+                    nid, (getattr(node, "statement", "") or "")[:120]))
+            # ★★ 2026-10-22（接线回补）：`regenerate_subtree` 的实现一直存在但
+            #   全仓无调用（历史备份里 `sub_goal_solver.py` 有三处调用，重构时丢了）。
+            #   它是**局部重写**：算出被拒节点的 LCA，只重写该子树、其余节点保留；
+            #   且内部**已内建**「LCA 是根 ⇒ 退化为整树」的分支 ⇒ 接回是安全的。
+            #   开关 `blueprint_subtree_regen`（默认 True）关闭则回到纯整树重写。
+            if _subtree_regen_enabled():
+                new_dag = self.regenerate_subtree(
+                    ctx, dag, rejected, lines, max_attempts=1)
+                self.record(ctx, "blueprint_self_review",
+                            "自审重写：局部子树（被拒 %d 个，LCA 自动判定）"
+                            % len(rejected))
+            else:
+                new_dag = self.regenerate_with_feedback(
+                    ctx, dag, lines, extra_context="【自审（第 4 次）】",
+                    max_attempts=1)
+                self.record(ctx, "blueprint_self_review",
+                            "自审重写：整树（开关关闭局部重写）")
             if new_dag is None:
                 self.record(ctx, "blueprint_self_review",
                             "自审建议重写但未产出 ⇒ 采用自审前的蓝图")

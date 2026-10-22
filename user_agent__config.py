@@ -528,6 +528,8 @@ class AgentConfig(_AgentConfigBase):
     five_gate_falsify_votes: int = 3
     # ★ 2026-10-22：子目标未产出有效结论时的重做轮数（旧实现空返回从不重试）。
     subgoal_failed_retry_rounds: int = 2
+    # ★ 2026-10-22：蓝图自审用局部子树重写（LCA 触根自动退化为整树）。
+    blueprint_subtree_regen: bool = True
     # ★ 2026-10-22：4.5 投票平票时以 4.4 的机器核验（verify_math）为依据。
     five_gate_verify_tiebreak: bool = True
     # ★ 2026-10-22（4.3）：Lean 编译失败按原因分级 —— 只有 refuted 才判答案错。
