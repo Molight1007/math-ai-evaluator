@@ -82,22 +82,20 @@ def _llm(solver, ctx, sys_text: str, user_text: str, temp: float = 0.3):
 
 
 # ---------------------------------------------------------------- 板块提取
-def _section(text: str, name: str) -> str:
-    """提取 "## name" 到下一个 "## " 之间的内容（没有则返回 ""）。"""
-    t = str(text or "")
-    m = re.search(r"##\s*" + re.escape(name) + r"\s*\n([\s\S]*?)(?=\n##\s|\Z)", t)
-    return (m.group(1).strip() if m else "")
+# 2026-10-20：分节解析与读写入口统一收敛到 `agent/subgoal_result.py`。
+# 此处保留同名导出，仅为兼容既有调用点与测试（`split_blocks` / `_section`）。
+# ⚠ 新代码请直接用 `subgoal_result`：存储/读取的口径是那一层的知识，
+#   不要再在本模块另写一套取数或拼接逻辑（那正是空壳事故的成因）。
+from .subgoal_result import (  # noqa: E402  (放在此处以保持文件结构)
+    cached_contract, cached_text, conclusion_of, parse_sections,
+    section_of, split_blocks, write_step,
+)
+from .subgoal_result import section as _section  # noqa: E402
 
-
-def split_blocks(text: str) -> dict:
-    """求解产出 → {"logic", "calc", "result"}（三节缺失时兜底整段进 result）。"""
-    t = str(text or "")
-    logic = _section(t, "逻辑推导")
-    calc = _section(t, "计算")
-    result = _section(t, "结论")
-    if not (logic or calc or result):
-        result = t.strip()
-    return {"logic": logic, "calc": calc, "result": result}
+# 2026-10-20：此处**不再提供** `compose_step_text()` 兼容别名。
+#   它是 v1 补丁（三节拼回）的过渡产物，生产代码零调用，留着只会诱导新代码
+#   用「三节投影」重建文本（那会丢掉模型多写的节）。需要完整文本时：
+#   写入用 `write_step()`，读取用 `read_step()`，解析用 `parse_sections()`。
 
 
 # ---------------------------------------------------------------- ① 求解 agent
@@ -338,16 +336,18 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
         # 复用命中 → 零 LLM 调用（与旧循环一致）
         _fp = "|".join(str(sg.get(_k, "")) for _k in
                        ("title", "description", "type"))[:240]
-        if _reuse_on and _fp in _done:
+        # ★ 2026-10-20：**空缓存不算命中**。原先"命中但结果为空"会把空壳原样
+        #   灌回 `results_map`/`sg["result"]`，等于用缓存把一次真实求解吞掉。
+        #   现在空值直接往下走真求解 —— 复用是优化，不能成为降级的通道。
+        if _reuse_on and _fp in _done and cached_text(_done[_fp]):
             _cached = _done[_fp]
-            step_result = (str(_cached.get("result") or "")
-                           if isinstance(_cached, dict) else str(_cached))
-            if isinstance(_cached, dict):
-                try:
-                    solver._restore_contract(sg, _cached.get("contract") or {})
-                except Exception:  # noqa: BLE001
-                    pass
-            results_map[sg["id"]] = step_result
+            step_result = cached_text(_cached)
+            try:
+                solver._restore_contract(sg, cached_contract(_cached))
+            except Exception:  # noqa: BLE001
+                pass
+            # 复用同样走唯一写入口（两容器同值），否则「复用」又造一次空壳
+            write_step(sg, results_map, step_result)
             try:
                 ctx.subgoal_trace.append(
                     solver._build_trace_item(sg, step_result, reused=True))
@@ -409,17 +409,24 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
         except Exception:  # noqa: BLE001
             pass
 
-        _blocks = split_blocks(_out)
-        step_result = _blocks.get("result") or _out.strip()
+        # ★ 2026-10-20（用户：不要耦合 / 功能真实实现不降级）：
+        #   存储走 `write_step()` 唯一入口 —— `sg["result"]` 与 `results_map[id]`
+        #   写**同一份完整文本**，不再"一个存摘要一个存全文"。
+        #   需要摘要时在下面显式投影（`conclusion_of`），不是拿存储形态凑合。
+        _secs = parse_sections(_out)
+        step_result = ""
+        _brief = ""          # 摘要投影：契约解析 / 规划 digest 用
 
         # 写入（与旧循环格式兼容）
         try:
-            results_map[sg["id"]] = step_result
+            step_result = write_step(sg, results_map, _out, sections=_secs)
+            _brief = conclusion_of(_out) or step_result
             try:
                 from .sub_goal_solver__contract import _parse_step_contract
-                _contract = _parse_step_contract(step_result) or {}
+                _contract = _parse_step_contract(_brief) or {}
             except Exception:  # noqa: BLE001
                 _contract = {}
+            # 复用缓存存完整文本（解析不出摘要时也有原文可用）
             _done[_fp] = {"result": step_result, "contract": _contract}
             ctx.subgoal_trace.append(solver._build_trace_item(sg, step_result))
             _artifact_append(ctx, "04_subgoal_results", ctx.subgoal_trace[-1])
@@ -427,6 +434,8 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
             solver.record(ctx, "subgoal_collab",
                           "写入异常（不阻断）：%s: %s"
                           % (type(_e_w).__name__, str(_e_w)[:100]))
+            if not _brief:
+                _brief = step_result or _out.strip()[:400]
 
         _ctx_inject_chars += len(_out)
         _elapsed = time.time() - _t0
@@ -435,8 +444,10 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
                       % (_idx + 1, len(subgoals), _title[:40], _n, _elapsed))
 
         # ③ 规划（预取下一个）+ 蓝图回传
+        #    digest 是**摘要投影**（喂下一次规划，控制上下文），不是存储形态。
+        #    节名不在此处枚举 —— 交给 `section_of` 解析别名。
         _digest = ("结论：%s\n逻辑要点：%s"
-                   % (step_result[:400], _blocks.get("logic", "")[:600]))
+                   % (_brief[:400], section_of(_secs, "logic")[:600]))
         _sg_next = subgoals[_idx + 1] if _idx + 1 < len(subgoals) else {}
         _next_plan = planning_agent(solver, ctx, _sg_next, _digest,
                                     _blueprint_digest or (subgoal_plan_summary or ""))

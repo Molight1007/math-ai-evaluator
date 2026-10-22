@@ -24,6 +24,8 @@ import time
 #   backward 模块模块级**只依赖 stdlib**（对 prompts / blueprint_planner 的引用
 #   全在函数体内惰性 import）⇒ 此处模块级 import 无循环风险。
 from .sub_goal_solver__backward import sg_dynamic_backward  # noqa: F401
+from .subgoal_result import cached_contract, cached_text, write_step
+
 
 
 def sg_light_check_resolve(self, ctx, sg, step_result, subgoal_plan_summary,
@@ -191,18 +193,14 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
         # 指纹用 title+description+type（重新规划后 id 可能重排，语义内容不变）。
         _fp = "|".join(str(sg.get(_k, "")) for _k in
                        ("title", "description", "type"))[:240]
-        if _reuse_on and _fp in _done:
-            # ★ 2026-10-06：缓存值可能是**旧格式**（纯结果字符串）或新格式
-            #   （{"result": …, "contract": {…}}）。两种都要能读，否则升级
-            #   后跨 run() 复用的子目标会丢失结论契约字段（被误标"无推导"）。
+        # ★ 2026-10-20：缓存形态的规范化统一走 `subgoal_result.cached_*`，
+        #   本路径不再自己判 isinstance；空缓存**不算命中**（否则会用缓存把
+        #   一次真实求解吞掉，把空壳灌回两个容器）。写入走 `write_step()`。
+        if _reuse_on and _fp in _done and cached_text(_done[_fp]):
             _cached = _done[_fp]
-            if isinstance(_cached, dict):
-                step_result = str(_cached.get("result") or "")
-                self._restore_contract(sg, _cached.get("contract") or {})
-            else:
-                step_result = _cached
-            results_map[sg["id"]] = step_result
-            sg["result"] = step_result
+            step_result = cached_text(_cached)
+            self._restore_contract(sg, cached_contract(_cached))
+            write_step(sg, results_map, step_result)
             ctx.subgoal_trace.append(
                 self._build_trace_item(sg, step_result, reused=True))
             # ★ 2026-10-02 hook 04：子目标结果即时落盘（存储层 04，append-only jsonl）。
@@ -299,8 +297,8 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
         # 消费过 <check> 断言，存盘/注入下游（merge/lemma/后续子目标）时
         # 不得再带协议标记，防污染提示词与最终答案。
         step_result = self._strip_check_tags(step_result)
-        results_map[sg["id"]] = step_result
-        sg["result"] = step_result
+        # ★ 2026-10-20：唯一写入口（两容器同值），与协作路径共用。
+        write_step(sg, results_map, step_result)
         if _reuse_on:
             # 写回 ctx，供**后续 run() 调用**复用（连同结论契约字段一起存，
             # 否则复用路径拿不到 has_derivation / 客观判定 → 误标"无推导"）。

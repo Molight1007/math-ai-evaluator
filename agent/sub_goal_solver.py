@@ -446,7 +446,7 @@ class SubGoalSolverAgent(BaseAgent):
             # 时，用最后一个子目标结果兜底（不空手返回）。
             self.record(ctx, "subgoal", "全局预算不足，跳过合并阶段")
             # 使用最后一个子目标的结果作为最终答案
-            final_answer = self._fallback_from_last_subgoal(subgoals)
+            final_answer = self._fallback_from_last_subgoal(subgoals, results_map)
         else:
             # 2026-09-04：即使子目标阶段预算已用尽（_stage_left()<=0），
             # 只要全局未 critical 就**必须真 merge**——这是"强制收尾产出"的关键：
@@ -467,7 +467,7 @@ class SubGoalSolverAgent(BaseAgent):
         # 构造 Candidate（`full_reasoning` 在门槛**之后**构建 ⇒ 与最终入池的
         #   `final_answer` 保持一致；避免抢救替换值后 reasoning 仍写原句）。
         full_reasoning = self._build_full_reasoning(
-            subgoals, problem_goal, final_answer)
+            subgoals, problem_goal, final_answer, results_map)
         candidate = Candidate(
             id=next_candidate_id(ctx.candidates),
             answer=final_answer,

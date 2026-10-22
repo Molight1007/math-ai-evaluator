@@ -15,6 +15,8 @@ import re
 import time
 
 from .base import TaskContext
+from .subgoal_result import read_step
+
 
 from prompts.sub_goal import (
     SUBGOAL_CROSSCHECK_SYSTEM,
@@ -122,7 +124,7 @@ def _cross_conflicts(self, subgoals: list[dict],
     claims: list = []
     for sg in subgoals:
         sid = sg.get("id")
-        text = (results_map.get(sid) or sg.get("result") or "")
+        text = read_step(sg, results_map)   # 唯一读入口（2026-10-20）
         for L, R in self._collect_claims(text):
             claims.append((sid, L, R))
     if not claims:
@@ -189,7 +191,7 @@ def _llm_crosscheck(self, ctx: TaskContext, subgoals: list[dict],
     concl_lines = []
     for sg in subgoals:
         sid = sg.get("id")
-        text = (results_map.get(sid) or sg.get("result") or "")
+        text = read_step(sg, results_map)   # 唯一读入口（2026-10-20）
         text = re.sub(r"\s+", " ", str(text)).strip()
         if not text:
             continue
@@ -273,7 +275,7 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
                     "\n\n[上一轮合并未返回有效文本] 请完整输出"
                     "【矛盾检查】【结论合并】【最终答案】。")
                 continue
-            return self._fallback_from_last_subgoal(subgoals)
+            return self._fallback_from_last_subgoal(subgoals, results_map)
 
         # 优先提取「最终答案」
         answer = extract_final_answer(resp)
@@ -292,7 +294,7 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
                         "③基于各子目标结果与蓝图结论真实推导，"
                         "在【最终答案】给出结论。")
                     continue
-                return self._fallback_from_last_subgoal(subgoals)
+                return self._fallback_from_last_subgoal(subgoals, results_map)
             return answer
         if attempt == 0:
             self.record(ctx, "subgoal_merge",
@@ -301,8 +303,8 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
                 "\n\n[上一轮未找到【最终答案】段] 请在末尾用【最终答案】"
                 "明确给出结论（一个数值/表达式/集合），不要只给过程。")
             continue
-        return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals)
-    return self._fallback_from_last_subgoal(subgoals)
+        return smart_fallback_answer(resp) or self._fallback_from_last_subgoal(subgoals, results_map)
+    return self._fallback_from_last_subgoal(subgoals, results_map)
 
 
 def _prepare_merge_prompt(self, ctx: TaskContext, subgoals: list[dict],
