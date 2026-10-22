@@ -194,7 +194,8 @@ def _llm_text(llm: Callable, ctx, system: str, user: str,
 
 
 def _vote(survivors: List[Tuple[str, str, Any]],
-          verified=None, verify_aware: bool = False
+          verified=None, verify_aware: bool = False,
+          machine_ok=None
           ) -> Tuple[str, Any, dict]:
     """步⑤：归一化频次投票。
 
@@ -204,6 +205,12 @@ def _vote(survivors: List[Tuple[str, str, Any]],
       记录**的 `\\boxed{0}` 仅凭更长推理胜出（gold=1）」的直接机制。
       新收尾 = (是否已验证, 该结论的独立支撑数, 答案形态分, 更短答案)，**全序确定**。
     `verify_aware=False` ⇒ 逐字保持改动前行为（A/B 对照）。
+
+    ★★ 2026-10-22（检测效果传导 · 用户要求「让检测环节的结论影响选择」）：
+      `machine_ok` = 「4.4 逐式复算全一致」的**答案集合**（`verify_math == "pass"`）。
+      它插在**支持数之后**，只影响"票数并列"的取舍 —— 因为
+      「算术全对」只说明推理没写错等式，**不等于答案正确**，不该压过票数。
+      排在形态分/长度之前，是为了替代"更短/更像答案"这类与正确性无因果的兜底。
     """
     groups: dict = {}
     for a, r, c in survivors:
@@ -217,17 +224,22 @@ def _vote(survivors: List[Tuple[str, str, Any]],
         diag["tie_break"] = "reasoning_length(legacy)"
         return top[0], top[2], diag
     _ver = verified if isinstance(verified, (set, frozenset, dict)) else set()
+    _mok = machine_ok if isinstance(machine_ok, (set, frozenset, dict)) else set()
 
     def _key(t):
         a = t[0]
-        return (1 if _norm(a) in _ver else 0,
-                len(groups.get(_norm(a), ())),
+        n = _norm(a)
+        return (1 if n in _ver else 0,
+                len(groups.get(n, ())),
+                1 if n in _mok else 0,
                 _answer_form_score(a),
                 -len(a))
 
     _flat = [t for g in groups.values() for t in g]
     top = max(_flat, key=_key)
-    diag["tie_break"] = "verified_then_support_then_form_then_shorter"
+    diag["tie_break"] = ("verified_then_support_then_machine_ok_then_form_then_shorter"
+                         if _mok else "verified_then_support_then_form_then_shorter")
+    diag["n_machine_ok"] = len(_mok)
     return top[0], top[2], diag
 
 
@@ -415,8 +427,16 @@ def _select_from_survivors(ctx, uniq, problem, llm, steps, diag, _rec,
     steps.append("5_vote")
     _verified_norms = {_norm(t[0]) for t in pool
                        if _vstat.get(_norm(t[0]), ("verified",))[0] == "verified"}
+    # ★ 2026-10-22：把 4.4 的机器核验结论传进投票 —— 只作**票数并列**时的次级依据。
+    #   之前 `verify_math` 写在候选上却没人读，等于检测环节的结论到不了选择层。
+    _machine_ok: set = set()
+    if _machine_tiebreak_enabled():
+        for _a, _r, _c in pool:
+            if str(getattr(_c, "verify_math", "") or "") == "pass":
+                _machine_ok.add(_norm(_a))
     a, c, v_diag = _vote(pool, verified=_verified_norms,
-                         verify_aware=verify_aware)
+                         verify_aware=verify_aware,
+                         machine_ok=_machine_ok)
     diag["vote"] = v_diag
     diag["branch"] = "vote"
     _rec(f"五层选择⑤：投票兜底选中：{a[:80]}"
@@ -431,6 +451,20 @@ def _switch_enabled() -> bool:
         return bool(_swb("enable_final_answer_selection"))
     except Exception:  # noqa: BLE001
         return False
+
+
+def _machine_tiebreak_enabled() -> bool:
+    """读「4.4 机器核验作投票平票依据」开关（``five_gate_verify_tiebreak``，默认 True）。
+
+    ★ 2026-10-22：4.4 一直把 ``verify_math``（逐式复算是否全一致）写在候选上，
+      但**没有任何消费方**阅读它 ⇒ 检测环节的结论到不了选择层。
+      开启后：票数并列时优先选「算术已核」的答案；OFF ⇒ 回到只按形态分/长度。
+    """
+    from agent.switch_registry import get_bool as _swb
+    try:
+        return bool(_swb("five_gate_verify_tiebreak"))
+    except Exception:  # noqa: BLE001  注册表不可用 ⇒ 新语义
+        return True
 
 
 def _single_source_enabled() -> bool:

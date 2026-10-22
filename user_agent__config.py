@@ -524,6 +524,8 @@ class AgentConfig(_AgentConfigBase):
     # ★ 2026-10-22：4.1 自审采样次数。实测同一错误候选 3 次判定为「留/杀/留」
     #   ⇒ 单次不可靠；多次采样、任一带落地证据的逻辑错即淘汰。1 = 旧行为。
     five_gate_self_audit_votes: int = 3
+    # ★ 2026-10-22：4.5 投票平票时以 4.4 的机器核验（verify_math）为依据。
+    five_gate_verify_tiebreak: bool = True
     # ★ 2026-10-22（4.3）：Lean 编译失败按原因分级 —— 只有 refuted 才判答案错。
     lean_failure_kind_split: bool = True
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——

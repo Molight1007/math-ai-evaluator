@@ -625,6 +625,11 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "判定为「留/杀/留」⇒ 单次采样不稳定、漏杀率约 2/3。现采 N 次，"
         "任一次给出**带落地证据**的逻辑错即淘汰（编造位置被证据门挡住）；"
         "=1 回到旧行为（单次判定），供 A/B 对照"),
+    "five_gate_verify_tiebreak": (
+        "FIVE_GATE_VERIFY_TIEBREAK", "bool", True,
+        "4.5 投票平票时以 4.4 机器核验为依据（2026-10-22）：4.4 把 "
+        "verify_math 写在候选上却无消费方 ⇒ 检测结论到不了选择层。开启后票数"
+        "并列时优先选「逐式复算全一致」的答案；=0 回到只按形态分/长度"),
     "five_gate_grounding": (
         "FIVE_GATE_GROUNDING", "bool", True,
         "五道链·证据落地校验（2026-10-22 审计修复）：4.1/4.2 的淘汰必须附"
