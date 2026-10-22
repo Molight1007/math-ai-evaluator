@@ -298,25 +298,45 @@ _FAIL_MARKERS = (
     "化简失败", "计算失败", "无法化简", "无法计算", "未能计算",
 )
 
+# ★ 2026-10-22（判据误报修复）：结论契约行——子目标给出可判定结论即视为成功。
+_CONCLUSION_LINE_RE = re.compile(
+    r"本步结论\s*[:：]\s*(?:值|等式|判定)\s*=\s*\S")
+# 失败声明必须出现在**开头**这么多个字符内才算（占位符/自陈失败都在开头）。
+_HEAD_CHARS = 80
+
+
 def is_subgoal_failed(result_text: str) -> bool:
-    """该子目标是否**未产出有效结论**（复用 sub_goal_solver 的判据）。
+    """该子目标是否**未产出有效结论**。
 
     ★ 2026-09-29 修正：`_plan_err` 标记（依赖/前提/缺少/不成立/无法确定）
-      **本身就是失败信号**。sub_goal_solver 的这类文本出现在两个位置：
-        · `:838` 对**已失败**结果的归因 → 一定是失败；
-        · 模型自己说"这步依赖前文、前提缺少" → 也是**没得出结论**。
-      首版漏了这一条，实测把 sg4 这类"我推不出来因为前提缺失"误判为**成功**，
-      导致 `plan_err` 类缺口全部统计不到（会被读成"子目标都解出来了"）。
+      本身是失败信号，但当时用的是**全文包含**判据。
+    ★★ 2026-10-22 修正（判据误报，实测证据）：
+      22 条被判 ``plan_err`` 的子目标里，**含合规「本步结论」行的 8 条、
+      0 条是"开头即失败"**，其余 14 条是正常分析文本 —— 例如
+      「图 G 满足 BEST 定理的**前提条件**」、「解族清单…逐族判定：常数解**不存在**」，
+      都只是正文里出现了关键词。全文包含判据把这类**正常产出**判成失败，
+      直接后果是报表里的「子目标失败率」虚高，且会把不存在的病当成规划缺陷去改。
+
+      新判据（三条，按优先级）：
+        ① 空 / 纯空白 / 极短 ⇒ 失败；
+        ② **有合规「本步结论: 值|等式|判定 = …」行 ⇒ 成功**（结论契约优先）；
+        ③ 失败标记只在前 ``_HEAD_CHARS`` 字符内命中才算失败
+           （占位符 `[子目标N 求解失败]` 与自陈"无法推出…"都出现在开头）。
     """
     t = str(result_text or "")
     if not t.strip():
         return True
-    if any(m in t for m in _FAIL_MARKERS):
+    if len(t.strip()) < 4:
         return True
-    if any(m in t for m in _PLAN_ERR_MARKERS):
-        return True          # ← 自陈"缺前提/推不出"= 未得出有效结论
-    # 极短且无可判定内容 ⇒ 视为没解出来（如仅一个空占位）
-    return len(t.strip()) < 4
+    # ② 契约优先：已给出可判定结论 ⇒ 不算失败（哪怕正文里讨论了"不存在/矛盾"）
+    if _CONCLUSION_LINE_RE.search(t):
+        return False
+    head = t.lstrip()[: _HEAD_CHARS]
+    if any(m in head for m in _FAIL_MARKERS):
+        return True
+    if any(m in head for m in _PLAN_ERR_MARKERS):
+        return True
+    return False
 
 
 def classify_subgoal_gap(result_text: str) -> str:

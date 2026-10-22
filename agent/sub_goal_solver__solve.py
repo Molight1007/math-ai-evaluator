@@ -525,9 +525,19 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
             ),
             0.2, 32768,
         )
+        if not str(resp or "").strip():
+            # ★ 2026-10-22：空/纯空白响应必须在 **stitch 之前** 判掉 ——
+            #   否则 `stitch` 会把 "   " 包成「【本步结果】   」，变成"有内容的空壳"。
+            return "[子目标求解失败]"
         if resp:
             resp = stitch("【本步结果】", resp)
     if resp is None:
+        return "[子目标求解失败]"
+    # ★★ 2026-10-22（产出为空的两个缺陷）：
+    #   ① 原实现只拦 `None`，**空串 `""` 会一路落成空 result** —— 实测 628 个
+    #      子目标里 103 个 result 为空，进 merge 当有效输入。空响应属于调用失败，
+    #      与 None 同处理。
+    if not str(resp).strip():
         return "[子目标求解失败]"
 
     # 提取「本步结果」部分
@@ -536,11 +546,21 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     # 就是这里把模型原文尾部（工具调用 XML 残留）原样当成"本步结果"返回，
     # 再经 merge 变成最终答案。剥壳后为空则返回空串，交给上层兜底。
     result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
-    if result_match:
+    if result_match and result_match.group(1).strip():
         step_result = self._strip_tool_residue(result_match.group(1)).strip()
     else:
-        # 如果没有标记，取最后 500 字符（同样先剥壳再切片）
-        step_result = self._strip_tool_residue(resp).strip()[-500:]
+        # ★ 2026-10-22：`【本步结果】` 后**紧跟**另一个标记（如「【推导过程】」）时，
+        #   上面的非贪婪正则 `(.*?)(?:$|【)` 会匹配到空内容 —— 模型把实质内容
+        #   写在了推导段里。此时退到推导段取正文，而不是返回空串。
+        _dev = re.search(r"【推导过程】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
+        if _dev and _dev.group(1).strip():
+            step_result = self._strip_tool_residue(_dev.group(1)).strip()
+        else:
+            # 没有标记，取最后 500 字符（同样先剥壳再切片）
+            step_result = self._strip_tool_residue(resp).strip()[-500:]
+    if not str(step_result).strip():
+        # 兜底：剥壳/切片后仍空 ⇒ 明确失败标记，绝不留空串给下游
+        return "[子目标求解失败]"
     # ★★ 2026-10-06（子目标交付重写 A/B/C）：把结论契约解析 + 客观判定
     #   落到 sg（trace 由 run() 落盘）。传 resp 供兜底找【推导过程】块。
     if sg is not None and _conclusion_contract_on():
