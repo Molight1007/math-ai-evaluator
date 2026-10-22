@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 from .switch_registry import get_bool as _sw_get_bool
+from .switch_registry import get_num as _sw_get_num
 
 def _switch_enabled() -> bool:
     """读「五道链·第 2 道对抗证伪」开关（默认 True，=0 关闭做 A/B）。"""
@@ -47,6 +48,21 @@ def _grounding_enabled() -> bool:
         return _sw_get_bool("five_gate_grounding")
     except Exception:  # noqa: BLE001
         return True
+
+
+def _falsify_votes() -> int:
+    """读「对抗证伪采样次数」（``five_gate_falsify_votes``，默认 3）。
+
+    ★ 2026-10-22 实测（书生 Intern，真实调用）：同一个错误候选（推理正确、
+      只把终答写错）连跑 3 次对抗探测，结果是 **「证伪 / 放过 / 放过」** ——
+      与 4.1 自审同样的不稳定，单次采样漏检约 2/3。
+      因此同样采 N 次，**任一次** actionable 且证据落地即淘汰。
+      =1 回到旧行为（单次探测），供 A/B。
+    """
+    try:
+        return max(1, int(_sw_get_num("five_gate_falsify_votes")))
+    except Exception:  # noqa: BLE001
+        return 3
 
 
 def adversarial_gate_stage(self, ctx, tier: str) -> None:
@@ -78,6 +94,7 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
         kept, rejected, soft = [], [], []
         n_skipped, n_failed = 0, 0
         _grounding = _grounding_enabled()
+        _fvotes = _falsify_votes()
         ungrounded = []   # LLM 指认的出错步骤在原文里找不到 ⇒ 不得据此淘汰
 
         for c in cands:
@@ -100,10 +117,23 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                             % (cid, type(_e_f).__name__, str(_e_f)[:120]))
 
             # ② LLM 对抗生成（机检已判错则不再调用，省一次重证）
+            # ★ 2026-10-22（多次采样）：实测单次探测不稳定 —— 同一错误候选连跑
+            #   3 次得「证伪 / 放过 / 放过」。现采 `_fvotes` 次，**任一次**
+            #   actionable 且证据落地即淘汰；过程瑕疵与跳过只在全部未命中时才计。
             _llm_rej = None
             if _machine_rej is None:
-                try:
-                    pr = _prober.probe(ctx, c, tier=tier)
+                _soft_hit = None
+                _skip_hit = ""
+                for _vi in range(_fvotes):
+                    try:
+                        pr = _prober.probe(ctx, c, tier=tier)
+                    except Exception as _e_p:  # noqa: BLE001  故障绝不淘汰候选
+                        if _vi == 0:
+                            n_failed += 1
+                            self.record(ctx, "adversarial_gate",
+                                        "cid=%s 对抗探测异常（保留候选）: %s: %s"
+                                        % (cid, type(_e_p).__name__, str(_e_p)[:120]))
+                        break
                     if getattr(pr, "is_actionable", False):
                         _estep = str(getattr(pr, "error_step", "") or "")
                         _gok, _gr, _gmiss = (None, 0.0, [])
@@ -113,7 +143,8 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                                 _gok, _gr, _gmiss = check_quote(
                                     _estep, str(getattr(c, "reasoning", "") or ""))
                         if _grounding and _gok is not True:
-                            # 证据无法落地（位置缺失 / 原文里找不到）⇒ 不淘汰
+                            # 证据无法落地（位置缺失 / 原文里找不到）⇒ 本次不成立，
+                            # 但**继续采样**：下一票可能给出可核对的证据。
                             ungrounded.append({
                                 "id": cid, "answer": str(
                                     getattr(c, "answer_norm", None)
@@ -124,40 +155,44 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                                          else "not_found:%s" % "|".join(_gmiss[:2])),
                             })
                             self.record(ctx, "adversarial_gate",
-                                        "cid=%s 证伪证据无法落地 ⇒ 不淘汰：出错步骤 %r"
-                                        % (cid, _estep[:40]))
-                        else:
-                            _llm_rej = {
-                                "by": "llm",
-                                "error_type": str(getattr(pr, "error_type", "") or ""),
-                                "confidence": float(
-                                    getattr(pr, "confidence", 0.0) or 0.0),
-                                "feedback": str(pr.to_feedback() or "")[:600],
-                            }
-                    elif getattr(pr, "is_soft", False):
+                                        "cid=%s 证伪证据无法落地（第 %d 票）⇒ 本次不计：%r"
+                                        % (cid, _vi + 1, _estep[:40]))
+                            continue
+                        _llm_rej = {
+                            "by": "llm",
+                            "error_type": str(getattr(pr, "error_type", "") or ""),
+                            "confidence": float(
+                                getattr(pr, "confidence", 0.0) or 0.0),
+                            "feedback": str(pr.to_feedback() or "")[:600],
+                        }
+                        break
+                    if getattr(pr, "is_soft", False):
+                        if _soft_hit is None:
+                            _soft_hit = pr
+                        continue          # 过程瑕疵不算结论，继续找硬错
+                    if getattr(pr, "skipped", ""):
+                        _skip_hit = _skip_hit or str(getattr(pr, "skipped", ""))
+                        continue
+                if _llm_rej is None:
+                    if _soft_hit is not None:
                         # 2026-10-20：过程性问题（跳步/边界未讨论/题意形式偏差）
                         #   不构成答案错误 ⇒ 放行 + 留痕，不进 rejected。
-                        _st = str(getattr(pr, "error_type", "") or "") or "?"
+                        _st = str(getattr(_soft_hit, "error_type", "") or "") or "?"
                         soft.append({
                             "id": cid,
                             "error_type": _st,
                             "confidence": float(
-                                getattr(pr, "confidence", 0.0) or 0.0),
-                            "note": str(pr.to_feedback() or "")[:300],
+                                getattr(_soft_hit, "confidence", 0.0) or 0.0),
+                            "note": str(_soft_hit.to_feedback() or "")[:300],
                         })
                         self.record(ctx, "adversarial_gate",
                                     "cid=%s 仅过程瑕疵（%s）⇒ 不淘汰，放行"
                                     % (cid, _st))
-                    elif getattr(pr, "skipped", ""):
+                    elif _skip_hit:
                         n_skipped += 1
                         self.record(ctx, "adversarial_gate",
                                     "cid=%s 对抗探测跳过（保留）: %s"
-                                    % (cid, pr.skipped))
-                except Exception as _e_p:  # noqa: BLE001
-                    n_failed += 1
-                    self.record(ctx, "adversarial_gate",
-                                "cid=%s 对抗探测异常（保留候选）: %s: %s"
-                                % (cid, type(_e_p).__name__, str(_e_p)[:120]))
+                                    % (cid, _skip_hit))
 
             _rej = _machine_rej or _llm_rej
             # ★ 2026-10-17（用户定案「加一个其他大模型检错」）：生成/自审/证伪

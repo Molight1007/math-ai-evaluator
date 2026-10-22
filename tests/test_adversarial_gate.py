@@ -16,6 +16,16 @@ from agent.adversarial_gate import adversarial_gate_stage  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _single_vote(monkeypatch):
+    """把 4.2 采样次数压到 1（旧行为），让「调用次数」类断言可比。
+
+    ★ 2026-10-22：4.2 改为多次采样（默认 3），多票行为由
+      ``test_falsify_votes_*`` 单独覆盖。
+    """
+    monkeypatch.setenv("FIVE_GATE_FALSIFY_VOTES", "1")
+
+
+@pytest.fixture(autouse=True)
 def _no_cross_model(monkeypatch):
     """隔离跨模型通道：默认关，避免单测打真实 API（判定结果随网络波动）。
 
@@ -272,3 +282,47 @@ def test_stage_wired_in_orchestrator():
     i_fmt = src.index('self._stage_start(ctx, "6_format")')
     assert i_au < i_fa < i_fmt
     assert '"4.2_falsify",' in src
+
+
+# ---------------------------------------- 多次采样（2026-10-22 实测修复）
+# 背景：同一错误候选连跑 3 次对抗探测得「证伪 / 放过 / 放过」⇒ 单次漏检约 2/3。
+# 契约：采 N 次，任一次 actionable 且证据落地即淘汰；全未命中才按 soft/skip 处理。
+def test_falsify_votes_any_hit_rejects(monkeypatch):
+    monkeypatch.setenv("FIVE_GATE_FALSIFY_VOTES", "3")
+    f = _Falsifier([_Res(), _Res()])
+    p = _Prober([
+        _PRes(),                                   # 第 1 票放过
+        _PRes(actionable=True, error_type="前提不成立",
+              error_step="因此 n 只能取 1",
+              feedback="[对抗式审查] x"),          # 第 2 票命中
+        _PRes(),
+    ])
+    ctx = _Ctx([_c(1)])
+    adversarial_gate_stage(_Stub(f, p), ctx, "deep")
+    assert ctx.candidates == []
+    assert ctx.adversarial_gate["n_llm"] == 1
+    assert p.calls == [1, 1]                       # 命中即短路
+
+
+def test_falsify_votes_all_pass_keeps(monkeypatch):
+    monkeypatch.setenv("FIVE_GATE_FALSIFY_VOTES", "3")
+    f = _Falsifier([_Res()])
+    p = _Prober([_PRes(), _PRes(), _PRes()])
+    ctx = _Ctx([_c(1)])
+    adversarial_gate_stage(_Stub(f, p), ctx, "deep")
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.adversarial_gate["n_llm"] == 0
+    assert p.calls == [1, 1, 1]
+
+
+def test_falsify_votes_soft_only_after_all_miss(monkeypatch):
+    """有一次过程瑕疵、其余放过 ⇒ 全部未命中后才计 soft（放行）。"""
+    monkeypatch.setenv("FIVE_GATE_FALSIFY_VOTES", "2")
+    f = _Falsifier([_Res()])
+    p = _Prober([_PRes(), _PRes(error_type="跳步", feedback="[对抗式审查] 跳步")])
+    # _PRes 默认 is_actionable=False ⇒ 需要 is_soft 才进 soft 分支
+    p.seq[1].is_soft = True
+    ctx = _Ctx([_c(1)])
+    adversarial_gate_stage(_Stub(f, p), ctx, "deep")
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.adversarial_gate["n_soft"] == 1
