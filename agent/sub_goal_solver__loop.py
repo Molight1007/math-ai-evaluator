@@ -259,18 +259,49 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
         # 2026-09-17 移除重试的时间闸（原 `and _stage_left() > 120`）：时间无限，
         # 子目标失败一律带上下文重试一次；配套的「剩余不足则放弃重试」分支
         # （原 `elif ... _stage_left() <= 120`，仅写一条"放弃重试"记录）一并删除。
-        if step_result.startswith("[子目标"):
+        # ★★ 2026-10-22（产出闸修复）：原触发条件只认 `startswith("[子目标")`
+        #   —— 而实测 628 个子目标里 135 个失败（21.5%），其中 **95 个是
+        #   `result == ""`（空返回）**：既不匹配占位符前缀，就**从不重试**，
+        #   空结果直接流进 results_map 被 merge 当有效输入。
+        #   空返回的成因多为"推理把 max_tokens 吃光后正文为空"（同 4.1 的
+        #   `finish_reason=length` 家族），属于**可重做**的技术性失败。
+        #   现在：空/纯空白 与 占位符 走同一条重做路径。
+        if step_result.startswith("[子目标") or not str(step_result or "").strip():
+            _why = ("（结果为空，疑似被截断或调用失败）"
+                    if not str(step_result or "").strip() else "")
             self.record(ctx, "subgoal",
-                        f"子目标 #{sg['id']}「{sg['title']}」失败，带上下文重试一次")
+                        f"子目标 #{sg['id']}「{sg['title']}」失败{_why}，带上下文重试一次")
             if _ctx_mode == "all":
                 prev_results2 = self._format_previous_results(
                     results_map, subgoals)
             else:
                 prev_results2 = self._format_dep_results(
                     results_map, subgoals, sg)
-            retry = self._solve_subgoal(ctx, sg, subgoal_plan_summary, prev_results2)
-            if retry and not retry.startswith("[子目标"):
-                step_result = retry
+            # ★ 2026-10-22：重做**多轮**（默认 2）—— 空返回多为推理被截断，
+            #   换一次未必成功；且要带上"上一次为空"的提示（extra_hint），
+            #   否则同一提示词大概率再空一次。
+            _rr = max(1, int(getattr(
+                self.config, "subgoal_failed_retry_rounds", 2) or 2))
+            _empty = not str(step_result or "").strip()
+            for _ri in range(_rr):
+                retry = self._solve_subgoal(
+                    ctx, sg, subgoal_plan_summary, prev_results2,
+                    extra_hint=("上一次本步结果为空（可能被截断）。请重新给出完整结果，"
+                                "必须包含【本步结果】【推导过程】，并以「本步结论: …」"
+                                "开头给出可判定的结论，不要留空。"
+                                if _empty else ""))
+                if retry and not retry.startswith("[子目标"):
+                    step_result = retry
+                    break
+                if retry:
+                    step_result = retry
+                self.record(ctx, "subgoal",
+                            "子目标 #%s 第 %d/%d 次重做仍无有效结论"
+                            % (sg.get("id"), _ri + 1, _rr))
+            if not str(step_result or "").strip():
+                # 重做仍空 ⇒ 落**显式占位符**（下游据此知道"本步无结论"，
+                # 而不是拿到空串被当成"有内容但为空"）。
+                step_result = "[子目标%s 求解失败]" % sg.get("id")
 
         step_result = sg_light_check_resolve(
             self, ctx, sg, step_result, subgoal_plan_summary, prev_results)

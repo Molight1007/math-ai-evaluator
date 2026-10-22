@@ -619,6 +619,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "unproved（代码合法但没证出）/ translation（生成的代码不合法）/ env"
         "（环境缺依赖）与答案对错无关，改判 unknown 并标 degraded=lean_<kind>；"
         "=0 回到旧行为（proof_invalid 一律淘汰），供 A/B 对照"),
+    "subgoal_failed_retry_rounds": (
+        "SUBGOAL_FAILED_RETRY_ROUNDS", "num", 2,
+        "子目标未产出有效结论时的重做轮数（2026-10-22）：实测 628 个子目标里 "
+        "135 个失败（21.5%），其中 95 个是空返回——旧实现只在结果以 "
+        "`[子目标` 开头时才重试一次，空串不匹配 ⇒ 从不重试，空结果直接进 merge。"
+        "现改为空/占位一律重做 N 轮（带「上次为空」提示），仍空则落显式占位符"),
     "five_gate_falsify_votes": (
         "FIVE_GATE_FALSIFY_VOTES", "num", 3,
         "4.2 对抗证伪采样次数（2026-10-22 实测修复）：同一错误候选连跑 3 次探测"

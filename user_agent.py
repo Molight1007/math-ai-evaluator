@@ -198,6 +198,7 @@ _CONFIG_OVERRIDE_KEYS = (
     "five_gate_audit_retry",
     "five_gate_self_audit_votes",
     "five_gate_falsify_votes",
+    "subgoal_failed_retry_rounds",
     "five_gate_verify_tiebreak",
     "lean_failure_kind_split",
     "five_gate_math_check_calcverify",
