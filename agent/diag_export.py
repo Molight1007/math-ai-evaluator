@@ -249,6 +249,11 @@ def _diag_blueprint_review(ctx, config) -> dict:
                               for t in (getattr(ctx, "trace", None) or [])
                               if isinstance(t, dict)
                               and t.get("step") == "math_check"],
+        # ★ 2026-10-21：工具③证据快照（提取到的每条式子 + 逐条复算结论）。
+        #   补的是「4.4 整池清空但无法归因」这个缺口 —— 候选 reasoning 不落盘，
+        #   只留判词等于让人猜是真算错还是提取误伤。
+        "math_calcverify_gate": dict(
+            getattr(ctx, "math_calcverify_gate", None) or {}),
         # ★ 2026-10-14（五道审核链第 5 道）：投票（多答判断 + 票型表 + best 簇）
         "vote_gate": dict(getattr(ctx, "vote_gate", None) or {}),
         "vote_multi_answer": getattr(ctx, "vote_multi_answer", None),

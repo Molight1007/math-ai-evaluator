@@ -206,23 +206,37 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
         if soft:
             ctx.adversarial_gate_soft = list(
                 getattr(ctx, "adversarial_gate_soft", None) or []) + soft
+        # ★ 按来源自动分组：`by` 目前有 machine / llm / cross_model 三种，
+        #   旧写法只统计前两种 ⇒ 「淘汰 3（机检 0 / LLM 1）」分项和只有 1
+        #   （2026-10-20 collab019_r1：实际 cross_model×2 + llm×1，跨模型这条主力被漏计）。
+        #   此处不写死枚举：新增来源自动进 `n_by`，日志也自动带上，
+        #   不会再出现「淘汰数对、分项加起来不对」的观测失真。
+        n_by = {}
+        for _r in rejected:
+            _k = _r.get("by") or "unknown"
+            n_by[_k] = n_by.get(_k, 0) + 1
+        _BY_LABEL = {"machine": "机检", "llm": "LLM", "cross_model": "跨模型"}
+        _by_txt = " / ".join(
+            "%s %d" % (_BY_LABEL.get(k, k), v) for k, v in n_by.items()) or "无"
         ctx.adversarial_gate = {
             "n": len(cands),
             "n_soft": len(soft),
             "soft_ids": [s["id"] for s in soft],
             "n_rejected": len(rejected),
-            "n_machine": sum(1 for r in rejected if r["by"] == "machine"),
-            "n_llm": sum(1 for r in rejected if r["by"] == "llm"),
+            # 兼容既有读者（stage_audit / diag_export 按这两个键取数）
+            "n_machine": n_by.get("machine", 0),
+            "n_llm": n_by.get("llm", 0),
+            "n_cross_model": n_by.get("cross_model", 0),
+            "n_by": n_by,
             "n_skipped": n_skipped,
             "n_failed": n_failed,
             "rejected_ids": [r["id"] for r in rejected],
         }
         self.record(
             ctx, "adversarial_gate",
-            "4.2 对抗证伪：%d 候选 ⇒ 证伪淘汰 %d（机检 %d / LLM %d）"
+            "4.2 对抗证伪：%d 候选 ⇒ 证伪淘汰 %d（按来源：%s）"
             "（跳过 %d、故障 %d、过程瑕疵放行 %d）"
-            % (len(cands), len(rejected),
-               ctx.adversarial_gate["n_machine"], ctx.adversarial_gate["n_llm"],
+            % (len(cands), len(rejected), _by_txt,
                n_skipped, n_failed, len(soft)))
 
         try:

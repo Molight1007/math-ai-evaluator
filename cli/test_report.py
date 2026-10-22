@@ -233,6 +233,45 @@ def _dashboard_preagg(recs):
     return t_agg, tool_by_stage
 
 
+def _fmt_falsify_by(ag) -> str:
+    """4.2 淘汰来源摘要（模块级以便单测）。
+
+    ★ 2026-10-20：按来源自动聚合（不写死 machine/llm 两项）。
+      旧实现只显示机检/LLM ⇒ 「淘汰 3（机检 0/LLM 1）」看着像统计错，
+      实际是 cross_model 那 2 条压根没进报表。
+
+    旧结果文件没有 `n_by` ⇒ 退回两项口径（历史数据无从恢复 cross_model 分项）。
+    """
+    ag = _as_dict(ag)
+    n_by = _as_dict(ag.get("n_by"))
+    if n_by:
+        lab = {"machine": "机检", "llm": "LLM", "cross_model": "跨模型"}
+        return "/".join("%s%s" % (lab.get(k, k), v) for k, v in n_by.items())
+    return "机检%s/LLM%s" % (ag.get("n_machine", "—"), ag.get("n_llm", "—"))
+
+
+def _fmt_math_by(mc) -> str:
+    """4.4 计算检测摘要（模块级以便单测）。
+
+    ★ 2026-10-21：把「淘汰依据来自哪条通道」显式列出（工具③逐式复算 /
+      DeterministicChecker 回代…，按 `n_by_method` 自动聚合，**不写死枚举**）。
+      med2_r1 上「淘汰 9（无法判定 0）」看不出是工具③在整池清空 ——
+      归因表因此把 4.4 记成了"无法判定"，方向就错了。
+    旧结果文件没有 `n_by_method` ⇒ 退回两项口径。
+    """
+    mc = _as_dict(mc)
+    n_by = _as_dict(mc.get("n_by_method"))
+    lab = {"calc_verify": "逐式复算", "substitution": "回代",
+           "parse": "解析", "counterexample": "反例"}
+    if n_by:
+        parts = "/".join("%s%s" % (lab.get(k, k), v) for k, v in n_by.items())
+        return "淘汰=%s（%s；无法判定%s；未提取%s）" % (
+            mc.get("n_rejected", "—"), parts,
+            mc.get("n_unknown", "—"), mc.get("n_cv_no_extract", "—"))
+    return "淘汰=%s（无法判定%s）" % (mc.get("n_rejected", "—"),
+                                     mc.get("n_unknown", "—"))
+
+
 def _stage_dashboard_rows(recs):
     """汇总每个阶段的**四维**：耗时 / 结果 / 是否达标 / 工具使用。
 
@@ -277,16 +316,13 @@ def _stage_dashboard_rows(recs):
             return "淘汰=%s/%s" % (sa.get("n_rejected", "—"), sa.get("n", "—"))
         if stage == "4.2_falsify":
             ag = _as_dict(d.get("adversarial_gate"))
-            return "淘汰=%s（机检%s/LLM%s）" % (
-                ag.get("n_rejected", "—"), ag.get("n_machine", "—"),
-                ag.get("n_llm", "—"))
+            return "淘汰=%s（%s）" % (ag.get("n_rejected", "—"),
+                                     _fmt_falsify_by(ag))
         if stage == "4.3_lean_check":
             lb = _as_dict(d.get("lean_backcheck"))
             return "通过=%s/%s" % (lb.get("n_kept", "—"), lb.get("n", "—"))
         if stage == "4.4_math_check":
-            mc = _as_dict(d.get("math_check"))
-            return "淘汰=%s（无法判定%s）" % (
-                mc.get("n_rejected", "—"), mc.get("n_unknown", "—"))
+            return _fmt_math_by(_as_dict(d.get("math_check")))
         if stage == "4.5_vote":
             vg = _as_dict(d.get("vote_gate"))
             bc = _as_dict(vg.get("best_cluster"))

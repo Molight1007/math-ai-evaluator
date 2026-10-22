@@ -185,19 +185,32 @@ def normalize_oid(ref: str, ledger: Optional[dict] = None) -> str:
     """把模型给的义务引用归一成 `O<n>`；无法归一返回 ""。
 
     容忍 `o3` / `O3` / `第3条` / `义务3` / `3` / `O-3` 等写法（实测模型会自造格式）。
+
+    ★ 复合引用（`O5/O7`、`O1 和 O2`、`O1,O2`）取**第一个落在账本内的编号**。
+      旧实现把所有数字拼成一个数（`O5/O7` → `"57"` → `O57`），
+      而 `O57` 必然不在账本里 ⇒ 被判成「指认失败」放行。
+      实测 2026-10-20 collab019_r1：4.1 三次放行全部源于此，
+      其中 cid=0 随后被 4.2 跨模型以同一理由（下界假设 Natasha 不干扰 2×2 块）
+      独立证伪 ⇒ 是真错被误放行，不是模型乱指认。
+
+    语义边界（与调用点「只惩罚明确指认失败，不惩罚漏填」一致）：
+      只要模型点到了账本里**任一条真实义务**，就算指认成立 ——
+      复合里混进不存在的编号不推翻它；一条都对不上才返回 ""。
     """
     s = str(ref or "").strip()
     if not s:
         return ""
     if s.lower().strip() in ("none", "null", "n/a", "无", "不适用", "空"):
         return ""
-    digits = "".join(ch for ch in s if ch.isdigit())
-    if not digits:
+    groups = re.findall(r"\d+", s)
+    if not groups:
         return ""
-    oid = "O%d" % int(digits)
-    if ledger and oid not in (ledger.get("node_to_oid") or {}).values():
-        return ""
-    return oid
+    valid = set((ledger.get("node_to_oid") or {}).values()) if ledger else None
+    for g in groups:
+        oid = "O%d" % int(g)
+        if valid is None or oid in valid:
+            return oid
+    return ""
 
 
 def has_obligation(ledger: Optional[dict], ref: str) -> bool:
