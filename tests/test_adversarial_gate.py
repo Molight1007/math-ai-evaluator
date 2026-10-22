@@ -7,10 +7,26 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.base import Candidate  # noqa: E402
 from agent.adversarial_gate import adversarial_gate_stage  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_cross_model(monkeypatch):
+    """隔离跨模型通道：默认关，避免单测打真实 API（判定结果随网络波动）。
+
+    ★ 2026-10-22：跨模型检错默认开启，未桩住时会被真实调用；候选 reasoning
+      一变长，DeepSeek 就可能返回 wrong，导致「保留」类用例随机翻红。
+    """
+    import agent.adversarial_gate as _ag
+    _orig = _ag._sw_get_bool
+    monkeypatch.setattr(
+        _ag, "_sw_get_bool",
+        lambda n: False if n == "cross_model_falsify" else _orig(n))
 
 
 # ----------------------------------------------------- 桩
@@ -24,12 +40,14 @@ class _Res:
 
 class _PRes:
     def __init__(self, actionable=False, skipped="", error_type="",
-                 confidence=0.6, feedback=""):
+                 confidence=0.6, feedback="", error_step=""):
         self.is_actionable = actionable
         self.skipped = skipped
         self.error_type = error_type
         self.confidence = confidence
         self._fb = feedback
+        # ★ 2026-10-22：证据落地校验会核对 error_step 是否逐字出现在候选推理里
+        self.error_step = error_step
 
     def to_feedback(self):
         return self._fb
@@ -84,7 +102,9 @@ class _Ctx:
 
 
 def _c(i, ans="48"):
-    return Candidate(id=i, answer=ans, reasoning="推理")
+    # ★ 2026-10-22：reasoning 需可被引证（证据落地校验逐字核对 error_step）
+    return Candidate(id=i, answer=ans,
+                     reasoning="先验证小值，得到 n+1 必须整除 2，因此 n 只能取 1。")
 
 
 # ----------------------------------------------------- 1) 机检证伪
@@ -110,6 +130,7 @@ def test_llm_probe_falsified_rejected():
     f = _Falsifier([_Res(), _Res()])
     p = _Prober([
         _PRes(actionable=True, error_type="前提不成立", confidence=0.8,
+              error_step="因此 n 只能取 1",
               feedback="[对抗式审查] 检出「前提不成立」"),
         _PRes(),
     ])
@@ -217,7 +238,9 @@ def test_mixed_sources_sum_to_total(monkeypatch):
     # c1 机检判错；c2 LLM 可行动；c3 两道放行 ⇒ 跨模型判错
     stub = _Stub(
         _Falsifier([_Res(incorrect=True, reason="r", witness="w"), _Res(), _Res()]),
-        _Prober([_PRes(actionable=True, error_type="跳步", feedback="[对抗式审查] x"),
+        _Prober([_PRes(actionable=True, error_type="跳步",
+                       error_step="因此 n 只能取 1",
+                       feedback="[对抗式审查] x"),
                  _PRes()]))
     ctx = _Ctx([_c(1), _c(2), _c(3)])
     adversarial_gate_stage(stub, ctx, "deep")

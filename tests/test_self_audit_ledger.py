@@ -76,7 +76,9 @@ class _Ctx:
 
 
 def _c(i, ans="48"):
-    return Candidate(id=i, answer=ans, reasoning="推理过程")
+    # ★ 2026-10-22：reasoning 需可被引证（证据落地校验会逐字核对 error_at）
+    return Candidate(id=i, answer=ans,
+                     reasoning="先验证小值，得到 n+1 必须整除 2，因此 n 只能取 1。")
 
 
 def _user_msg(stub):
@@ -85,7 +87,8 @@ def _user_msg(stub):
 
 # --------------------------------------------------- 1) 无蓝图：老口径不变
 def test_no_blueprint_keeps_legacy_behavior():
-    stub = _Stub(['{"logic_error": true, "error_desc": "结论与推理不符"}'])
+    stub = _Stub(['{"logic_error": true, "error_desc": "结论与推理不符",'
+                  ' "error_at": "因此 n 只能取 1"}'])
     ctx = _Ctx([_c(1)])
     self_audit_stage(stub, ctx)
     assert ctx.candidates == []
@@ -110,7 +113,7 @@ def test_blueprint_injected_into_prompt():
 # --------------------------------------------------- 3) 指认 none ⇒ 放行
 def test_unmapped_obligation_keeps_candidate():
     stub = _Stub(['{"logic_error": true, "error_desc": "只列子目标没有推导",'
-                  ' "error_at": "整个解答", "obligation_id": "none"}'],
+                  ' "error_at": "因此 n 只能取 1", "obligation_id": "none"}'],
                  blueprint=_bp())
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)
@@ -123,7 +126,8 @@ def test_unmapped_obligation_keeps_candidate():
 
 def test_nonexistent_oid_keeps_candidate():
     # 账本只有 O1..O3，模型引用 O9 ⇒ 同样视为指认失败
-    stub = _Stub(['{"logic_error": true, "error_desc": "x", "obligation_id": "O9"}'],
+    stub = _Stub(['{"logic_error": true, "error_desc": "x", "obligation_id": "O9",'
+                  ' "error_at": "因此 n 只能取 1"}'],
                  blueprint=_bp())
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)
@@ -134,7 +138,7 @@ def test_nonexistent_oid_keeps_candidate():
 # --------------------------------------------------- 4) 指认真实义务 ⇒ 淘汰
 def test_mapped_obligation_still_rejects():
     stub = _Stub(['{"logic_error": true, "error_desc": "前提误用",'
-                  ' "error_at": "第2步", "obligation_id": "O2"}'],
+                  ' "error_at": "得到 n+1 必须整除 2", "obligation_id": "O2"}'],
                  blueprint=_bp())
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)
@@ -148,6 +152,7 @@ def test_mapped_obligation_still_rejects():
 def test_oid_format_tolerated():
     # 模型常写 `o2` / `第2条`，归一后仍算命中
     stub = _Stub(['{"logic_error": true, "error_desc": "前提误用",'
+                  ' "error_at": "得到 n+1 必须整除 2",'
                   ' "obligation_id": "第2条"}'], blueprint=_bp())
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)
@@ -157,7 +162,8 @@ def test_oid_format_tolerated():
 
 # --------------------------------------------------- 5) 漏填不惩罚
 def test_missing_oid_not_penalized():
-    stub = _Stub(['{"logic_error": true, "error_desc": "自相矛盾"}'],
+    stub = _Stub(['{"logic_error": true, "error_desc": "自相矛盾",'
+                  ' "error_at": "因此 n 只能取 1"}'],
                  blueprint=_bp())
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)
@@ -170,7 +176,7 @@ def test_missing_oid_not_penalized():
 # --------------------------------------------------- 6) 开关关闭
 def test_ledger_switch_off(monkeypatch):
     stub = _Stub(['{"logic_error": true, "error_desc": "跳步",'
-                  ' "obligation_id": "none"}'],
+                  ' "error_at": "因此 n 只能取 1", "obligation_id": "none"}'],
                  blueprint=_bp(), ledger_switch=False)
     ctx = _Ctx([_c(1)], blueprint=_bp())
     self_audit_stage(stub, ctx)

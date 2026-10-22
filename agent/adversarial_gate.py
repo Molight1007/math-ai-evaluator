@@ -36,6 +36,19 @@ def _switch_enabled() -> bool:
         return True
 
 
+def _grounding_enabled() -> bool:
+    """读「证据落地校验」开关（默认 True，与 4.1 同一开关）。
+
+    ★ 2026-10-22（五道链审计）：LLM 对抗给出的 ``error_step`` 必须能在候选
+      推理里**逐字找到**，否则不构成淘汰依据。桩测试实测：随便编一句
+      「故 n=2」作 error_step，正确答案即被判 `is_actionable` 淘汰。
+    """
+    try:
+        return _sw_get_bool("five_gate_grounding")
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def adversarial_gate_stage(self, ctx, tier: str) -> None:
     """4.2 阶段入口（orchestrator 一行委托；``self`` 即 Orchestrator 实例）。
 
@@ -64,6 +77,8 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
 
         kept, rejected, soft = [], [], []
         n_skipped, n_failed = 0, 0
+        _grounding = _grounding_enabled()
+        ungrounded = []   # LLM 指认的出错步骤在原文里找不到 ⇒ 不得据此淘汰
 
         for c in cands:
             cid = getattr(c, "id", "?")
@@ -90,13 +105,35 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                 try:
                     pr = _prober.probe(ctx, c, tier=tier)
                     if getattr(pr, "is_actionable", False):
-                        _llm_rej = {
-                            "by": "llm",
-                            "error_type": str(getattr(pr, "error_type", "") or ""),
-                            "confidence": float(
-                                getattr(pr, "confidence", 0.0) or 0.0),
-                            "feedback": str(pr.to_feedback() or "")[:600],
-                        }
+                        _estep = str(getattr(pr, "error_step", "") or "")
+                        _gok, _gr, _gmiss = (None, 0.0, [])
+                        if _grounding:
+                            from .evidence_grounding import check_quote
+                            if _estep:
+                                _gok, _gr, _gmiss = check_quote(
+                                    _estep, str(getattr(c, "reasoning", "") or ""))
+                        if _grounding and _gok is not True:
+                            # 证据无法落地（位置缺失 / 原文里找不到）⇒ 不淘汰
+                            ungrounded.append({
+                                "id": cid, "answer": str(
+                                    getattr(c, "answer_norm", None)
+                                    or getattr(c, "answer", "") or "")[:120],
+                                "error_step": _estep[:120],
+                                "error_type": str(getattr(pr, "error_type", "") or ""),
+                                "note": ("missing" if not _estep
+                                         else "not_found:%s" % "|".join(_gmiss[:2])),
+                            })
+                            self.record(ctx, "adversarial_gate",
+                                        "cid=%s 证伪证据无法落地 ⇒ 不淘汰：出错步骤 %r"
+                                        % (cid, _estep[:40]))
+                        else:
+                            _llm_rej = {
+                                "by": "llm",
+                                "error_type": str(getattr(pr, "error_type", "") or ""),
+                                "confidence": float(
+                                    getattr(pr, "confidence", 0.0) or 0.0),
+                                "feedback": str(pr.to_feedback() or "")[:600],
+                            }
                     elif getattr(pr, "is_soft", False):
                         # 2026-10-20：过程性问题（跳步/边界未讨论/题意形式偏差）
                         #   不构成答案错误 ⇒ 放行 + 留痕，不进 rejected。
@@ -230,14 +267,19 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
             "n_by": n_by,
             "n_skipped": n_skipped,
             "n_failed": n_failed,
+            "n_ungrounded": len(ungrounded),
+            "ungrounded_ids": [r["id"] for r in ungrounded],
             "rejected_ids": [r["id"] for r in rejected],
         }
+        if ungrounded:
+            ctx.adversarial_gate_ungrounded = list(
+                getattr(ctx, "adversarial_gate_ungrounded", None) or []) + ungrounded
         self.record(
             ctx, "adversarial_gate",
             "4.2 对抗证伪：%d 候选 ⇒ 证伪淘汰 %d（按来源：%s）"
-            "（跳过 %d、故障 %d、过程瑕疵放行 %d）"
+            "（跳过 %d、故障 %d、过程瑕疵放行 %d、证据无法落地 %d）"
             % (len(cands), len(rejected), _by_txt,
-               n_skipped, n_failed, len(soft)))
+               n_skipped, n_failed, len(soft), len(ungrounded)))
 
         try:
             from .orchestrator__verify import _pool_empty_fallback as _pef

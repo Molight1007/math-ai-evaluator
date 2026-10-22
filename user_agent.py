@@ -194,6 +194,8 @@ _CONFIG_OVERRIDE_KEYS = (
     # 2026-10-14 五道审核链（0 规范化/1 自审/2 对抗证伪/3 Lean 代回/4 计算检测/5 投票 + 重写通道）
     "five_gate_normalize", "five_gate_self_audit", "five_gate_falsify",
     "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
+    "five_gate_grounding",
+    "five_gate_audit_retry",
     "five_gate_math_check_calcverify",
     "five_gate_rewrite",
     # 2026-10-20：审核侧义务账本总开关（4.1 自审 + 4.2 证伪共用）

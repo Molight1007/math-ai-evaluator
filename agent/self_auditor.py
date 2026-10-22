@@ -112,6 +112,35 @@ def _switch_enabled() -> bool:
         return True
 
 
+def _grounding_enabled() -> bool:
+    """读「证据落地校验」开关（默认 True）。
+
+    ★ 2026-10-22（五道链审计）：淘汰必须附「可机器复核的证据」——
+      模型指认的错误位置必须是候选推理里**真实存在的原文片段**。
+      桩测试实测：随便编一句「原文并不存在的一句话」作 ``error_at``，
+      正确答案会被判逻辑错直接淘汰（幻觉型误杀）。
+      =0 时回到旧口径（只认 desc 非空），仅用于 A/B 对照。
+    """
+    try:
+        return _sw_get_bool("five_gate_grounding")
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _retry_enabled() -> bool:
+    """读「自审解析失败重问」开关（默认 True）。
+
+    ★ 2026-10-22（五道链审计）：``unparsed`` 一律放行曾让这道长期空转
+      （历史实测 84/88、12/12）。格式失败是可修复的失败，按最严格式重问一次；
+      仍失败才记 unparsed 并标 ``verify_audit="unparsed"``（选择层可据此降权）。
+      =0 回到旧口径（一次不成即放行）。
+    """
+    try:
+        return _sw_get_bool("five_gate_audit_retry")
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def _obligation_block(ctx, config) -> tuple:
     """取「蓝图倒推链反演出的义务清单」（2026-10-20，与 4.2 同一开关同一实现）。
 
@@ -144,6 +173,9 @@ def self_audit_stage(self, ctx) -> None:
 
         problem = str(getattr(ctx, "problem", "") or "")[:_PROBLEM_MAX]
         kept, rejected, unparsed, llm_fail = [], [], [], 0
+        n_retry = 0
+        _grounding = _grounding_enabled()
+        ungrounded = []   # 证据无法落地（位置缺失 / 原文里找不到）⇒ 不得据此淘汰
         # ★ 2026-10-20（用户：「把蓝图倒推链反过来输出到第 4 部分」）：
         #   账本只建一次（全候选共用），注入 prompt 并作为淘汰的第三条门。
         ledger, ledger_text = _obligation_block(ctx, getattr(self, "config", None))
@@ -158,13 +190,32 @@ def self_audit_stage(self, ctx) -> None:
             reasoning = str(getattr(c, "reasoning", "") or "")[:_REASONING_MAX]
             d = {}
             try:
-                raw = self.llm(ctx, [
+                _msgs = [
                     {"role": "system", "content": SELF_AUDIT_SYSTEM},
                     {"role": "user", "content": SELF_AUDIT_USER.format(
                         problem=problem, obligations=_lblock,
                         answer=ans, reasoning=reasoning)},
-                ], _TEMPERATURE, _MAX_TOKENS)
+                ]
+                raw = self.llm(ctx, _msgs, _TEMPERATURE, _MAX_TOKENS)
                 d = parse_self_audit_json(raw)
+                # ★ 2026-10-22（五道链审计）：解析失败**不再直接放行**。
+                #   历史实测 unparsed 占比高到 84/88、12/12 —— 这一道长期空转，
+                #   等于 4.1 从未真正生效。格式失败是**可修复的失败**（模型常常
+                #   在 JSON 前后带一段解释），所以按最严约束重问一次，而不是把
+                #   候选当成"通过"。仍失败才记 unparsed（并在候选上标 unverified）。
+                if not d and _retry_enabled():
+                    n_retry += 1
+                    raw2 = self.llm(ctx, _msgs + [
+                        {"role": "assistant", "content": str(raw or "")[:2000]},
+                        {"role": "user", "content":
+                         "上一次回答无法解析。请**只**输出一个 JSON 对象，"
+                         "第一个字符必须是 `{`，最后一个字符必须是 `}`；"
+                         "不要任何解释、不要 Markdown 围栏。"},
+                    ], 0.0, _MAX_TOKENS)
+                    d = parse_self_audit_json(raw2)
+                    self.record(ctx, "self_audit",
+                                "cid=%s 首次输出不可解析 ⇒ 已按严格格式重问一次：%s"
+                                % (cid, "成功" if d else "仍失败"))
             except Exception as _e_call:  # noqa: BLE001  LLM 故障绝不淘汰候选
                 llm_fail += 1
                 kept.append(c)
@@ -176,14 +227,34 @@ def self_audit_stage(self, ctx) -> None:
             if not d:
                 unparsed.append(cid)
                 kept.append(c)
+                try:                    # 未审 = 未验证，交给选择层降权
+                    c.verify_audit = "unparsed"
+                except Exception:  # noqa: BLE001
+                    pass
                 self.record(ctx, "self_audit",
-                            "cid=%s 输出不可解析 ⇒ 保留（记为 unparsed）" % cid)
+                            "cid=%s 重问后仍不可解析 ⇒ 保留并标记 unverified" % cid)
                 continue
 
             if d.get("logic_error") and d.get("error_desc"):
                 desc = d["error_desc"][:300]
                 at = (d.get("error_at") or "")[:120]
                 oid_raw = str(d.get("obligation_id") or "")
+                # ★ 2026-10-22（五道链审计·证据落地门）：淘汰必须能指出**原文里
+                #   真实存在**的片段。用完整 reasoning 校验（`reasoning` 变量已被
+                #   `_REASONING_MAX` 截断，引文可能落在截断区外）。
+                if _grounding:
+                    from .evidence_grounding import check_location
+                    _gok, _gr, _gnote = check_location(
+                        at, str(getattr(c, "reasoning", "") or ""))
+                    if _gok is not True:
+                        ungrounded.append({
+                            "id": cid, "answer": ans[:120], "at": at[:60],
+                            "desc": desc[:200], "note": _gnote})
+                        kept.append(c)
+                        self.record(ctx, "self_audit",
+                                    "cid=%s 证据无法落地（%s）⇒ 不淘汰：指认位置 %r"
+                                    % (cid, _gnote, at[:40]))
+                        continue
                 # ★ 2026-10-20 义务账本门：账本已注入、模型也给了引用，但这条引用
                 #   在账本里查不到（填了 none / 编号不存在）⇒ 它评论的是蓝图并未
                 #   要求的东西，属「证更强命题」型误判，放行。
@@ -230,20 +301,27 @@ def self_audit_stage(self, ctx) -> None:
             "n_rejected": len(rejected),
             "n_unparsed": len(unparsed),
             "n_llm_fail": llm_fail,
+            "n_retry": n_retry,
             "n_unmapped": len(unmapped),
             "unmapped_ids": [r["id"] for r in unmapped],
+            "n_ungrounded": len(ungrounded),
+            "ungrounded_ids": [r["id"] for r in ungrounded],
             "ledger_used": bool(ledger_text),
             "rejected_ids": [r["id"] for r in rejected],
         }
+        if ungrounded:
+            ctx.self_audit_ungrounded = list(
+                getattr(ctx, "self_audit_ungrounded", None) or []) + ungrounded
         if unmapped:
             ctx.self_audit_unmapped = list(
                 getattr(ctx, "self_audit_unmapped", None) or []) + unmapped
         self.record(
             ctx, "self_audit",
             "4.1 自审：%d 候选 ⇒ 淘汰 %d / 保留 %d"
-            "（不可解析 %d、LLM 故障 %d、义务指认失败放行 %d）"
-            % (len(cands), len(rejected), len(kept), len(unparsed), llm_fail,
-               len(unmapped)))
+            "（不可解析 %d、重问 %d、LLM 故障 %d、义务指认失败放行 %d、"
+            "证据无法落地 %d）"
+            % (len(cands), len(rejected), len(kept), len(unparsed), n_retry,
+               llm_fail, len(unmapped), len(ungrounded)))
 
         # 淘汰后池空 ⇒ 汇总错误点交下游（与 4.0/旧链同一兜底，纯留痕）
         try:

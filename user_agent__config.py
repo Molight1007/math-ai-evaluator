@@ -511,6 +511,11 @@ class AgentConfig(_AgentConfigBase):
     five_gate_lean_check: bool = True
     # ★ 2026-10-15（工具①观测通道）：4.3 调 lean_check 工具（默认关）
     five_gate_lean_check_tool: bool = False
+    # ★ 2026-10-22（五道链审计修复）：证据落地校验 —— 4.1/4.2 的淘汰必须附
+    #   可机器复核的原文引证（编造的出错位置/步骤不得据此淘汰）。
+    five_gate_grounding: bool = True
+    # ★ 2026-10-22：4.1 输出不可解析时按最严格式重问一次（旧口径一次放行）。
+    five_gate_audit_retry: bool = True
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——
     #     SymPy 精确判定；fail 淘汰 / unknown 放行 / 全拒回退保留。
     five_gate_math_check: bool = True

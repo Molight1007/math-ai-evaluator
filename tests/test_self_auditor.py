@@ -75,12 +75,16 @@ class _Ctx:
 
 
 def _c(i, ans="48"):
-    return Candidate(id=i, answer=ans, reasoning="推理过程")
+    # ★ 2026-10-22：reasoning 必须是「可被引证」的真实文本 —— 证据落地校验
+    #   会核对 error_at 是否逐字出现在这里（旧夹具 "推理过程" 无法引证）。
+    return Candidate(id=i, answer=ans,
+                     reasoning="先验证小值，得到 n+1 必须整除 2，因此 n 只能取 1。")
 
 
 def test_reject_logic_error():
     stub = _Stub([
-        '{"logic_error": true, "error_desc": "结论与推理不符", "error_at": "最后一步"}',
+        '{"logic_error": true, "error_desc": "结论与推理不符",'
+        ' "error_at": "得到 n+1 必须整除 2"}',
         '{"logic_error": false, "error_desc": ""}',
     ])
     ctx = _Ctx([_c(1), _c(2)])
@@ -103,12 +107,36 @@ def test_logic_error_without_desc_keeps_candidate():
 
 
 def test_unparsed_and_llm_fail_keep_candidates():
+    # ★ 2026-10-22：解析失败会按严格格式重问一次（five_gate_audit_retry），
+    #   所以 c1 的第二次调用会取到 RuntimeError ⇒ llm_fail；c2 拿到默认的
+    #   legal JSON ⇒ 正常通过。旧口径下 c1 直接计 unparsed。
     stub = _Stub(["不是 JSON", RuntimeError("timeout")])
     ctx = _Ctx([_c(1), _c(2)])
     self_audit_stage(stub, ctx)
     assert [c.id for c in ctx.candidates] == [1, 2]        # 全部保留
-    assert ctx.self_audit["n_unparsed"] == 1
     assert ctx.self_audit["n_llm_fail"] == 1
+    assert ctx.self_audit["n_retry"] == 1
+
+
+def test_unparsed_twice_marks_unverified():
+    # 两次都不成 JSON ⇒ 保留但打 unverified（不再视为"通过"）
+    stub = _Stub(["不是 JSON", "还是不是 JSON"])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.self_audit["n_unparsed"] == 1
+    assert getattr(ctx.candidates[0], "verify_audit", "") == "unparsed"
+
+
+def test_ungrounded_evidence_keeps_candidate():
+    # ★ 2026-10-22 证据落地门：error_at 编造（原文没有这句）⇒ 不得据此淘汰
+    stub = _Stub(['{"logic_error": true, "error_desc": "第二步错了",'
+                  ' "error_at": "原文根本不存在的这一句话"}'])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.self_audit["n_ungrounded"] == 1
+    assert ctx.self_audit["n_rejected"] == 0
 
 
 def test_uses_answer_norm_when_present():
@@ -139,7 +167,8 @@ def test_empty_pool_skips():
 
 
 def test_all_rejected_pool_empty_recorded():
-    stub = _Stub(['{"logic_error": true, "error_desc": "严重逻辑错误"}'])
+    stub = _Stub(['{"logic_error": true, "error_desc": "严重逻辑错误",'
+                  ' "error_at": "因此 n 只能取 1"}'])
     ctx = _Ctx([_c(1)])
     self_audit_stage(stub, ctx)
     assert ctx.candidates == []

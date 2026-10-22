@@ -90,7 +90,9 @@ _CERT_PROMPT = """你是数学证明的「证伪员」。给你一道题和一�
 1. 只输出**闭式**（代入候选后不再含未知量）的等式，写成 `lhs` / `rhs` 两个字符串；
    lhs/rhs 必须是可直接计算的表达式，例如 "20**2 - 400" 与 "0"。
    只允许数字与 + - * / ** ( ) sqrt sin cos tan log exp 及常量 pi/E。
-2. 每条等式注明它来自题目的哪一条条件（`desc`）。
+2. 每条等式必须在 `desc` 里**逐字摘录**它依据的题面原文（≤40 字，不得改写、
+   不得概括、不得翻译成另一种语言）。摘不出原文，说明这条等式没有题面依据，
+   必须删掉 —— **不要编造条件**；系统会逐字核对这段摘录是否真的在题面里。
 3. 如果你能直接给出一个**具体反例**（代入后两侧不等的数值），把它写进 `witness`。
 4. 如果该候选**无法**被数值回带检验（例如答案是集合/参数式/证明文本），
    `checks` 留空数组 —— **不要编造等式**。
@@ -161,6 +163,21 @@ class AnswerFalsifier:
             checks = self._normalize_checks(cert.get("checks"))
             if not checks:
                 return FalsifyResult(reason="证书无可机检等式")
+
+            # ★ 2026-10-22（五道链审计·证据落地门）：等式必须带题面原文依据，
+            #   否则机器锚点会给幻觉背书（编造 `1+1=3` ⇒ 正确答案被淘汰）。
+            _dropped = []
+            try:
+                from .switch_registry import get_bool as _swb
+                _grounding = _swb("five_gate_grounding")
+            except Exception:  # noqa: BLE001
+                _grounding = True
+            if _grounding:
+                checks, _dropped = self._drop_ungrounded(checks, prob)
+                if not checks:
+                    return FalsifyResult(
+                        reason="证书等式均无题面依据（%d 条被丢弃）" % len(_dropped),
+                        checks=[dict(c, verdict="ungrounded") for c in _dropped])
 
             fails, detail_lines = self._sympy_refute(checks)
             if not fails:
@@ -331,6 +348,43 @@ class AnswerFalsifier:
     # ------------------------------------------------------------------
     # 证书清洗
     # ------------------------------------------------------------------
+    @classmethod
+    def _drop_ungrounded(cls, checks: list, problem: str) -> tuple:
+        """★ 2026-10-22（五道链审计）：丢掉「题面里没有依据」的等式。
+
+        为什么必须有这一步：证书是 LLM 写的，若它凭空编一条与本题无关的等式
+        （桩测试：``1+1 = 3``），SymPy 会忠实地算出 2≠3 并判定「候选被证伪」——
+        机器锚点反而给幻觉背书，正确答案被整条淘汰。判据是**可机器复核**的：
+        ``desc`` 必须是题面原文的逐字摘录，系统归一化后做子串核对。
+
+        Returns:
+            ``(kept_checks, dropped)``；``dropped`` 供留痕（含丢弃原因）。
+        """
+        from .evidence_grounding import check_quote, norm_text
+        import re as _re
+        # 剥掉「来自条件：」「根据题意：」这类前缀，只留摘录正文
+        _prefix = _re.compile(
+            r"^(?:来自|出自|根据|依据|由)?(?:题目|题面|条件|题干|题意)?\s*[:：]?\s*")
+        kept, dropped = [], []
+        for c in checks:
+            d = _prefix.sub("", str(c.get("desc") or "").strip())
+            ok, ratio, miss = check_quote(d, problem, min_len=4, min_seg=3)
+            if ok is True:
+                kept.append(c)
+            else:
+                if not norm_text(d):
+                    _note = "no_desc"
+                elif ok is None:
+                    _note = "unverifiable_too_short"
+                else:
+                    _note = "not_in_problem:%s" % "|".join(miss[:2])
+                dropped.append({
+                    "desc": str(c.get("desc") or "")[:120],
+                    "expr": "%s = %s" % (c.get("lhs"), c.get("rhs")),
+                    "note": _note,
+                })
+        return kept, dropped
+
     @classmethod
     def _normalize_checks(cls, checks) -> list:
         """只保留 lhs/rhs 都是**安全闭式**的条目；最多取 6 条。"""

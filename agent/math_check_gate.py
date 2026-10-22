@@ -222,7 +222,7 @@ def _extract_numeric_equations(text: str) -> list:
             continue
         seen.add(key)
         out.append((lhs, rhs))
-        if len(out) >= 8:
+        if len(out) >= 16:
             break
     return out
 
@@ -279,7 +279,7 @@ def _extract_inequalities(text: str) -> list:
             if len(lhs) > 24 or len(rhs) > 24:
                 continue
         out.append((lhs, rhs, op))
-        if len(out) >= 8:
+        if len(out) >= 16:
             break
     return out
 
@@ -418,6 +418,7 @@ def math_check_stage(self, ctx) -> None:
             ans = str(getattr(c, "answer_norm", None)
                       or getattr(c, "answer", "") or "")
             det = {"verdict": "unknown", "evidence": "", "method": ""}
+            _cv_pass = False    # 逐式复算是否全一致（与 det.verdict 分开记）
             try:
                 det = _det.check_answer(ctx, problem, ans, domain or None) or det
             except Exception as _e_d:  # noqa: BLE001  异常 ⇒ 放行（不误杀）
@@ -432,9 +433,9 @@ def math_check_stage(self, ctx) -> None:
                 _txt = str(getattr(c, "reasoning", "") or "")
                 _eqs = _extract_numeric_equations(_txt)
                 _ineq = _extract_inequalities(_txt)
-                _items = [{"expr": a, "claimed": b} for a, b in _eqs[:8]]
+                _items = [{"expr": a, "claimed": b} for a, b in _eqs[:16]]
                 _items += [{"expr": a, "claimed": b, "op": op}
-                           for a, b, op in _ineq[:8]]
+                           for a, b, op in _ineq[:16]]
                 if _items:
                     _rv = _cv(_items, constraints=_conds)
                     _nb = int(_rv.get("n_bad") or 0)
@@ -471,6 +472,10 @@ def math_check_stage(self, ctx) -> None:
                                        str(_r0.get("claimed") or "")[:24],
                                        str(_r0.get("actual") or "")[:24]))
                         continue
+                    # ★ 2026-10-22：逐式复算全部一致 —— 这是「算术层已核」，
+                    #   与「答案被机器确认」（det.verdict=="pass"）不是一回事，
+                    #   但也不能算 unknown（否则 4.4 的产出永远无法被下游区分）。
+                    _cv_pass = True
                 else:
                     _n_no_extract += 1
             except Exception as _e_cv:  # noqa: BLE001
@@ -491,10 +496,18 @@ def math_check_stage(self, ctx) -> None:
             else:
                 if _v == "unknown":
                     n_unknown += 1
+                # ★ 2026-10-22（五道链审计）：给候选挂**验证状态**，让下游能区分
+                #   「机器确认通过」与「根本没判定」——旧实现两者在 4.5 投票里同权，
+                #   等于 4.4 白做。
+                try:
+                    c.verify_math = ("pass" if (_v == "pass" or _cv_pass)
+                                     else "unknown")
+                except Exception:  # noqa: BLE001  只读候选对象异常不影响主链
+                    pass
                 kept.append(c)
                 self.record(ctx, "math_check",
-                            "cid=%s 通过/放行（verdict=%s%s）"
-                            % (cid, _v,
+                            "cid=%s 通过/放行（verdict=%s、逐式复算=%s%s）"
+                            % (cid, _v, "all_ok" if _cv_pass else "none",
                                "、kind=%s" % kind if kind else ""))
 
         # ★ 2026-10-21：淘汰来源**自动分组**（不写死 method 枚举）——
@@ -584,7 +597,7 @@ def math_check_stage(self, ctx) -> None:
                         continue
                     _n_eq += len(_eqs)
                     _r = _cv([{"expr": a, "claimed": b}
-                              for a, b in _eqs[:8]])
+                              for a, b in _eqs[:16]])
                     for _x in (_r.get("results") or []):
                         if not _x.get("ok"):
                             _bad.append({

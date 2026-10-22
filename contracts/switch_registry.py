@@ -606,6 +606,19 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.3 Lean 逻辑判断·答案代回题目（五道审核链第 3 道）：候选级 "
         "LeanGate.apply 硬验证（题目+答案翻译为 Lean 命题编译判定）；"
         "部分淘汰落池、全拒标记不静默清池、不适用题豁免；=0 关闭做 A/B"),
+    "five_gate_audit_retry": (
+        "FIVE_GATE_AUDIT_RETRY", "bool", True,
+        "五道链·自审解析失败重问（2026-10-22 审计修复）：4.1 输出不可解析时"
+        "按最严格式重问一次（不只输出 JSON 就再试），仍失败才记 unparsed 并"
+        "标 verify_audit=unparsed；旧口径「一次不成即放行」让 4.1 长期空转"
+        "（历史实测 84/88、12/12 候选 unparsed）；=0 回到旧口径"),
+    "five_gate_grounding": (
+        "FIVE_GATE_GROUNDING", "bool", True,
+        "五道链·证据落地校验（2026-10-22 审计修复）：4.1/4.2 的淘汰必须附"
+        "**可机器复核**的证据——模型指认的出错位置/出错步骤必须是候选推理里"
+        "逐字存在的原文片段，系统按归一化子串核对；编造的引文判为无效证据，"
+        "不得据此淘汰（写 self_audit_ungrounded / adversarial_gate_ungrounded"
+        " 留痕）；=0 回到旧口径（只认描述非空），仅用于 A/B 对照"),
     "five_gate_math_check_calcverify": (
         "FIVE_GATE_MATH_CHECK_CALCVERIFY", "bool", False,
         "4.4 工具③观测通道（2026-10-15）：开启后对存活候选推理提取数值等式、"
