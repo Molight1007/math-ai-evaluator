@@ -619,6 +619,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "unproved（代码合法但没证出）/ translation（生成的代码不合法）/ env"
         "（环境缺依赖）与答案对错无关，改判 unknown 并标 degraded=lean_<kind>；"
         "=0 回到旧行为（proof_invalid 一律淘汰），供 A/B 对照"),
+    "five_gate_self_audit_votes": (
+        "FIVE_GATE_SELF_AUDIT_VOTES", "num", 3,
+        "4.1 自审采样次数（2026-10-22 实测修复）：同一个错误候选连跑 3 次"
+        "判定为「留/杀/留」⇒ 单次采样不稳定、漏杀率约 2/3。现采 N 次，"
+        "任一次给出**带落地证据**的逻辑错即淘汰（编造位置被证据门挡住）；"
+        "=1 回到旧行为（单次判定），供 A/B 对照"),
     "five_gate_grounding": (
         "FIVE_GATE_GROUNDING", "bool", True,
         "五道链·证据落地校验（2026-10-22 审计修复）：4.1/4.2 的淘汰必须附"

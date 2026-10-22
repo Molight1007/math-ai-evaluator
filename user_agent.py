@@ -196,6 +196,7 @@ _CONFIG_OVERRIDE_KEYS = (
     "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
     "five_gate_grounding",
     "five_gate_audit_retry",
+    "five_gate_self_audit_votes",
     "lean_failure_kind_split",
     "five_gate_math_check_calcverify",
     "five_gate_rewrite",

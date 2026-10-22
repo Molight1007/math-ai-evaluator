@@ -28,8 +28,13 @@ class AgentConfig(_AgentConfigBase):
     max_tokens_cap: int = 0            # 内部 token 裁剪上限：0=不裁剪（base.llm 语义）
     # ★ 2026-10-20：输出**保底**上限。推理模型先写 Thinking 再写正文，
     #   ≤2048 的"短输出"设计全部会被思考吃掉（实测 212 次截断的主因）。
-    #   0 = 关闭保底；默认 4096 只抬不降（不影响投票这类短任务的速度）。
-    llm_min_max_tokens: int = 4096
+    #   0 = 关闭保底；默认只抬不降（不影响投票这类短任务的速度）。
+    # ★ 2026-10-22 4096 → 16384：端到端实测发现 4096 **完全不够**——
+    #   official112-008 / 001 这类题上，推理模型的思考会吃光整个上限、
+    #   正文输出 0 字（实测 max_tokens=16384 → reasoning=16384、content="";
+    #   甚至 32768 也被吃光）。4096 在这种题上必然"无有效解答"。
+    #   max_tokens 是**上限不是预留**，抬到 16384 不会让短调用变慢。
+    llm_min_max_tokens: int = 16384
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     # ★ 2026-09-16 删除两个**死字段**（全仓 0 读取点，已实测确认）：
     #   · `max_tokens`  —— 实际生效的是 `max_answer_tokens`（solver 侧）
@@ -516,6 +521,9 @@ class AgentConfig(_AgentConfigBase):
     five_gate_grounding: bool = True
     # ★ 2026-10-22：4.1 输出不可解析时按最严格式重问一次（旧口径一次放行）。
     five_gate_audit_retry: bool = True
+    # ★ 2026-10-22：4.1 自审采样次数。实测同一错误候选 3 次判定为「留/杀/留」
+    #   ⇒ 单次不可靠；多次采样、任一带落地证据的逻辑错即淘汰。1 = 旧行为。
+    five_gate_self_audit_votes: int = 3
     # ★ 2026-10-22（4.3）：Lean 编译失败按原因分级 —— 只有 refuted 才判答案错。
     lean_failure_kind_split: bool = True
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——

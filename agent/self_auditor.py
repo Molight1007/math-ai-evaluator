@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 from .switch_registry import get_bool as _sw_get_bool
+from .switch_registry import get_num as _sw_get_num
 # 单候选自审的输入截断（防超长上下文；题目 4000 / 推理 6000 与既有阶段同量级）
 _PROBLEM_MAX = 4000
 _REASONING_MAX = 6000
@@ -141,7 +142,66 @@ def _retry_enabled() -> bool:
         return True
 
 
+def _vote_count() -> int:
+    """读「自审采样次数」（默认 3，1 = 旧行为）。
+
+    ★ 2026-10-22 端到端实测（DeepSeek 真实调用）：同一个**错误**候选
+      （推理正确、只把终答写错）连跑 3 次，判定是「留 / 杀 / 留」——
+      单次判定**不稳定**，漏杀率约 2/3。这正是「错的没杀」的直接原因：
+      不是判据太松，是一次采样太偶然。
+      同一实验里**正确**候选 3/3 稳定通过，所以提高采样不会增加误杀。
+    """
+    try:
+        return max(1, int(_sw_get_num("five_gate_self_audit_votes")))
+    except Exception:  # noqa: BLE001
+        return 3
+
+
+def _audit_once(orch, ctx, msgs) -> tuple:
+    """调一次自审并解析；解析失败且开关允许时用最严格式重问一次。
+
+    返回 ``(d, used_retry)``。``d`` 为空 dict = 两次都不可解析。
+    异常不吞（调用方据此计 ``llm_fail``）。
+    """
+    raw = orch.llm(ctx, msgs, _TEMPERATURE, _MAX_TOKENS)
+    d = parse_self_audit_json(raw)
+    if d or not _retry_enabled():
+        return d, False
+    try:
+        raw2 = orch.llm(ctx, msgs + [
+            {"role": "assistant", "content": str(raw or "")[:2000]},
+            {"role": "user", "content":
+             "上一次回答无法解析。请**只**输出一个 JSON 对象，"
+             "第一个字符必须是 `{`，最后一个字符必须是 `}`；"
+             "不要任何解释、不要 Markdown 围栏。"},
+        ], 0.0, _MAX_TOKENS)
+    except Exception:  # noqa: BLE001
+        # 重问失败只说明"格式救不回来"，**不是模型不可用** —— 记为 unparsed
+        # 而不是 llm_fail，否则会把格式问题误算成基础设施故障。
+        return {}, True
+    return parse_self_audit_json(raw2), True
+
+def _judge_once(d, full_reasoning: str, grounding: bool) -> str:
+    """单次判定 → ``error`` / ``clean`` / ``ungrounded`` / ``""``（不可解析）。
+
+    ``error`` 只在这三件事同时成立时给出：模型判了逻辑错、给了描述、
+    且**指认的出错位置能在原文里逐字找到**（证据落地门，见 evidence_grounding）。
+    """
+    if not d:
+        return ""
+    if not (d.get("logic_error") and d.get("error_desc")):
+        return "clean"
+    if grounding:
+        from .evidence_grounding import check_location
+        ok, _r, _note = check_location(str(d.get("error_at") or ""),
+                                       full_reasoning)
+        if ok is not True:
+            return "ungrounded"
+    return "error"
+
+
 def _obligation_block(ctx, config) -> tuple:
+
     """取「蓝图倒推链反演出的义务清单」（2026-10-20，与 4.2 同一开关同一实现）。
 
     返回 ``(ledger, text)``；无蓝图 / 开关关闭 / 构建异常 ⇒ ``(None, "")``，
@@ -174,6 +234,8 @@ def self_audit_stage(self, ctx) -> None:
         problem = str(getattr(ctx, "problem", "") or "")[:_PROBLEM_MAX]
         kept, rejected, unparsed, llm_fail = [], [], [], 0
         n_retry = 0
+        n_weak = 0                    # 只靠"部分票"淘汰的数量（弱证据，供观察）
+        _votes = _vote_count()
         _grounding = _grounding_enabled()
         ungrounded = []   # 证据无法落地（位置缺失 / 原文里找不到）⇒ 不得据此淘汰
         # ★ 2026-10-20（用户：「把蓝图倒推链反过来输出到第 4 部分」）：
@@ -188,73 +250,76 @@ def self_audit_stage(self, ctx) -> None:
             ans = str(getattr(c, "answer_norm", None)
                       or getattr(c, "answer", "") or "")[:_ANSWER_MAX]
             reasoning = str(getattr(c, "reasoning", "") or "")[:_REASONING_MAX]
-            d = {}
-            try:
-                _msgs = [
-                    {"role": "system", "content": SELF_AUDIT_SYSTEM},
-                    {"role": "user", "content": SELF_AUDIT_USER.format(
-                        problem=problem, obligations=_lblock,
-                        answer=ans, reasoning=reasoning)},
-                ]
-                raw = self.llm(ctx, _msgs, _TEMPERATURE, _MAX_TOKENS)
-                d = parse_self_audit_json(raw)
-                # ★ 2026-10-22（五道链审计）：解析失败**不再直接放行**。
-                #   历史实测 unparsed 占比高到 84/88、12/12 —— 这一道长期空转，
-                #   等于 4.1 从未真正生效。格式失败是**可修复的失败**（模型常常
-                #   在 JSON 前后带一段解释），所以按最严约束重问一次，而不是把
-                #   候选当成"通过"。仍失败才记 unparsed（并在候选上标 unverified）。
-                if not d and _retry_enabled():
+            # ★ 2026-10-22（多次采样）：单次判定不稳定 —— 实测同一错误候选
+            #   连跑 3 次得「留/杀/留」；正确候选 3/3 稳定通过。
+            #   因此采 `_votes` 次，**任一次给出带落地证据的逻辑错即淘汰**
+            #   （漏杀代价 > 误杀代价；编造的证据已被 `_judge_once` 的落地门挡住）。
+            full_reasoning = str(getattr(c, "reasoning", "") or "")
+            _msgs = [
+                {"role": "system", "content": SELF_AUDIT_SYSTEM},
+                {"role": "user", "content": SELF_AUDIT_USER.format(
+                    problem=problem, obligations=_lblock,
+                    answer=ans, reasoning=reasoning)},
+            ]
+            d = None
+            _hit = None
+            _seen: list = []
+            _fail_first = False
+            for _vi in range(_votes):
+                try:
+                    _dd, _used = _audit_once(self, ctx, _msgs)
+                except Exception as _e_call:  # noqa: BLE001  LLM 故障绝不淘汰候选
+                    if _vi == 0:
+                        _fail_first = True
+                        llm_fail += 1
+                        self.record(ctx, "self_audit",
+                                    "cid=%s LLM 调用失败（保留候选）: %s"
+                                    % (cid, str(_e_call)[:120]))
+                    break
+                if _used:
                     n_retry += 1
-                    raw2 = self.llm(ctx, _msgs + [
-                        {"role": "assistant", "content": str(raw or "")[:2000]},
-                        {"role": "user", "content":
-                         "上一次回答无法解析。请**只**输出一个 JSON 对象，"
-                         "第一个字符必须是 `{`，最后一个字符必须是 `}`；"
-                         "不要任何解释、不要 Markdown 围栏。"},
-                    ], 0.0, _MAX_TOKENS)
-                    d = parse_self_audit_json(raw2)
+                _v = _judge_once(_dd, full_reasoning, _grounding)
+                _seen.append(_v)
+                if _v == "error":
+                    _hit = _dd
+                    break
+            if _fail_first:
+                kept.append(c)
+                continue
+
+            if _hit is None:
+                # 没有任何一次采样判定成立
+                if not any(_seen):
+                    unparsed.append(cid)
+                    kept.append(c)
+                    try:                # 未审 = 未验证，交给选择层降权
+                        c.verify_audit = "unparsed"
+                    except Exception:  # noqa: BLE001
+                        pass
                     self.record(ctx, "self_audit",
-                                "cid=%s 首次输出不可解析 ⇒ 已按严格格式重问一次：%s"
-                                % (cid, "成功" if d else "仍失败"))
-            except Exception as _e_call:  # noqa: BLE001  LLM 故障绝不淘汰候选
-                llm_fail += 1
+                                "cid=%s %d 次采样均不可解析 ⇒ 保留并标记 unverified"
+                                % (cid, len(_seen)))
+                    continue
+                if "ungrounded" in _seen:
+                    ungrounded.append({
+                        "id": cid, "answer": ans[:120], "at": "",
+                        "desc": "", "note": "ungrounded_in_votes"})
+                    self.record(ctx, "self_audit",
+                                "cid=%s 指认证据无法落地（%d 次中 %d 次）⇒ 不淘汰"
+                                % (cid, len(_seen), _seen.count("ungrounded")))
                 kept.append(c)
                 self.record(ctx, "self_audit",
-                            "cid=%s LLM 调用失败（保留候选）: %s"
-                            % (cid, str(_e_call)[:120]))
+                            "cid=%s 通过（采样 %d 次：%s）"
+                            % (cid, len(_seen), "/".join(_seen)))
                 continue
 
-            if not d:
-                unparsed.append(cid)
-                kept.append(c)
-                try:                    # 未审 = 未验证，交给选择层降权
-                    c.verify_audit = "unparsed"
-                except Exception:  # noqa: BLE001
-                    pass
-                self.record(ctx, "self_audit",
-                            "cid=%s 重问后仍不可解析 ⇒ 保留并标记 unverified" % cid)
-                continue
-
+            d = _hit          # 命中：走义务账本门与淘汰
+            n_weak += (1 if len(_seen) > 1 else 0)
             if d.get("logic_error") and d.get("error_desc"):
                 desc = d["error_desc"][:300]
                 at = (d.get("error_at") or "")[:120]
                 oid_raw = str(d.get("obligation_id") or "")
-                # ★ 2026-10-22（五道链审计·证据落地门）：淘汰必须能指出**原文里
-                #   真实存在**的片段。用完整 reasoning 校验（`reasoning` 变量已被
-                #   `_REASONING_MAX` 截断，引文可能落在截断区外）。
-                if _grounding:
-                    from .evidence_grounding import check_location
-                    _gok, _gr, _gnote = check_location(
-                        at, str(getattr(c, "reasoning", "") or ""))
-                    if _gok is not True:
-                        ungrounded.append({
-                            "id": cid, "answer": ans[:120], "at": at[:60],
-                            "desc": desc[:200], "note": _gnote})
-                        kept.append(c)
-                        self.record(ctx, "self_audit",
-                                    "cid=%s 证据无法落地（%s）⇒ 不淘汰：指认位置 %r"
-                                    % (cid, _gnote, at[:40]))
-                        continue
+                # 证据落地门已在 `_judge_once` 内逐票执行，此处不重复。
                 # ★ 2026-10-20 义务账本门：账本已注入、模型也给了引用，但这条引用
                 #   在账本里查不到（填了 none / 编号不存在）⇒ 它评论的是蓝图并未
                 #   要求的东西，属「证更强命题」型误判，放行。
@@ -302,6 +367,8 @@ def self_audit_stage(self, ctx) -> None:
             "n_unparsed": len(unparsed),
             "n_llm_fail": llm_fail,
             "n_retry": n_retry,
+            "n_weak": n_weak,
+            "votes": _votes,
             "n_unmapped": len(unmapped),
             "unmapped_ids": [r["id"] for r in unmapped],
             "n_ungrounded": len(ungrounded),

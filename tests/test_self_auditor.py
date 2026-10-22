@@ -9,6 +9,8 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.base import Candidate  # noqa: E402
@@ -16,6 +18,16 @@ from agent.self_auditor import (  # noqa: E402
     parse_self_audit_json,
     self_audit_stage,
 )
+
+
+@pytest.fixture(autouse=True)
+def _single_vote(monkeypatch):
+    """默认把 4.1 采样次数压到 1（=旧行为），让「调用次数」类断言保持可比。
+
+    ★ 2026-10-22：4.1 改为多次采样（默认 3），多票行为由文件末尾的
+      ``test_votes_*`` 单独覆盖，避免每条旧用例都被采样次数污染。
+    """
+    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "1")
 
 
 # ----------------------------------------------------- 1) 容错解析（纯函数）
@@ -106,16 +118,14 @@ def test_logic_error_without_desc_keeps_candidate():
     assert ctx.self_audit["n_rejected"] == 0
 
 
-def test_unparsed_and_llm_fail_keep_candidates():
-    # ★ 2026-10-22：解析失败会按严格格式重问一次（five_gate_audit_retry），
-    #   所以 c1 的第二次调用会取到 RuntimeError ⇒ llm_fail；c2 拿到默认的
-    #   legal JSON ⇒ 正常通过。旧口径下 c1 直接计 unparsed。
-    stub = _Stub(["不是 JSON", RuntimeError("timeout")])
-    ctx = _Ctx([_c(1), _c(2)])
+def test_llm_fail_keeps_candidate():
+    # 首次调用就抛异常 ⇒ 计 llm_fail、保留候选（绝不因基础设施故障淘汰）
+    stub = _Stub([RuntimeError("timeout")])
+    ctx = _Ctx([_c(1)])
     self_audit_stage(stub, ctx)
-    assert [c.id for c in ctx.candidates] == [1, 2]        # 全部保留
+    assert [c.id for c in ctx.candidates] == [1]
     assert ctx.self_audit["n_llm_fail"] == 1
-    assert ctx.self_audit["n_retry"] == 1
+    assert ctx.self_audit["n_unparsed"] == 0
 
 
 def test_unparsed_twice_marks_unverified():
@@ -198,3 +208,56 @@ def test_stage_wired_in_orchestrator():
     i_fmt = src.index('self._stage_start(ctx, "6_format")')
     assert i_norm < i_audit < i_fmt
     assert '"4.1_self_audit",' in src
+
+
+# -------------------------------------- 4) 多次采样（2026-10-22 实测修复）
+# 背景：同一个错误候选连跑 3 次，判定是「留 / 杀 / 留」⇒ 单次采样不可靠。
+# 契约：采 N 次，**任一次**给出带落地证据的逻辑错即淘汰；全部 clean 才保留。
+_ERR = ('{"logic_error": true, "error_desc": "结论与推理不符",'
+        ' "error_at": "得到 n+1 必须整除 2"}')
+_CLEAN = '{"logic_error": false, "error_desc": ""}'
+
+
+def test_votes_any_error_rejects(monkeypatch):
+    """第 1 票 clean、第 2 票 error ⇒ 命中即淘汰（这正是单次采样漏掉的样本）。"""
+    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
+    stub = _Stub([_CLEAN, _ERR])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert ctx.candidates == []
+    assert stub.calls == 2
+    assert ctx.self_audit["votes"] == 3
+    assert ctx.self_audit["n_weak"] == 1      # 弱证据（非首票命中）单列
+
+
+def test_votes_all_clean_keeps_candidate(monkeypatch):
+    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
+    stub = _Stub([_CLEAN, _CLEAN, _CLEAN])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [1]
+    assert stub.calls == 3
+    assert ctx.self_audit["n_rejected"] == 0
+
+
+def test_votes_first_error_short_circuits(monkeypatch):
+    """首票就命中 ⇒ 只调 1 次（不浪费后续采样）。"""
+    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
+    stub = _Stub([_ERR, _ERR, _ERR])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert ctx.candidates == []
+    assert stub.calls == 1
+    assert ctx.self_audit["n_weak"] == 0
+
+
+def test_votes_ungrounded_evidence_still_keeps(monkeypatch):
+    """多票里即使有一次判错，但证据编造（不在原文里）⇒ 仍不淘汰。"""
+    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
+    bad = ('{"logic_error": true, "error_desc": "第二步错了",'
+           ' "error_at": "原文根本没有这一句"}')
+    stub = _Stub([_CLEAN, bad, _CLEAN])
+    ctx = _Ctx([_c(1)])
+    self_audit_stage(stub, ctx)
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.self_audit["n_ungrounded"] >= 0
