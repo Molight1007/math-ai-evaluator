@@ -530,6 +530,29 @@ class AgentConfig(_AgentConfigBase):
     subgoal_failed_retry_rounds: int = 2
     # ★ 2026-10-22：蓝图自审用局部子树重写（LCA 触根自动退化为整树）。
     blueprint_subtree_regen: bool = True
+    # ================= 2026-10-22 全仓审计：补齐 6 个「环境变量改不动」的开关 =================
+    # 这 6 个在 switch_registry 里注册了、也在白名单/param_usage 里，但 config 类**没有字段**
+    # ⇒ 消费方用 `getattr(config, "x", 代码默认)` 读取时永远拿到代码默认值，
+    #   设 `STRICT_ALL_REJECTED=1` 这类环境变量会被**静默忽略**（不是默认值错，是覆盖链断了）。
+    # 取值一律与 registry 声明保持一致（getattr 兜底值必须等于 config 声明值）。
+    falsify_max_per_q: float = 0.0            # 0 = 不限
+    enable_question_type: bool = True
+    strict_all_rejected: bool = False
+    require_answer_in_pool: bool = True
+    deterministic_solution_check: bool = True
+    audit_gate_rubric_nonproof: bool = False
+    # 余下 9 个只经 `get_bool()/get_num()/get_str()` 读取（行为本就正确），
+    # 缺字段的唯一后果是 `param_usage` 报表显示代码默认值、与实际 env 覆盖值不符。
+    # 一并补齐，使「注册表 / config / 白名单 / param_usage」四件套完整。
+    diversity_resample_enabled: bool = True
+    diversity_resample_count: int = 3
+    accept_gate_enforce: bool = True
+    accept_gate_pass_threshold: float = 1.0
+    accept_gate_reject_defect_threshold: float = 2.0
+    stage_timer_reassign_revise: bool = True
+    pool_gate_v2: bool = True
+    check_protocol_guard: bool = True
+    verifier_vote_reasoning: str = "disagree"
     # ★ 2026-10-22：4.5 投票平票时以 4.4 的机器核验（verify_math）为依据。
     five_gate_verify_tiebreak: bool = True
     # ★ 2026-10-22（4.3）：Lean 编译失败按原因分级 —— 只有 refuted 才判答案错。
