@@ -6,13 +6,13 @@
 --------------
 - **只读远端**：仅执行 `ls` / `scp <远端> -> 本地`，绝不 push / 不写远端。
 - **不写 `results/_cloud/`**：评测运行期间该目录属禁区（口径见 MEMORY）。
-  默认落地 `D:\mathpilot_work\cloud_snap\_cloud_snap_<时间戳>\\`，可用 `--dest` 覆盖。
+  默认落地 `D:\\mathpilot_work\\cloud_snap\\_cloud_snap_<时间戳>\\`，可用 `--dest` 覆盖。
 - 不做任何代码同步、不 verify、不 kill 会话。
 
 用法
 ----
   python tools/cloud_fetch_ro.py --tag run_2026-09-22
-  python tools/cloud_fetch_ro.py --tag run_2026-09-22 --dest D:\mathpilot_work\cloud_snap\_cloud_snap_now
+  python tools/cloud_fetch_ro.py --tag run_2026-09-22 --dest D:\\mathpilot_work\\cloud_snap\\_cloud_snap_now
 """
 from __future__ import annotations
 

@@ -16,7 +16,7 @@
 ----
   python cli/research_ledger.py
   python cli/research_ledger.py --cloud results/run_2026-09-22_0922_1955.jsonl
-  python cli/research_ledger.py --cloud-dir D:\mathpilot_work\cloud_snap\_cloud_snap_0923_2217
+  python cli/research_ledger.py --cloud-dir D:\\mathpilot_work\\cloud_snap\\_cloud_snap_0923_2217
 """
 # 2026-10-01 去同名：write_text -> write_text_mkdir（写文本**并建父目录**（另一处同名的不建），加 _mkdir 区分）
 from __future__ import annotations
