@@ -75,3 +75,22 @@ def test_empty_result_section_falls_back_to_derivation():
 def test_no_marker_falls_back_to_tail():
     out = _run("直接给一段没有标记的推导内容，长度足够。")
     assert out and out != PLACEHOLDER
+
+
+def test_short_result_section_keeps_derivation():
+    """★ 实测：prefill 后模型不重复「【本步结果】」，只写结论两行 + 【推导过程】。
+    旧实现截到下一个 `【` 就把**整段推导丢了**（1753 字 → 40 字）。"""
+    resp = ("【本步结果】\n本步结论: 值 = 5\n本步依据: 题设\n"
+            "【推导过程】\n设 x=1，代入得 1+4=5，故结论为 5。")
+    out = _run(resp)
+    assert "本步结论" in out
+    assert "设 x=1" in out, "推导段被丢弃 ⇒ merge 只能拿到一句结论"
+    assert "【推导过程】" in out
+
+
+def test_long_result_section_not_duplicated():
+    """结果段本身够长（已含推导）⇒ 不再重复拼接推导段。"""
+    body = "本步结论: 值 = 5\n" + ("推导内容" * 20)
+    out = _run("【本步结果】\n" + body + "\n【推导过程】\n另一段")
+    assert out.count("推导内容") >= 20
+    assert "另一段" not in out

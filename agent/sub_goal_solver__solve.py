@@ -548,6 +548,20 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
     if result_match and result_match.group(1).strip():
         step_result = self._strip_tool_residue(result_match.group(1)).strip()
+        # ★★ 2026-10-22（实测：产出被截残）：模型 prefill 后**不会重复**
+        #   「【本步结果】」，而是直接写「本步结论: …」「本步依据: …」再写
+        #   「【推导过程】…」。上面截到下一个 `【` 为止 ⇒ **推导整段被丢弃**。
+        #   实测 official112-008：原始 1753 字 → 只留 40 字（仅结论行），
+        #   而 merge 需要推导来合成最终答案 ⇒ 这同样是"产出不完整"。
+        #   判定：结果段**很短**（<80 字，通常只有结论两行）且存在推导段时，
+        #   把推导一并带上；若结果段本身已含实质内容则保持原样。
+        if len(step_result) < 80 and "【推导过程】" in resp:
+            _dev2 = re.search(r"【推导过程】\s*\n?(.*?)(?:$|【)", resp,
+                              re.DOTALL)
+            if _dev2 and _dev2.group(1).strip():
+                step_result = (step_result + "\n【推导过程】\n"
+                               + self._strip_tool_residue(
+                                   _dev2.group(1)).strip())
     else:
         # ★ 2026-10-22：`【本步结果】` 后**紧跟**另一个标记（如「【推导过程】」）时，
         #   上面的非贪婪正则 `(.*?)(?:$|【)` 会匹配到空内容 —— 模型把实质内容
