@@ -228,6 +228,13 @@ def _local_mathlib_olean_roots() -> list[str]:
     for _base in {os.path.dirname(_project_root())} | set(_lean_env_roots()):
         roots.extend(sorted(_glob.glob(os.path.join(
             _base, "mathlib4*", ".lake", "build", "lib", "lean"))))
+        # ★ 2026-10-22（Lean 编译失败根因）：Mathlib 的**依赖包**必须一并挂上。
+        #   实测：只挂 Mathlib 层 ⇒ `import Mathlib.Tactic` 报
+        #   `unknown module prefix 'Batteries'`；补齐 batteries/aesop/Qq/
+        #   LeanSearchClient/plausible/proofwidgets/importGraph 七个包后退出码 0。
+        roots.extend(sorted(_glob.glob(os.path.join(
+            _base, "mathlib4*", ".lake", "packages", "*", ".lake",
+            "build", "lib", "lean"))))
     seen: set[str] = set()
     out: list[str] = []
     for p in roots:

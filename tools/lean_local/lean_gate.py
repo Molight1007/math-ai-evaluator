@@ -435,7 +435,10 @@ class LeanGate:
                 if _lc:
                     entry["lean_code"] = _lc[:2000]
                 for _dk in ("verdict_reason", "cross_check",
-                            "sys_verify", "compiled"):
+                            "sys_verify", "compiled",
+                            # ★ 2026-10-22：编译器原始报错（此前从不落盘 ⇒
+                            #   失败原因无法归因）
+                            "compile_error"):
                     try:
                         _dv = getattr(report, _dk, None)
                     except Exception:  # noqa: BLE001

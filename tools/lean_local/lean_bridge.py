@@ -74,6 +74,7 @@ from tools.lean_local.lean_bridge__env import (  # noqa: F401
     _closure_roots,
     _has_mathlib_tactics,
     _mathlib_tactic_entry_available,
+    _local_mathlib_olean_roots,
     CORE_MATHLIB_IMPORTS,
     _mathlib_import_block,
     _normalize_lean_imports,
@@ -1016,20 +1017,45 @@ def _compile_lean(
         {"ok": bool, "error": str}。
     """
     exe = lean_executable or _DEFAULT_LEAN_EXECUTABLE
-    # 2026-09-09 平台零配置兜底：work_dir 即 mathlib 闭包（含 Mathlib/Tactic.olean
-    # 聚合入口）时，若当前进程 LEAN_PATH 未含它则自动注入——平台 clone 后不跑
-    # setup 脚本（无 lean-env.sh）也能让 lean.exe 直编 import Mathlib；LEAN_PATH
-    # 已被环境显式设置时尊重原值（调用约定：env 显式最高优先），仅追加缺失闭包。
-    _lean_entry = os.path.join(work_dir, "Mathlib", "Tactic.olean")
-    if os.path.isfile(_lean_entry):
+    # ★★ 2026-10-22（Lean 编译失败根因修复 · 实测定位）
+    #   旧实现只在 ``<work_dir>/Mathlib/Tactic.olean`` 存在时才把 work_dir 挂进
+    #   LEAN_PATH，且**只挂这一个目录**。两处都会让直编必然失败：
+    #     ① 裁剪闭包（deploy/mathlib-olean）没有聚合入口 `Mathlib/Tactic.olean`，
+    #        只有 `Mathlib/Tactic/NormNum.olean` ⇒ 判据不成立 ⇒ **一个路径都不挂**；
+    #     ② 即使挂上 Mathlib 层，`import Mathlib.Tactic` 仍需 7 个依赖包
+    #        （batteries/aesop/Qq/LeanSearchClient/plausible/proofwidgets/importGraph）
+    #        ⇒ 报 `unknown module prefix 'Batteries'`。
+    #   实测：同样的 t1.lean，只挂 Mathlib 退出码 1（Batteries 缺失）；
+    #        补全 7 个 packages 后退出码 0。
+    #   现改为：闭包根（聚合入口或裁剪子模块任一存在）⇒ 挂 work_dir；
+    #        再无条件补挂 `_local_mathlib_olean_roots()` 给出的全部依赖包路径。
+    _has_closure = (
+        os.path.isfile(os.path.join(work_dir, "Mathlib", "Tactic.olean"))
+        or os.path.isfile(os.path.join(work_dir, "Mathlib", "Tactic",
+                                       "NormNum.olean")))
+    _inject: list = []
+    if _has_closure:
+        _inject.append(work_dir)
+    try:
+        _inject.extend(_local_mathlib_olean_roots())
+    except Exception:  # noqa: BLE001  探测失败不影响主流程（保持原值）
+        pass
+    if _inject:
         # 2026-09-13：并行通道下多线程会同时走到这里 —— os.environ 是进程级共享，
         # 读-改-写必须加锁，否则可能丢更新（LEAN_PATH 漏掉闭包 → bridge 直编失败）。
         with _LEAN_PATH_LOCK:
             _lp = (os.environ.get("LEAN_PATH", "") or "").strip()
-            _lp_dirs = [os.path.normpath(d) for d in _lp.split(os.pathsep) if d]
-            if os.path.normpath(work_dir) not in _lp_dirs:
+            _lp_dirs = {os.path.normcase(os.path.normpath(d))
+                        for d in _lp.split(os.pathsep) if d}
+            _add = []
+            for _d in _inject:
+                _k = os.path.normcase(os.path.normpath(_d))
+                if _d and _k not in _lp_dirs:
+                    _lp_dirs.add(_k)
+                    _add.append(_d)
+            if _add:
                 os.environ["LEAN_PATH"] = (
-                    (_lp + os.pathsep) if _lp else "") + work_dir
+                    (_lp + os.pathsep) if _lp else "") + os.pathsep.join(_add)
     lean_file = os.path.join(work_dir, lean_filename)
     # 2026-09-11（mcp 可用性修复）：mcp 后端下规范化 imports —— 裸 `import Mathlib`
     # 在本机 Mathlib 布局下会触发 fatalError，导致 mcp 恒报 diagnostics_unavailable。
@@ -1551,12 +1577,23 @@ class LeanBridge:
             if time.monotonic() > deadline:
                 return _mk("unknown", reason="deadline_before_error_analysis",
                            code=lean_code, compiled=False)
-            return self._analyze_error(
+            _rep = self._analyze_error(
                 problem,
                 reasoning + "\n## 最终答案\n" + answer,
                 lean_code,
                 comp.get("error", "答案验证编译失败（无详细输出）")
                 if comp else "答案验证编译失败（无详细输出）")
+            # ★ 2026-10-22（可观测性补强）：把编译器**原始报错**带进 report。
+            #   历史 4387 条 lean_gate 判定的 error 字段**全部为空** ⇒ 失败原因
+            #   无法归因（环境缺依赖 / 翻译写错 / 命题为假，三者混在一起）。
+            #   落进 diag 后才能按错误类型分类统计，这是修 4.3 的前提。
+            try:
+                if comp and comp.get("error"):
+                    setattr(_rep, "compile_error",
+                            str(comp["error"])[:400])
+            except Exception:  # noqa: BLE001  属性附加失败不影响判定
+                pass
+            return _rep
         except Exception as exc:  # noqa: BLE001
             # 2026-09-13 修复：此处原实现**直接把异常降级为 unknown**，但异常的主因
             # 是翻译阶段的 LLM 调用超时（LLMClient 180s × 重试 1 次 = 360s），被静默
