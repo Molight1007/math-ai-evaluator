@@ -26,6 +26,10 @@ class AgentConfig(_AgentConfigBase):
     # v2.4.0：max_tokens/cap 同步 24576（ICMA reasoning 同款上限，模型实际用 3-7K token）
     # 2026-09-04：max_tokens_cap=0 关闭 base.llm 二次裁剪
     max_tokens_cap: int = 0            # 内部 token 裁剪上限：0=不裁剪（base.llm 语义）
+    # ★ 2026-10-20：输出**保底**上限。推理模型先写 Thinking 再写正文，
+    #   ≤2048 的"短输出"设计全部会被思考吃掉（实测 212 次截断的主因）。
+    #   0 = 关闭保底；默认 4096 只抬不降（不影响投票这类短任务的速度）。
+    llm_min_max_tokens: int = 4096
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
     # ★ 2026-09-16 删除两个**死字段**（全仓 0 读取点，已实测确认）：
     #   · `max_tokens`  —— 实际生效的是 `max_answer_tokens`（solver 侧）
@@ -176,6 +180,8 @@ class AgentConfig(_AgentConfigBase):
     # （reasoning 先吃满预算、正文为空）。
     adversarial_max_tokens: int = 8192
     adversarial_max_reasoning: int = 2400
+    # 2026-10-20：审核侧义务账本（蓝图倒推链反演），见 agent/obligation_ledger.py
+    audit_obligation_ledger: bool = True
     # ---- 验证增强链时间护栏（2026-09-07：治 4.5_oracle / 4.6_adv 烧穿 6.5）----
     # 冒烟 v2 实证：3.3/3.6 止损省下的时间被 4.5 Oracle(365s)/4.6 对抗(372s)
     # 单次 300s+ 不可打断的复核吸收 → 6.5 Lean 终局仍 time_critical、0 绿点。

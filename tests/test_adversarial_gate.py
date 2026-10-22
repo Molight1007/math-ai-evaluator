@@ -176,7 +176,70 @@ def test_exception_does_not_raise():
     assert any("异常" in m for _, m in stub.events)
 
 
-# ----------------------------------------------------- 5) 接线锚点（读源守卫）
+# ----------------------------------------------------- 5) 按来源分组统计（不写死枚举）
+def test_cross_model_rejections_counted(monkeypatch):
+    """跨模型淘汰必须进分项（2026-10-20 collab019_r1：淘汰 3 只报到 1）。
+
+    现场：`cid=0`/`cid=8` 走 cross_model、`cid=12` 走 llm，日志却写
+    「证伪淘汰 3（机检 0 / LLM 1）」——分项和 1 ≠ 总数 3，跨模型这条主力被漏计。
+    """
+    import agent.adversarial_gate as ag
+    import agent.cross_model_check as cmc
+
+    monkeypatch.setattr(ag, "_sw_get_bool", lambda name: True)
+    monkeypatch.setattr(cmc, "cross_check", lambda **kw: {
+        "verdict": "wrong", "evidence": "下界假设 Natasha 不干扰 2×2 块",
+        "model": "deepseek-v3"})
+
+    stub = _Stub(_Falsifier([_Res(), _Res()]), _Prober([_PRes(), _PRes()]))
+    ctx = _Ctx([_c(1), _c(2)])
+    adversarial_gate_stage(stub, ctx, "deep")
+
+    g = ctx.adversarial_gate
+    assert g["n_rejected"] == 2
+    assert g["n_cross_model"] == 2
+    assert g["n_by"] == {"cross_model": 2}
+    # 核心不变量：分项和必须等于淘汰总数
+    assert g["n_machine"] + g["n_llm"] + g["n_cross_model"] == g["n_rejected"]
+    msg = [m for _, m in stub.events if "4.2 对抗证伪" in m][-1]
+    assert "跨模型 2" in msg
+
+
+def test_mixed_sources_sum_to_total(monkeypatch):
+    """机检 + LLM + 跨模型混合时，三项之和仍等于淘汰总数。"""
+    import agent.adversarial_gate as ag
+    import agent.cross_model_check as cmc
+
+    monkeypatch.setattr(ag, "_sw_get_bool", lambda name: True)
+    monkeypatch.setattr(cmc, "cross_check", lambda **kw: {"verdict": "wrong",
+                                                          "evidence": "e"})
+
+    # c1 机检判错；c2 LLM 可行动；c3 两道放行 ⇒ 跨模型判错
+    stub = _Stub(
+        _Falsifier([_Res(incorrect=True, reason="r", witness="w"), _Res(), _Res()]),
+        _Prober([_PRes(actionable=True, error_type="跳步", feedback="[对抗式审查] x"),
+                 _PRes()]))
+    ctx = _Ctx([_c(1), _c(2), _c(3)])
+    adversarial_gate_stage(stub, ctx, "deep")
+
+    g = ctx.adversarial_gate
+    assert g["n_rejected"] == 3
+    assert g["n_by"] == {"machine": 1, "llm": 1, "cross_model": 1}
+    assert sum(g["n_by"].values()) == g["n_rejected"]
+
+
+def test_report_summary_lists_all_sources():
+    """报表 4.2 摘要必须列出全部分组（旧版只印机检/LLM，跨模型不可见）。"""
+    from cli.test_report import _fmt_falsify_by
+    assert _fmt_falsify_by({"n_rejected": 3,
+                            "n_by": {"cross_model": 2, "llm": 1}}) == "跨模型2/LLM1"
+    # 历史结果文件没有 n_by ⇒ 退回两项口径，不报错
+    assert _fmt_falsify_by({"n_rejected": 3, "n_machine": 0,
+                            "n_llm": 1}) == "机检0/LLM1"
+    assert _fmt_falsify_by({}) == "机检—/LLM—"
+
+
+# ----------------------------------------------------- 6) 接线锚点（读源守卫）
 def test_stage_wired_in_orchestrator():
     src = open(
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

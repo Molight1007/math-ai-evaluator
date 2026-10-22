@@ -124,7 +124,7 @@ def _ask_premise(self, ctx, sg: dict, missing: str, prev_results: str) -> dict:
             ctx,
             [{"role": "system", "content": system},
              {"role": "user", "content": user}],
-            0.2, 2048,
+            0.2, 8192,
         )
     except Exception as e:  # noqa: BLE001  LLM 故障不该拖垮求解
         return {"ok": False, "reason": f"倒推调用异常: {str(e)[:100]}"}
@@ -278,9 +278,10 @@ def sg_dynamic_backward(self, ctx, sg: dict, step_result: str,
                     f"子目标 #{sg['id']} 前提 #{p_sg['id']} 求解异常"
                     f"（{str(e)[:80]}）⇒ 维持原结果")
         return step_result
-    p_sg["result"] = _p_res
-    if results_map is not None:
-        results_map[p_sg["id"]] = _p_res
+    # ★ 2026-10-20：唯一写入口（两容器同值）。手写两行就意味着"漏写一处"
+    #   的可能 —— 动态子目标同样要进 reasoning 文本，否则又造一个空壳。
+    from .subgoal_result import write_step
+    write_step(p_sg, results_map, _p_res)
     try:
         ctx.subgoal_trace.append(self._build_trace_item(p_sg, _p_res))
     except Exception:  # noqa: BLE001  trace 写入失败不该影响求解

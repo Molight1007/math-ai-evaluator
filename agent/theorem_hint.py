@@ -825,7 +825,7 @@ def run_hint_for(agent, ctx) -> None:
             #   ⇒ 解析器拿到思考碎片当 query（实测产 99 条噪声命中）。
             #   2048 给思考留出空间，使真正的 JSON 数组能产出。
             #   代价极小：这只是一次短输出调用，且失败仍回退规则 query。
-            ], 0.2, 2048)
+            ], 0.2, 8192)
             _extra_q = parse_llm_queries(_raw_q)
             agent.record(ctx, "theorem_hint",
                          "LLM 辅助 query：%s" % (_extra_q or "（空，回退规则 query）"))

@@ -88,7 +88,43 @@ def _render(v) -> str:
     return str(v)
 
 
-def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
+def _prepare_constraints(constraints) -> list:
+    """预解析前提为 `[(差式, op)]` —— 代值点要反复比对，不能每点重解析。"""
+    out = []
+    for c in constraints or []:
+        try:
+            out.append((_parse(str(c.get("expr") or "")) -
+                        _parse(str(c.get("claimed") or "")),
+                        str(c.get("op") or "ge").lower()))
+        except Exception:  # noqa: BLE001  坏约束忽略（不放宽也不收紧）
+            continue
+    return out
+
+
+def _constraints_hold(sub: dict, prepared, tol: float = 1e-9) -> bool:
+    """代值点是否满足全部**题目前提**（如 `d>=2`、`0<x<=1`）。
+
+    ★ 2026-10-21：没有前提就分不清「恒假断言」和「有条件才真的命题」——
+      `x^(d-1) >= x` 在 d=1 时假，但题目说 `d>=2`，它是真命题（实测误杀 3 次）。
+      该点未覆盖的符号 ⇒ 该约束不作数（不能因信息不全就判越界）。
+    """
+    for diff, op in prepared:
+        try:
+            d = diff.subs(sub)
+            if d.free_symbols:
+                continue
+            v = float(d)
+        except Exception:  # noqa: BLE001
+            continue
+        ok = {"ge": v >= -tol, "le": v <= tol,
+              "gt": v > tol, "lt": v < -tol}.get(op, True)
+        if not ok:
+            return False
+    return True
+
+
+def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
+                       constraints=None) -> "bool | None":
     """判定 ``lhs op rhs``（op: ge/le/gt/lt）—— True 成立 / False 有反例 / None 无法判定。
 
     ★ 2026-10-17（用户要求「让工具检错计算过程」）：原工具只验**数值等式**，
@@ -96,7 +132,7 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
       本函数三重判定：
         ① 常数化简（simplify(lhs-rhs) 无自由符号 ⇒ 直接判）；
         ② 符号性质（sympy 的 is_nonnegative / is_nonpositive）；
-        ③ **随机代值找反例**（40 组，命中即确证 False）——这是抓 017 的关键。
+        ③ **代值找反例**（正整数区确定性枚举，命中即确证 False）——抓 017 的关键。
       任一步不能定 ⇒ None（调用方计 n_err，绝不误杀）。
     """
     import sympy as _sympy                 # ★ 局部导入（原代码未定义 _sympy，
@@ -138,34 +174,64 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
                 return False
     except Exception:
         pass
-    # ③ 随机代值找反例（只用于确证 False；找不到不等价于成立）
+    # ③ 代值找反例（只用于确证 False；找不到不等价于成立）
     #   ★ 用 `d_raw`（未 simplify 的原始差）：simplify 可能引入 Piecewise，
-    #     其 subs/float 会失败导致 40 组全跳过（实测 017 型因此漏判）。
-    #   ★ 2026-10-17 审核（防误杀条件不等式）：代值分两组——
-    #     · **全正区**（20 组）：出现反例 ⇒ 判 False（017 型即在此被抓）；
-    #     · 全负/混合区（20 组）：**只记疑不判错** —— 形如 `x+1/x>=2`（前提 x>0）
-    #       的**真命题**在负数区必出"反例"，但那不构成命题为假（工具不知道前提）。
+    #     其 subs/float 会失败导致全部跳过（实测 017 型因此漏判）。
+    #   ★ 2026-10-17：分「全正区 / 负区」，负区只记疑 —— 形如 `x+1/x>=2`
+    #     （前提 x>0）的真命题在负数区必出"反例"，但那不构成命题为假
+    #     （工具不知道前提）。
+    #   ★ 2026-10-21 修正（条件不等式误杀）：原「全正区」取样是
+    #     `Rational(randint(1,5), randint(1,3))` ⇒ 含 1/2 这类**小于 1 的正
+    #     有理数**。对前提为 `q>=1` 的真命题 `q^2-1 >= 0`，q=1/2 时得 -0.75
+    #     ⇒ 直接判 False ⇒ 候选被淘汰（实测误杀）。现分三区：
+    #       · **正整数区**：**确定性枚举**（不随机 —— 同一候选两次运行必须同
+    #         结论；1..5 足够覆盖 017 型反例），出现反例 ⇒ 确证 False；
+    #       · **正分数区 / 负混合区**：只记疑 ⇒ None（前提未知，反例不作数）。
+    #   ★ 前提预解析放在 try 之外：它自身已带异常保护，若放在 try 内，
+    #     任何 NameError 都会被下面的 `except Exception: pass` 吞掉 ⇒ 静默退化成
+    #     「全部无法判定」（实测踩到，所有不等式一律 None）。
+    _prep = _prepare_constraints(constraints)
     try:
+        import itertools
         import random
         syms = sorted(d_raw.free_symbols, key=lambda x: str(x))[:3]
 
-        def _sample(pos: bool) -> dict:
+        def _sample(pos: bool, den: int = 1) -> dict:
             _s = {}
             for sy in syms:
                 _v = random.randint(1, 5) * (1 if pos else -1)
-                _s[sy] = _sympy.Rational(_v, random.randint(1, 3))
+                _s[sy] = _sympy.Rational(_v, den)
             return _s
 
-        for _ in range(20):                       # 全正区：可判 False
+        # ① 正整数区：可判 False（017 型在此被抓）
+        for _combo in itertools.product((1, 2, 3, 4, 5), repeat=len(syms)):
+            _sub = {sy: _sympy.Rational(v) for sy, v in zip(syms, _combo)}
+            if not _constraints_hold(_sub, _prep, tol):
+                continue                 # 越出题目前提的点不构成反例
             try:
-                v = float(_sympy.N(d_raw.subs(_sample(True))))
+                v = float(_sympy.N(d_raw.subs(_sub)))
             except Exception:
                 continue
             if not _judge(v):
                 return False
-        for _ in range(20):                       # 负/混合区：只记疑
+        # ② 正分数区：只记疑（`1/x >= 1` 类命题前提是 0<x<=1，此处反例不作数）
+        for _ in range(10):
+            _sub = _sample(True, random.randint(2, 3))
+            if not _constraints_hold(_sub, _prep, tol):
+                continue
             try:
-                v = float(_sympy.N(d_raw.subs(_sample(False))))
+                v = float(_sympy.N(d_raw.subs(_sub)))
+            except Exception:
+                continue
+            if not _judge(v):
+                return None
+        # ③ 负/混合区：只记疑
+        for _ in range(20):
+            _sub = _sample(False, random.randint(1, 3))
+            if not _constraints_hold(_sub, _prep, tol):
+                continue
+            try:
+                v = float(_sympy.N(d_raw.subs(_sub)))
             except Exception:
                 continue
             if not _judge(v):
@@ -175,7 +241,7 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9) -> "bool | None":
     return None
 
 
-def calc_verify(computations, tol: float = 1e-9) -> dict:
+def calc_verify(computations, tol: float = 1e-9, constraints=None) -> dict:
     """逐条机械复算。
 
     参数
@@ -228,7 +294,7 @@ def calc_verify(computations, tol: float = 1e-9) -> dict:
                 n_err += 1
                 results.append(rec)
                 continue
-            _iv = _verify_inequality(val, claimed, _op, tol)
+            _iv = _verify_inequality(val, claimed, _op, tol, constraints)
             _op_txt = {"ge": ">=", "le": "<=", "gt": ">", "lt": "<"}[_op]
             if _iv is True:
                 rec["ok"] = True

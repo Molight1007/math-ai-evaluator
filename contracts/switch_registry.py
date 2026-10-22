@@ -590,6 +590,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.2 AI 对抗证伪（五道审核链第 2 道）：逐存活候选两层对抗验证——"
         "机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰；"
         "跳过/故障一律保留候选（防误杀）；=0 关闭做 A/B"),
+    "audit_obligation_ledger": (
+        "AUDIT_OBLIGATION_LEDGER", "bool", True,
+        "审核侧义务账本（2026-10-20）：把蓝图倒推链反演成「本题应建立哪些事实」"
+        "的清单，注入 4.1 自审与 4.2 证伪 prompt；审查者指认的义务在清单里"
+        "查不到 ⇒ 视为评论了蓝图未要求的内容，不淘汰候选。"
+        "=0 退回「只喂题目/解答/答案」的老口径，用于 A/B"),
     "five_gate_lean_check_tool": (
         "FIVE_GATE_LEAN_CHECK_TOOL", "bool", False,
         "4.3 工具①观测通道（2026-10-15 工具化定稿）：开启后对存活候选调 "

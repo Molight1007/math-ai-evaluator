@@ -82,7 +82,7 @@ def judge_question_type(self, ctx) -> None:
             {"role": "user", "content": _TU.format(
                 problem=(getattr(ctx, "problem", "") or "")[:4000],
                 rule_guess=_rule or "（未知）")},
-        ], 0.1, 512)
+        ], 0.1, 4096)
         _llm_d = _ptj(_raw)
     except Exception as _e_t:  # noqa: BLE001  判题是增益，绝不阻断
         self.record(ctx, "type_understanding",

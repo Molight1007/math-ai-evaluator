@@ -66,7 +66,7 @@ def _strip_fence(text: str) -> str:
 
 
 def to_lean(statement: str, context: str = "", client=None,
-            max_tokens: int = 2048) -> dict:
+            max_tokens: int = 8192) -> dict:
     """自然语言陈述 → Lean 4 代码。
 
     参数

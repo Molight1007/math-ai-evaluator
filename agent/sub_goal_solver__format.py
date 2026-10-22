@@ -13,6 +13,17 @@ from __future__ import annotations
 import re
 
 from .base import TaskContext
+from .subgoal_result import clip, demote_headings, read_conclusion, read_step
+
+#: 子目标结果注入提示词时的**单步字符预算**（2026-10-20）。
+#: 存储层一律保留完整文本，压缩只发生在这里 —— 且 `clip()` 会优先保住
+#: 结论节，避免"按字数硬切把结论切掉"。三类注入场景预算不同：
+#:   · merge：所有子目标一起进，给足（默认值）
+#:   · deps ：只注入直接依赖，同量级
+#:   · 全量前序（`subgoal_ctx_mode=all`）：O(n²) 聚合，压到最小
+_RESULT_BUDGET_MERGE = 3000
+_RESULT_BUDGET_DEPS = 3000
+_RESULT_BUDGET_PREV = 1200
 
 
 
@@ -127,33 +138,56 @@ def _format_plan_summary(subgoals: list[dict], merge_strategy: str) -> str:
 
 
 def _format_previous_results(results_map: dict[int, str],
-                             subgoals: list[dict]) -> str:
+                             subgoals: list[dict],
+                             budget: int = _RESULT_BUDGET_PREV) -> str:
     """格式化已求解的子目标结果（全量前序，subgoal_ctx_mode="all" 时用）"""
     if not results_map:
         return "（尚无前置结果）"
     lines = []
     for sg in subgoals:
-        if sg["id"] in results_map:
-            lines.append(f"  子目标 #{sg['id']}「{sg['title']}」结果: {results_map[sg['id']]}")
+        _r = read_step(sg, results_map)
+        if _r:
+            lines.append("  子目标 #%s「%s」结果: %s"
+                         % (sg["id"], sg["title"], clip(_r, budget)))
     return "\n".join(lines) if lines else "（尚无前置结果）"
 
 
 def _format_dep_results(results_map: dict[int, str],
-                        subgoals: list[dict], sg: dict) -> str:
+                        subgoals: list[dict], sg: dict,
+                        budget: int = _RESULT_BUDGET_DEPS) -> str:
     """按 depends_on 只注入**直接依赖**的结果（老师 9/6 建议：子目标独立性、
         最小上下文依赖）。无依赖 / 依赖未解出 → 返回空串（零前序上下文），
         让独立子目标可并行、不被无关中间量污染。id 缺失容错：依赖未解出跳过。
 
         与 _format_previous_results 的区别：后者把**所有**已解子目标都塞进
         提示词（O(n²) 上下文膨胀）；本函数只带声明依赖的少数几条。
+
+        ★ 2026-10-20：取数统一走 `read_step()`；`deps` 的判定也改成"能取到
+          非空文本"，而不是"键存在"——键存在但值为空时原实现会注入一行空结果，
+          等于告诉下游"这步没产出"。
         """
-    deps = [d for d in (sg.get("depends_on") or []) if d in results_map]
-    if not deps:
+    _by_id = {s.get("id"): s for s in (subgoals or [])}
+    _declared = list(sg.get("depends_on") or [])
+    _texts = {}
+    for d in _declared:
+        _t = read_step(_by_id.get(d, {}), results_map)
+        if _t:
+            _texts[d] = _t
+    if not _texts:
+        # ⚠ 历史遗留（2026-10-20 重构时发现）：2026-09-14 曾为 #110 加过一个
+        #   「声明依赖全部未产出 ⇒ 显式告知下游『共享依据缺失』」的分支，但它
+        #   排在 `if not deps: return ""` **之后** ⇒ 恒不可达，**从未生效**。
+        #   本次重构如实还原既有行为（返回空串），不顺手改语义——那会改变
+        #   所有依赖子目标的提示词，属独立的一项，需单独验证后再定。
+        #   ⇒ 待办：确认 #110 那次修复是否该真正启用（见 daily log 2026-10-20）。
         return ""
-    title_map = {s.get("id"): (s.get("title") or "") for s in subgoals}
+
+    title_map = {s.get("id"): (s.get("title") or "") for s in (subgoals or [])}
     lines = []
-    for d in deps:
-        _txt = str(results_map[d])
+    for d in _declared:
+        if d not in _texts:
+            continue
+        _txt = clip(_texts[d], budget)
         _title = title_map.get(d, "")
         # 2026-09-14 P1：**切断"基准污染"链**。
         # 实测 #098 的基准子目标违规吐 `\boxed{D}`；而 #103 的「判定选项 E」
@@ -165,18 +199,6 @@ def _format_dep_results(results_map: dict[int, str],
                     "请只把它当作**判断依据**，**不要照抄**为任何选项的答案）"
                     + _txt)
         lines.append(f"  子目标 #{d}「{_title}」结果: {_txt}")
-    # 2026-09-14 P1：**依赖未产出时的降级**（实测 #110）。
-    # #110 的基准子目标求解失败 ⇒ 注入字符数 = 0 ⇒ 依赖它的选项子目标
-    # 拿到空上下文、整个判定链断掉（gold A / 模型 D）。
-    # 故：声明的依赖**全部未解出**时不再返回空串，而是显式告知下游
-    # "共享依据缺失，请独立完成"，避免静默断链。
-    _declared = [d for d in (sg.get("depends_on") or [])]
-    if _declared and not deps:
-        _names = "、".join(
-            "#{}「{}」".format(d, title_map.get(d, "")) for d in _declared)
-        return ("  （⚠ 前置子目标 {} **未能产出有效结果**，本次无法提供共享依据；"
-                "请**基于题目本身独立完成**本步判定，"
-                "不要因缺少依据而放弃或空转）").format(_names)
     return "\n".join(lines)
 
 
@@ -205,14 +227,20 @@ def _extract_option_verdict(cls, text: str):
 
 
 def _format_all_results(results_map: dict[int, str],
-                        subgoals: list[dict]) -> str:
-    """格式化所有子目标结果"""
+                        subgoals: list[dict],
+                        budget: int = _RESULT_BUDGET_MERGE) -> str:
+    """格式化所有子目标结果（merge 提示词的输入）。
+
+    ★ 2026-10-20：取数走 `read_step()`（唯一读入口）；`result` 传的是**完整**
+      求解文本，压缩交给 `clip()` 按预算做且**优先保住结论节**。此前存储层
+      只留「结论」节（几十字），merge 实际是在残片上做综合。
+    """
     from .sub_goal_solver import SubGoalSolverAgent
     lines = []
     for sg in subgoals:
-        result = results_map.get(sg["id"], "（未求解）")
+        result = read_step(sg, results_map) or "（未求解）"
         _title = str(sg.get("title") or "")
-        _txt = str(result)
+        _txt = clip(result, budget)
         # 2026-09-14：聚合层不再依赖模型的格式自觉（实测 #103/#107/#110）——
         # 对「判定选项 X」子目标**解析结论并结构化前置**，使合并层无需理解
         # 自由文本即可汇总；解析不到则显式标注"判定缺失，需单独复核"。
@@ -233,7 +261,8 @@ def _format_all_results(results_map: dict[int, str],
     return "\n".join(lines)
 
 
-def _fallback_from_last_subgoal(subgoals: list[dict]) -> str:
+def _fallback_from_last_subgoal(subgoals: list[dict],
+                                results_map: dict | None = None) -> str:
     """兜底：使用最后一个**剥壳后仍有实质内容**的子目标结果。
 
         2026-09-17 两处修复（实测 official112-025）：
@@ -242,19 +271,18 @@ def _fallback_from_last_subgoal(subgoals: list[dict]) -> str:
         ② 倒序找第一个**剥壳后非空**的结果：原实现只看 `sg.get("result")`
            真值，若最后一个子目标是空壳（纯标签）就被当答案返回，故剥壳后
            为空则继续往前找，避免"空壳顶替真结论"。
+
+        ★ 2026-10-20：取数改为 `read_conclusion()`（**唯一读入口**）。它内部
+          已按「结构化结论契约 → 文本结论节 → 整段」的语义优先级取值，本函数
+          不再自己拼 `a or b`。同时修正一个隐性降级：早先 `result` 是完整推导
+          时会被**整段**当作答案返回；现在优先取结论节。
         """
     from .sub_goal_solver import SubGoalSolverAgent
-    # ★ 2026-10-06（结论契约）：结论契约生效后 `result` 会包含「结论行 +
-    #   依据行 + 验算段」，整体当最终答案过于冗长 ⇒ **优先取结构化结论**
-    #   （`value`/`equation` 形态可直接作为答案），没有再退回 result。
     for sg in reversed(subgoals):
-        _concl = str(sg.get("conclusion") or "").strip()
-        if _concl:
-            return SubGoalSolverAgent._strip_tool_residue(_concl).strip()
-        _res = sg.get("result")
+        _res = read_conclusion(sg, results_map)
         if not _res:
             continue
-        _clean = SubGoalSolverAgent._strip_tool_residue(str(_res)).strip()
+        _clean = SubGoalSolverAgent._strip_tool_residue(_res).strip()
         if _clean:
             return _clean
     return "无法求解"
@@ -262,12 +290,19 @@ def _fallback_from_last_subgoal(subgoals: list[dict]) -> str:
 
 def _build_full_reasoning(subgoals: list[dict],
                           problem_goal: dict,
-                          final_answer: str) -> str:
+                          final_answer: str,
+                          results_map: dict | None = None) -> str:
     """构建完整的推理过程文本（用于展示和回溯）。
 
     ★ 2026-10-14（任务列表 #3）：原「## 问题分析」区块读的是蓝图 / 子目标规划
       自产的 `problem_analysis`（同一件事被推了三遍），现改读 2.6 的**唯一题目
       目标** `ctx.problem_goal`（`agent/problem_goal.py`），该副本字段已删除。
+
+    ★ 2026-10-20（输出逻辑断链）：`结果:` 行取数改为 `read_step()`（**唯一
+      读入口**），不再自己拼 `sg.get("result") or rmap.get(id)`。此文本是
+      4.1 自审 / 4.2 证伪 / 4.4 计算检测的**唯一输入**（`self_auditor.py:158`、
+      `adversarial_gate.py:141` 读的都是 `candidate.reasoning`），空壳等于
+      让审核层对着骨架判案。
     """
     lines = ["# 子目标分解求解过程\n"]
     if problem_goal:
@@ -279,6 +314,7 @@ def _build_full_reasoning(subgoals: list[dict],
     lines.append("\n## 逐步求解")
     for sg in subgoals:
         lines.append(f"\n### 子目标 #{sg['id']}「{sg['title']}」")
-        lines.append(f"结果: {sg.get('result', '未求解')}")
+        _res = demote_headings(read_step(sg, results_map)) or "未求解"
+        lines.append(f"结果: {_res}")
     lines.append(f"\n## 最终答案\n{final_answer}")
     return "\n".join(lines)

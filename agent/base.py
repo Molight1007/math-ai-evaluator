@@ -180,6 +180,17 @@ class BaseAgent(ABC):
         # 2026-09-03 老师：比赛无限 token，**不裁剪 max_tokens**——截断 = 白白丢分
         # （v10 实测大量 finish_reason=length，答案被腰斩）。cap 配置保留但默认 0=不限；
         # 若调用方显式传 max_tokens 则尊重（小输出任务如投票只传 512 属正常设计）。
+        # ★ 2026-10-20（212 次截断的根因收口）：该模型是**推理模型**，先吐长段
+        #   Thinking 再给正文，512/1024/2048 这类"短输出"上限会被思考整段吃掉
+        #   ⇒ finish_reason=length、正文腰斩（10-19 实测：1024×55、512×7、
+        #   2048 若干，合计 100+ 次；答案因此不完整/无有效解答）。
+        #   ⇒ 统一保底 `llm_min_max_tokens`（默认 4096，显式给更小值也会被抬）。
+        #   max_tokens 只是**上限**不是预留，短输出任务（投票/一行 VERDICT）
+        #   不会因此变慢，只是不再被"思考"挤死。
+        _min_tok = int(getattr(self.config, 'llm_min_max_tokens', 0) or 0)
+        if _min_tok and (not max_tokens or max_tokens < _min_tok):
+            max_tokens = _min_tok
+
         cap = getattr(self.config, 'max_tokens_cap', 0) or 0
         if cap and cap < 65536:
             if max_tokens:
@@ -647,15 +658,24 @@ class BaseAgent(ABC):
                 args = {}
             # ★ 2026-09-16：按函数名分派；★ 2026-10-15 扩展 Lean/Math 工具集
             _fname = str(fn.get("name", "") or "")
+            # ★ 2026-10-20 修复（服务器日志 3 次 `cannot access local variable '_q'`）：
+            #   原 `_q` 只在 web_search 分支赋值，Lean/Math 工具走 elif 后，
+            #   下方 `_q[:60]` 必然 UnboundLocalError ⇒ **整个工具循环崩溃**，
+            #   外层捕获后回落成"无工具 LLM"（sympy/Lean 能力整段失效）。
+            #   现两分支都赋值，并把埋点标签改成真实工具名
+            #   （原先把所有 lean 结果一律标成 <web_search>，日志失真）。
+            _q = ""
             if _fname == "web_search":
                 _q = str(args.get("query", "") or "")
                 result = self._web_search_tool_exec(_q)
             elif _fname in ("lean_search", "calc_verify", "to_lean",
                             "lean_check"):
+                _q = str(args.get("query", "") or args.get("statement", "")
+                         or args.get("expr", "") or args.get("lean_code", "") or "")
                 result = self._lean_tool_exec(ctx, _fname, args)
             else:
                 continue
-            _ev = "<web_search> %s -> %s" % (_q[:60], result[:50])
+            _ev = "<%s> %s -> %s" % (_fname, _q[:60], result[:50])
             msgs.append({
                 "role": "tool",
                 "tool_call_id": tc.get("id", ""),
