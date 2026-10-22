@@ -120,20 +120,29 @@ def audit_summary(entries: list) -> str:
 
 
 def lean_summary(entries: list) -> str:
-    """LeanGate：判定 + 降级原因分布。"""
+    """LeanGate：判定 + 降级原因 + 编译失败原因分布。"""
     if not entries:
         return "（未触发/不适用）"
     v = collections.Counter()
     deg = collections.Counter()
+    fk = collections.Counter()
     for e in entries:
         if not isinstance(e, dict) or "verdict" not in e:
             continue          # 跳过无判定字段的条目（如仅记录 id 的占位）
         v[str(e.get("verdict"))] += 1
         if e.get("degraded"):
             deg[str(e.get("degraded"))] += 1
+        # ★ 2026-10-22：失败原因分类（refuted/unproved/translation/env）。
+        #   没有它，报表只能看到 proof_invalid×N，分不清「确实被证伪」和
+        #   「环境缺依赖/没证出来」——后者恰恰不该算答案错。
+        if e.get("failure_kind"):
+            fk[str(e.get("failure_kind"))] += 1
     if not v:
         return "（未触发/不适用）"
     seg = "、".join("%s×%d" % (k, n) for k, n in v.most_common())
+    if fk:
+        seg += "（失败原因：" + "、".join("%s×%d" % (k, n)
+                                     for k, n in fk.most_common()) + "）"
     if deg:
         seg += "（降级：" + "、".join("%s×%d" % (k, n)
                                      for k, n in deg.most_common()) + "）"

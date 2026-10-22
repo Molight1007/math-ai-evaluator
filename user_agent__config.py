@@ -516,6 +516,8 @@ class AgentConfig(_AgentConfigBase):
     five_gate_grounding: bool = True
     # ★ 2026-10-22：4.1 输出不可解析时按最严格式重问一次（旧口径一次放行）。
     five_gate_audit_retry: bool = True
+    # ★ 2026-10-22（4.3）：Lean 编译失败按原因分级 —— 只有 refuted 才判答案错。
+    lean_failure_kind_split: bool = True
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——
     #     SymPy 精确判定；fail 淘汰 / unknown 放行 / 全拒回退保留。
     five_gate_math_check: bool = True

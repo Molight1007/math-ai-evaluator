@@ -61,6 +61,24 @@ logger = logging.getLogger("MathPilot")
 _LEANSEARCH_WARNED = False
 
 
+def _failure_kind_split_enabled() -> bool:
+    """读「按编译失败原因分级」开关（注册名 ``lean_failure_kind_split``，默认 True）。
+
+    ★ 2026-10-22（4.3 误杀根因）：``proof_invalid`` 一个结论码压了四种语义
+      （见 ``tools/lean_local/lean_failure.py``）。只有 ``refuted``（Lean 明确
+      输出 ``⊢ False``）能支撑「答案错」；``unproved``（代码合法但没证出）、
+      ``translation``（生成的代码不合法）、``env``（环境缺依赖）与答案对错无关。
+      实测证据：2026-10-07 记录 73 条 proof_invalid 里 **51 条 compiled == true**。
+
+    True ⇒ 非 ``refuted`` 的 proof_invalid 改判 ``unknown``（不淘汰，标
+    ``degraded=lean_<kind>`` 留痕）；False ⇒ 旧行为（一律淘汰），供 A/B 对照。
+    """
+    try:
+        return _sw_bool("lean_failure_kind_split")
+    except Exception:  # noqa: BLE001  注册表不可用 → 新语义（不误伤答案）
+        return True
+
+
 class LeanGate:
     """证明题的 Lean 硬验证门禁（v2.8 扩展到全部档位）。"""
 
@@ -436,9 +454,9 @@ class LeanGate:
                     entry["lean_code"] = _lc[:2000]
                 for _dk in ("verdict_reason", "cross_check",
                             "sys_verify", "compiled",
-                            # ★ 2026-10-22：编译器原始报错（此前从不落盘 ⇒
-                            #   失败原因无法归因）
-                            "compile_error"):
+                            # ★ 2026-10-22：编译器原始报错 + 失败原因分类
+                            #   （此前从不落盘 ⇒ 失败原因无法归因）
+                            "compile_error", "failure_kind"):
                     try:
                         _dv = getattr(report, _dk, None)
                     except Exception:  # noqa: BLE001
@@ -553,6 +571,19 @@ class LeanGate:
                 self._record_to_memory(ctx, domain, used_names)
             kept.append(cand)
         elif report.verdict == "proof_invalid":
+            # ★ 2026-10-22（语义分级）：先看失败原因，只有「被证伪」才淘汰。
+            _fk = str(getattr(report, "failure_kind", "") or "")
+            if _fk:
+                entry["failure_kind"] = _fk
+            if _fk and _fk != "refuted" and _failure_kind_split_enabled():
+                entry["verdict"] = "unknown"
+                entry["degraded"] = "lean_" + _fk
+                _unknown_streak += 1
+                kept.append(cand)
+                logger.info(
+                    "LeanGate: 候选 %s 未通过（failure_kind=%s，非证伪）⇒ 保留不淘汰",
+                    cand.id, _fk)
+                return _unknown_streak
             entry["verdict"] = "proof_invalid"
             # 淘汰（hard gate）：不进 kept
             # v2.7：结构化注入 Finding 精确错误定位（location/kind/desc），

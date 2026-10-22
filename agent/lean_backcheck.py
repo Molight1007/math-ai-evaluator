@@ -123,15 +123,40 @@ def lean_backcheck_stage(self, ctx, tier: str) -> None:
                         "4.3 Lean 代回：通过 %d/%d（淘汰 %d）"
                         % (len(kept), _n_in, _n_in - len(kept)))
         else:
-            # 全拒不静默清池（与 3.6 既有处置一致；strict 才清）
-            ctx._gate_all_rejected = True
-            self.record(ctx, "lean_backcheck",
-                        "4.3 Lean 代回：⚠ %d 个候选**全部未通过** ⇒ 已标记 "
-                        "_gate_all_rejected（不静默清池）" % _n_in)
-            if bool(getattr(self.config, "strict_all_rejected", False)):
+            # ★★ 2026-10-22（4.3 语义分级）：全拒不再一律"标记放行"。
+            #   先看**为什么全拒**（`lean_gate[i].failure_kind`）：
+            #     · 全部 refuted（Lean 明确输出 `⊢ False`）⇒ 答案确实错，清池
+            #       交 4.6 重写（这是正常判定，不是降级）；
+            #     · 含 env / translation / unproved ⇒ Lean 这一环**没有判定能力**
+            #       （缺依赖 / 生成的代码不合法 / 没证出来），与答案对错无关，
+            #       不清池，但把分布写进 diag 并告警，避免"静默失效"。
+            _kinds: dict = {}
+            for _e in (getattr(ctx, "lean_gate", None) or []):
+                if isinstance(_e, dict):
+                    _k = str(_e.get("failure_kind") or "")
+                    if _k:
+                        _kinds[_k] = _kinds.get(_k, 0) + 1
+            _refuted = int(_kinds.get("refuted", 0))
+            _other = sum(int(_v) for _k, _v in _kinds.items() if _k != "refuted")
+            ctx.lean_backcheck_reject_kinds = dict(_kinds)
+            if _refuted and not _other:
                 ctx.candidates = []
                 self.record(ctx, "lean_backcheck",
-                            "strict_all_rejected=True ⇒ 清空候选池交下游兜底")
+                            "4.3 Lean 代回：%d 个候选**全部被证伪**"
+                            "（failure_kind=refuted）⇒ 清空候选池交 4.6 重写"
+                            % _n_in)
+            else:
+                ctx._gate_all_rejected = True
+                _detail = ("、".join("%s %d" % (k, v)
+                                    for k, v in sorted(_kinds.items())) or "无分类信息")
+                self.record(ctx, "lean_backcheck",
+                            "4.3 Lean 代回：⚠ %d 个候选全部未通过，但原因**不是证伪**"
+                            "（%s）⇒ 无法据此判错，保留候选并标记"
+                            % (_n_in, _detail))
+                if bool(getattr(self.config, "strict_all_rejected", False)):
+                    ctx.candidates = []
+                    self.record(ctx, "lean_backcheck",
+                                "strict_all_rejected=True ⇒ 清空候选池交下游兜底")
 
         if fbs:
             ctx.audit_reject_feedback = list(
@@ -146,6 +171,9 @@ def lean_backcheck_stage(self, ctx, tier: str) -> None:
             "n_kept": len(kept),
             "n_rejected": _n_in - len(kept),
             "all_rejected": not kept,
+            # ★ 2026-10-22：全拒原因分布（refuted/unproved/translation/env）
+            "reject_kinds": dict(
+                getattr(ctx, "lean_backcheck_reject_kinds", None) or {}),
         }
         self.record(ctx, "lean_backcheck",
                     "4.3 Lean 代回：%d 候选 ⇒ 通过 %d / 淘汰 %d%s"

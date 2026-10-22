@@ -81,6 +81,45 @@ def test_all_rejected_marked_not_cleared():
     assert any("全部未通过" in m for _, m in stub.events)
 
 
+def test_all_rejected_refuted_clears_pool():
+    """★ 2026-10-22：全部被 Lean 明确证伪（failure_kind=refuted）⇒ 答案确实错，
+    清池交 4.6 重写（这是正常判定，不是降级）。"""
+    gate = _Gate(kept=[], fbs=["[Lean] 全拒反馈"])
+    stub = _Stub(gate)
+    ctx = _Ctx([_c(1), _c(2)])
+    ctx.lean_gate = [{"id": 1, "failure_kind": "refuted"},
+                     {"id": 2, "failure_kind": "refuted"}]
+    lean_backcheck_stage(stub, ctx, "deep")
+    assert ctx.candidates == []
+    assert ctx.lean_backcheck["reject_kinds"] == {"refuted": 2}
+    assert any("全部被证伪" in m for _, m in stub.events)
+
+
+def test_all_rejected_unproved_keeps_pool():
+    """★ 2026-10-22：全拒原因是 unproved（没证出来）⇒ 与答案对错无关，保留候选，
+    并把原因分布写进 diag（不再静默标记）。"""
+    gate = _Gate(kept=[], fbs=[])
+    stub = _Stub(gate)
+    ctx = _Ctx([_c(1)])
+    ctx.lean_gate = [{"id": 1, "failure_kind": "unproved"}]
+    lean_backcheck_stage(stub, ctx, "deep")
+    assert [c.id for c in ctx.candidates] == [1]
+    assert ctx.lean_backcheck["reject_kinds"] == {"unproved": 1}
+    assert any("不是证伪" in m for _, m in stub.events)
+
+
+def test_all_rejected_mixed_kinds_keeps_pool():
+    """一个 refuted + 一个 env ⇒ 不能判整池都错，保留。"""
+    gate = _Gate(kept=[], fbs=[])
+    stub = _Stub(gate)
+    ctx = _Ctx([_c(1), _c(2)])
+    ctx.lean_gate = [{"id": 1, "failure_kind": "refuted"},
+                     {"id": 2, "failure_kind": "env"}]
+    lean_backcheck_stage(stub, ctx, "deep")
+    assert len(ctx.candidates) == 2
+    assert ctx.lean_backcheck["reject_kinds"] == {"refuted": 1, "env": 1}
+
+
 def test_all_rejected_strict_clears_pool():
     gate = _Gate(kept=[], fbs=["[Lean] 全拒反馈"])
     stub = _Stub(gate)

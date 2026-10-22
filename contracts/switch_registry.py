@@ -612,6 +612,13 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "按最严格式重问一次（不只输出 JSON 就再试），仍失败才记 unparsed 并"
         "标 verify_audit=unparsed；旧口径「一次不成即放行」让 4.1 长期空转"
         "（历史实测 84/88、12/12 候选 unparsed）；=0 回到旧口径"),
+    "lean_failure_kind_split": (
+        "LEAN_FAILURE_KIND_SPLIT", "bool", True,
+        "4.3 Lean 编译失败按原因分级（2026-10-22 审计修复）：只有 "
+        "failure_kind=refuted（Lean 明确输出 `⊢ False`）才判「答案错」并淘汰；"
+        "unproved（代码合法但没证出）/ translation（生成的代码不合法）/ env"
+        "（环境缺依赖）与答案对错无关，改判 unknown 并标 degraded=lean_<kind>；"
+        "=0 回到旧行为（proof_invalid 一律淘汰），供 A/B 对照"),
     "five_gate_grounding": (
         "FIVE_GATE_GROUNDING", "bool", True,
         "五道链·证据落地校验（2026-10-22 审计修复）：4.1/4.2 的淘汰必须附"

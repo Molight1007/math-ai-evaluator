@@ -1330,6 +1330,28 @@ class LeanBridge:
         return self._llm._analyze_error(
             problem, reasoning, lean_code, compile_error)
 
+    @staticmethod
+    def _attach_failure_kind(report, comp) -> None:
+        """把**编译失败原因**挂到 report 上（原始报错 + 语义分类）。
+
+        ★ 2026-10-22（4.3 误杀根因 · 两处调用点共用）：
+          ① ``compile_error``：编译器原始输出。历史 4387 条 lean_gate 判定的
+             error 字段**全部为空** ⇒ 失败原因无法归因；
+          ② ``failure_kind``：由 `tools/lean_local/lean_failure` 归类为
+             refuted / unproved / translation / env / unknown。``lean_gate``
+             据此只对 ``refuted`` 淘汰（见 ``_failure_kind_split_enabled``）。
+
+        纯附加属性，绝不改变 report 的 verdict —— 判定权仍在 gate 层。
+        """
+        try:
+            from tools.lean_local.lean_failure import classify_compile_error
+            _err = str((comp or {}).get("error") or "")
+            if _err:
+                setattr(report, "compile_error", _err[:400])
+            setattr(report, "failure_kind", classify_compile_error(_err))
+        except Exception:  # noqa: BLE001  属性附加失败不影响判定
+            pass
+
     # ------------------------------------------------------------------
     # 对外同步接口
     # ------------------------------------------------------------------
@@ -1403,9 +1425,12 @@ class LeanBridge:
             #    避免 verify() 落空返回 None 导致上层拿不到 BugReport）
             if time.monotonic() > deadline:
                 return _mk_report("unknown", reason="deadline_before_error_analysis")
-            return self._analyze_error(
+            _rep = self._analyze_error(
                 problem, reasoning, lean_code,
-                comp.get("error", "编译失败（无详细输出）") if comp else "编译失败（无详细输出）")
+                comp.get("error", "编译失败（无详细输出）")
+                if comp else "编译失败（无详细输出）")
+            self._attach_failure_kind(_rep, comp)
+            return _rep
         except Exception as exc:  # noqa: BLE001
             logger.warning("[LeanBridge] verify 异常（降级 unknown）: %s", exc)
             return _mk_report("unknown",
@@ -1583,16 +1608,8 @@ class LeanBridge:
                 lean_code,
                 comp.get("error", "答案验证编译失败（无详细输出）")
                 if comp else "答案验证编译失败（无详细输出）")
-            # ★ 2026-10-22（可观测性补强）：把编译器**原始报错**带进 report。
-            #   历史 4387 条 lean_gate 判定的 error 字段**全部为空** ⇒ 失败原因
-            #   无法归因（环境缺依赖 / 翻译写错 / 命题为假，三者混在一起）。
-            #   落进 diag 后才能按错误类型分类统计，这是修 4.3 的前提。
-            try:
-                if comp and comp.get("error"):
-                    setattr(_rep, "compile_error",
-                            str(comp["error"])[:400])
-            except Exception:  # noqa: BLE001  属性附加失败不影响判定
-                pass
+            # ★ 2026-10-22（可观测性 + 语义分级）：见 `_attach_failure_kind`。
+            self._attach_failure_kind(_rep, comp)
             return _rep
         except Exception as exc:  # noqa: BLE001
             # 2026-09-13 修复：此处原实现**直接把异常降级为 unknown**，但异常的主因
