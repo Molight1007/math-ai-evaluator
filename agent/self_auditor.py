@@ -200,6 +200,33 @@ def _judge_once(d, full_reasoning: str, grounding: bool) -> str:
     return "error"
 
 
+def _audit_batch(orch, ctx, msgs, n: int) -> list:
+    """并发跑 n 次自审，返回长度 n 的列表：元素是 ``(d, used_retry)`` 或异常。
+
+    ★ 2026-10-22（不浪费并发额度）：多次采样是**互相独立**的调用，
+      串行执行会让 4.1 的耗时随票数线性增长（3 票 = 3 倍时间）。
+      而云端实测的主要瓶颈正是"单题墙钟太长"——用线程池并发后
+      墙钟 ≈ 单次耗时，代价只是"错误候选不再首票短路"（最多多 2 次调用）。
+      `BaseAgent.llm` 无共享锁、LLMClient 每次新建连接 ⇒ 并发安全；
+      唯一副作用是 `ctx.budget.spend` 计数可能少记，不影响判定。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    if n <= 1:
+        try:
+            return [_audit_once(orch, ctx, msgs)]
+        except Exception as exc:  # noqa: BLE001  调用方按"故障"处理
+            return [exc]
+    out: list = [None] * n
+    with ThreadPoolExecutor(max_workers=min(4, n)) as ex:
+        futs = {ex.submit(_audit_once, orch, ctx, msgs): i for i in range(n)}
+        for fut, idx in futs.items():
+            try:
+                out[idx] = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                out[idx] = exc
+    return out
+
+
 def _obligation_block(ctx, config) -> tuple:
 
     """取「蓝图倒推链反演出的义务清单」（2026-10-20，与 4.2 同一开关同一实现）。
@@ -265,24 +292,24 @@ def self_audit_stage(self, ctx) -> None:
             _hit = None
             _seen: list = []
             _fail_first = False
-            for _vi in range(_votes):
-                try:
-                    _dd, _used = _audit_once(self, ctx, _msgs)
-                except Exception as _e_call:  # noqa: BLE001  LLM 故障绝不淘汰候选
+            # ★ 2026-10-22：并发采样（见 `_audit_batch`）—— 墙钟 ≈ 单次耗时。
+            _outs = _audit_batch(self, ctx, _msgs, _votes)
+            for _vi, _r in enumerate(_outs):
+                if _r is None or isinstance(_r, Exception):
                     if _vi == 0:
                         _fail_first = True
                         llm_fail += 1
                         self.record(ctx, "self_audit",
                                     "cid=%s LLM 调用失败（保留候选）: %s"
-                                    % (cid, str(_e_call)[:120]))
-                    break
+                                    % (cid, str(_r)[:120]))
+                    continue
+                _dd, _used = _r
                 if _used:
                     n_retry += 1
                 _v = _judge_once(_dd, full_reasoning, _grounding)
                 _seen.append(_v)
-                if _v == "error":
+                if _v == "error" and _hit is None:
                     _hit = _dd
-                    break
             if _fail_first:
                 kept.append(c)
                 continue
@@ -314,7 +341,10 @@ def self_audit_stage(self, ctx) -> None:
                 continue
 
             d = _hit          # 命中：走义务账本门与淘汰
-            n_weak += (1 if len(_seen) > 1 else 0)
+            # ★ 2026-10-22：并发采样后无法再按"第几票命中"判弱证据，
+            #   改为按**票数比例**：只有部分票判错 ⇒ 弱证据（供观察/调阈值）。
+            if sum(1 for _v2 in _seen if _v2 == "error") < len(_seen):
+                n_weak += 1
             if d.get("logic_error") and d.get("error_desc"):
                 desc = d["error_desc"][:300]
                 at = (d.get("error_at") or "")[:120]

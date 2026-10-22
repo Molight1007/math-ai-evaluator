@@ -301,7 +301,7 @@ def test_falsify_votes_any_hit_rejects(monkeypatch):
     adversarial_gate_stage(_Stub(f, p), ctx, "deep")
     assert ctx.candidates == []
     assert ctx.adversarial_gate["n_llm"] == 1
-    assert p.calls == [1, 1]                       # 命中即短路
+    assert p.calls == [1, 1, 1]   # ★ 并发后不再短路：3 票全部发出（墙钟≈单次）
 
 
 def test_falsify_votes_all_pass_keeps(monkeypatch):

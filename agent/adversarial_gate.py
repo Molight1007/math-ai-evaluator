@@ -37,6 +37,32 @@ def _switch_enabled() -> bool:
         return True
 
 
+def _probe_batch(prober, ctx, cand, tier: str, n: int) -> list:
+    """并发跑 n 次对抗探测，返回长度 n 的列表（元素为探针结果或异常）。
+
+    ★ 2026-10-22（不浪费并发额度）：多次探测互相独立，串行会让 4.2 的墙钟
+      随票数线性增长；并发后墙钟 ≈ 单次。`BaseAgent.llm` 无共享锁、
+      LLMClient 每次新建连接 ⇒ 安全；代价是"任一票命中即停"不再成立
+      （固定发 n 次）。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    if n <= 1:
+        try:
+            return [prober.probe(ctx, cand, tier=tier)]
+        except Exception as exc:  # noqa: BLE001
+            return [exc]
+    out: list = [None] * n
+    with ThreadPoolExecutor(max_workers=min(4, n)) as ex:
+        futs = {ex.submit(prober.probe, ctx, cand, tier=tier): i
+                for i in range(n)}
+        for fut, idx in futs.items():
+            try:
+                out[idx] = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                out[idx] = exc
+    return out
+
+
 def _grounding_enabled() -> bool:
     """读「证据落地校验」开关（默认 True，与 4.1 同一开关）。
 
@@ -124,16 +150,16 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
             if _machine_rej is None:
                 _soft_hit = None
                 _skip_hit = ""
-                for _vi in range(_fvotes):
-                    try:
-                        pr = _prober.probe(ctx, c, tier=tier)
-                    except Exception as _e_p:  # noqa: BLE001  故障绝不淘汰候选
+                _probes = _probe_batch(_prober, ctx, c, tier, _fvotes)
+                for _vi, _pr in enumerate(_probes):
+                    if isinstance(_pr, Exception):
                         if _vi == 0:
                             n_failed += 1
                             self.record(ctx, "adversarial_gate",
                                         "cid=%s 对抗探测异常（保留候选）: %s: %s"
-                                        % (cid, type(_e_p).__name__, str(_e_p)[:120]))
-                        break
+                                        % (cid, type(_pr).__name__, str(_pr)[:120]))
+                        continue
+                    pr = _pr
                     if getattr(pr, "is_actionable", False):
                         _estep = str(getattr(pr, "error_step", "") or "")
                         _gok, _gr, _gmiss = (None, 0.0, [])

@@ -219,13 +219,17 @@ _CLEAN = '{"logic_error": false, "error_desc": ""}'
 
 
 def test_votes_any_error_rejects(monkeypatch):
-    """第 1 票 clean、第 2 票 error ⇒ 命中即淘汰（这正是单次采样漏掉的样本）。"""
+    """任一票判错即淘汰（这正是单次采样漏掉的样本）。
+
+    ★ 2026-10-22：采样改为**并发**（墙钟 ≈ 单次），因此不再"首票命中即短路"，
+      3 票全部发出；语义仍是「任一票 error ⇒ 淘汰」。
+    """
     monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
-    stub = _Stub([_CLEAN, _ERR])
+    stub = _Stub([_CLEAN, _ERR, _CLEAN])
     ctx = _Ctx([_c(1)])
     self_audit_stage(stub, ctx)
     assert ctx.candidates == []
-    assert stub.calls == 2
+    assert stub.calls == 3
     assert ctx.self_audit["votes"] == 3
     assert ctx.self_audit["n_weak"] == 1      # 弱证据（非首票命中）单列
 
@@ -240,14 +244,14 @@ def test_votes_all_clean_keeps_candidate(monkeypatch):
     assert ctx.self_audit["n_rejected"] == 0
 
 
-def test_votes_first_error_short_circuits(monkeypatch):
-    """首票就命中 ⇒ 只调 1 次（不浪费后续采样）。"""
+def test_votes_concurrent_always_runs_all(monkeypatch):
+    """并发模式下 3 票全部发出（用墙钟换调用数）—— 语义：任一票 error 即淘汰。"""
     monkeypatch.setenv("FIVE_GATE_SELF_AUDIT_VOTES", "3")
     stub = _Stub([_ERR, _ERR, _ERR])
     ctx = _Ctx([_c(1)])
     self_audit_stage(stub, ctx)
     assert ctx.candidates == []
-    assert stub.calls == 1
+    assert stub.calls == 3
     assert ctx.self_audit["n_weak"] == 0
 
 
