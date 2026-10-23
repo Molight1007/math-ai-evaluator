@@ -71,3 +71,91 @@ def test_summarize_shape():
                     "expected": "", "got": ""}])
     assert "1 处可疑" in s and "4" in s
     assert summarize([]) == ""
+
+
+# --------------------------------------------------------------------------
+# 注入合并提示词（用户 A 案：发现了就要用）
+# --------------------------------------------------------------------------
+def test_merge_prompt_carries_selfcheck_hint(monkeypatch):
+    """自检结论必须进入 merge 的 user 提示词，且措辞是"请重新核算"而非"照抄"。"""
+    import agent.subgoal_selfcheck as ssc
+    from agent.sub_goal_solver__merge import _merge_results
+
+    monkeypatch.setattr(ssc, "check_subgoal_chain",
+                        lambda *a, **k: [{"id": "5", "kind": "limit",
+                                          "step": "由 AM-HM 推出 777^2/2，极限算错",
+                                          "expected": "D ≤ 777^2", "got": "777^2/2"}])
+    monkeypatch.setattr(ssc, "chain_from_trace", lambda t: [])
+    monkeypatch.setattr(ssc, "summarize", lambda s: "stub")
+
+    seen = {}
+
+    class _Orch:
+        def __getattr__(self, n):
+            # merge 还会调 _looks_placeholder / _merge_retry_hint 等；桩上统一给"否"
+            return lambda *a, **k: False
+
+        def record(self, *a, **k):
+            pass
+
+        def _prepare_merge_prompt(self, *a, **k):
+            return ("BASE_USER", "SYS")
+
+        def llm(self, ctx, msgs, *a, **k):
+            seen["msgs"] = msgs
+            return "【最终答案】\\boxed{777^2}"
+
+    class _Ctx:
+        subgoal_trace = []
+        problem = "p"
+        metadata = {}
+
+        def __getattr__(self, n):
+            return None
+
+    _merge_results(_Orch(), _Ctx(), [], "", {}, "sum")
+
+    blob = "\n".join(str(m.get("content", "")) for m in seen.get("msgs", []))
+    assert "独立复核提示" in blob
+    assert "777^2/2" in blob, "链里给出的错值要出现在提示里"
+    assert "重新核算" in blob, "要求自行复算，不强制照抄"
+    assert "BASE_USER" in blob, "原提示不能被覆盖"
+
+
+def test_merge_without_suspects_keeps_prompt_clean(monkeypatch):
+    """没有可疑项时不得注入任何复核段落。"""
+    import agent.subgoal_selfcheck as ssc
+    from agent.sub_goal_solver__merge import _merge_results
+
+    monkeypatch.setattr(ssc, "check_subgoal_chain", lambda *a, **k: [])
+    monkeypatch.setattr(ssc, "chain_from_trace", lambda t: [])
+    monkeypatch.setattr(ssc, "summarize", lambda s: "")
+
+    seen = {}
+
+    class _Orch:
+        def __getattr__(self, n):
+            # merge 还会调 _looks_placeholder / _merge_retry_hint 等；桩上统一给"否"
+            return lambda *a, **k: False
+
+        def record(self, *a, **k):
+            pass
+
+        def _prepare_merge_prompt(self, *a, **k):
+            return ("BASE_USER", "SYS")
+
+        def llm(self, ctx, msgs, *a, **k):
+            seen["msgs"] = msgs
+            return "【最终答案】\\boxed{1}"
+
+    class _Ctx:
+        subgoal_trace = []
+        problem = "p"
+        metadata = {}
+
+        def __getattr__(self, n):
+            return None
+
+    _merge_results(_Orch(), _Ctx(), [], "", {}, "sum")
+    blob = "\n".join(str(m.get("content", "")) for m in seen.get("msgs", []))
+    assert "独立复核提示" not in blob

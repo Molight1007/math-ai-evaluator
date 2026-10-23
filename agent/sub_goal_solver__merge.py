@@ -254,7 +254,9 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
     #   `∑1/(…) ≥ (N-1)²/(N(N+1)-3) → 1` 推成 `D ≤ 777²/2`（应为 777²/1，凭空除 2），
     #   sg8 又高估构造下确界。这两处一旦进入 merge 就直接固化成最终答案，
     #   后面 4.1/4.2 只能"正确地全杀"，4.6 重写两轮（79 分钟/轮）也无济于事。
-    #   此处只**记录**（diag + 错误库），不改流程；等验证过再决定是否注入 merge 提示词。
+    #   自检结果既记 diag/错误库，也**注入合并提示词**（见下方）；
+    #   但不强制照抄——要求合并方"以自己的重新核算为准"。
+    _sus: list = []
     try:
         import json as _json
         from .subgoal_selfcheck import (check_subgoal_chain, chain_from_trace,
@@ -281,6 +283,25 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
 
     user_msg, _merge_system = self._prepare_merge_prompt(
         ctx, subgoals, plan_summary, results_map, merge_strategy)
+
+    # ★★ 2026-10-23（用户 A 案：发现了就要用）：把复核结论**注入合并提示词**。
+    #   只说"哪一步可疑 + 复核认为应为多少"，并要求**以自己重新核算为准**、
+    #   不一致时说明理由 —— 不强制它照抄，避免把一个模型的错当权威。
+    if _sus:
+        _hint = ["", "",
+                 "【独立复核提示（第二模型重算，非最终结论）】",
+                 "下列子目标结论经独立复算可疑，合并时**请重新核算，勿直接采用**："]
+        for _s in _sus[:4]:
+            _hint.append("- 子目标 %s（%s）：%s"
+                         % (_s.get("id") or "?", _s.get("kind") or "?",
+                            str(_s.get("step") or "")[:200]))
+            if _s.get("expected"):
+                _hint.append("  复核认为应为：%s" % str(_s["expected"])[:160])
+            if _s.get("got"):
+                _hint.append("  链里给出的：%s" % str(_s["got"])[:160])
+        _hint.append("请以你**重新核算**的结果为准；若与复核意见不一致，"
+                     "在最终答案的推导里写明理由。")
+        user_msg = user_msg + "\n".join(_hint)
 
     for attempt in range(2):
         # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT
