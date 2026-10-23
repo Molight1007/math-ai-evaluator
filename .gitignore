@@ -97,3 +97,7 @@ deploy/banks/
 赛事提交版/
 # 空题库探针目录
 测试工具/
+
+# 文档不进仓库（用户 2026-09-13 规则）：docs 下的 docx/md 只在本地保留
+docs/*.docx
+docs/*.pdf

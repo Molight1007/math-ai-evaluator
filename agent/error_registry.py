@@ -104,8 +104,12 @@ def _connect():
 
 def record(kind: str, signature: str, *, stage: str = "", qid: str = "",
            run_id: str = "", detail: str = "", detector: str = "",
-           fix: str = "") -> str:
-    """记录一条错误（同指纹自动累加计数并刷新 last_seen）。返回指纹。"""
+           fix: str = "", count_inc: bool = True) -> str:
+    """记录一条错误（同指纹自动累加计数并刷新 last_seen）。返回指纹。
+
+    ``count_inc=False`` 用于 **seed**（幂等导入历史）：已存在就只更新字段，
+    不累加 ``n_occurrences``，也不会把 `fixed` 误置成 `regressed`。
+    """
     if kind not in KINDS:
         raise ValueError("未登记的错误类型: %s（请在 KINDS 里登记）" % kind)
     fp = fingerprint(kind, signature)
@@ -116,10 +120,17 @@ def record(kind: str, signature: str, *, stage: str = "", qid: str = "",
                            "WHERE fingerprint=?", (fp,))
         row = cur.fetchone()
         if row:
-            conn.execute(
-                "UPDATE errors SET n_occurrences=n_occurrences+1, last_seen=?, "
-                "status=CASE WHEN status='fixed' THEN 'regressed' ELSE status END "
-                "WHERE fingerprint=?", (now, fp))
+            if count_inc:
+                conn.execute(
+                    "UPDATE errors SET n_occurrences=n_occurrences+1, last_seen=?, "
+                    "status=CASE WHEN status='fixed' THEN 'regressed' ELSE status END "
+                    "WHERE fingerprint=?", (now, fp))
+            else:
+                conn.execute(
+                    "UPDATE errors SET last_seen=?, "
+                    "detail=COALESCE(NULLIF(detail,''),?), "
+                    "fix=COALESCE(NULLIF(fix,''),?) WHERE fingerprint=?",
+                    (now, detail[:1000], fix, fp))
         else:
             conn.execute(
                 "INSERT INTO errors (fingerprint,kind,stage,signature,detail,"
@@ -242,15 +253,63 @@ def seed_known_errors() -> int:
     ]
     n = 0
     for it in items:
-        record(**it)
+        record(count_inc=False, **it)
         n += 1
     return n
+
+
+def seed_history() -> int:
+    """补充**历史**错误（2026-09 ~ 10 月，从项目记忆回溯，均有实证或结论）。
+
+    与 `seed_known_errors` 的区别：那批是 10-22/23 两轮全量测试现场抓到的；
+    这批是更早的机制教训，很多已修复 —— 入库的价值是**防复发**（复发会自动
+    fixed→regressed）。
+    """
+    items = [
+        dict(kind="answer_leak", signature="蓝图/子目标把待求量写成具体值（K11）",
+             stage="2.7_blueprint", qid="*", run_id="k11_analysis",
+             detail="41/99 错题的唯一过半根因：蓝图 statement 对待求量下断言，"
+                    "锁死答案；错题池内无 gold 占 72–75%",
+             detector="错题归因", fix="蓝图禁书待求量；子目标要接口冗余"),
+        dict(kind="stage_inert", signature="verify_math 写入但无任何消费方",
+             stage="4.4_math_check", qid="*", run_id="audit_20261022",
+             detail="函数写了但下游没人读，等于机制不存在",
+             detector="AST 全仓扫描", fix="接到判定上或删除"),
+        dict(kind="stage_inert", signature="is_subgoal_failed 只用于报表不进决策",
+             stage="2.7_subgoal", qid="*", run_id="audit_20261022",
+             detail="埋点有、判定无 —— 观测不等于治理",
+             detector="AST 全仓扫描", fix="接入重试/回退决策"),
+        dict(kind="false_reject", signature="skipped_step / misread_requirement 打中 gold",
+             stage="4.2_falsify", qid="*", run_id="p0b5_r5",
+             detail="49 条淘汰里 15 条打中的是 gold 本身；skipped_step 9 次淘汰打中 5 次",
+             detector="gold 对照", fix="义务账本 + 证据落地门"),
+        dict(kind="timeout_hang", signature="LLM_TIMEOUT 太小导致长输出被截断",
+             stage="llm_client", qid="*", run_id="2026-09-18",
+             detail="当时 120s，而 65536 token 需 2221s ⇒ 必然读超时 ⇒ Candidate empty response",
+             detector="日志 finish_reason", fix="超时与 max_tokens 必须匹配"),
+        dict(kind="silent_failure", signature="Candidate empty response（finish_reason=length 后空）",
+             stage="3_solve", qid="*", run_id="2026-09-18",
+             detail="调用成功但内容为空，被当成「模型不会做」",
+             detector="日志 finish_reason", fix="空响应单独计数并报警"),
+        dict(kind="stage_inert", signature="5_revise 黑洞 72.6%（伪结论）",
+             stage="4.6_rewrite", qid="*", run_id="2026-10-12",
+             detail="曾据此认定 revise 吞掉答案；复核发现是采集时上游已坏 ⇒ 机制触发≠效果",
+             detector="code-audit 路线A", fix="判机制无效前必查上游健康度"),
+        dict(kind="tool_unavailable", signature="Lean 环境不可用致 4.3 全空（两轮）",
+             stage="4.3_lean_check", qid="*", run_id="val1_r1_1022+val1_r2_1023",
+             detail="lake 不在 PATH ⇒ LSP 起不来；且失败被包成 ok=True ⇒ 两轮各 4~6 小时",
+             detector="--check-env", fix="代码兜底 _ensure_lake_in_path"),
+    ]
+    for it in items:
+        record(count_inc=False, **it)
+    return len(items)
 
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "seed":
-        print("写入 %d 条已知错误" % seed_known_errors())
+        print("写入 %d 条本轮错误" % seed_known_errors())
+        print("写入 %d 条历史错误" % seed_history())
     s = stats()
     print("库: %s" % DB_PATH)
     print("总计 %d 条 | 状态 %s" % (s["total"], s["by_status"]))
