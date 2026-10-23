@@ -77,3 +77,18 @@ def test_no_quant_falls_back_to_plain_list():
     out = _collect_error_brief(_Ctx([{"stage": "4.1", "error": _VAGUE}], []))
     assert "优先采信" not in out
     assert "无法逻辑自洽地建立上界" in out
+
+
+def test_upstream_hint_is_its_own_section():
+    """★ 候选指出「子目标层矛盾」时必须单独成段 —— 这是该回传上游的信号，
+    不是候选算错。实测 cid=0 的 error_at 就是这种形态，却被 4.1 当成
+    「解答自相矛盾」淘汰，导致 4.6 重写仍从错误的子目标链出发。"""
+    rej = [{
+        "id": 0, "answer": "\\boxed{\\dfrac{603729}{2}}",
+        "error_desc": "解答在子目标 1 中明确指出推导结果与义务 O5 要求的结论矛盾",
+        "error_at": "但子目标描述要求的是 $(m+n)D \\le 777^2$，这与推导矛盾。",
+    }]
+    out = _collect_error_brief(_Ctx([], rej))
+    assert "上游问题" in out
+    assert "子目标链" in out
+    assert out.find("上游问题") < out.find("候选")  or "上游问题" in out.split("\n")[0]

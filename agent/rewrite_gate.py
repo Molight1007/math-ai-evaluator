@@ -118,20 +118,34 @@ def _collect_error_brief(ctx) -> str:
     _clean = [l for l in lines if len(str(l).strip()) > 20]
     if not _clean:
         _clean = list(lines)
-    # 只认**可核对的定量依据**：多位数 / 不等号 / 明确反例。
-    # ⚠ 不要把"上界/下界"这类词算进来 —— 实测"无法自洽地建立上界"这种纯结论性
-    #   描述也含该词，会导致降级段被判成定量段（2026-10-23 实测）。
+    # ★★ 2026-10-23（用户：「错误的地方在于把正确的判断为错误的」）：
+    #   实测 cid=0 的淘汰理由 `error_at` 是——「但子目标描述要求的是 (m+n)D ≤ 777²，
+    #   这与推导矛盾。」 这句话其实是**候选自己发现了上游子目标的矛盾**
+    #   （sg4 假设 ∑(p_k+p_{k+1}) ≤ N，而正确量级是 ≈N²）—— 是**正确的洞察**。
+    #   但 4.1 的视角是"解答是否自洽"，于是把这个洞察当成"解答逻辑错误"淘汰掉，
+    #   **该回传上游的信号就此丢失**，4.6 重写仍然从错误的子目标链出发。
+    #   ⇒ 这里把它单独拎成一段，明确告诉重写模型：这不是候选的错，是子目标要修。
+    _up = []
+    for r in (getattr(ctx, "self_audit_rejected", None) or []):
+        if isinstance(r, dict):
+            _ea = str(r.get("error_at") or "")
+            if "子目标" in _ea:
+                _up.append("- %s" % _ea[:200])
     _QUANT_RE = re.compile(r"\d{3,}|≤|≥|\\le|\\ge|反例")
     _quant = [l for l in _clean if _QUANT_RE.search(str(l))]
     _rest = [l for l in _clean if l not in _quant]
+    _out = []
+    if _up:
+        _out.append("【候选指出的上游问题 —— 这不是候选算错，是**子目标链**要改的地方】")
+        _out += _up
     if _quant:
-        _out = ["【优先采信：以下理由给出了具体数值 / 不等式 / 反例，请以它们为基准】"]
+        _out.append("【优先采信：以下理由给出了具体数值 / 不等式 / 反例，请以它们为基准】")
         _out += _quant
-        if _rest:
-            _out += ["【其余（仅结论性描述、可信度较低，可参考但勿据此推翻上面的定量结论）】"]
-            _out += _rest
-        return "\n".join(_out)[:_ERRORS_MAX]
-    return "\n".join(_clean)[:_ERRORS_MAX]
+    if _rest:
+        if _quant:
+            _out.append("【其余（仅结论性描述、可信度较低，可参考但勿据此推翻上面的定量结论）】")
+        _out += _rest
+    return "\n".join(_out or _clean)[:_ERRORS_MAX]
 
 
 def _collect_rejected_brief(ctx) -> str:
