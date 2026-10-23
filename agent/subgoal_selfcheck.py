@@ -91,8 +91,9 @@ def _fmt_chain(chain: list[dict], max_each: int = 600,
     return "\n\n".join(lines)
 
 
-def check_subgoal_chain(chain: list[dict], problem: str, *,
-                        timeout: int = 900, max_tokens: int = 32768) -> list[dict]:
+def _check_batch(chain: list[dict], problem: str, *,
+                 timeout: int = 900, max_tokens: int = 32768) -> list[dict]:
+    """对一批子目标做一次复算（内部函数，见 check_subgoal_chain 的分批策略）。"""
     """返回可疑子目标列表（空列表 = 未发现可复算的错 / 机制不可用）。
 
     ⚠ `max_tokens` 必须给够：DeepSeek 是推理模型，2048 会被思考吃光
@@ -119,6 +120,35 @@ def check_subgoal_chain(chain: list[dict], problem: str, *,
     except Exception:  # noqa: BLE001  增益机制，任何失败都静默
         return []
     return _parse(raw)
+
+
+def check_subgoal_chain(chain: list[dict], problem: str, *,
+                        timeout: int = 900, max_tokens: int = 32768,
+                        batch: int = 4) -> list[dict]:
+    """复算子目标链，**分批覆盖全链**（避免早期子目标被截断漏检）。
+
+    分批理由（2026-10-23 实测）：一次喂 8 个子目标时，DeepSeek 的推理会把
+    16384 token 吃光（finish_reason=length ⇒ 空响应 ⇒ 静默失效）；只喂最后 4 个
+    能跑通，但会**漏掉更早的错误**（实测 sg4 的极限代换就因此没被检出）。
+    ⇒ 每批 `batch` 个、相邻批重叠 1 个（保证跨批的依赖能对上），结果按 id 去重。
+    """
+    if not chain:
+        return []
+    if len(chain) <= batch:
+        return _check_batch(chain, problem, timeout=timeout,
+                            max_tokens=max_tokens)
+    out: dict[str, dict] = {}
+    step = max(1, batch - 1)          # 重叠 1 个
+    i = 0
+    while i < len(chain):
+        part = chain[i:i + batch]
+        for s in _check_batch(part, problem, timeout=timeout,
+                              max_tokens=max_tokens):
+            out.setdefault(s.get("id") or "", s)
+        if i + batch >= len(chain):
+            break
+        i += step
+    return list(out.values())
 
 
 def _parse(raw) -> list[dict]:
