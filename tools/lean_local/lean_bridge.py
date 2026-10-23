@@ -1069,9 +1069,19 @@ def _compile_lean(
                 os.environ["LEAN_PATH"] = (
                     (_lp + os.pathsep) if _lp else "") + os.pathsep.join(_add)
     lean_file = os.path.join(work_dir, lean_filename)
-    # 2026-09-11（mcp 可用性修复）：mcp 后端下规范化 imports —— 裸 `import Mathlib`
-    # 在本机 Mathlib 布局下会触发 fatalError，导致 mcp 恒报 diagnostics_unavailable。
-    if get_lean_backend() == "mcp":
+    # 规范化 imports —— 裸 `import Mathlib` 在本机 Mathlib 布局下必然失败。
+    # ★★ 2026-10-23 修正：原实现只在 `backend == "mcp"` 时归一化，
+    #   但「Mathlib.olean 聚合入口缺失」是**环境事实，与后端无关**：
+    #   云端 LEAN_BACKEND 未设（默认 bridge）⇒ 归一化被跳过 ⇒ `import Mathlib`
+    #   原样送编译 ⇒ 报 `object file .../Mathlib.olean does not exist` ⇒
+    #   被 lean_failure 判为 ENV ⇒ 6 个候选全部 lenient_pass
+    #   （实测 val1_r1 现场：4.3 通过 6/6，而 6 个答案全是 777²/2 变体）。
+    #   现改为：**聚合入口不存在就归一化**，与后端解耦。
+    try:
+        _agg_missing = not os.path.isfile(os.path.join(work_dir, "Mathlib.olean"))
+    except OSError:
+        _agg_missing = True
+    if get_lean_backend() == "mcp" or _agg_missing:
         code = _normalize_lean_imports(code)
     with open(lean_file, "w", encoding="utf-8") as f:
         f.write(code)

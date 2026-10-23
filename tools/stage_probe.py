@@ -317,10 +317,20 @@ def run_stage(stage: str, orch: ProbeOrch, ctx):
 
 def summarize(ctx) -> dict:
     cands = getattr(ctx, "candidates", None) or []
-    return {
+    out = {
         "候选数": len(cands),
         "候选答案": [str(getattr(c, "answer", ""))[:40] for c in cands],
     }
+    # ★ 2026-10-23：Lean 阶段必须看得见**每候选的 verdict 与 failure_kind**，
+    #   否则"通过 6/6"到底是真通过、还是"非证伪⇒保留"根本分不清。
+    lg = getattr(ctx, "lean_gate", None)
+    if isinstance(lg, list) and lg:
+        out["lean_gate"] = [
+            {"id": e.get("id"), "verdict": e.get("verdict"),
+             "failure_kind": e.get("failure_kind"),
+             "degraded": e.get("degraded")}
+            for e in lg[:8] if isinstance(e, dict)]
+    return out
 
 
 # ------------------------------------------------------------------ main
@@ -397,6 +407,12 @@ def main(argv=None) -> int:
             print("    - %s" % a)
     else:
         print("  存活答案：（无，全部被淘汰）")
+    if after.get("lean_gate"):
+        print("\n  Lean 逐候选：")
+        for _e in after["lean_gate"]:
+            print("    id=%-4s verdict=%-14s failure_kind=%-14s degraded=%s"
+                  % (_e.get("id"), _e.get("verdict"),
+                     _e.get("failure_kind") or "-", _e.get("degraded") or "-"))
     print("\n  阶段留痕（%d 条）：" % len(orch.records))
     for step, msg in orch.records[:40]:
         print("    [%s] %s" % (step, msg))
