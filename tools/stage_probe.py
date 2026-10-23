@@ -51,6 +51,46 @@ STAGES = {
 
 
 
+
+def _load_prod_env() -> None:
+    """按 run_112 的方式加载环境（.env → lean-env.sh → cloud_run.env）。
+
+    ★★ 2026-10-23 教训：**探针必须与生产同环境**，否则测出来的是假象。
+      第一次实测 4.3 一直报 `failure_kind=env`，查了半天发现是探针自己
+      没加载环境（LEAN_PATH 为空，Lean 找不到 Mathlib）。
+      这与「--check-env 第一版误报 lake ✗」是同一个错。
+    """
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        _envf = os.path.join(_root, ".env")
+        if os.path.isfile(_envf):
+            for _ln in open(_envf, encoding="utf-8", errors="ignore"):
+                _ln = _ln.strip()
+                if "=" in _ln and not _ln.startswith("#"):
+                    _k, _v = _ln.split("=", 1)
+                    os.environ.setdefault(_k.strip(),
+                                          _v.strip().strip('"').strip("'"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import subprocess as _sp
+        for _f in ("deploy/lean-env.sh", "deploy/cloud_run.env"):
+            _p = os.path.join(_root, _f)
+            if not os.path.isfile(_p):
+                continue
+            _r = _sp.run(["bash", "-c", 'set -a; . "%s" 2>/dev/null; env' % _p],
+                         cwd=_root, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", timeout=60)
+            for _ln in (_r.stdout or "").splitlines():
+                if "=" in _ln:
+                    _k = _ln.partition("=")[0]
+                    _v = _ln.partition("=")[2]
+                    if _k and not _k.startswith("_"):
+                        os.environ[_k] = _v
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ================================================================== 环境自检
 def check_env() -> int:
     """逐项体检**环境依赖**，每项独立、失败不影响其余，5~30 秒出结论。
@@ -72,6 +112,7 @@ def check_env() -> int:
             ok_all = False
         print("  %-14s %s  %s" % (name, "✓" if good else "✗", detail))
 
+    _load_prod_env()
     print("=== 环境自检 ===")
 
     # ★ 必须**按 run_112 的方式**加载环境，否则体检结果与 run 的真实环境不符
@@ -359,6 +400,7 @@ def main(argv=None) -> int:
     if not args.stage:
         ap.error("必须给 --stage（或 --list 查看）")
 
+    _load_prod_env()          # ★ 先与生产同环境，再取现场
     qdir = find_q_dir(args.run_dir)
     u = load_json(qdir, "01_understanding.json", {}) or {}
     raw_c = load_json(qdir, "05_candidates.json", []) or []

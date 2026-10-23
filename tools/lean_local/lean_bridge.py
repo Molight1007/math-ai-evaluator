@@ -1048,6 +1048,15 @@ def _compile_lean(
     _inject: list = []
     if _has_closure:
         _inject.append(work_dir)
+    # ★★ 2026-10-23（实测根因）：候选验证是在**临时目录**里编译的
+    #   （cwd=/tmp/lean_ansverify_xxx），那里当然没有 Mathlib ⇒ `_has_closure`
+    #   恒假 ⇒ 一个路径都不挂 ⇒ `import Mathlib.Tactic` 报
+    #   「unknown module prefix 'Mathlib'；search path 只有 lean/lib/lean」
+    #   ⇒ 被判 ENV ⇒ 所有候选 lenient_pass（实测 6/6 放行错答案）。
+    #   ⇒ 无条件挂 **LEAN_PROJECT_PATH**（Mathlib 闭包根），与 work_dir 无关。
+    _proj_root = (os.environ.get("LEAN_PROJECT_PATH", "") or "").strip()
+    if _proj_root and os.path.isdir(_proj_root):
+        _inject.append(_proj_root)
     try:
         _inject.extend(_local_mathlib_olean_roots())
     except Exception:  # noqa: BLE001  探测失败不影响主流程（保持原值）
@@ -1118,6 +1127,8 @@ def _compile_lean(
     cmd = ([exe, "env", "lean", lean_filename] if is_lake
            else [exe, lean_filename])
     try:
+        logger.warning("[LeanBridge] 即将编译 cmd=%s | LEAN_PATH=%r",
+                       cmd, (os.environ.get("LEAN_PATH", "") or "")[:260])
         result = subprocess.run(
             cmd,
             cwd=work_dir,
@@ -1140,6 +1151,15 @@ def _compile_lean(
                 if untrusted:
                     return {"ok": False, "error": _UNTRUSTED_MSG}
             return {"ok": True, "error": ""}
+        # ★★ 2026-10-23（诊断用）：编译失败必须留下**可定位**的三样东西 ——
+        #   实际命令、工作目录、代码里的 import 行、Lean 错误原文。
+        #   缺了这些，"failure_kind=env" 只能靠猜（本项目已因此绕了两轮）。
+        _imps = [l.strip() for l in code.split("\n")
+                 if l.strip().startswith("import")][:4]
+        logger.warning("[LeanBridge] 编译失败 rc=%s | cwd=%s | imports=%s",
+                       result.returncode, work_dir, _imps)
+        logger.warning("[LeanBridge] 编译错误原文: %s",
+                       (err or "")[:500].replace("\n", " ⏎ "))
         return {"ok": False, "error": _truncate_error_output(err)}
     except subprocess.TimeoutExpired:
         return {"ok": False,
