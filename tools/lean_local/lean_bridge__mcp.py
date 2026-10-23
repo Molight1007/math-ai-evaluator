@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import threading
 
@@ -202,6 +203,45 @@ def mcp_available() -> bool:
         return False
 
 
+
+def _ensure_lake_in_path(env: dict) -> str:
+    """保证 `lake` 所在目录在 env['PATH'] 里，返回命中的目录（未命中返回空）。
+
+    为什么必须由代码兜底（2026-10-23 实测）
+    ---------------------------------------
+    `lean-lsp-mcp` 启动 Lean LSP 时执行的是 **`lake` 命令**，不是 `lean` 绝对路径。
+    云端 `lake` 就在 `deploy/lean-4.31.0-linux/bin/` 里，但那个目录**不在 PATH 上**
+    ⇒ MCP 报 `No such file or directory: 'lake'` ⇒ 整条 Lean 通道静默失效
+    （val1_r1_1022：4.3 全空、leansearch calls=0；val1_r2_1023 复现）。
+
+    虽然 `deploy/cloud_run.env` 已加 PATH，但依赖"启动路径确实 source 了它"太脆
+    （实测 run 里仍失败）。这里从两个**已有**事实反推目录，自给自足：
+      ① `LEAN_EXECUTABLE` —— lean 绝对路径；
+      ② `LEAN_PROJECT_PATH` —— mathlib-olean 目录，其**兄弟目录**里通常放着 lean 发行版。
+    """
+    if shutil.which("lake", path=env.get("PATH", "")):
+        return ""
+    cand = []
+    exe = env.get("LEAN_EXECUTABLE", "")
+    if exe:
+        cand.append(os.path.dirname(exe))
+    proj = env.get("LEAN_PROJECT_PATH", "")
+    if proj:
+        parent = os.path.dirname(os.path.abspath(proj))
+        try:
+            for name in sorted(os.listdir(parent)):
+                d = os.path.join(parent, name, "bin")
+                if os.path.isfile(os.path.join(d, "lake")):
+                    cand.append(d)
+        except OSError:
+            pass
+    for d in cand:
+        if os.path.isfile(os.path.join(d, "lake")):
+            env["PATH"] = d + os.pathsep + env.get("PATH", "")
+            return d
+    return ""
+
+
 class _LeanMcpProxyClient:
     """spawn venv python 跑 lean_mcp_proxy.py，一行 JSON 一问一答。
 
@@ -213,6 +253,10 @@ class _LeanMcpProxyClient:
     def __init__(self, python: str, script: str, project_dir: str):
         env = dict(os.environ)
         env["LEAN_PROJECT_PATH"] = project_dir
+        # ★ 2026-10-23：先补 lake 所在目录，再 spawn —— 否则 LSP 起不来且失败被包成 ok=True
+        _lake_dir = _ensure_lake_in_path(env)
+        if _lake_dir:
+            logger.info("[LeanMCP] lake 补进 PATH: %s", _lake_dir)
         env.setdefault("LEAN_LOG_LEVEL", "NONE")
         # 2026-09-13 修复（诊断能力）：stderr 由 DEVNULL 改为 PIPE + 后台收割。
         # 原因：`lean-lsp-mcp` 启动失败时（典型场景：LEAN_PROJECT_PATH 指向的

@@ -75,9 +75,13 @@ def _env(name: str) -> str:
     return ""
 
 
-def _fmt_chain(chain: list[dict], max_each: int = 600) -> str:
+def _fmt_chain(chain: list[dict], max_each: int = 600,
+               limit: int = 4) -> str:
+    # ★ 2026-10-23 实测：8 个子目标 × 600 字 ⇒ DeepSeek 的推理把 16384 token
+    #   全吃光（finish_reason=length ⇒ 空响应 ⇒ 静默失效）。只喂**最后 limit 个**
+    #   （最终答案来自最后几步，前面已通过的结论不必复述），并抬高 max_tokens。
     lines = []
-    for it in chain:
+    for it in chain[-limit:]:
         cid = it.get("id")
         title = str(it.get("title") or "")[:200]
         concl = str(it.get("conclusion") or it.get("concl") or "")[:200]
@@ -88,7 +92,7 @@ def _fmt_chain(chain: list[dict], max_each: int = 600) -> str:
 
 
 def check_subgoal_chain(chain: list[dict], problem: str, *,
-                        timeout: int = 600, max_tokens: int = 16384) -> list[dict]:
+                        timeout: int = 900, max_tokens: int = 32768) -> list[dict]:
     """返回可疑子目标列表（空列表 = 未发现可复算的错 / 机制不可用）。
 
     ⚠ `max_tokens` 必须给够：DeepSeek 是推理模型，2048 会被思考吃光
