@@ -26,6 +26,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from .switch_registry import get_bool as _sw_get_bool
 
 _PROBLEM_MAX = 4000
@@ -102,7 +104,34 @@ def _collect_error_brief(ctx) -> str:
                                 ("（degraded=%s）" % _deg) if _deg else ""))
     if not lines:
         lines.append("（无具体错误点留痕：候选在各道被整体淘汰，或错误点未记录）")
-    return "\n".join(lines)[:_ERRORS_MAX]
+    # ★★ 2026-10-23（用户：「把正确的判断为错误的，给大模型矛盾的答案」）：
+    #   实测 val1_r1_1022 —— 4 条淘汰理由平铺，其中 cross_model 那条**已经写出了
+    #   正确上界**「由 AM-HM 该和 ≥ (N-1)²/(N(N+1)-3) → 1，故 D ≤ M = 777² = 603729」，
+    #   但它排在第 4 位、还和「构造证明有误 / 与义务 O5 矛盾」等理由混在一起，
+    #   模型无法判断谁对 ⇒ 两轮重写仍给 777²/2。
+    #   此外有一条理由正文为空（"- [4.2_falsify] "），纯噪声。
+    #   新口径：
+    #     ① 丢弃空壳理由（前缀之外没有实质内容）；
+    #     ② **含具体数值/不等式/反例**的理由置顶，并显式标注「优先采信」——
+    #        这类理由自带可核对依据，比"某某不成立"的结论性描述可信；
+    #     ③ 其余理由单列，明确降级为"参考"。
+    _clean = [l for l in lines if len(str(l).strip()) > 20]
+    if not _clean:
+        _clean = list(lines)
+    # 只认**可核对的定量依据**：多位数 / 不等号 / 明确反例。
+    # ⚠ 不要把"上界/下界"这类词算进来 —— 实测"无法自洽地建立上界"这种纯结论性
+    #   描述也含该词，会导致降级段被判成定量段（2026-10-23 实测）。
+    _QUANT_RE = re.compile(r"\d{3,}|≤|≥|\\le|\\ge|反例")
+    _quant = [l for l in _clean if _QUANT_RE.search(str(l))]
+    _rest = [l for l in _clean if l not in _quant]
+    if _quant:
+        _out = ["【优先采信：以下理由给出了具体数值 / 不等式 / 反例，请以它们为基准】"]
+        _out += _quant
+        if _rest:
+            _out += ["【其余（仅结论性描述、可信度较低，可参考但勿据此推翻上面的定量结论）】"]
+            _out += _rest
+        return "\n".join(_out)[:_ERRORS_MAX]
+    return "\n".join(_clean)[:_ERRORS_MAX]
 
 
 def _collect_rejected_brief(ctx) -> str:
