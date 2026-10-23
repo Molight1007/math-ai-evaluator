@@ -764,6 +764,18 @@ def mcp_run_code(code: str, work_dir: str, timeout: float = 120.0) -> dict:
         try:
             _t0 = time.monotonic()
             out = proxy.run_code(code, timeout=timeout)
+            # ★★ 2026-10-23（实测：失败被包装成成功）：proxy 在 Lean LSP 起不来时
+            #   返回 `{"ok": True, "items": [], "raw": "Error executing tool ..."}` ——
+            #   `error` 字段为空，错误只藏在 `raw` 里。调用方看到 ok=True + 空 items
+            #   会以为"执行成功但没输出"，于是 Lean 数值核验静默失效
+            #   （val1_r1_1022：10 次调用全这种形态，而 4.3 因此整题判定 lean_active=false）。
+            #   此处把"工具层错误"翻译成 ok=False，让上层能按环境失败处理。
+            if bool(out.get("ok")) and not out.get("items"):
+                _raw = str(out.get("raw") or "")
+                if "Error executing tool" in _raw or "Failed to start Lean" in _raw:
+                    out = dict(out)
+                    out["ok"] = False
+                    out["error"] = _raw.strip()[:300]
             _mcp_note(time.monotonic() - _t0, bool(out.get("ok")))
             logger.info("[LeanBridge] ★ mcp run_code 耗时 %.1fs（ok=%s）",
                         time.monotonic() - _t0, bool(out.get("ok")))
