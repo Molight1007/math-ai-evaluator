@@ -43,9 +43,116 @@ if _ROOT not in sys.path:
 STAGES = {
     "4.1": "self_audit（AI 自审：逻辑错误淘汰）",
     "4.2": "adversarial_gate（对抗证伪 + 跨模型）",
+    "4.3": "lean_check（Lean 编译验证）",
     "4.4": "math_check（数学工具计算检测）",
     "4.5": "vote（多答案判断 + 投票）",
+    "merge": "子目标合并（含第二模型复核实检 / 提示词注入）",
 }
+
+
+
+# ================================================================== 环境自检
+def check_env() -> int:
+    """逐项体检**环境依赖**，每项独立、失败不影响其余，5~30 秒出结论。
+
+    为什么单独做成一个入口（2026-10-23 教训）
+    -----------------------------------------
+    Lean 通道连着两轮在真实 run 里 `lean_active=false`，而我都是从
+    "跑完 4 小时 → 看 diag → 发现没跑"这个方向发现的 —— 太晚、太贵。
+    环境类问题根本不需要 ctx，一个 20 秒的体检就够。
+
+    检查项：Lean 可执行 / lake / MCP run_code / Mathlib olean / 主模型 / 第二模型。
+    """
+    import shutil
+    ok_all = True
+
+    def _line(name, good, detail=""):
+        nonlocal ok_all
+        if not good:
+            ok_all = False
+        print("  %-14s %s  %s" % (name, "✓" if good else "✗", detail))
+
+    print("=== 环境自检 ===")
+
+    # ★ 必须**按 run_112 的方式**加载环境，否则体检结果与 run 的真实环境不符
+    #   （实测：不 source 时云端 lease/lake 全 ✗，而 run 里其实是好的）。
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        _envf = os.path.join(_root, ".env")
+        if os.path.isfile(_envf):
+            for _ln in open(_envf, encoding="utf-8", errors="ignore"):
+                _ln = _ln.strip()
+                if "=" in _ln and not _ln.startswith("#"):
+                    _k, _v = _ln.split("=", 1)
+                    os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+    except Exception:  # noqa: BLE001
+        pass
+    # 用 bash source lean-env.sh + cloud_run.env（与 run_112.py 的 main 一致），
+    # 拿回它们设的 PATH / LEAN_PATH / LEAN_PROJECT_PATH。
+    try:
+        import subprocess as _sp
+        for _f in ("deploy/lean-env.sh", "deploy/cloud_run.env"):
+            _p = os.path.join(_root, _f)
+            if not os.path.isfile(_p):
+                continue
+            _r = _sp.run(["bash", "-c", 'set -a; . "%s" 2>/dev/null; env' % _p],
+                         cwd=_root, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", timeout=60)
+            for _ln in (_r.stdout or "").splitlines():
+                if "=" in _ln:
+                    _k, _v = _ln.partition("=")[0], _ln.partition("=")[2]
+                    if _k and not _k.startswith("_"):
+                        os.environ[_k] = _v
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 1) lean / lake 是否可解析
+    exe = os.environ.get("LEAN_EXECUTABLE", "") or shutil.which("lean") or ""
+    _line("lean", bool(exe), exe or "未找到（设 LEAN_EXECUTABLE 或加 PATH）")
+    lake = shutil.which("lake") or ""
+    if not lake and exe:
+        cand = os.path.join(os.path.dirname(exe), "lake")
+        lake = cand if os.path.isfile(cand) else ""
+    _line("lake", bool(lake), lake or "未找到（MCP 用它启动 LSP，缺则 4.3 全空）")
+
+    # 2) MCP run_code —— 真正决定 4.3/4.4 能不能用
+    proj = os.environ.get("LEAN_PROJECT_PATH", "")
+    if not proj:
+        _line("LEAN_PROJECT_PATH", False, "未设置（MCP 需要合法 Lean 工程根）")
+    else:
+        try:
+            from tools.lean_local.lean_bridge import mcp_run_code
+            r = mcp_run_code("#eval (1+1 : Nat)", proj, timeout=180)
+            good = bool(r.get("ok")) and bool(r.get("items"))
+            _line("MCP run_code", good,
+                  "ok=%s items=%d%s" % (r.get("ok"), len(r.get("items") or []),
+                                        ("  err=" + str(r.get("error"))[:90])
+                                        if not good else ""))
+        except Exception as exc:  # noqa: BLE001
+            _line("MCP run_code", False, "%s: %s" % (type(exc).__name__, str(exc)[:90]))
+
+    # 3) Mathlib olean 数量（只看 LEAN_PROJECT_PATH，别扫整棵树）
+    if proj:
+        try:
+            cnt = 0
+            for _r, _d, files in os.walk(proj):
+                cnt += sum(1 for f in files if f.endswith(".olean"))
+            _line("Mathlib olean", cnt > 100, "%d 个（%s）" % (cnt, proj[-30:]))
+        except Exception:  # noqa: BLE001
+            _line("Mathlib olean", False, "统计失败")
+
+    # 4) 主模型 / 第二模型：各发一次极小请求
+    for name, groups in (
+            ("主模型", (("INTERN_API_KEY", "INTERN_API_BASE"),
+                        ("OPENAI_API_KEY", "OPENAI_BASE_URL"))),
+            ("第二模型", (("DEEPSEEK_API_KEY", "DEEPSEEK_API_BASE"),))):
+        hit = next((g for g in groups if all(os.environ.get(k) for k in g)), None)
+        _line(name + "凭据", bool(hit),
+              " ".join(hit) if hit else "缺 %s" % groups[0][0])
+
+    print()
+    print("结论：%s" % ("环境就绪" if ok_all else "有项目未通过（见 ✗ 行）"))
+    return 0 if ok_all else 1
 
 
 # ------------------------------------------------------------------ 现场重建
@@ -181,12 +288,29 @@ def run_stage(stage: str, orch: ProbeOrch, ctx):
     elif stage == "4.2":
         from agent.adversarial_gate import adversarial_gate_stage
         adversarial_gate_stage(orch, ctx, "deep")
+    elif stage == "4.3":
+        from agent.lean_backcheck import lean_backcheck_stage
+        lean_backcheck_stage(orch, ctx, "deep")
+    elif stage == "merge":
+        # merge 本体需要完整 Orchestrator（_prepare_merge_prompt 等），
+        # 这里退一步：只单测「第二模型复核 + 提示词注入」这段**新增逻辑**，
+        # 正好覆盖最容易出问题的地方（自检命中率 / 注入内容）。
+        from agent.subgoal_selfcheck import (check_subgoal_chain,
+                                            chain_from_trace, summarize)
+        _sus = check_subgoal_chain(
+            chain_from_trace(getattr(ctx, "subgoal_trace", None) or []),
+            str(getattr(ctx, "problem", "") or ""))
+        print("\n=== 复核结果 ===")
+        print(summarize(_sus) or "(未发现可疑)")
+        for _s in _sus:
+            print("  - [%s] %s" % (_s.get("id"), str(_s.get("step"))[:140]))
+            print("      应为: %s" % str(_s.get("expected"))[:120])
     elif stage == "4.4":
         from agent.math_check_gate import math_check_stage
         math_check_stage(orch, ctx)
     elif stage == "4.5":
-        from agent.final_selector import vote_stage  # 名称不符时给出提示
-        vote_stage(orch, ctx)
+        from agent.final_selector import vote_stage
+        vote_stage(orch, ctx, "deep")
     else:
         raise SystemExit("未支持的阶段: %s（支持 %s）" % (stage, ", ".join(STAGES)))
 
@@ -209,12 +333,17 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="只回放现场，不调模型")
     ap.add_argument("--no-llm", action="store_true", help="用桩模型（验证管线）")
     ap.add_argument("--list", action="store_true", help="列出可用阶段")
+    ap.add_argument("--check-env", action="store_true",
+                    help="只做环境体检（Lean/lake/MCP/Mathlib/模型凭据），不需要 --run-dir")
     args = ap.parse_args(argv)
 
     if args.list:
         for k, v in STAGES.items():
-            print("  %-4s %s" % (k, v))
+            print("  %-8s %s" % (k, v))
+        print("  %-8s %s" % ("--check-env", "环境体检（Lean/lake/MCP/Mathlib/凭据）"))
         return 0
+    if args.check_env:
+        return check_env()
     if not args.run_dir:
         ap.error("必须给 --run-dir")
     if not args.stage:
