@@ -50,6 +50,7 @@ KINDS = {
     "silent_failure": "失败被包装成成功（ok=True 但无结果）",
     "timeout_hang": "超时漫长 / 卡死",
     "format_error": "答案形态不合法（含描述性文字等）",
+    "subgoal_error": "子目标链的数值/量级/代换错误（第二模型复算检出）",
 }
 
 _SCHEMA = """

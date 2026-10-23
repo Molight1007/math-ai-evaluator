@@ -249,6 +249,36 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
         发现的矛盾强制注入 merge 提示词要求逐条裁决——不让子目标间矛盾
         静默流入最终合并（alg-060 型显式/隐含矛盾）。
         """
+    # ★★ 2026-10-23（用户：「根据错误设置检测环节判断新版本有没有问题」）：
+    #   子目标链在合并前用**第二模型复算**一遍。实测 official112-008：sg5 把
+    #   `∑1/(…) ≥ (N-1)²/(N(N+1)-3) → 1` 推成 `D ≤ 777²/2`（应为 777²/1，凭空除 2），
+    #   sg8 又高估构造下确界。这两处一旦进入 merge 就直接固化成最终答案，
+    #   后面 4.1/4.2 只能"正确地全杀"，4.6 重写两轮（79 分钟/轮）也无济于事。
+    #   此处只**记录**（diag + 错误库），不改流程；等验证过再决定是否注入 merge 提示词。
+    try:
+        import json as _json
+        from .subgoal_selfcheck import (check_subgoal_chain, chain_from_trace,
+                                        summarize)
+        _sus = check_subgoal_chain(
+            chain_from_trace(getattr(ctx, "subgoal_trace", None) or []),
+            str(getattr(ctx, "problem", "") or ""))
+        if _sus:
+            _md = getattr(ctx, "metadata", None)
+            if isinstance(_md, dict):
+                _md["subgoal_suspects"] = _sus
+            self.record(ctx, "subgoal_selfcheck", summarize(_sus))
+            try:
+                from .error_registry import record as _rec
+                for _s in _sus:
+                    _rec(kind="subgoal_error", signature=_s["step"],
+                         stage="2.7_subgoal",
+                         detail=_json.dumps(_s, ensure_ascii=False),
+                         detector="second_model_recalc")
+            except Exception:  # noqa: BLE001  错误库是增益，失败不影响合并
+                pass
+    except Exception:  # noqa: BLE001  自检是增益，任何失败都不影响合并
+        pass
+
     user_msg, _merge_system = self._prepare_merge_prompt(
         ctx, subgoals, plan_summary, results_map, merge_strategy)
 
