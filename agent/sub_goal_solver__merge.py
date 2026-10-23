@@ -269,15 +269,8 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
             if isinstance(_md, dict):
                 _md["subgoal_suspects"] = _sus
             self.record(ctx, "subgoal_selfcheck", summarize(_sus))
-            try:
-                from .error_registry import record as _rec
-                for _s in _sus:
-                    _rec(kind="subgoal_error", signature=_s["step"],
-                         stage="2.7_subgoal",
-                         detail=_json.dumps(_s, ensure_ascii=False),
-                         detector="second_model_recalc")
-            except Exception:  # noqa: BLE001  错误库是增益，失败不影响合并
-                pass
+            # 注：不再写错误库 —— 2026-10-23 用户定，经验库改为「给人看的
+            # 可迁移教训（现象/原因/应对）」，不承载单次运行的追踪记录。
     except Exception:  # noqa: BLE001  自检是增益，任何失败都不影响合并
         pass
 
