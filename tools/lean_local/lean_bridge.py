@@ -566,6 +566,60 @@ def get_lean_backend() -> str:
     return _LEAN_BACKEND
 
 
+
+# Lean 内核允许的标准公理（之外的都意味着"依赖了未证明的假设"）
+_STD_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
+
+_AXIOM_LINE_RE = re.compile(
+    r"'([\w.]+)'\s+depends\s+on\s+axioms://s*//[(.*?)//]")
+
+
+def _check_axioms(code: str, work_dir: str, cmd_prefix: list,
+                  lean_filename: str, timeout: float) -> dict:
+    """``#print axioms`` 门：证明"通过"是否依赖了未证明的假设。
+
+    为什么需要（2026-10-23 调研 AlphaProof / AlphaProof-Nexus 后补）
+    ---------------------------------------------------------------
+    Lean 编译通过 ≠ 没有作弊。行业公认的三道硬门是：
+      ① 禁 `sorry`；② `#print axioms` 只允许 propext / Classical.choice /
+      Quot.sound；③ 禁新 `axiom` 声明。
+    我们原来只做了 ①（源码扫 sorry），**②完全没做** —— 于是「加一条 axiom
+    把难点吞掉」这种证明会一路绿灯。
+
+    实现：编译通过后，把代码原文 + 若干 `#print axioms <decl>` 追加成探针文件
+    再编译一次，解析输出里每个声明依赖的公理集合。多花一次编译（约 5-20s），
+    只在后置验证（allow_sorry=False）且代码里确实有 theorem/lemma 时才跑。
+
+    返回 ``{"checked": n, "bad": [{"decl","extra"}], "ok": bool}``。
+    """
+    names = re.findall(r"(?:theorem|lemma)\s+([A-Za-z_][\w']*)", code or "")
+    if not names:
+        return {"checked": 0, "bad": [], "ok": True}
+    probe_name = "_axiom_probe.lean"
+    try:
+        probe = (code.rstrip() + "\n\n"
+                 + "\n".join("#print axioms %s" % n for n in names[:5]) + "\n")
+        with open(os.path.join(work_dir, probe_name), "w",
+                  encoding="utf-8") as f:
+            f.write(probe)
+        r = subprocess.run(cmd_prefix + [probe_name], cwd=work_dir,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout)
+        txt = (r.stdout or "") + (r.stderr or "")
+    except Exception:  # noqa: BLE001  探针失败不影响主判定（只是少一道门）
+        return {"checked": 0, "bad": [], "ok": True, "error": "probe_failed"}
+    bad = []
+    for line in txt.splitlines():
+        m = _AXIOM_LINE_RE.search(line)
+        if not m:
+            continue
+        axs = {a.strip().strip("'").strip() for a in m.group(2).split(",") if a.strip()}
+        extra = sorted(a for a in axs if a not in _STD_AXIOMS)
+        if extra:
+            bad.append({"decl": m.group(1), "extra": extra})
+    return {"checked": len(names), "bad": bad, "ok": not bad}
+
+
 def _scan_untrusted(code: str) -> bool:
     """源码含不可信构造（sorry/axiom/unsafe/implemented_by/skipKernelTC）。"""
     return any(re.search(p, code or "") for p in _UNTRUSTED_SRC_PATTERNS)
@@ -1150,6 +1204,15 @@ def _compile_lean(
                              or _has_sorry_warning(err))
                 if untrusted:
                     return {"ok": False, "error": _UNTRUSTED_MSG}
+                # ★★ 2026-10-23：`#print axioms` 门 —— 防「加 axiom 吞难点」
+                _ax = _check_axioms(code, work_dir, cmd[:-1] if is_lake else cmd[:1],
+                                    lean_filename, timeout)
+                if not _ax.get("ok"):
+                    _bad = "; ".join(
+                        "%s 依赖 %s" % (b["decl"], ",".join(b["extra"]))
+                        for b in _ax.get("bad") or [])
+                    return {"ok": False,
+                            "error": "证明依赖了标准三公理之外的假设：" + _bad}
             return {"ok": True, "error": ""}
         # ★★ 2026-10-23（诊断用）：编译失败必须留下**可定位**的三样东西 ——
         #   实际命令、工作目录、代码里的 import 行、Lean 错误原文。

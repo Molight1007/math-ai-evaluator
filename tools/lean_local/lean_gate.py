@@ -572,7 +572,19 @@ class LeanGate:
             entry["verdict"] = report.verdict
             entry["lean_valid"] = True
             _unknown_streak = 0        # 验证器正常工作（出绿点），计数清零
-            BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
+            # ★★ 2026-10-23（调研 AlphaProof/Nexus 后修正）：
+            #   `answer_valid` 的语义是「答案是一个**形式合法**的 Lean 表达式」，
+            #   **不验它是否满足题目条件**（AlphaProof 的做法是把候选答案注入命题
+            #   再要求证明；我们没做那一步，所以这只是一个语法检查）。
+            #   实测：603729/2、777²/2 这类错答案全部 answer_valid。
+            #   ⇒ ① 不再把它记成"编译验证成功"（原来调 note_compile_valid，制造假绿）；
+            #     ② 显式标注 degraded=format_only，让 diag/报表能区分"真验证"与"仅格式"。
+            if report.verdict == "answer_valid":
+                entry["degraded"] = "format_only"
+                entry["note"] = ("仅验证答案为合法 Lean 表达式，"
+                                 "未验证其是否满足题目条件（非判别性）")
+            else:
+                BaseAgent.note_compile_valid(ctx)  # 真正的形式化验证成功
             # #44 埋点第四维：定理「最终被采用」以 Lean 编译通过为准。
             # 检索命中 ≠ 采用（老师 #46：命中不等于编译通过），
             # 检索侧无法判断定理是否真的进了证明，只有这里能确认。
