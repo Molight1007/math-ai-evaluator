@@ -667,6 +667,12 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "4.5 投票（五道审核链第 5 道）：先多答案判断（规则+LLM，写 "
         "ctx.vote_multi_answer 单一来源）→ 大模型对存活候选逐候选投票"
         "（票数锁定 tier_votes 多票口径，绝不降为 1）；=0 关闭做 A/B"),
+    "five_gate_subgoal_lean": (
+        "FIVE_GATE_SUBGOAL_LEAN", "bool", False,
+        "子目标级 Lean 断言验证（2026-10-23 调研 AlphaProof/Nexus 后新增）："
+        "从最后几个子目标的结论里挑出**可判断言**（等式/不等式/极限），"
+        "让 LLM 转成 Lean 定理并编译；编译不过 ⇒ 该断言不成立，作为上游可疑信号。"
+        "默认关（成本与命中率待探针验证）；=1 开启"),
     "five_gate_rewrite": (
         "FIVE_GATE_REWRITE", "bool", True,
         "4.6 重写通道（五道审核链配套，2026-10-14 用户定案）：池空 ⇒ 汇总错误"

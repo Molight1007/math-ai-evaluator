@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 
@@ -280,6 +281,35 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
     # ★★ 2026-10-23（用户 A 案：发现了就要用）：把复核结论**注入合并提示词**。
     #   只说"哪一步可疑 + 复核认为应为多少"，并要求**以自己重新核算为准**、
     #   不一致时说明理由 —— 不强制它照抄，避免把一个模型的错当权威。
+    # ★★ 2026-10-23（调研 AlphaProof / Nexus 后新增）：子目标级 Lean 断言验证。
+    #   与上面的「第二模型复算」互补：复算看"算得对不对"，Lean 看"这句断言是否成立"。
+    #   默认关（five_gate_subgoal_lean=False）；失败/环境缺失一律跳过，绝不阻断合并。
+    _lean_res = {}
+    try:
+        from contracts.switch_registry import get_bool as _swb
+        if _swb("five_gate_subgoal_lean"):
+            from .subgoal_lean import verify_chain, summarize as _sl_sum
+            from .subgoal_selfcheck import chain_from_trace as _cft
+            _cfg = getattr(self, "config", None)
+            _wd = (os.environ.get("LEAN_PROJECT_PATH", "")
+                   or getattr(_cfg, "lean_project_dir", "") or "")
+            _le = (os.environ.get("LEAN_EXECUTABLE", "")
+                   or getattr(_cfg, "lean_executable", "") or "")
+            if _wd:
+                _lean_res = verify_chain(
+                    _cft(getattr(ctx, "subgoal_trace", None) or []),
+                    str(getattr(ctx, "problem", "") or ""),
+                    client=getattr(self, "client", None),
+                    work_dir=_wd, lean_exe=_le)
+                if _lean_res.get("n_picked"):
+                    _md = getattr(ctx, "metadata", None)
+                    if isinstance(_md, dict):
+                        _md["subgoal_lean"] = _lean_res
+                    self.record(ctx, "subgoal_lean", _sl_sum(_lean_res))
+    except Exception as _e_sl:  # noqa: BLE001  增益机制，任何失败都不影响合并
+        self.record(ctx, "subgoal_lean", "子目标 Lean 验证异常（跳过）: %s"
+                    % type(_e_sl).__name__)
+
     if _sus:
         _hint = ["", "",
                  "【独立复核提示（第二模型重算，非最终结论）】",
@@ -295,6 +325,18 @@ def _merge_results(self, ctx: TaskContext, subgoals: list[dict],
         _hint.append("请以你**重新核算**的结果为准；若与复核意见不一致，"
                      "在最终答案的推导里写明理由。")
         user_msg = user_msg + "\n".join(_hint)
+
+    # Lean 编译不通过 = 该断言不成立，比"复核认为"更硬（编译器判定）
+    _lean_bad = [x for x in (_lean_res.get("items") or [])
+                 if x.get("ok") is False]
+    if _lean_bad:
+        _lh = ["", "", "【Lean 编译结果（机器判定，优先级最高）】",
+               "下列子目标断言**转成 Lean 后编译不通过** ⇒ 该断言不成立，"
+               "合并时不得采用："]
+        for x in _lean_bad[:4]:
+            _lh.append("- sg%s：%s" % (x.get("id"), str(x.get("statement"))[:160]))
+            _lh.append("  编译错误：%s" % str(x.get("error"))[:160])
+        user_msg = user_msg + "\n".join(_lh)
 
     for attempt in range(2):
         # v2.4.1：prefill「【最终答案】」答案前置，抑制 CoT

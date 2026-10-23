@@ -507,6 +507,9 @@ class AgentConfig(_AgentConfigBase):
     five_gate_normalize: bool = True
     #   ★ 2026-10-14 第 1 道（4.1_self_audit）：AI 自审逻辑错误 → 淘汰；
     #     输出不可解析/LLM 故障一律保留候选（防误杀）。
+    # ★ 2026-10-23：子目标级 Lean 断言验证。默认关 —— 它是"真正用 Lean 判真伪"
+    #   的第一步（原来的 answer_valid 只验表达式合法），但成本未测，先用探针验证。
+    five_gate_subgoal_lean: bool = False
     five_gate_self_audit: bool = True
     #   ★ 2026-10-14 第 2 道（4.2_falsify）：对抗证伪逐候选化 ——
     #     机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰。
