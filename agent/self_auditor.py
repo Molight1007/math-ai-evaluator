@@ -239,7 +239,31 @@ def _obligation_block(ctx, config) -> tuple:
             return None, ""
         from .obligation_ledger import build_ledger, render_for_audit
         lg = build_ledger(getattr(ctx, "blueprint", None))
-        return lg, render_for_audit(lg)
+        _text = render_for_audit(lg)
+        # ★★ 2026-10-23（用户：「把正确的判断为错误的」）：
+        #   实测 official112-008 的义务 O5 断言 `(m+n)D ≤ 777²`，代入 gold D=777²
+        #   得 m+n ≤ 1，与 m<n 正整数矛盾 —— **账本自己错了**；而 4.1 按「必须满足
+        #   义务」判，把正确指出该矛盾的候选淘汰掉。账本错 ⇒ 下游越审越"自洽"。
+        #   这里做一次机械自检，**把可疑义务显式标给审查者**（不剔除、不改判据），
+        #   让"候选反驳该义务"成为可接受的输出，而不是被判成逻辑错误。
+        try:
+            from .obligation_selfcheck import check_ledger
+            _sus = check_ledger(lg)
+            if _sus:
+                _md = getattr(ctx, "metadata", None)
+                if isinstance(_md, dict):
+                    _md["obligation_suspects"] = _sus
+                _warn = ["【自检提示：下列义务可能**不成立**（待求量被变量因子压死 / "
+                         "重复 / 空断言）—— 若候选明确反驳它们，不得据此判错，"
+                         "应视为「上游义务可疑」并记录】"]
+                for _s in _sus[:5]:
+                    _warn.append("- %s（%s）：%s" % (
+                        _s.get("oid", "?"), _s.get("kind", "?"),
+                        str(_s.get("why", ""))[:140]))
+                _text = (_text.rstrip() + "\n\n" + "\n".join(_warn))
+        except Exception:  # noqa: BLE001  自检是增益，失败不影响账本本身
+            pass
+        return lg, _text
     except Exception:  # noqa: BLE001  账本是增益，构建失败绝不影响自审
         return None, ""
 

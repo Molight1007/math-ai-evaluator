@@ -67,6 +67,12 @@ TOOLS_AGENT_ALLOW = {
     "tools/lean_local/tests/test_lean_refiner.py": "集成测试",
     "tools/lean_local/tests/test_lean_translator.py": "集成测试",
     "tools/lean_local/tests/test_sketch_audit.py": "集成测试",
+    # —— tools/stage_probe.py：分阶段探针（调试工具，非生产路径）——
+    # 它必须构造 TaskContext（agent.base）才能从 run 目录重建真实现场、只跑单阶段；
+    # 这是"离线复现"的唯一办法——否则排查任一环节都要跑完整 112 题（实测单题 5h40m）。
+    # 它不被主链 import，只由人从命令行调用，故不构成运行时耦合。
+    "tools/stage_probe.py":
+        "调试工具：需 TaskContext 重建现场以单跑某阶段；不被主链 import",
 }
 
 
