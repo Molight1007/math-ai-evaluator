@@ -109,13 +109,33 @@ def pick_assertions(chain: list[dict], limit: int = 6) -> list[dict]:
 
 
 def _extract_lean(raw: str) -> str:
-    m = re.search(r"```(?:lean|Lean)?\s*([\s\S]*?)```", str(raw or ""))
-    return (m.group(1) if m else str(raw or "")).strip()
+    """从模型输出里抽出 Lean 代码。
+
+    ★ 2026-10-23 实测（第一版在这里翻车）：推理模型会把"该怎么写"的思考过程
+      也输出出来，里面同样出现 ```lean 字样 ⇒ 按第一个代码块取，取到的是自言自语
+      （`code block". "Structure fixed: ...`）。必须：
+        ① 只取**最后一个**含 theorem/example 的代码块（最终答案在最后）；
+        ② 没有代码块时，从 "import " 开始截断。
+    """
+    t = str(raw or "")
+    blocks = re.findall(r"```(?:lean|Lean)?\s*([\s\S]*?)```", t)
+    cands = [b.strip() for b in blocks
+             if ("theorem" in b or "example" in b or "lemma" in b)]
+    if cands:
+        return cands[-1]
+    if blocks:
+        return blocks[-1].strip()
+    i = t.find("import ")
+    return t[i:].strip() if i != -1 else ""
 
 
 def to_lean(assertion: str, problem: str, context: str, client,
-            temperature: float = 0.0, max_tokens: int = 8192) -> str:
-    """调 LLM 把断言转成 Lean 定理（含证明）。失败返回空串。"""
+            temperature: float = 0.0, max_tokens: int = 32768) -> str:
+    """调 LLM 把断言转成 Lean 定理（含证明）。失败返回空串。
+
+    ⚠ `max_tokens` 必须给足：推理模型（Intern / DeepSeek）的思考会吃光预算，
+      实测 8192 时 finish_reason=length ⇒ 正文没输出 ⇒ 看起来像"模型不肯写"。
+    """
     try:
         raw = client.chat(messages=[
             {"role": "system", "content": _SYSTEM},
@@ -130,6 +150,107 @@ def to_lean(assertion: str, problem: str, context: str, client,
     if "CANNOT_FORMALIZE" in code or "theorem" not in code:
         return ""
     return code
+
+
+_FIX_SYSTEM = """你是 Lean 4 + Mathlib 工程师。下面这段 Lean 代码**编译失败**，请修正。
+
+修正纪律（按此顺序判断）：
+1. `unknown constant/identifier X`：X 不存在。换成真实存在的引理，或改用
+   `simp` / `omega` / `norm_num` / `linarith` / `ring` 这类通用 tactic。
+2. `consider marking it as 'noncomputable'`：给定义加上 `noncomputable` 前缀。
+3. `unexpected token / invalid syntax`：语法错，检查括号与 `:= by` 结构。
+4. `unsolved goals`：证明没做完，补 tactic。
+5. **严禁**用 `sorry` / `axiom` / `admit` 绕过。
+6. 不要改变命题本身的意思（左端的 statement 必须保持一致）。
+
+只输出一个 ```lean 代码块，不要解释。"""
+
+_FIX_USER = """【原命题（必须保持一致）】
+{statement}
+
+【当前代码】
+```lean
+{code}
+```
+
+【Lean 编译错误】
+{error}
+
+请输出修正后的完整代码。"""
+
+
+def _fix_once(code: str, error: str, statement: str, client,
+              max_tokens: int = 32768) -> str:
+    """把编译错误喂回模型，返回修正后的代码；失败返回空串。
+
+    ⚠ max_tokens 必须给足（实测 8192 时证明写到 `:= by` 就断了，编译报
+      `expected token` —— 看起来像"改不对"，其实是输出被截断）。
+    """
+    try:
+        raw = client.chat(messages=[
+            {"role": "system", "content": _FIX_SYSTEM},
+            {"role": "user", "content": _FIX_USER.format(
+                statement=str(statement or "")[:600],
+                code=str(code or "")[:4000],
+                error=str(error or "")[:1200])},
+        ], temperature=0.0, max_tokens=max_tokens)
+    except Exception:  # noqa: BLE001
+        return ""
+    new = _extract_lean(raw)
+    if not new or "theorem" not in new:
+        return ""
+    # 防退化：修正版不许引入 sorry/axiom（源码层先拦一道，编译层还会再拦）
+    low = new.lower()
+    if "sorry" in low or re.search(r"\baxiom\b", low):
+        return ""
+    return new
+
+
+def to_lean_iter(assertion: str, problem: str, context: str, client, *,
+                 work_dir: str = "", lean_exe: str = "",
+                 max_rounds: int = 3, timeout: float = 300) -> dict:
+    """生成 Lean 代码，**并用编译错误迭代修正**（AlphaProof 的 truncate-and-resume 简化版）。
+
+    为什么需要（2026-10-24 用户点出）：
+    模型不是"不知道要用 Lean"，而是**记不住 300 万行 Mathlib 里的确切名字**——
+    实测两个错：`Unknown constant Finset.card_Ico`（引理名不存在）、
+    `Real.sqrt 需要 noncomputable`（漏标记）。这类问题**不该靠模型记忆解决**，
+    而应由智能体用编译器反馈去修。
+
+    流程：生成 → 编译 → 失败则把错误原文喂回模型 → 再编译 …… 最多 max_rounds 轮。
+
+    返回 ``{"code","ok","error","rounds"}``；`work_dir` 为空时只生成不迭代。
+    """
+    code = to_lean(assertion, problem, context, client)
+    if not code:
+        return {"code": "", "ok": None, "error": "cannot_formalize", "rounds": 0}
+    if not work_dir:
+        return {"code": code, "ok": None, "error": "no_work_dir", "rounds": 0}
+    try:
+        from tools.lean_local.lean_bridge import _compile_lean
+    except Exception as exc:  # noqa: BLE001
+        return {"code": code, "ok": None, "error": "lean_bridge: %s" % exc,
+                "rounds": 0}
+
+    last_err = ""
+    for rnd in range(1, max_rounds + 1):
+        try:
+            res = _compile_lean(code, work_dir, lean_executable=lean_exe,
+                                timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            return {"code": code, "ok": None,
+                    "error": "%s: %s" % (type(exc).__name__, str(exc)[:160]),
+                    "rounds": rnd}
+        if res.get("ok"):
+            return {"code": code, "ok": True, "error": "", "rounds": rnd}
+        last_err = str(res.get("error") or "")[:800]
+        if rnd >= max_rounds:
+            break
+        fixed = _fix_once(code, last_err, assertion, client)
+        if not fixed:
+            break
+        code = fixed
+    return {"code": code, "ok": False, "error": last_err, "rounds": max_rounds}
 
 
 def verify_chain(chain: list[dict], problem: str, *, client, work_dir: str,
@@ -151,23 +272,18 @@ def verify_chain(chain: list[dict], problem: str, *, client, work_dir: str,
 
     ctx_text = ""
     for p in picks:
-        code = to_lean(p["statement"], problem, ctx_text, client)
-        if not code:
-            items.append({"id": p["id"], "statement": p["statement"],
-                          "ok": None, "error": "cannot_formalize", "lean": ""})
-            continue
-        try:
-            r = _compile_lean(code, work_dir, lean_executable=lean_exe,
-                              timeout=timeout)
-        except Exception as exc:  # noqa: BLE001
-            items.append({"id": p["id"], "statement": p["statement"],
-                          "ok": None, "error": "%s" % type(exc).__name__,
-                          "lean": code})
-            continue
+        # ★ 2026-10-24：改用「生成 + 编译反馈迭代」——模型记不住 Mathlib 的确切
+        #   引理名/标记要求，靠编译器反馈纠正，而不是指望它一次写对。
+        r = to_lean_iter(p["statement"], problem, ctx_text, client,
+                         work_dir=work_dir, lean_exe=lean_exe,
+                         max_rounds=3, timeout=timeout)
+        code = r.get("code") or ""
         ok = bool(r.get("ok"))
         items.append({"id": p["id"], "statement": p["statement"], "ok": ok,
                       "error": "" if ok else str(r.get("error") or "")[:300],
-                      "lean": code})
+                      "lean": code, "rounds": r.get("rounds")})
+        if ok:
+            ctx_text = (ctx_text + "\n" + p["statement"])[:800]
         # 把已证出的结论作为下一步的上下文（减少重复推导）
         if ok:
             ctx_text = (ctx_text + "\n" + p["statement"])[:800]
