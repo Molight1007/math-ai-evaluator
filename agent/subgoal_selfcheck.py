@@ -124,7 +124,7 @@ def _check_batch(chain: list[dict], problem: str, *,
 
 def check_subgoal_chain(chain: list[dict], problem: str, *,
                         timeout: int = 900, max_tokens: int = 32768,
-                        batch: int = 4) -> list[dict]:
+                        batch: int = 4, char_budget: int = 3500) -> list[dict]:
     """复算子目标链，**分批覆盖全链**（避免早期子目标被截断漏检）。
 
     分批理由（2026-10-23 实测）：一次喂 8 个子目标时，DeepSeek 的推理会把
@@ -134,21 +134,44 @@ def check_subgoal_chain(chain: list[dict], problem: str, *,
     """
     if not chain:
         return []
-    if len(chain) <= batch:
-        return _check_batch(chain, problem, timeout=timeout,
+    parts = _batches_by_chars(chain, budget=char_budget, max_items=batch)
+    if len(parts) == 1:
+        return _check_batch(parts[0], problem, timeout=timeout,
                             max_tokens=max_tokens)
     out: dict[str, dict] = {}
-    step = max(1, batch - 1)          # 重叠 1 个
-    i = 0
-    while i < len(chain):
-        part = chain[i:i + batch]
+    for part in parts:
         for s in _check_batch(part, problem, timeout=timeout,
                               max_tokens=max_tokens):
             out.setdefault(s.get("id") or "", s)
-        if i + batch >= len(chain):
-            break
-        i += step
     return list(out.values())
+
+
+def _batches_by_chars(chain: list[dict], budget: int = 3500,
+                      max_items: int = 4) -> list[list[dict]]:
+    """按**字符预算**分批（而不是按个数），相邻批重叠 1 个。
+
+    为什么改成按字符（2026-10-24 实测）：按个数分批时，8 个子目标切成 3 批，
+    其中 2 批仍 `finish_reason=length`（单条 basis 最长近 600 字，4 条就 2400 字，
+    加上题目与提示，推理预算仍会吃满）。按字符攒批后，长条目自然落在小批、
+    短条目能多带几条 —— 既减少批数（调用次数），又降低截断率。
+
+    重叠 1 个是为了让跨批的依赖关系（"由子目标 X 得…"）能在下一批里对上。
+    """
+    parts: list[list[dict]] = []
+    cur: list[dict] = []
+    cur_len = 0
+    for it in chain:
+        ln = (len(str(it.get("basis") or ""))
+              + len(str(it.get("conclusion") or ""))
+              + len(str(it.get("title") or "")))
+        if cur and (cur_len + ln > budget or len(cur) >= max_items):
+            parts.append(cur)
+            cur, cur_len = [cur[-1]], len(str(cur[-1].get("basis") or ""))  # 重叠 1 个
+        cur.append(it)
+        cur_len += ln
+    if cur:
+        parts.append(cur)
+    return parts
 
 
 def _parse(raw) -> list[dict]:
