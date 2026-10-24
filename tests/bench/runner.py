@@ -124,6 +124,19 @@ def run_obligation_selfcheck(case: dict, env: dict) -> dict:
             "detail": sus}
 
 
+def run_normalize_answer(case: dict, env: dict) -> dict:
+    """候选入池前的规范化 + 校验（纯函数，零依赖）。
+
+    对应真实事故：6 个候选里 3 个 answer 是「- 依赖：子问题1的上界」这类元话语，
+    却照样入池 ⇒ 污染投票与检错。本 case 锁住"元话语必须不可用"。
+    """
+    from utils.extract import normalize_pool_answer
+    inp = case.get("input") or {}
+    a, usable = normalize_pool_answer(inp.get("answer"),
+                                      inp.get("question_type"))
+    return {"answer": a, "usable": bool(usable)}
+
+
 def run_subgoal_selfcheck(case: dict, env: dict) -> dict:
     """需要第二模型；没有 key 时抛错（该条判 FAIL 而不是 SKIP，提醒配凭据）。"""
     from agent.subgoal_selfcheck import check_subgoal_chain
@@ -133,6 +146,7 @@ def run_subgoal_selfcheck(case: dict, env: dict) -> dict:
 
 
 TOOLS = {
+    "normalize_answer": run_normalize_answer,
     "lean_compile": run_lean_compile,
     "lean_mcp": run_lean_mcp,
     "obligation_selfcheck": run_obligation_selfcheck,
@@ -177,6 +191,13 @@ def check_expect(got: dict, exp: dict) -> tuple[bool, str]:
         elif key == "n_suspects":
             if int(got.get("n_suspects") or 0) != int(want):
                 return False, "可疑条数期望 %d 实际 %d" % (want, got.get("n_suspects") or 0)
+        elif key == "usable":
+            if bool(got.get("usable")) != bool(want):
+                return False, "可用性期望 %r 实际 %r（answer=%r）" % (
+                    want, got.get("usable"), str(got.get("answer"))[:60])
+        elif key == "answer_eq":
+            if str(got.get("answer") or "").strip() != str(want).strip():
+                return False, "规范化结果期望 %r 实际 %r" % (want, got.get("answer"))
         elif key == "kind":
             if str(got.get("kind") or "") != str(want):
                 return False, "类型期望 %r 实际 %r" % (want, got.get("kind"))

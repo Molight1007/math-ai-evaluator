@@ -173,6 +173,11 @@ _DESC_COUNT_CLAUSE_RE = re.compile(r"[，,]\s*共\s*\d")
 _DESC_CONJ_VERB_RE = re.compile(r"[，,]\s*并\s*(?:验证|证明|求出?|计算|说明|讨论|构造)")
 
 
+# 列表项 + 推导引导词（" - 依赖：…" / "• 因此…"）⇒ 推导步骤描述
+_LIST_ITEM_META_RE = re.compile(
+    r"^\s*[-•*·]\s*(依赖|所以|因此|故|需要|构造|证明|由|根据|利用|考虑|将|令|设)")
+
+
 def _looks_like_plan_or_setup(s: str) -> bool:
     """该文本是否是**规划/设定描述句**（任务描述、步骤标题、计数说明）而非答案。
 
@@ -189,6 +194,14 @@ def _looks_like_plan_or_setup(s: str) -> bool:
     if _DESC_COUNT_CLAUSE_RE.search(t):
         return True
     if _DESC_CONJ_VERB_RE.search(t):
+        return True
+    # ★ 2026-10-24（工具测试台 bench:normalize_meta_speech 抓到）：
+    #   列表项形态 + 引导词 ⇒ 是推导步骤的描述，不是答案。
+    #   实例：`- 依赖：子问题1的上界`、`- 因此需要构造序列`——它们曾被判为
+    #   "可用答案"入池（实测 6 个候选里有 3 个是这种），污染投票与检错。
+    #   只收"确定不是答案"的形态：**必须以列表符开头**且紧跟引导词，
+    #   避免误杀 `-5`、`—1/2` 这类负数值答案。
+    if _LIST_ITEM_META_RE.match(t):
         return True
     return False
 
