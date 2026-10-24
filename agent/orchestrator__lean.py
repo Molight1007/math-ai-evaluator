@@ -64,12 +64,22 @@ def _lean_active(self) -> bool:
         （单测经 tests/conftest.py 统一置 0；评测 A/B 对照也可用它）。
         """
     self._ensure_lean_modules()          # 2026-09-10：治循环导入静默禁用
+    # ★★ 2026-10-24（第 4 次 lean_active=false 后）：**每个 return 点都必须留原因**。
+    #   前四轮都是"结果 false、原因不明"，只能靠猜。记进 self._lean_why，
+    #   由 diag_export 写进 diag.lean_skip_reason，跑完直接看是哪一步卡住。
     _env_off = "0" if not _sw_bool("lean_verify") else "1"
     if _env_off in ("0", "false", "no", "off"):
+        self._lean_why = "switch_off: lean_verify=%r" % _env_off
         return False
     if not getattr(self.config, "enable_lean_verify", True):
+        self._lean_why = "config_off: enable_lean_verify=%r" % getattr(
+            self.config, "enable_lean_verify", None)
         return False
     if self.lean_gate is None:
+        from . import orchestrator as _o
+        self._lean_why = ("gate_none: _LEAN_MODULES_OK=%r LeanGate=%r"
+                          % (getattr(_o, "_LEAN_MODULES_OK", None),
+                             getattr(_o, "LeanGate", None)))
         return False
     if self._lean_probe is None:
         try:
@@ -79,6 +89,14 @@ def _lean_active(self) -> bool:
             self._lean_probe = False
         if not self._lean_probe:
             logger.warning("Lean 环境不可用，检测链回落 AuditGate（AI 判分）")
+            self._lean_why = "probe_false: bridge=%r available=%r" % (
+                type(_b).__name__ if _b is not None else None,
+                getattr(_b, "lean_available", None) if _b is not None else None)
+    if not self._lean_probe:
+        if not getattr(self, "_lean_why", ""):
+            self._lean_why = "probe_false(cached)"
+    else:
+        self._lean_why = ""
     return bool(self._lean_probe)
 
 

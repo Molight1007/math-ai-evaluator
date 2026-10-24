@@ -545,7 +545,10 @@ def _diag_pipeline_lean(ctx, _md, _lean_on, _lean_exe) -> dict:
         #     （选项字母/判断值/概念文字）→ 整题豁免 Lean、改路由 AuditGate。
         #     字段缺失（旧结果）视为 True，与 _lean_applicable 缺省口径一致。
         "lean_applicable": bool(_md.get("lean_applicable", True)),
-        "lean_skip_reason": str(_md.get("lean_skip_reason", "") or ""),
+        # ★ 2026-10-24：`_lean_active()` 每一步的失败原因（第 4 次 lean_active=false
+        #   之后加的）—— 前四轮都只看到 false、看不到为什么，只能靠猜。
+        "lean_skip_reason": (str(_md.get("lean_skip_reason", "") or "")
+                             or str(getattr(ctx, "_lean_why", "") or "")),
         # ⑤''' Lean 链路自证：lean_active=True 且 lean_executable 非空，
         #      才可声称本题走过 Lean 通道（闸门身份 = diag.lean_gate 非空）。
         "lean_active": _lean_on,
