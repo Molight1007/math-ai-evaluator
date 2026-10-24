@@ -143,12 +143,20 @@ try:
     from tools.lean_local.lean_gate import LeanGate
     from tools.lean_local.lean_pre_verifier import LeanPreVerifier
     _LEAN_MODULES_OK = True
-except Exception:  # noqa: BLE001
+except Exception as _e_lean:  # noqa: BLE001
     LeanGate = None
     LeanPreVerifier = None
     _LEAN_MODULES_OK = False
     logger = logging.getLogger("MathPilot")
-    logger.warning("tools.lean_local 不可用，Lean 双通道禁用（回落 AuditGate）")
+    # ★★ 2026-10-24（用户：「有问题却查不到本身就是 bug」）：
+    #   原实现是裸 `except Exception:`——连异常对象都不接，只打一句"不可用"，
+    #   于是 `lean_active=false` 连跑四轮都没人知道为什么。现在：
+    #   ① 日志带 exc_info（完整 traceback）；
+    #   ② 文本存进模块全局 `_LEAN_IMPORT_ERROR`，供诊断器/外部脚本直接读。
+    import traceback as _tb
+    _LEAN_IMPORT_ERROR = _tb.format_exc()
+    logger.warning("tools.lean_local 不可用，Lean 双通道禁用（回落 AuditGate）: %s",
+                   _e_lean, exc_info=True)
 
 
 try:

@@ -100,7 +100,11 @@ def _load_lean_modules() -> bool:
         logger.info("Lean 双通道模块延迟加载成功（顶部导入曾被循环导入阻断，已自愈）")
         return True
     except Exception as _e:  # noqa: BLE001
-        logger.warning("Lean 双通道模块重新加载仍失败，Lean 保持禁用: %s", _e)
+        # ★ 2026-10-24：带 traceback，并留下可供诊断器读取的原因。
+        import traceback as _tb
+        _orch._LEAN_IMPORT_ERROR = _tb.format_exc()
+        logger.warning("Lean 双通道模块重新加载仍失败，Lean 保持禁用: %s",
+                       _e, exc_info=True)
         return False
 
 

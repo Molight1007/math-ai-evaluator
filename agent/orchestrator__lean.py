@@ -82,19 +82,34 @@ def _lean_active(self) -> bool:
                              getattr(_o, "LeanGate", None)))
         return False
     if self._lean_probe is None:
+        # ★★ 2026-10-24（第 4 次 lean_active=false 后定位到的两个真 bug）：
+        #   ① **失败被缓存**：`self._lean_probe = False` 一旦写下就永不再探。
+        #      而 `LeanBridge.lean_available` 在早期可能是 False（尚未探到），
+        #      于是"第一次探测时机不好"⇒ 整题永久禁用 Lean。
+        #      实测对照：诊断器新建编排器后立刻调 `_lean_active()` 返回 True，
+        #      而 r4 里是 False ⇒ 差异只在**探测时机**，不在环境。
+        #   ② **`_b` 可能未定义**：原 `except` 里没给 `_b` 赋值，紧接着的
+        #      logger/why 又用 `_b` ⇒ 异常路径会抛 NameError 掩盖真实原因。
+        #   现改为：**成功才缓存；失败只记原因，下次重探**（读属性零成本）。
+        _b = None
         try:
             _b = self.lean_gate._bridge_inst
-            self._lean_probe = bool(_b is not None and _b.lean_available)
-        except Exception:  # noqa: BLE001
-            self._lean_probe = False
-        if not self._lean_probe:
-            logger.warning("Lean 环境不可用，检测链回落 AuditGate（AI 判分）")
-            self._lean_why = "probe_false: bridge=%r available=%r" % (
-                type(_b).__name__ if _b is not None else None,
-                getattr(_b, "lean_available", None) if _b is not None else None)
-    if not self._lean_probe:
-        if not getattr(self, "_lean_why", ""):
-            self._lean_why = "probe_false(cached)"
+            _ok = bool(_b is not None and _b.lean_available)
+        except Exception as _e:  # noqa: BLE001
+            _ok = False
+            self._lean_why = "probe_exc: %s: %s" % (
+                type(_e).__name__, str(_e)[:120])
+        if _ok:
+            self._lean_probe = True
+            self._lean_why = ""
+        else:
+            # 不写 self._lean_probe ⇒ 保持 None ⇒ 下次调用重新探测
+            if not getattr(self, "_lean_why", ""):
+                self._lean_why = "probe_false: bridge=%r available=%r" % (
+                    type(_b).__name__ if _b is not None else None,
+                    getattr(_b, "lean_available", None) if _b is not None else None)
+            logger.warning("Lean 环境当前不可用（本次放行，下次重探）: %s",
+                           self._lean_why)
     else:
         self._lean_why = ""
     return bool(self._lean_probe)

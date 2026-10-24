@@ -70,7 +70,32 @@ def test_lean_active_probe_unavailable_falls_back(monkeypatch):
 
     orch.lean_gate._bridge = _FakeBridge()
     assert orch._lean_active() is False
-    assert orch._lean_probe is False
+    # ★ 2026-10-24 契约变更：**探测失败不再缓存**。
+    #   原因：LeanBridge.lean_available 在早期可能是 False（尚未探到），
+    #   一旦把失败写进 _lean_probe 就整题永久禁用 Lean —— 实测 r4 的
+    #   lean_active=false 就是这样来的（同一环境下新建编排器直接返回 True）。
+    #   现在失败只记 `_lean_why`，保持 None 以便下次重探（读属性零成本）。
+    assert orch._lean_probe is None
+
+
+def test_lean_active_reprobes_after_failure(monkeypatch):
+    """★ 2026-10-24：探测失败后，环境恢复应当能重新激活。
+
+    这是上面那条契约变更的正向验证：失败不缓存 ⇒ 第二次探到 True 就生效。
+    """
+    monkeypatch.setenv("LEAN_VERIFY", "1")
+    orch = _orchestrator(monkeypatch, _make_agent_config())
+
+    class _Down:
+        lean_available = False
+
+    class _Up:
+        lean_available = True
+
+    orch.lean_gate._bridge = _Down()
+    assert orch._lean_active() is False
+    orch.lean_gate._bridge = _Up()
+    assert orch._lean_active() is True, "环境恢复后应能重探并激活"
 
 
 def test_lean_active_env_on_and_probe_ok(monkeypatch):
