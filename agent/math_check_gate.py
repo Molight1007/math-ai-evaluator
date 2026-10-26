@@ -78,6 +78,18 @@ _CJK_RE = re.compile(r"[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+")
 #   （宁可少一条证据，不可误判 —— 与 `_looks_numeric` 拒收同一哲学）。
 _NEG_MARK = "\x01"
 _NEG_RE = re.compile(r"不成立|不相等|矛盾|显然错误|不可能|不满足|不成立")
+# ★ 2026-10-26：**不可机械复算**标记。与否定标记分开：否定说的是「这句话是不是
+#   假的」（复算方向相反），本标记说的是「这句话里的算式已经被改写过了，工具看
+#   到的不是原意」。命中即整句丢弃 —— 与 `_looks_numeric` 拒收同一哲学：
+#   少一条证据不误判。三类来源见 `_normalize_math` 的 ③''' / ⑦' 注释。
+_DROP_MARK = "\x02"
+# 数量词夹在两个数之间（`17个100`）—— 语义是乘法，机械复算还原不出来。
+# 用**有限量词表**而不是「任意中文」：`60，且 2+2=5` 是两个独立命题，后者是真
+# 错误必须留检（2026-10-26 实测：放宽到任意中文，`2+2=5` 这种真错误再也检不出，
+# 三个既有测试同时失败）。表里漏掉的量词由 `_cjk_split` 的紧贴兜底接住。
+_CJK_CLASSIFIER_RE = re.compile(
+    r"(?<=\d)\s*(?:个|只|枚|本|张|种|位|名|条|组|项|人|阶|维|天|年|元|分|秒|步|层|页|行|列)"
+    r"\s*(?=\d)")
 _LATEX_SIMPLE = ((r"\left", " "), (r"\right", " "), (r"\!", " "), (r"\,", " "),
                  (r"\;", " "), (r"\:", " "), (r"\quad", " "), (r"\qquad", " "),
                  (r"\cdot", "*"), (r"\times", "*"), (r"\ast", "*"),
@@ -92,15 +104,48 @@ def _normalize_math(text: str) -> str:
     s = str(text or "")
     s = _XML_TAG_RE.sub(" ", s)                      # ① 剥 <check>…</check>
     s = s.replace("$", " ")
+    # ①' markdown 无序列表符（★ 2026-10-26 回放实测：单一最大误杀形态，34 条判死里 10 条）
+    #    原文 `- $100\times 18=1800$` 的 `- ` 是**列表符号**，不是负号。`-` 属段字符集
+    #    且不在 `_LEAD_BAD` 里，于是被并进左式 ⇒ 提取出 `('-  100* 18', '1800')` ⇒
+    #    sympy 算 -1800 ≠ 1800 ⇒ 判「算错」⇒ 消灭本来正确的候选（同题 5 条候选全灭）。
+    #    只认「行首 + 列表符 + 空白」：真负号写作 `-5`（不贴空格），而「行首 `- 5`」
+    #    作为被断言算式在全部实测样本里一次都没出现过。
+    s = re.sub(r"(?m)^[ \t]*[-*+][ \t]+", " ", s)
     for _dl in ("\\(", "\\)", "\\[", "\\]"):
         s = s.replace(_dl, " ")
     s = re.sub(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", s)
+    # ①'' 带次方的根式 `\sqrt[4]{5}`（★ 2026-10-26 回放实测：34 条判死里 5 条）。
+    #     旧实现只认 `\sqrt{...}`，`[4]` 原样留下 ⇒ `(\sqrt[4]{5})^2=\sqrt{5}` 归一成
+    #     `( sqrt [4]{5})^2 = sqrt(5)`，左段在 `[` 处断开 ⇒ 提取出 `('2', 'sqrt(5)')`
+    #     ⇒ 判「算错：2 ≠ √5」⇒ 消灭正确候选。改写成幂式 `((5)^(1/(4)))` 后
+    #     左段完整、且 sympy 能算：`((5)^(1/4))^2 = √5` 成立。
+    s = re.sub(r"\\sqrt\s*\[([^\[\]]{1,8})\]\s*\{([^{}]*)\}",
+               r"((\2)^(1/(\1)))", s)
     s = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"sqrt(\1)", s)
     s = re.sub(r"\\boxed\s*\{([^{}]*)\}", r"(\1)", s)
-    s = re.sub(r"\\text\s*\{[^{}]*\}", " ", s)
+    # ⑦' 带余除法（★ 2026-10-26 回放实测）：`1010 \div 3 = 336 余 2` 归一成
+    #     `1010 / 3 = 336 \x00 2`，右值只剩 `336` ⇒ sympy 算 336.67 ≠ 336 ⇒
+    #     判「算错」⇒ 消灭正确候选。`余` 后面的余数不是等号右值的一部分，
+    #     机械复算表达不了「商…余…」这种二元记法，故整句丢弃。
+    #     ★ 必须早于 `\text{…}` 剥除：常见写法是 `\text{ 余 }`，晚一步就只剩空格
+    #       而丢掉信号。剥除时按内容决定保留标记还是换成空格（见下一条）。
+    s = re.sub(r"余\s*数?", _DROP_MARK, s)
+    # ⑦'' 数量词夹算式（`17个100=1700` / `17 个 100 = 1700`）：与上面同理，
+    #      归一化把量词折成 `\x00` 后左段只剩 `100` ⇒ 判 100≠1700 ⇒ 误杀。
+    s = _CJK_CLASSIFIER_RE.sub(_DROP_MARK, s)
+    s = re.sub(r"\\text\s*\{([^{}]*)\}",
+               lambda m: _DROP_MARK if _DROP_MARK in m.group(1) else " ", s)
     for _a, _b in _LATEX_SIMPLE:
         s = s.replace(_a, _b)
     s = re.sub(r"\^\{([^{}]*)\}", r"^(\1)", s)       # ② 2^{10} → 2^(10)
+    # ②' 进制下标（★ 2026-10-26 回放实测）：`8 = 1000_2` 里的 `_2` 是**二进制**
+    #     记法，不是变量下标。下面的下标剥离规则把它抹成 `8 = 1000` ⇒ 判「算错」
+    #     ⇒ 消灭正确候选。不做进制求值（那要另建一套字面量语义），直接整句丢弃。
+    #     必须在 ③ 之前：`_` 一旦被剥就再也看不出这是进制。
+    #     ★ 也认 Unicode 下标数字（`1000₂` = U+2082）：同一语义，且它在段字符集
+    #       之外，会把左段截断 —— 不处理就会判 `8 ≠ 1000`。
+    s = re.sub(r"(?<=\d)_(?=\d)", _DROP_MARK, s)
+    s = re.sub(r"(?<=\d)[\u2080-\u2089]+", _DROP_MARK, s)
     s = re.sub(r"_[a-zA-Z0-9]+", "", s)              # ③ 下标当拼接：a_1 → a
     # ③'' 千分位逗号（★ 2026-10-26 离线回放实测）：`,` 不在段字符集里
     #     ⇒ `1008 * 1010 = 1,018,080` 的右值只抓到 `1` ⇒ 判「算错：正确结果是
@@ -129,6 +174,7 @@ def _normalize_math(text: str) -> str:
     #     到这里还能匹配的都是我们不认识的写法。
     s = re.sub(r"\\([A-Za-z]+)", r" \1 ", s)
     s = re.sub(r"\|([^|]{1,40})\|", r"Abs(\1)", s)    # ⑥ |q-k| → Abs(q-k)
+    # ⑦' 的 `余` 已在上面处理（须早于 `\text{}` 剥除），这里不重复。
     s = _NEG_RE.sub(_NEG_MARK, s)                     # ⑦ 否定词 → `\x01`（先于中文折叠）
     s = _CJK_RE.sub("\x00", s)                        # ⑧ 中文 → 隔断哨兵
     # ⑨ 否定标记与四周中文折叠成一个分隔符：`=6 \x00\x01\x00 ；` → `=6 \x01`。
@@ -186,6 +232,50 @@ def _neg_ranges(s: str) -> list:
     return out
 
 
+def _drop_ranges(s: str) -> list:
+    """不可机械复算的句子区间 `[(start, end)]`（`\\x02` 由 `_normalize_math` 打）。
+
+    ★ 与 `_neg_ranges` 同构：标记所在**整句**（前后最近的分隔符之间）一并丢弃。
+      带余除法的余数、进制下标会挂在句子的任一位置（`336 余 2` 在右值后，
+      `1000_2` 在右值内），只丢「标记右半边」都会留下半截算式。
+    """
+    seps = ("\x00", _NEG_MARK, _DROP_MARK)
+    out = []
+    for m in re.finditer(re.escape(_DROP_MARK), s):
+        pos = m.start()
+        left = max(s.rfind(c, 0, pos) for c in seps)
+        rights = [s.find(c, pos + 1) for c in seps]
+        right = min([r for r in rights if r >= 0] or [len(s)])
+        out.append((left + 1, right))
+    return out
+
+
+def _cjk_split(s: str, rel_start: int, rel_end: int) -> bool:
+    """算式是否被中文从中间切断（`17个100=1700` 型）。
+
+    ★ 回放实测：`17个100=1700` 的「个」是量词，不是分隔符。中文被折成 `\\x00`
+      后左段只剩 `100` ⇒ 判 100≠1700 ⇒ 误杀。「17 个 100」的乘法语义机械复算
+      还原不出来，故整条丢弃（少一条证据，不误判）。
+    ★ 只认「数字紧贴中文、中文紧贴数字」（`17个100`）：中文哨兵两侧**都不能有
+      空格**。`60，且 2+2=5` 这类是两个独立命题被中文隔开（哨兵右边是空格），
+      `所以 100=100` 同理，都不触发 —— 否则会把正常句子里每条算式全丢掉
+      （2026-10-26 实测：不加这条限制，`2+2=5` 这种真错误再也检不出来）。
+    """
+    i = rel_start - 1
+    while i >= 0 and s[i] in _OPERAND_CHARS:
+        i -= 1
+    j = rel_end
+    while j < len(s) and s[j] in _OPERAND_CHARS:
+        j += 1
+    if (i >= 1 and s[i] == "\x00" and s[i - 1].isdigit()
+            and i + 1 < len(s) and s[i + 1].isdigit()):
+        return True
+    if (j + 1 < len(s) and s[j] == "\x00" and s[j + 1].isdigit()
+            and s[j - 1].isdigit()):
+        return True
+    return False
+
+
 def _relations(text: str) -> list:
     """扫描所有关系运算符，返回 [(lhs, op, rhs)]，op ∈ {eq, ge, le, gt, lt}。
 
@@ -194,16 +284,23 @@ def _relations(text: str) -> list:
       逐对判等，不需要任何「链式特判」。
     ★ 2026-10-22：处在**否定语境**的关系（右值后紧接 `\x01`）整条丢弃，
       原因见 `_NEG_MARK` 注释。丢弃会少一条证据，但不会误判算错。
+    ★ 2026-10-26：`\x02`（带余除法 / 进制下标）与「中文夹算式」同样整条丢弃，
+      原因见 `_DROP_MARK` 与 `_cjk_split` 注释。
     """
     s = _normalize_math(text)
     out = []
     _negs = _neg_ranges(s)
+    _drops = _drop_ranges(s)
     for m in _REL_RE.finditer(s):
         op = _REL_OPS.get(m.group(0))
         if not op:
             continue                 # `<>` / `!=` 不是可复算关系（且会被误当 `=`）
         if any(l <= m.start() < r for l, r in _negs):
             continue                 # 否定语境：字面真假相反，机械复算无法表达
+        if any(l <= m.start() < r for l, r in _drops):
+            continue                 # 算式已被改写（余数/进制）⇒ 复算无意义
+        if _cjk_split(s, m.start(), m.end()):
+            continue                 # 中文夹在算式中（量词）⇒ 段已被切成半截
         lhs = _trim_operand(_operand_left(s, m.start()))
         rhs = _trim_operand(_operand_right(s, m.end()))
         if lhs and rhs:

@@ -545,3 +545,65 @@ def test_unknown_latex_command_does_not_truncate_operand():
     # 白名单命令不受影响
     assert ("2^2* 3", "12") in _extract_numeric_equations(r"所以 $2^2\cdot 3 = 12$")
     assert _extract_numeric_equations(r"由 $\frac{1}{2}+\frac{1}{3} = \frac{5}{6}$")
+
+
+# ---------------------------------------------------------------- 2026-10-26
+# 回放床 + 人工标注（results/calc_gate_labels_1026.json）定位的四类形态。
+# 34 条判死里这四类占 19 条，且全部是「工具读错」而不是「模型算错」。
+def test_markdown_list_bullet_is_not_unary_minus():
+    """`- $100\\times 18=1800$` 的 `- ` 是列表符号，不是负号。
+
+    旧提取：`('-  100* 18', '1800')` ⇒ sympy 算 -1800 ≠ 1800 ⇒ 判算错
+    ⇒ 消灭正确候选（同题 5 条候选全灭）。34 条判死里 10 条是这个形态。
+    """
+    assert ("100* 18", "1800") in _extract_numeric_equations(r"- $100\times 18=1800$")
+    # 真负号不受影响：`-5`（不贴空格）仍是负号
+    assert ("-5", "-5") in _extract_numeric_equations("-5 = -5")
+    assert ("1 - 6", "-5") in _extract_numeric_equations("1 - 6 = -5")
+
+
+def test_nth_root_is_kept_whole():
+    """`\\sqrt[4]{5}` 的 `[4]` 旧实现原样留下 ⇒ 左段在 `[` 处截断。
+
+    实测原文 `(\\sqrt[4]{5})^2 = \\sqrt{5}` 旧提取成 `('2', 'sqrt(5)')`
+    ⇒ 判「算错：2 ≠ √5」⇒ 消灭正确候选。34 条判死里 5 条是这个族。
+    """
+    eqs = _extract_numeric_equations(r"(\sqrt[4]{5})^2 = \sqrt{5}")
+    assert eqs and eqs[0][1] == "sqrt(5)"
+    assert "sqrt" not in eqs[0][0].split("^")[0] or "5" in eqs[0][0], eqs
+    assert ("((8)^(1/(3)))", "2") in _extract_numeric_equations(r"\sqrt[3]{8} = 2")
+
+
+def test_remainder_notation_does_not_produce_false_alarm():
+    """`1010 \\div 3 = 336 余 2`：余数不是等号右值，机械复算表达不了。
+
+    旧提取：`('1010 / 3', '336')` ⇒ 336.67 ≠ 336 ⇒ 判算错。整句丢弃。
+    `\\text{ 余 }` 写法同样要接住（`\\text{}` 剥除会让信号消失）。
+    """
+    assert _extract_numeric_equations("1010 ÷ 3 = 336 余 2") == []
+    assert _extract_numeric_equations(r"故 1010 \div 3 = 336 \text{ 余 } 2") == []
+    # 普通 `\\text{}` 里的说明文字仍照常剥成空格，不影响同句其它算式
+    assert ("2+2", "5") in _extract_numeric_equations(r"先算 \text{这一步}，然后 2+2=5")
+
+
+def test_base_subscript_is_not_stripped():
+    """`8 = 1000_2` 的 `_2` 是二进制记法，下标剥离会把它抹成 `8 = 1000`。
+
+    Unicode 下标记法 `1000₂` 同义，且在段字符集之外（会截断左段）。
+    两者都整句丢弃 —— 不做进制求值（要另建一套字面量语义）。
+    """
+    assert _extract_numeric_equations("8 = 1000_2") == []
+    assert _extract_numeric_equations("8 = 1000₂") == []
+
+
+def test_classifier_between_numbers_is_not_a_separator():
+    """`17个100=1700` 的「个」是量词，不是分隔符（语义是 17×100）。
+
+    只认**量词表**：`60，且 2+2=5` 是两个独立命题，后者是真错误必须留检
+    （放宽到任意中文时，`test_real_mistake_still_rejected` 立刻失败）。
+    """
+    assert _extract_numeric_equations("17个100=1700") == []
+    assert _extract_numeric_equations("17 个 100 = 1700") == []
+    # 独立命题不受影响：真错误仍被提取
+    assert ("2 + 2", "5") in _extract_numeric_equations("由 2 + 2 = 5，且 20 × 3 = 60")
+    assert ("2+2", "5") in _extract_numeric_equations("第2次 2+2=5")
