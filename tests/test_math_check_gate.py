@@ -514,3 +514,34 @@ def test_negation_marker_does_not_swallow_next_sentence():
     """否定词只作用于本句，下一句的等式照常提取。"""
     eqs = _extract_numeric_equations(r"$1!=9$ 不成立；$2+2=4$ 成立")
     assert ("2+2", "4") in eqs and ("1", "9") not in eqs
+
+
+# ---------------------------------------------------------------- 2026-10-26
+# 离线回放床（replay_calc_gate.py）在历史 reasoning 上扫出的两条**假证据**：
+# 判死的理由是「算错」，但实际是提取器把数值切坏了。答案也恰好是错的，
+# 所以 hard_kill 抓不到 —— 但只要同类出现在答案正确的候选上就是硬误杀。
+def test_thousands_separator_is_stripped():
+    """`1,018,080` 的千分位逗号不在段字符集里 ⇒ 右值只抓到 `1`。
+
+    实测原文：`- = 1008 * 1010 = 1,018,080`
+    旧提取：`('1008 * 1010', '1')` ⇒ sympy 算 1018080 ≠ 1 ⇒ 判「算错」。
+    """
+    eqs = _extract_numeric_equations("- = 1008 * 1010 = 1,018,080")
+    assert ("1008 * 1010", "1018080") in eqs
+    assert not any(r == "1" for _, r in eqs), eqs
+    # 逗号作并列分隔（后有空格）不得被吞
+    assert _normalize_math("得到 1, 2, 3 三个值").count(",") == 2
+
+
+def test_unknown_latex_command_does_not_truncate_operand():
+    """未识别的 LaTeX 命令（`\\beta`）里 `\\` 不在段字符集 ⇒ 右值在 `Abs(` 处截断。
+
+    实测原文：`5^{1/4} = |\\beta|`
+    旧提取：`('5^(1/4)', 'Abs')` ⇒ 判「算错：正确结果是 5**(1/4)（声称 Abs）」。
+    修法把命令转成名字，该段含裸字母 ⇒ 整条拒收（少一条证据，不误判）。
+    """
+    r = r"故 $5^{1/4} = |\beta|$，且 $\alpha = 3$"
+    assert _extract_numeric_equations(r) == []
+    # 白名单命令不受影响
+    assert ("2^2* 3", "12") in _extract_numeric_equations(r"所以 $2^2\cdot 3 = 12$")
+    assert _extract_numeric_equations(r"由 $\frac{1}{2}+\frac{1}{3} = \frac{5}{6}$")

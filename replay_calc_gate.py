@@ -43,15 +43,39 @@ from tools.agent_toolkit.calc_verify import calc_verify  # noqa: E402
 DEFAULT_GLOB = "results/*.jsonl"
 
 
-def iter_records(patterns):
-    """产出 (文件, 记录)。只取含 candidates 的记录（旧格式没有，跳过）。"""
-    seen = set()
+def _content_key(rec):
+    """同一批候选的内容指纹 —— 用来识别「同一次运行被复制到多个文件」。
+
+    `results/` 里有真实重复：`verify10_0916.jsonl` 与其 `_rejudged` 版是同一批运行
+    （只多一次重新判分），`_修复前基线_10题_0917.jsonl` 与 `solution10_0916_中断4.jsonl`
+    字节数完全相同。不去重会把同一批误杀算两遍，指标虚高 —— 违背「证据可信」。
+
+    注意**不能**用 (id, cid) 去重：同一题在不同代码版本下重跑，proposer 采样不同、
+    reasoning 不同，那是**独立样本**，必须保留。所以指纹取 reasoning 全文。
+    """
+    import hashlib
+    h = hashlib.md5()
+    h.update(str(rec.get("id") or "").encode("utf-8", "replace"))
+    for c in rec.get("candidates") or []:
+        if isinstance(c, dict):
+            h.update(b"\x00")
+            h.update(str(c.get("reasoning") or "").encode("utf-8", "replace"))
+    return h.hexdigest()
+
+
+def iter_records(patterns, stats=None):
+    """产出 (文件, 记录)。只取含 candidates 的记录（旧格式没有，跳过）。
+
+    ``stats`` 传入 dict 时回填 ``raw`` / ``dup`` 两个计数，供报告如实说明去重前后。
+    """
+    seen_files = set()
+    seen_content = set()
     for pat in patterns:
         for path in sorted(glob.glob(pat)):
             key = os.path.normcase(os.path.abspath(path))
-            if key in seen:
+            if key in seen_files:
                 continue
-            seen.add(key)
+            seen_files.add(key)
             with open(path, encoding="utf-8", errors="replace") as f:
                 for line in f:
                     line = line.strip()
@@ -67,8 +91,17 @@ def iter_records(patterns):
                     # 老记录里 candidates 只有 id/answer/reasoning，才是我们需要的最小集
                     if not any(isinstance(c, dict) and c.get("reasoning") for c in cands):
                         continue
+                    ck = _content_key(rec)
+                    if ck in seen_content:
+                        if stats is not None:
+                            stats["dup"] = stats.get("dup", 0) + 1
+                        continue
+                    seen_content.add(ck)
+                    if stats is not None:
+                        stats["raw"] = stats.get("raw", 0) + 1
                     rec["_file"] = os.path.basename(path)
                     yield rec
+
 
 
 def replay_record(rec):
@@ -129,7 +162,8 @@ def main():
 
     n_rec = n_cand = n_participate = n_cond_rec = 0
     kills = []
-    for rec in iter_records(a.files):
+    _st = {}
+    for rec in iter_records(a.files, stats=_st):
         n_rec += 1
         cands = [c for c in rec["candidates"] if isinstance(c, dict)]
         n_cand += len(cands)
@@ -154,7 +188,8 @@ def main():
     print("=" * 66)
     print("4.4 工具③ 离线回放 · 确定性（δ=0）")
     print("=" * 66)
-    print("记录数          %d" % n_rec)
+    print("记录数          %d%s" % (
+        n_rec, ("（%d 条重复批已去重）" % _st["dup"]) if _st.get("dup") else ""))
     print("候选数          %d" % n_cand)
     print("参与工具③      %d（提取到式子）" % n_participate)
     print("判死 rejected   %d   覆盖率 %.1f%%" % (n_kill, kill_rate * 100))
