@@ -376,9 +376,43 @@ def test_conditional_inequality_not_false():
 
 
 def test_numeric_inequality_counterexample_kept():
-    """防「修成漏检」：真反例（x=1 时 1 >= 4 不成立）必须仍判 False。"""
+    """防「修成漏检」：**两侧共享变量**的代数关系仍须靠代值抓反例（017 型）。
+
+    ★ 2026-10-26 换样本（原断言是 `_verify_inequality("x^2","4","ge") is False`）：
+      单侧符号 vs 纯常量属于**界限陈述**（见下条测试），量词缺失时不可判假。
+      原断言把「存在反例」当成「断言为假」，只在命题隐含全称量词时才成立——
+      对 `a^2+3b^2 >= 4|a||b|^3` 这种双侧共享变量的代数关系成立，对
+      `x^2 >= 4` / `|f| <= 1` 不成立。017 型的检出能力由本条守住。
+    """
     from tools.agent_toolkit.calc_verify import _verify_inequality
-    assert _verify_inequality("x^2", "4", "ge") is False
+    assert _verify_inequality("a^2+3*b^2", "4*Abs(a)*Abs(b)^3", "ge") is False
+
+
+def test_bound_statement_is_not_judged_false():
+    """★ 2026-10-26 离线回放床实测：`|f| <= 1` 型**界限陈述**不得判假。
+
+    两侧不共享自由符号 ⇒ 一侧是纯数值/另一侧是符号，量词未知
+    （可能是「存在 M 使 …」，不是「对任意 …」）。代值 f=2 得到的反例
+    只是工具凭空假设的函数，不构成反例。
+
+    实测代价（official112-088 / 094，候选 **全部** 被判死 ⇒ 池清空 ⇒ 4.6 重写）：
+      088 原文：`定义 f(x)=1 若 x∈E，f(x)=0 若 x∉E。则 f 有界（$|f| \\leq 1$），
+                但 f 不可测` —— 完全正确（gold=AB），被判「不等式不成立」。
+      094 原文：Cauchy 数列有界性 `|a_n| <= M` —— 完全正确（gold=BCD），同判死。
+    """
+    from tools.agent_toolkit.calc_verify import _verify_inequality
+    assert _verify_inequality("Abs(f)", "1", "le") is None
+    assert _verify_inequality("Abs(a)", "M", "le") is None
+    assert _verify_inequality("x^2", "4", "ge") is None
+
+
+def test_bound_statement_salvaged_by_premise():
+    """界限陈述一旦题设交代了取值域 ⇒ 恢复代值判定（约束覆盖即合法）。"""
+    from agent.math_check_gate import _extract_conditions
+    from tools.agent_toolkit.calc_verify import _verify_inequality
+    c = _extract_conditions(r"let $x \ge 2$ be an integer")
+    assert _verify_inequality("x^2", "4", "ge") is None                # 无前提 ⇒ 不判
+    assert _verify_inequality("x^2", "4", "ge", constraints=c) is not False
 
 
 def test_inequality_sampling_is_deterministic():
@@ -415,12 +449,16 @@ def test_conditional_inequality_respects_premise():
 
 
 def test_premise_does_not_weaken_real_counterexample():
-    """约束只过滤越界点：`x^2>=4` 在 x>=2 下为真，但无前提时 x=1 仍是反例。"""
+    """约束只过滤越界点：`x^(d-1)>=x` 在 d>=2 下为真，但无前提时 d=1 仍是反例。
+
+    ★ 2026-10-26 换样本（原样本 `x^2>=4` 是界限陈述，现归 None，见上条测试）。
+      本条守的是「constraints 只裁剪越界点、不削弱双侧共享变量的真反例」。
+    """
     from agent.math_check_gate import _extract_conditions
     from tools.agent_toolkit.calc_verify import _verify_inequality
-    c = _extract_conditions(r"let $x \ge 2$ be an integer")
-    assert _verify_inequality("x^2", "4", "ge") is False
-    assert _verify_inequality("x^2", "4", "ge", constraints=c) is not False
+    c = _extract_conditions(r"let $d \ge 2$ be its degree")
+    assert _verify_inequality("x^(d-1)", "x", "ge") is False
+    assert _verify_inequality("x^(d-1)", "x", "ge", constraints=c) is not False
 
 
 def test_normalize_separates_chinese_by_sentinel():

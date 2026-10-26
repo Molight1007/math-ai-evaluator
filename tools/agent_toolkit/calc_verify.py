@@ -191,6 +191,34 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
     #     任何 NameError 都会被下面的 `except Exception: pass` 吞掉 ⇒ 静默退化成
     #     「全部无法判定」（实测踩到，所有不等式一律 None）。
     _prep = _prepare_constraints(constraints)
+    # ④ 界限陈述 vs 代数关系（★ 2026-10-26 离线回放床实测误杀）
+    #
+    #   两侧**共享**自由符号 ⇒ 关于这些符号的代数关系（`a^2+3b^2 >= 4|a||b|^3`），
+    #     在其自然定义域内代值找反例是合法的（数学写作默认全称量化）。
+    #   两侧**不共享**（一侧纯数值，或各说各话）⇒ 这是**界限/范围陈述**：
+    #     `|f| <= 1`、`|a| <= M`、`x^2-1 >= 0`。量词未知（可能是「存在某 M 使
+    #     |a|<=M」，不是「对所有 a」），替符号选值得到的"反例"只是工具凭空
+    #     假设的对象。典型现场：反例构造里 `f(x)=1 若 x∈E …（故 |f|<=1）`，
+    #     f 已被语境绑定成具体函数，代 f=2 判出的"反例"不成立。
+    #     实测代价：两题（实分析选择题、Cauchy 收敛选择题）候选**全部**被判死
+    #     ⇒ 池清空 ⇒ 触发重写，而它们的答案本来是对的。
+    #   处理与等式分支一致：题设交代了取值域（constraints 覆盖全部自由符号）才代值，
+    #   否则记疑（返回 None ⇒ n_err，调用方不淘汰）。**不调任何阈值**。
+    #
+    #   取舍（筛选器两类错误代价不对称）：杀掉正确答案 = 池清空 + 重写（实测
+    #   4433 s → 17273 s 且更差）；放过错误候选 = 4.5 投票本来就该做的工作。
+    try:
+        _free_a = {str(s) for s in getattr(a, "free_symbols", set())}
+        _free_b = {str(s) for s in getattr(b, "free_symbols", set())}
+        _free_all = _free_a | _free_b
+        if _free_all and not (_free_a & _free_b):
+            _covered = set()
+            for _cd, _co in _prep:
+                _covered |= {str(s) for s in getattr(_cd, "free_symbols", set())}
+            if not _free_all <= _covered:
+                return None
+    except Exception:
+        pass
     try:
         import itertools
         import random
