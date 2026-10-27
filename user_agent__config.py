@@ -341,6 +341,9 @@ class AgentConfig(_AgentConfigBase):
     #    只给结论无推导（其中一条臆造）却被主求解直接采用 ⇒ 答错。
     # 默认 True = 修好后的行为；=0 一键回退旧行为做 A/B（两开关均已登记注册表）。
     subgoal_conclusion_contract: bool = True   # A+C：结论契约（结构化结论 + 推导标记）
+    #   2026-10-27：收尾子目标**最终答案唯一锚点** —— 仅整题最后一步要求末行给出
+    #   `最终答案: \boxed{...}`。依据：180 候选里仅 59.4% 的 answer 来自 boxed。
+    subgoal_final_answer_anchor: bool = True
     subgoal_objective_judge: bool = True       # B：结论客观判定 + 判不出留痕
     #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限（原为三处硬编码 6，
     #     现收敛到 `agent/solver._pool_room` 单一来源）。

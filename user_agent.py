@@ -276,7 +276,7 @@ _CONFIG_OVERRIDE_KEYS = (
     #     原本已在白名单，未重复添加。）
     # 2026-10-06：子目标交付重写（结论契约 / 客观判定）—— 必须在此白名单，
     # 否则 CLI/kwargs 传入会被静默丢弃（本项目已因漏加白名单踩过多次）。
-    "subgoal_conclusion_contract", "subgoal_objective_judge",
+    "subgoal_conclusion_contract", "subgoal_final_answer_anchor", "subgoal_objective_judge",
     "k11_mask_statement",     # K11 注入点守卫（消费方 sub_goal_solver）
     "candidate_pool_limit",   # 候选池上限（0 = 不限）
     "sub_goal_oracle_check",  # 子目标逐步 oracle 校验（默认关）

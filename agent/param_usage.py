@@ -286,6 +286,12 @@ _SPEC = (
      "SUBGOAL_CONCLUSION_CONTRACT — 子目标结论契约：强制每步产出"
      "`本步结论: 值=/等式=/判定=` + 依据 + 验算段（默认 True = 修好后行为；"
      "依据 smoke10：73 子目标 59 个 expected_output 为空 / 64 个 <120 字）", None),
+    ("subgoal_final_answer_anchor",
+     lambda cfg, tier, _f="subgoal_final_answer_anchor", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "SUBGOAL_FINAL_ANSWER_ANCHOR — 收尾子目标最终答案唯一锚点：仅整题最后一步要求"
+     "末行给出 `最终答案: \\boxed{...}`（默认 True；依据 180 候选里仅 59.4% 的 answer "
+     "来自 boxed、22.8% 从正文任意位置抓片段）", None),
     ("subgoal_objective_judge",
      lambda cfg, tier, _f="subgoal_objective_judge", _d=True: getattr(cfg, _f, _d),
      None, "bool",

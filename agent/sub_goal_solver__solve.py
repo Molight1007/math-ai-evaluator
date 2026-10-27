@@ -23,6 +23,7 @@ from prompts.sub_goal import (
     SUBGOAL_TOOL_INSTRUCTIONS,      # 2026-10-15：蓝图 tool 指派 → 工具指令
     SUBGOAL_LEAN_SIG_TEMPLATE,      # 2026-10-15：lean 节点已带形式化签名 → 只补证明体
     SUBGOAL_SUCCESSION_TEMPLATE,    # 2026-10-15：承接前提块
+    SUBGOAL_FINAL_ANSWER_ANCHOR,    # 2026-10-27：收尾步「最终答案:\boxed{}」唯一锚点
 )
 from utils.prefill import prefill_messages, stitch
 
@@ -448,7 +449,7 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
         2026-10-01：原 2026-09-04 下沉的 `<calc>` 计算纪律（system 追加引导 +
         响应回填）已随计算工具板块整体删除；本方法现在只做提示词拼装与调用。
         """
-    from .sub_goal_solver import _conclusion_contract_on
+    from .sub_goal_solver import _conclusion_contract_on, _final_answer_anchor_on
     _step_system = SUBGOAL_STEP_SYSTEM
     # ★ 2026-09-29（截图 #3+#4）：子目标求解是**用户点名的解题重点环节**，
     # 且它是独立于 solver 的生成路径 —— 定理线索必须在本路径单独注入，
@@ -492,6 +493,19 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
             _tool_ins = SUBGOAL_TOOL_INSTRUCTIONS.get(_tool, "")
             if _tool_ins:
                 _step_system = _step_system + "\n" + _tool_ins
+
+    # ★★ 2026-10-27（用户：「从最后一步输出答案的标准化入手」）：
+    #   **仅收尾子目标**追加「最终答案唯一锚点」契约 —— 要求末行给出
+    #   `最终答案: \boxed{...}`。判据来自 180 个候选的来源回溯：
+    #     59.4% 的 answer 来自 `\boxed`、22.8% 从正文任意位置抓（其中混着
+    #     `</tool_call>` / `步骤8：重新思考` / 英文思考串）、16.1% 靠关键词命中。
+    #   ⇒ 答案"从哪来"没有保证，后处理只能猜。此改动把提交答案收敛到唯一锚点。
+    #   标记由 `sub_goal_solver__loop.solve_subgoals` 在循环里打在 `sg` 上
+    #   （`_is_final_step`），本函数只读 —— 不改变任何函数签名。
+    #   放 system（与结论契约/工具指令同处）：user 尾部追加有 2026-08-29 的
+    #   续写模式教训。
+    if sg and sg.get("_is_final_step") and _final_answer_anchor_on():
+        _step_system = _step_system + "\n" + SUBGOAL_FINAL_ANSWER_ANCHOR
 
     # ★ 2026-09-30（截图 #8）：**多 agent 求解子目标**。
     #   用户原话：「多 agent 拿子目标的求解能不能换成多 agent？

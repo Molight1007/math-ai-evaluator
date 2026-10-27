@@ -169,6 +169,23 @@ def _conclusion_contract_on() -> bool:
         return True
 
 
+def _final_answer_anchor_on() -> bool:
+    """收尾子目标**最终答案锚点**开关（`subgoal_final_answer_anchor`，默认 True）。
+
+    打开时：**仅整题最后一步**的 step 提示词追加
+    `prompts/sub_goal.py::SUBGOAL_FINAL_ANSWER_ANCHOR`，要求该步
+    【本步结果】末行给出 `最终答案: \\boxed{...}`。
+    实测依据（180 候选回溯来源）：59.4% 的 answer 来自 `\\boxed`、
+    22.8% 是从正文任意位置抓的片段（混着工具残留/思考片段）、16.1% 靠关键词。
+    中间步不加此要求 —— 它们只当引理用，提同样要求只会拉长输出、抬高成本。
+    =0 回退旧行为（无锚点要求），供 A/B。
+    """
+    try:
+        return bool(_sw_bool("subgoal_final_answer_anchor"))
+    except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
+        return True
+
+
 def _objective_judge_on() -> bool:
     """子目标结论**客观判定**开关（`subgoal_objective_judge`，默认 True）。
 

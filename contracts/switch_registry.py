@@ -254,6 +254,15 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "依据（smoke10 2026-10-06，两轮实测一致）：73 个子目标里 64 个交付 <120 字、"
         "59 个 expected_output 为空、客观判定 0/73、题 007 子目标只给结论无推导却被"
         "主求解采信 ⇒ 答错。=0 回退旧行为（只给自由文本结论）做 A/B"),
+    "subgoal_final_answer_anchor": (
+        "SUBGOAL_FINAL_ANSWER_ANCHOR", "bool", True,
+        "收尾子目标**最终答案唯一锚点**（默认 True）：**仅整题最后一步**的 step 提示词"
+        "追加「末行必须给出 `最终答案: \\boxed{...}`」契约，把提交答案收敛到唯一锚点。"
+        "依据（2026-10-27，180 个候选逐条回溯 answer 来源）：仅 59.4% 来自 `\\boxed`、"
+        "22.8%（41 条）是从 reasoning 任意位置抓的片段（实测混着 `</tool_call>`、"
+        "`步骤8：重新思考`、英文思考串）、16.1% 靠「最终答案」关键词命中形态不固定。"
+        "中间步**不**加此要求（它们只当引理用，加了只会拉长输出抬高成本）。"
+        "=0 回退旧行为（无锚点要求）做 A/B"),
     "subgoal_objective_judge": (
         "SUBGOAL_OBJECTIVE_JUDGE", "bool", True,
         "子目标结论**客观判定**（默认 True = 修好后行为）：对每个子目标结论做 0-LLM "

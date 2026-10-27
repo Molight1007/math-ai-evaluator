@@ -188,7 +188,20 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
             pass
     _n_reuse = 0
 
-    for sg in subgoals:
+    for _sg_i, sg in enumerate(subgoals):
+        # ★★ 2026-10-27：标记**收尾子目标**（整题最后一步）。
+        #   唯一消费者是 `_call_step` —— 只有这一步才追加「最终答案唯一锚点」
+        #   契约（`prompts/sub_goal.py::SUBGOAL_FINAL_ANSWER_ANCHOR`）。
+        #   为什么打在 sg 上而不是加函数参数：`_solve_subgoal` 有 5 个调用点
+        #   （含重问/重解路径），加参数会把"是否最后一步"这个静态事实
+        #   顺着每条重试链传一遍 —— 那些路径不可能改变它。sg 是既有载体，
+        #   一处标记即可覆盖全部路径（含 `_solve_subgoal` 内部的两次重问）。
+        #   ⚠ 动态倒推子目标（`sub_goal_solver__backward`）用 `<父id>B<n>` 独立 id
+        #     且**不进** subgoals 列表 ⇒ 不会继承该标记，符合预期（它们不是收尾步）。
+        try:
+            sg["_is_final_step"] = (_sg_i == len(subgoals) - 1)
+        except (TypeError, AttributeError):  # noqa: BLE001  非 dict 形态 ⇒ 跳过标记
+            pass
         # ★ 复用命中：上一轮已完成的**同一子目标** → 直接取结果，零 LLM 调用。
         # 指纹用 title+description+type（重新规划后 id 可能重排，语义内容不变）。
         _fp = "|".join(str(sg.get(_k, "")) for _k in
