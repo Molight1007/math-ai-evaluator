@@ -106,12 +106,38 @@ def lean_backcheck_stage(self, ctx, tier: str) -> None:
                         "verdict": _r.get("verdict"),
                         "n_errors": len(_r.get("errors") or []),
                         "n_missing": len(_r.get("missing") or []),
+                        # ★ 2026-10-27（P1-5）：原来只留 verdict ⇒ 失败原因全丢，
+                        #   「16/16 全 unknown」到底是环境坏、翻译失败还是编译不过，
+                        #   事后无从区分（当时只能靠猜）。三个字段必须一起留：
+                        #     error        —— 失败的具体成因（env-unavailable /
+                        #                     needs_translation / runner-exception…）
+                        #     import_norm  —— 送编译前有没有补 Mathlib import，
+                        #                     没补的话「unknown tactic」是必然结果
+                        #     elapsed_s    —— 区分「真编译过」与「秒回没编译」
+                        "error": str(_r.get("error") or "")[:200],
+                        "elapsed_s": _r.get("elapsed_s"),
+                        "import_norm": _r.get("import_norm"),
                     })
                 ctx.lean_tool_check = _res
+                # 明细逐条带原因：ok 只报状态，非 ok 报「状态(原因)」
                 self.record(ctx, "lean_backcheck",
                             "4.3（工具①观测）: " + "; ".join(
-                                "id=%s:%s" % (x["id"], x["verdict"])
+                                ("id=%s:%s" % (x["id"], x["verdict"]))
+                                + ("" if x["verdict"] == "ok" or not x["error"]
+                                   else "(%s)" % x["error"][:80])
                                 for x in _res[:6]))
+                # 归一化覆盖率单独记一行 —— 这是「必然失败」与「代码真的错」
+                # 的分界线；不记的话看 verdict 永远分不出来
+                _n_norm = sum(1 for x in _res
+                              if (x.get("import_norm") or {}).get("applied"))
+                _reasons = [(x.get("import_norm") or {}).get("reason", "")
+                            for x in _res
+                            if not (x.get("import_norm") or {}).get("applied")]
+                self.record(ctx, "lean_backcheck",
+                            "4.3（工具①）import 归一化：%d/%d 生效%s"
+                            % (_n_norm, len(_res),
+                               ("；未生效缘由：" + str(sorted(set(_reasons))[:2]))
+                               if _reasons else ""))
             except Exception as _e_tool:  # noqa: BLE001  观测通道绝不阻断主链
                 self.record(ctx, "lean_backcheck",
                             "4.3（工具①观测）异常（跳过）: %s: %s"

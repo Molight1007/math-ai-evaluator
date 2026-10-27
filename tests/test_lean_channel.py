@@ -313,3 +313,206 @@ def test_apply_parallel_prefetch_same_outcome(monkeypatch):
     # ★ 2026-10-17：无止损 ⇒ 串行/并行都全验 6 个
     assert s[0] == 6, "无止损：串行全验 6 个"
     assert p[0] == 6, "无止损：并行也全验 6 个"
+
+
+# ---------------------------------------------------------------- 2026-10-27
+# P0-2：`lean_check` 送编译前必须做 Mathlib import 归一化。
+#
+# 病灶（队友 10-27 报告 + 本次静态核实）：主链
+# `sub_goal_solver__lean._lean_block_verify` 在 `_compile` 前调了
+# `_prepend_mathlib_import`，唯独 `tools/agent_toolkit/lean_check.py` 是
+# `runner(code, …)` 直送 ⇒ 模型写的 `import Mathlib.Tactic` 在裁剪闭包下
+# 必然编译失败（unknown tactic / 缺 LT ℕ）⇒ 「run_code 16/16 全失败」。
+# 同一段代码走主链能编、走本工具必败 —— 与编译器可用性无关。
+def _stub_runner(seen):
+    def _run(code, work_dir, timeout):
+        seen["code"] = code
+        seen["work_dir"] = work_dir
+        return {"ok": True, "items": []}
+    return _run
+
+
+def test_lean_check_normalizes_import_before_runner(monkeypatch):
+    """无 import 的代码 → runner 收到的必须已带可用 import 块。"""
+    import importlib
+    # ★ `from tools.agent_toolkit import lean_check` 拿到的是**函数**（包内
+    #   re-export 覆盖了子模块名），要打桩模块属性必须走 import_module。
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (True, "mathlib-ready@stub"))
+    seen = {}
+    r = _m.lean_check(lean_code="theorem t : 1 = 1 := rfl",
+                      work_dir="/stub/proj",
+                      runner=_stub_runner(seen))
+    assert r["import_norm"]["applied"] is True
+    assert "import Mathlib" in seen["code"]
+    # 归一化后的代码才是**实际送编译**的，必须同步进 lean_code
+    assert r["lean_code"] == seen["code"]
+    assert "theorem t : 1 = 1 := rfl" in seen["code"]
+
+
+def test_lean_check_rewrites_aggregate_entry(monkeypatch):
+    """聚合入口 `import Mathlib.Tactic` 在裁剪闭包下必败 → 必须被改写。"""
+    import importlib
+    # ★ `from tools.agent_toolkit import lean_check` 拿到的是**函数**（包内
+    #   re-export 覆盖了子模块名），要打桩模块属性必须走 import_module。
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (True, "mathlib-ready@stub"))
+    seen = {}
+    r = _m.lean_check(lean_code="import Mathlib.Tactic\ntheorem t : 1 = 1 := rfl",
+                      work_dir="/stub/proj", runner=_stub_runner(seen))
+    assert r["import_norm"]["applied"] is True
+    # 改写目标是**具体模块**（core 闭包无聚合入口 olean）
+    assert "import Mathlib.Tactic.NormNum" in seen["code"]
+    assert "import Mathlib.Tactic\n" not in seen["code"]
+
+
+def test_lean_check_keeps_concrete_import_untouched(monkeypatch):
+    """已有具体模块导入 → 原样（归一化必须幂等，否则等于改坏用户代码）。"""
+    import importlib
+    # ★ `from tools.agent_toolkit import lean_check` 拿到的是**函数**（包内
+    #   re-export 覆盖了子模块名），要打桩模块属性必须走 import_module。
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (True, "mathlib-ready@stub"))
+    seen = {}
+    code = "import Mathlib.Tactic.Ring\ntheorem t : 1 = 1 := rfl"
+    r = _m.lean_check(lean_code=code, work_dir="/stub/proj",
+                      runner=_stub_runner(seen))
+    assert r["import_norm"]["applied"] is False
+    assert seen["code"] == code
+
+
+def test_lean_check_records_why_it_did_not_normalize(monkeypatch):
+    """Mathlib 未就绪 → 原样送编译，但**必须留痕**（不许静默）。
+
+    静默的代价：事后看到 verdict=unknown 无法区分「环境没挂载」与
+    「代码真错」，只能靠猜 —— 这正是 16/16 全失败查不出来的原因。
+    """
+    import importlib
+    # ★ `from tools.agent_toolkit import lean_check` 拿到的是**函数**（包内
+    #   re-export 覆盖了子模块名），要打桩模块属性必须走 import_module。
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (False, "mathlib-not-ready@stub"))
+    seen = {}
+    code = "theorem t : 1 = 1 := rfl"
+    r = _m.lean_check(lean_code=code, work_dir="/stub/proj",
+                      runner=_stub_runner(seen))
+    assert r["import_norm"]["applied"] is False
+    assert "not-ready" in r["import_norm"]["reason"]
+    assert seen["code"] == code
+
+
+def test_mathlib_ready_reuses_bridge_probe(monkeypatch):
+    """就绪判定必须复用 `LeanBridge._mathlib_ready`，不许自写窄判据。
+
+    ★ 本轮实际踩到的坑：一开始用 `_has_mathlib_tactics(work_dir)` 当守卫，
+      它只认 pdir 根下的 `Mathlib/Tactic.olean`（或 `Mathlib/Tactic/NormNum.olean`）。
+      本机 `<lean-env>/test_mathlib` 是 lake 工程，Mathlib 的 olean 在
+      `.lake/packages/mathlib/.lake/build/lib/lean/` ⇒ 窄判据判 **False**
+      ⇒ 归一化被整条跳过 ⇒ **修了等于没修**（本机实测 False vs True）。
+      按 `lean_bridge__env` docstring：`_has_mathlib_tactics` 回答的是
+      「聚合入口 vs 裁剪闭包」的**形态**问题，不是「要不要归一化」。
+    """
+    import importlib
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    called = {}
+
+    class _FakeBridge:
+        def __init__(self, client, cfg):
+            called["pdir"] = getattr(cfg, "lean_project_dir", None)
+
+        def _mathlib_ready(self):
+            called["hit"] = True
+            return True
+
+    monkeypatch.setattr("tools.lean_local.lean_bridge.LeanBridge", _FakeBridge)
+    monkeypatch.setattr(_m, "_MATHLIB_READY_CACHE", {})
+    ok, why = _m._mathlib_ready_for("/some/pdir")
+    assert ok is True
+    assert called.get("hit") is True, "必须走 LeanBridge._mathlib_ready"
+    assert called.get("pdir") == "/some/pdir", "work_dir 要真正传进去"
+    assert "ready" in why
+
+
+def test_lean_check_reports_original_line_numbers(monkeypatch):
+    """归一化插了 import 后，诊断行号必须**减回原始代码**的行号。
+
+    ★ 本轮实测踩到：补 import 让 sorry 从第 2 行变成第 7 行，旧输出报 `L7`
+    —— 用户/模型拿着 `L7` 去改原始代码，改的是 import 块那一行。
+    import 块永远插在文件最前面 ⇒ 「总行数差」就是唯一偏移量。
+    """
+    import importlib
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (True, "mathlib-ready@stub"))
+    # 归一化后 theorem 在第 6 行（4 行 import + 空行）⇒ 报 L7 时原文是第 2 行
+    err = "demo.lean:7:0: error: unsolved goals"
+    r = _m.lean_check(lean_code="theorem t : 1 = 1 := by\n  trivial",
+                      work_dir="/stub/proj",
+                      runner=lambda c, w, t: {"ok": False, "error": err})
+    assert r["import_norm"]["applied"] is True
+    assert r["line_shift"] == 5
+    assert r["errors"][0]["step"] == "L2", r["errors"]
+
+
+def test_lean_check_falls_back_to_bridge_when_mcp_missing(monkeypatch):
+    """MCP 通道不可用 ⇒ 必须回落 bridge 直编，而不是把 verdict 定死 unknown。
+
+    ★ 本轮实测：`mcp_run_code` 依赖 lean-lsp-mcp 的 venv，本机
+    `_detect_mcp_proxy_python()` 返回空串 ⇒ 恒 `mcp-env-missing`、0.0s。
+    主链 `_lean_block_verify` 走 `bridge._compile` 能编 —— 同一台机器
+    「主链能编、本工具恒 unknown」，这就是 run_code 全失败的第三层成因。
+    """
+    import importlib
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    from tools.lean_local import lean_bridge as _lb
+
+    monkeypatch.setattr(_lb, "mcp_run_code",
+                        lambda c, w, t: {"ok": False, "error": "mcp-env-missing"})
+    monkeypatch.setattr(_lb, "_detect_mcp_proxy_python", lambda: "")
+    called = {}
+
+    class _FakeBridge:
+        def __init__(self, client, cfg):
+            called["pdir"] = getattr(cfg, "lean_project_dir", None)
+
+        def _compile(self, code, work_dir, **kw):
+            called["compiled"] = code
+            return {"ok": True}
+
+    monkeypatch.setattr(_lb, "LeanBridge", _FakeBridge)
+    monkeypatch.setattr(_lb, "_trash_lean_file", lambda *a, **k: None)
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (False, "mathlib-not-ready@stub"))
+
+    r = _m.lean_check(lean_code="theorem t : 1 = 1 := rfl", work_dir="/stub/proj")
+    assert r["runner_used"] == "bridge", r
+    assert r["verdict"] == "ok"
+    assert "compiled" in called, "bridge._compile 必须真被调用"
+
+
+def test_lean_check_does_not_fall_back_on_real_compile_error(monkeypatch):
+    """真编译错误**不许**回落 —— 否则把「代码错」洗成「环境坏」，比不修更糟。"""
+    import importlib
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    from tools.lean_local import lean_bridge as _lb
+
+    err = "demo.lean:1:0: error: unknown identifier 'foo'"
+    monkeypatch.setattr(_lb, "mcp_run_code",
+                        lambda c, w, t: {"ok": False, "error": err})
+    monkeypatch.setattr(_lb, "_detect_mcp_proxy_python", lambda: "/fake/python")
+
+    class _BoomBridge:
+        def __init__(self, *a, **k):
+            raise AssertionError("真编译错误时不该走 bridge")
+
+    monkeypatch.setattr(_lb, "LeanBridge", _BoomBridge)
+    monkeypatch.setattr(_m, "_mathlib_ready_for",
+                        lambda wd: (False, "mathlib-not-ready@stub"))
+
+    r = _m.lean_check(lean_code="theorem t : 1 = 1 := rfl", work_dir="/stub/proj")
+    assert r["runner_used"] == "mcp"
+    assert r["verdict"] == "statement_error"
