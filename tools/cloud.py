@@ -66,6 +66,10 @@ PUSH_ITEMS = [
     "run_research*.py",
     "user_agent*.py",
     "requirements.txt",
+    # ★ 2026-10-27（L0 参数层）：params.json 必须随代码同步 —— `MP_PARAMS_JSON`
+    #   指向它时 EvalEngine 会**硬失败**（读不到就抛），漏传会让云端启动即崩；
+    #   更隐蔽的是 verify 与 push 共用本白名单 ⇒ 漏它时 verify 仍报“逐字节一致”（假绿）。
+    "params.json",
     "lean-toolchain",
     "SETUP.md",
     "ripgrep-14.1.1-x86_64-unknown-linux-musl",

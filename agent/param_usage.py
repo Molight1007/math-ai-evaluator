@@ -176,10 +176,6 @@ _SPEC = (
      lambda cfg, tier, _f="minimal_mode", _d=False: getattr(cfg, _f, _d),
      None, "bool",
      "MINIMAL_MODE — 最小基础模式（只留主链，默认关）", None),
-    ("mp_arm",
-     lambda cfg, tier, _f="mp_arm", _d='baseline': getattr(cfg, _f, _d),
-     None, "str",
-     "MP_ARM — 实验臂名称（deploy 用）", None),
     ("numericize_final",
      lambda cfg, tier, _f="numericize_final", _d=True: getattr(cfg, _f, _d),
      None, "bool",
@@ -287,14 +283,6 @@ _SPEC = (
      None, "bool",
      "SUBGOAL_OBJECTIVE_JUDGE — 子目标结论客观判定（SymPy 判等式 / 多候选多数），"
      "判不出时显式留痕原因（默认 True；依据：原实现 n_judged = 0/73）", None),
-    ("diversity_resample_enabled",
-     lambda cfg, tier, _f="diversity_resample_enabled", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "DIVERSITY_RESAMPLE — 候选零多样性时触发高温度补充采样（默认 True）", None),
-    ("diversity_resample_count",
-     lambda cfg, tier, _f="diversity_resample_count", _d=3: getattr(cfg, _f, _d),
-     None, "int",
-     "DIVERSITY_RESAMPLE_COUNT — 零多样性时补采候选数（默认 3）", None),
     ("revise_min_candidates",
      lambda cfg, tier, _f="revise_min_candidates", _d=3: getattr(cfg, _f, _d),
      None, "int",
@@ -420,14 +408,6 @@ _SPEC = (
      lambda cfg, tier, _f="enable_theorem_query_llm", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "ENABLE_THEOREM_QUERY_LLM — LLM 辅助 query（先出方向、再检索）", None),
-    ("enable_lean_before_vote",
-     lambda cfg, tier, _f="enable_lean_before_vote", _d=False: getattr(cfg, _f, _d),
-     None, "bool",
-     "ENABLE_LEAN_BEFORE_VOTE — 候选级 Lean 前移到投票之前（4.7_lean）", None),
-    ("enable_verify_chain_reorder",
-     lambda cfg, tier, _f="enable_verify_chain_reorder", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "ENABLE_VERIFY_CHAIN_REORDER — 验证链重排（4_verify 票数降为 1）", None),
     ("pool_empty_clear",
      lambda cfg, tier, _f="pool_empty_clear", _d=True: getattr(cfg, _f, _d),
      None, "bool",
@@ -534,40 +514,7 @@ _SPEC = (
      None, "bool",
      "ENABLE_QUESTION_TYPE — 题型惰性分类总开关", None),
     # ---- agent/orchestrator.py（Step 4 反馈复核两处修复，2026-10-06 新增）----
-    ("feedback_review_append",
-     lambda cfg, tier, _f="feedback_review_append", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "FEEDBACK_REVIEW_APPEND — 复核产物附加而非覆盖（默认 True = 修好后行为；"
-     "=0 回退旧行为做 A/B）", None),
-    ("feedback_review_max_chars",
-     lambda cfg, tier, _f="feedback_review_max_chars", _d=8000: getattr(cfg, _f, _d),
-     None, "数",
-     "FEEDBACK_REVIEW_MAX_CHARS — 复核产物长度上限（默认 8000，与 verifier 同口径；"
-     "治实测 157,550 字符裸输出；=0 不截断）", None),
-    ("feedback_review_clip",
-     lambda cfg, tier, _f="feedback_review_clip", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "FEEDBACK_REVIEW_CLIP — 复核产物越权结论/重做正文清洗"
-     "（默认 True，复用 verifier._clip_review_prose；=0 回退旧行为）", None),
     # ---- agent/orchestrator.py（AcceptGate 生效 + revise 计时归属，2026-10-07 新增）----
-    ("accept_gate_enforce",
-     lambda cfg, tier, _f="accept_gate_enforce", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "ACCEPT_GATE_ENFORCE — AcceptGate 真实生效（默认 True = 修好后行为；"
-     "依据：阈值 5/10 在 max_revise_rounds=5 下结构性不可达 ⇒ 10/10 题恒 HOLD）", None),
-    ("accept_gate_pass_threshold",
-     lambda cfg, tier, _f="accept_gate_pass_threshold", _d=1.0: getattr(cfg, _f, _d),
-     None, "数",
-     "ACCEPT_GATE_PASS_THRESHOLD — 连续通过达 N 次 → ACCEPT（默认 1）", None),
-    ("accept_gate_reject_defect_threshold",
-     lambda cfg, tier, _f="accept_gate_reject_defect_threshold", _d=2.0: getattr(cfg, _f, _d),
-     None, "数",
-     "ACCEPT_GATE_REJECT_DEFECT_THRESHOLD — 连续重大缺陷达 N 次 → REJECT（默认 2）", None),
-    ("stage_timer_reassign_revise",
-     lambda cfg, tier, _f="stage_timer_reassign_revise", _d=True: getattr(cfg, _f, _d),
-     None, "bool",
-     "STAGE_TIMER_REASSIGN_REVISE — revise 回环墙钟归到 5_revise_or_fallback"
-     "（默认 True，纯埋点；=0 回退旧归属）", None),
 
     # ---- ① LeanSearch（用户点名）--------------------------------------
     ("leansearch_max_calls_per_q",
@@ -677,10 +624,6 @@ _SPEC = (
     # 目的是让启动统计能把这些开关的生效值记录下来（注册制第③件）。
     # ★ 2026-10-15：emergency_direct_max_tokens / emergency_answer_max_tokens /
     #   final_answer_min_sec 已随直答兜底删除。
-    ("rework_reserve_sec",
-     lambda cfg, tier, _f="rework_reserve_sec", _d=300.0: getattr(cfg, _f, _d),
-     None, "秒",
-     "REWORK_RESERVE_SEC — 6.5 重做预留秒数（防跨硬墙）", None),
     ("deep_max_rework",
      lambda cfg, tier, _f="deep_max_rework", _d=-1: getattr(cfg, _f, _d),
      None, "次",
@@ -689,6 +632,13 @@ _SPEC = (
      lambda cfg, tier, _f="objective_itemwise_plan", _d=True: getattr(cfg, _f, _d),
      None, "bool",
      "OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略（=0 关闭）", None),
+    # ★ 2026-10-27（L0 参数层）：本行只为满足「开关注册四件套」的第 ④ 件
+    #   （A ⊆ _SPEC）。它不是"上限"，故 cap 取当前生效值、used 恒 None ——
+    #   参数层文件路径可复用这里的 cap 字段判断「本 run 到底有没有接层」。
+    ("params_json_path",
+     lambda cfg, tier, _f="params_json_path", _d="": getattr(cfg, _f, _d),
+     None, "路径",
+     "MP_PARAMS_JSON — L0 参数层文件路径（空=不启用）", None),
 )
 
 

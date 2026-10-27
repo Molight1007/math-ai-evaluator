@@ -1,0 +1,4406 @@
+{
+ "schema": "params/1",
+ "about": "L0 参数层：A=机器可改的标量值（候选空间）；B=需人改；C=结构性。候选 = 本文件 a 段的 diff。生成器 tools/params_export.py，勿手改。",
+ "tiers": {
+  "A": "机器可自动改：标量 + 有真实读取点 + 在覆盖白名单内",
+  "B": "必须人改：提示词文本/记忆条目/非标量值/死配置/未接线参数",
+  "C": "结构性，永不进候选池：阶段顺序/工具实现/硬编码上下文切片"
+ },
+ "counts": {
+  "A": 203,
+  "B": 83,
+  "C": 5,
+  "dead": 0,
+  "unwired": 2,
+  "struct": 9,
+  "context_excluded": 467,
+  "total_in_file": 291
+ },
+ "sources": {
+  "config": "user_agent__config_base.py + user_agent__config.py",
+  "switches": "contracts/switch_registry.py::SWITCHES",
+  "whitelist": "user_agent.py::_CONFIG_OVERRIDE_KEYS",
+  "eval_baseline": "run_eval__engine.py::DEFAULT_AGENT_OVERRIDES",
+  "prompt_memory_tool": "tools/eu_inventory.py"
+ },
+ "a": {
+  "accept_confidence": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.accept_confidence",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.6,
+   "declared": 0.6,
+   "eval_override": null,
+   "refs": [
+    "run_eval.py"
+   ]
+  },
+  "adversarial_max_reasoning": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.adversarial_max_reasoning",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2400,
+   "declared": 2400,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_verifier.py"
+   ]
+  },
+  "adversarial_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.adversarial_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 8192,
+   "declared": 8192,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_verifier.py",
+    "agent/param_usage.py",
+    "cli/param_usage_report.py"
+   ]
+  },
+  "adversarial_min_confidence": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.adversarial_min_confidence",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.5,
+   "declared": 0.5,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_verifier.py"
+   ]
+  },
+  "answer_form_gate": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.answer_form_gate",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ANSWER_FORM_GATE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__numeric.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "answer_shape_strict": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.answer_shape_strict",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ANSWER_SHAPE_STRICT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_normalizer.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "artifact_store_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.artifact_store_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ARTIFACT_STORE_ENABLED",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/artifact_store.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "attention_focus_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.attention_focus_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ATTENTION_FOCUS_ENABLED",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__prompt.py",
+    "agent/sub_goal_solver__solve.py"
+   ]
+  },
+  "audit_gate_rubric_nonproof": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.audit_gate_rubric_nonproof",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "AUDIT_GATE_RUBRIC_NONPROOF",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/audit_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "audit_gate_skip_non_proof": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.audit_gate_skip_non_proof",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/audit_gate.py",
+    "run_eval.py"
+   ]
+  },
+  "audit_obligation_ledger": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.audit_obligation_ledger",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "AUDIT_OBLIGATION_LEDGER",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_verifier.py",
+    "agent/param_usage.py",
+    "agent/self_auditor.py"
+   ]
+  },
+  "blueprint_deps_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_deps_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/sub_goal_solver__planner.py",
+    "run_eval.py"
+   ]
+  },
+  "blueprint_lean_max_per_q": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.blueprint_lean_max_per_q",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__lean.py"
+   ]
+  },
+  "blueprint_lean_sig": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_lean_sig",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_LEAN_SIG",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner__dag.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "blueprint_multi_gen_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.blueprint_multi_gen_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_MULTI_GEN_ROUNDS",
+   "switch_kind": "num",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py"
+   ]
+  },
+  "blueprint_node_contract": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_node_contract",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_NODE_CONTRACT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__solve.py"
+   ]
+  },
+  "blueprint_or_expand_all": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_or_expand_all",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_OR_EXPAND_ALL",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "cli/test_report__common.py",
+    "deploy/run_112.py",
+    "run_eval.py"
+   ]
+  },
+  "blueprint_self_review": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_self_review",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_SELF_REVIEW",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/diag_export.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py"
+   ]
+  },
+  "blueprint_self_review_reject_ratio": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.blueprint_self_review_reject_ratio",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_SELF_REVIEW_REJECT_RATIO",
+   "switch_kind": "num",
+   "registry_default": 0.4,
+   "value": 0.4,
+   "declared": 0.4,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "blueprint_subtree_regen": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_subtree_regen",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_SUBTREE_REGEN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "blueprint_tool_exec": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.blueprint_tool_exec",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "BLUEPRINT_TOOL_EXEC",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__lean.py"
+   ]
+  },
+  "candidate_pool_limit": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.candidate_pool_limit",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "CANDIDATE_POOL_LIMIT",
+   "switch_kind": "num",
+   "registry_default": 12.0,
+   "value": 12.0,
+   "declared": 12.0,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__pool.py",
+    "agent/sub_goal_solver__pool.py"
+   ]
+  },
+  "check_protocol_guard": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.check_protocol_guard",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "CHECK_PROTOCOL_GUARD",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "collab_max_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.collab_max_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/collaborative_solver.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "critical_tail_seconds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.critical_tail_seconds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 120.0,
+   "declared": 120.0,
+   "eval_override": null,
+   "refs": [
+    "agent/base__types.py",
+    "agent/orchestrator__prep.py"
+   ]
+  },
+  "cross_model_falsify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.cross_model_falsify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "CROSS_MODEL_FALSIFY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "cross_model_timeout": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.cross_model_timeout",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "CROSS_MODEL_TIMEOUT",
+   "switch_kind": "num",
+   "registry_default": 90,
+   "value": 90.0,
+   "declared": 90.0,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "deep_critical_tail_seconds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.deep_critical_tail_seconds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 60.0,
+   "declared": 60.0,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__prep.py"
+   ]
+  },
+  "deep_max_rework": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.deep_max_rework",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "DEEP_MAX_REWORK",
+   "switch_kind": "num",
+   "registry_default": -1,
+   "value": -1,
+   "declared": -1,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/param_usage__extract.py"
+   ]
+  },
+  "deep_revise_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.deep_revise_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py"
+   ]
+  },
+  "deep_use_playoff": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.deep_use_playoff",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/vote_gate.py"
+   ]
+  },
+  "deep_use_sub_goal": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.deep_use_sub_goal",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__solve.py"
+   ]
+  },
+  "deterministic_solution_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.deterministic_solution_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "DETERMINISTIC_SOLUTION_CHECK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/audit_gate.py",
+    "agent/deterministic.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "deterministic_timeout_sec": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.deterministic_timeout_sec",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "DETERMINISTIC_TIMEOUT_SEC",
+   "switch_kind": "num",
+   "registry_default": 5.0,
+   "value": 5.0,
+   "declared": 5.0,
+   "eval_override": null,
+   "refs": [
+    "agent/deterministic.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "enable_adversarial_verify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_adversarial_verify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_verifier.py"
+   ]
+  },
+  "enable_answer_falsifier": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.enable_answer_falsifier",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_falsifier.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_collaborative_deep": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_collaborative_deep",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__collab.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_deterministic": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_deterministic",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/vote_gate.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_domain_hint": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.enable_domain_hint",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/classifier.py",
+    "agent/orchestrator.py",
+    "user_agent.py"
+   ]
+  },
+  "enable_error_lessons": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_error_lessons",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver.py",
+    "agent/solver__prompt.py"
+   ]
+  },
+  "enable_final_answer_selection": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_final_answer_selection",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_FINAL_ANSWER_SELECTION",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/final_selector.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "enable_lean_preverify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_lean_preverify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_pre_verifier.py"
+   ]
+  },
+  "enable_lean_tools": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_lean_tools",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_LEAN_TOOLS",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/base.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "enable_lean_verify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_lean_verify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__lean.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "enable_numeric_lean_verify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_numeric_lean_verify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_NUMERIC_LEAN_VERIFY",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": true,
+   "declared": false,
+   "eval_override": true,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__lean.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py"
+   ]
+  },
+  "enable_preverify_sketch_audit": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_preverify_sketch_audit",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_PREVERIFY_SKETCH_AUDIT",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/diag_export.py",
+    "agent/param_usage.py",
+    "tools/lean_local/lean_pre_verifier.py"
+   ]
+  },
+  "enable_question_type": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_question_type",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_QUESTION_TYPE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/classifier.py",
+    "agent/orchestrator.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "enable_question_type_hint": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.enable_question_type_hint",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__prompt.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_self_improve": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_self_improve",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__solve.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_subgoal_findings": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_subgoal_findings",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_SUBGOAL_FINDINGS",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__subgoal.py"
+   ]
+  },
+  "enable_subgoal_lean_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_subgoal_lean_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__contract.py"
+   ]
+  },
+  "enable_subgoal_main_path": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_subgoal_main_path",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__solve.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_subgoal_multi_agent": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_subgoal_multi_agent",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_SUBGOAL_MULTI_AGENT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__solve.py"
+   ]
+  },
+  "enable_theorem_hint": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_theorem_hint",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/solver.py",
+    "agent/solver__prompt.py",
+    "agent/solver__revise.py",
+    "agent/sub_goal_solver.py",
+    "agent/sub_goal_solver__merge.py",
+    "agent/sub_goal_solver__solve.py",
+    "agent/theorem_hint.py",
+    "run_eval.py"
+   ]
+  },
+  "enable_theorem_query_llm": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_theorem_query_llm",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_THEOREM_QUERY_LLM",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "enable_type_llm": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_type_llm",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_TYPE_LLM",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__prep.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "enable_understanding_chain": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.enable_understanding_chain",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "ENABLE_UNDERSTANDING_CHAIN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__prep.py",
+    "agent/param_usage.py",
+    "tools/lean_local/lean_pre_verifier.py"
+   ]
+  },
+  "enable_web_search": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.enable_web_search",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/base.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "user_agent.py"
+   ]
+  },
+  "eval_alpha_equiv": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.eval_alpha_equiv",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "EVAL_ALPHA_EQUIV",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "run_eval__scoring.py"
+   ]
+  },
+  "eval_split_cn": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.eval_split_cn",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "EVAL_SPLIT_CN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "run_eval__scoring.py"
+   ]
+  },
+  "expr_eval_grounding_guard": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.expr_eval_grounding_guard",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "EXPR_EVAL_GROUNDING_GUARD",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__symbolic.py"
+   ]
+  },
+  "falsify_max_per_q": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.falsify_max_per_q",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FALSIFY_MAX_PER_Q",
+   "switch_kind": "num",
+   "registry_default": 0.0,
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_falsifier.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "final_answer_single_source": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.final_answer_single_source",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FINAL_ANSWER_SINGLE_SOURCE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/final_selector.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "final_select_verify_aware": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.final_select_verify_aware",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FINAL_SELECT_VERIFY_AWARE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/final_selector.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_audit_retry": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_audit_retry",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_AUDIT_RETRY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/self_auditor.py"
+   ]
+  },
+  "five_gate_falsify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_falsify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_FALSIFY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_falsify_votes": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.five_gate_falsify_votes",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_FALSIFY_VOTES",
+   "switch_kind": "num",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_grounding": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_grounding",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_GROUNDING",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/answer_falsifier.py",
+    "agent/param_usage.py",
+    "agent/self_auditor.py"
+   ]
+  },
+  "five_gate_lean_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_lean_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_LEAN_CHECK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/lean_backcheck.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_lean_check_tool": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_lean_check_tool",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_LEAN_CHECK_TOOL",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/lean_backcheck.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_math_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_math_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_MATH_CHECK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/math_check_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_math_check_calcverify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_math_check_calcverify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_MATH_CHECK_CALCVERIFY",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/math_check_gate.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_normalize": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_normalize",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_NORMALIZE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_normalizer.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_rewrite": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_rewrite",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_REWRITE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/rewrite_gate.py"
+   ]
+  },
+  "five_gate_self_audit": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_self_audit",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_SELF_AUDIT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/self_auditor.py"
+   ]
+  },
+  "five_gate_self_audit_votes": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.five_gate_self_audit_votes",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_SELF_AUDIT_VOTES",
+   "switch_kind": "num",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/self_auditor.py"
+   ]
+  },
+  "five_gate_subgoal_lean": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_subgoal_lean",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_SUBGOAL_LEAN",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__merge.py"
+   ]
+  },
+  "five_gate_verify_tiebreak": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_verify_tiebreak",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_VERIFY_TIEBREAK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/final_selector.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "five_gate_vote": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.five_gate_vote",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "FIVE_GATE_VOTE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/vote_gate.py"
+   ]
+  },
+  "improve_min_remaining": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.improve_min_remaining",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 300.0,
+   "declared": 300.0,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__improve.py",
+    "run_eval.py"
+   ]
+  },
+  "inject_mathlib_to_solver": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.inject_mathlib_to_solver",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__planner.py",
+    "run_eval.py"
+   ]
+  },
+  "k11_mask_statement": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.k11_mask_statement",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "K11_MASK_STATEMENT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "lean_backend": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.lean_backend",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": "mcp",
+   "declared": "mcp",
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_crosscheck_as_unknown": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_crosscheck_as_unknown",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_CROSSCHECK_AS_UNKNOWN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_dedup_by_answer": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.lean_dedup_by_answer",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_executable": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.lean_executable",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": "",
+   "declared": "",
+   "eval_override": null,
+   "refs": [
+    "agent/diag_export.py",
+    "agent/sub_goal_solver__merge.py",
+    "agent/subgoal_lean.py",
+    "deploy/_audit_tools.py",
+    "deploy/_probe_lean_run.py",
+    "deploy/_verify_mcp_fix.py",
+    "tools/lean_local/lean_bridge.py",
+    "tools/lean_local/lean_refiner.py",
+    "tools/lean_local/lean_translator.py"
+   ]
+  },
+  "lean_failure_kind_split": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_failure_kind_split",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_FAILURE_KIND_SPLIT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_all_proofs": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_all_proofs",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_nonproof": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_nonproof",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_nonproof_deep_only": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_nonproof_deep_only",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_parallel": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_parallel",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_GATE_PARALLEL",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_strict": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_strict",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_strict_unknown": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_strict_unknown",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_GATE_STRICT_UNKNOWN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_gate_unknown_stop": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.lean_gate_unknown_stop",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_hammer": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_hammer",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_HAMMER",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/agent_toolkit/to_lean.py"
+   ]
+  },
+  "lean_mcp_autolake": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_autolake",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_AUTOLAKE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge__mcp.py"
+   ]
+  },
+  "lean_mcp_goal_loc": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_goal_loc",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_GOAL_LOC",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_mcp_hover_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_hover_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_HOVER_CHECK",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_mcp_multi_attempt": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_multi_attempt",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_MULTI_ATTEMPT",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_mcp_timeout_floor": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_timeout_floor",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_TIMEOUT_FLOOR",
+   "switch_kind": "num",
+   "registry_default": 300.0,
+   "value": 300.0,
+   "declared": 300.0,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_mcp_verify_axioms": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_mcp_verify_axioms",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_MCP_VERIFY_AXIOMS",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_project_dir": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.lean_project_dir",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": "",
+   "declared": "",
+   "eval_override": null,
+   "refs": [
+    "agent/base.py",
+    "agent/lean_backcheck.py",
+    "agent/orchestrator__numeric.py",
+    "agent/sub_goal_solver__merge.py",
+    "tools/lean_local/lean_bridge.py"
+   ]
+  },
+  "lean_timeout": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.lean_timeout",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 60.0,
+   "declared": 60.0,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_bridge.py",
+    "tools/lean_local/lean_gate.py"
+   ]
+  },
+  "lean_verify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_verify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_VERIFY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__lean.py",
+    "agent/param_usage.py",
+    "tools/lean_local/lean_bridge__llm.py",
+    "tools/lean_local/lean_mcp_proxy.py"
+   ]
+  },
+  "lean_xcheck_numeric": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.lean_xcheck_numeric",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LEAN_XCHECK_NUMERIC",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__numeric.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "leansearch_inject_verifier": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.leansearch_inject_verifier",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__lemma.py",
+    "run_eval.py"
+   ]
+  },
+  "leansearch_max_calls_per_q": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.leansearch_max_calls_per_q",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/diag_metrics.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "agent/verifier__lemma.py",
+    "run_eval.py"
+   ]
+  },
+  "leansearch_top_k": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.leansearch_top_k",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 25,
+   "declared": 25,
+   "eval_override": null,
+   "refs": [
+    "agent/diag_metrics.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "agent/theorem_hint.py",
+    "agent/verifier__lemma.py",
+    "cli/param_usage_report.py",
+    "cli/test_report__common.py",
+    "run_eval.py"
+   ]
+  },
+  "lemma_storage_path": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.lemma_storage_path",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": "",
+   "declared": "",
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_refiner.py"
+   ]
+  },
+  "llm_retry_on_timeout": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.llm_retry_on_timeout",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LLM_RETRY_ON_TIMEOUT",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "utils/llm_client.py"
+   ]
+  },
+  "llm_timeout": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.llm_timeout",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "LLM_TIMEOUT",
+   "switch_kind": "num",
+   "registry_default": 120,
+   "value": 120,
+   "declared": 120,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "utils/llm_client.py"
+   ]
+  },
+  "max_answer_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.max_answer_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 65536,
+   "declared": 65536,
+   "eval_override": 65536,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver.py",
+    "agent/solver__symbolic.py",
+    "cli/test_report__common.py",
+    "deploy/run_112.py",
+    "run_eval__engine.py"
+   ]
+  },
+  "max_revise_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.max_revise_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 5,
+   "declared": 5,
+   "eval_override": 5,
+   "refs": [
+    "agent/param_usage.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py"
+   ]
+  },
+  "max_subgoals": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.max_subgoals",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 100,
+   "declared": 100,
+   "eval_override": null,
+   "refs": [
+    "agent/blueprint_planner.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "run_eval.py"
+   ]
+  },
+  "max_time_per_question": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.max_time_per_question",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 86400,
+   "declared": 86400,
+   "eval_override": 86400,
+   "refs": [
+    "agent/orchestrator.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py",
+    "tools/lean_local/lean_gate.py",
+    "tools/stage_probe.py"
+   ]
+  },
+  "max_tokens_cap": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.max_tokens_cap",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0,
+   "declared": 0,
+   "eval_override": null,
+   "refs": [
+    "agent/base.py",
+    "user_agent.py"
+   ]
+  },
+  "max_total_calls": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.max_total_calls",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 150,
+   "declared": 150,
+   "eval_override": 150,
+   "refs": [
+    "agent/orchestrator.py",
+    "agent/orchestrator__prep.py",
+    "agent/param_usage.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py",
+    "user_agent.py"
+   ]
+  },
+  "max_total_time_seconds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.max_total_time_seconds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2592000,
+   "declared": 2592000,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator.py",
+    "run_eval.py"
+   ]
+  },
+  "max_workers": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.max_workers",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 3,
+   "declared": 3,
+   "eval_override": 3,
+   "refs": [
+    "agent/adversarial_gate.py",
+    "agent/self_auditor.py",
+    "agent/solver__revise.py",
+    "agent/solver__sample.py",
+    "agent/verifier__vote.py",
+    "cli/test_report__common.py",
+    "run_eval__engine.py",
+    "tools/lean_local/lean_gate.py",
+    "utils/math_eval__kernel.py"
+   ]
+  },
+  "minimal_mode": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.minimal_mode",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "MINIMAL_MODE",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "user_agent.py"
+   ]
+  },
+  "numericize_final": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.numericize_final",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "NUMERICIZE_FINAL",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__numeric.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "objective_itemwise_plan": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.objective_itemwise_plan",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "OBJECTIVE_ITEMWISE_PLAN",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "objective_itemwise_priority": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.objective_itemwise_priority",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "OBJECTIVE_ITEMWISE_PRIORITY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/formatter.py",
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "objective_majority_vote": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.objective_majority_vote",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "OBJECTIVE_MAJORITY_VOTE",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/formatter.py",
+    "agent/orchestrator__select.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "objective_selfcheck": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.objective_selfcheck",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "OBJECTIVE_SELFCHECK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__numeric.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "objective_tactic_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.objective_tactic_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__prompt.py",
+    "agent/sub_goal_solver__merge.py",
+    "agent/sub_goal_solver__planner.py",
+    "agent/sub_goal_solver__solve.py",
+    "run_eval.py"
+   ]
+  },
+  "phase_budget_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.phase_budget_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "PHASE_BUDGET_ENABLED",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__budget.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "pick_confidence_floor": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.pick_confidence_floor",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "agent/formatter__select.py"
+   ]
+  },
+  "policy_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.policy_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 65536,
+   "declared": 65536,
+   "eval_override": null,
+   "refs": [
+    "agent/collaborative_solver.py",
+    "agent/solver__improve.py",
+    "agent/solver__revise.py",
+    "agent/solver__sample.py",
+    "agent/subgoal_collab.py"
+   ]
+  },
+  "policy_sample_times": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.policy_sample_times",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": 2,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver.py",
+    "run_eval__engine.py",
+    "user_agent.py"
+   ]
+  },
+  "policy_temperature": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.policy_temperature",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.3,
+   "declared": 0.3,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__revise.py",
+    "agent/solver__sample.py"
+   ]
+  },
+  "pool_empty_clear": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.pool_empty_clear",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "POOL_EMPTY_CLEAR",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_normalizer.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "pool_gate_v2": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.pool_gate_v2",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "POOL_GATE_V2",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/base__candidates.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "preverify_max_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.preverify_max_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": 2,
+   "refs": [
+    "agent/param_usage.py",
+    "cli/test_report__common.py",
+    "run_eval__engine.py",
+    "tools/lean_local/lean_pre_verifier.py"
+   ]
+  },
+  "preverify_timeout": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.preverify_timeout",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 60.0,
+   "declared": 60.0,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_pre_verifier.py",
+    "tools/lean_local/lean_refiner.py",
+    "tools/lean_local/lean_translator.py"
+   ]
+  },
+  "require_answer_in_pool": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.require_answer_in_pool",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "REQUIRE_ANSWER_IN_POOL",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__pool.py"
+   ]
+  },
+  "revise_min_candidates": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.revise_min_candidates",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "REVISE_MIN_CANDIDATES",
+   "switch_kind": "int",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver.py"
+   ]
+  },
+  "revise_sample_times": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.revise_sample_times",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": 2,
+   "refs": [
+    "agent/solver.py",
+    "run_eval__engine.py"
+   ]
+  },
+  "rewrite_conf_threshold": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.rewrite_conf_threshold",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "REWRITE_CONF_THRESHOLD",
+   "switch_kind": "num",
+   "registry_default": 0.0,
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/rewrite_gate.py"
+   ]
+  },
+  "rewrite_on_low_conf": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.rewrite_on_low_conf",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "REWRITE_ON_LOW_CONF",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/rewrite_gate.py"
+   ]
+  },
+  "self_improve_after_revise": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.self_improve_after_revise",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/solver.py"
+   ]
+  },
+  "self_improve_conditional": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.self_improve_conditional",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/solver.py",
+    "agent/solver__improve.py",
+    "run_eval.py"
+   ]
+  },
+  "self_improve_keep_original": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.self_improve_keep_original",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SELF_IMPROVE_KEEP_ORIGINAL",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__improve.py"
+   ]
+  },
+  "self_improve_max": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.self_improve_max",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver.py"
+   ]
+  },
+  "self_improve_objective_skip": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.self_improve_objective_skip",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SELF_IMPROVE_OBJECTIVE_SKIP",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator__budget.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "self_improve_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.self_improve_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__fallback.py",
+    "run_eval.py"
+   ]
+  },
+  "self_improve_stage": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.self_improve_stage",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SELF_IMPROVE_STAGE",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/orchestrator.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "smt_falsify": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.smt_falsify",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SMT_FALSIFY",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/answer_falsifier.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "strict_all_rejected": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.strict_all_rejected",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "STRICT_ALL_REJECTED",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/lean_backcheck.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "sub_goal_oracle_check": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.sub_goal_oracle_check",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUB_GOAL_ORACLE_CHECK",
+   "switch_kind": "bool",
+   "registry_default": false,
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__solve.py"
+   ]
+  },
+  "subgoal_adaptive_recover": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.subgoal_adaptive_recover",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__loop.py"
+   ]
+  },
+  "subgoal_agents_n": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.subgoal_agents_n",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__solve.py"
+   ]
+  },
+  "subgoal_backward_max_depth": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.subgoal_backward_max_depth",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_BACKWARD_MAX_DEPTH",
+   "switch_kind": "num",
+   "registry_default": 2,
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__backward.py"
+   ]
+  },
+  "subgoal_collab_mode": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_collab_mode",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_COLLAB_MODE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/subgoal_collab.py"
+   ]
+  },
+  "subgoal_collab_regen_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.subgoal_collab_regen_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_COLLAB_REGEN_ROUNDS",
+   "switch_kind": "num",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/subgoal_collab.py"
+   ]
+  },
+  "subgoal_conclusion_contract": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_conclusion_contract",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_CONCLUSION_CONTRACT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "subgoal_conflict_gate": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_conflict_gate",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__merge.py"
+   ]
+  },
+  "subgoal_crosscheck_llm": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_crosscheck_llm",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__merge.py"
+   ]
+  },
+  "subgoal_ctx_mode": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.subgoal_ctx_mode",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": "deps",
+   "declared": "deps",
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__loop.py"
+   ]
+  },
+  "subgoal_dynamic_backward": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_dynamic_backward",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_DYNAMIC_BACKWARD",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__backward.py"
+   ]
+  },
+  "subgoal_failed_retry_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.subgoal_failed_retry_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_FAILED_RETRY_ROUNDS",
+   "switch_kind": "num",
+   "registry_default": 2,
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__loop.py"
+   ]
+  },
+  "subgoal_inputs_validation": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_inputs_validation",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_INPUTS_VALIDATION",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py"
+   ]
+  },
+  "subgoal_objective_judge": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_objective_judge",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_OBJECTIVE_JUDGE",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver.py"
+   ]
+  },
+  "subgoal_regen_self_review": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_regen_self_review",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_REGEN_SELF_REVIEW",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/subgoal_collab.py"
+   ]
+  },
+  "subgoal_reuse_done": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.subgoal_reuse_done",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__loop.py",
+    "agent/subgoal_collab.py"
+   ]
+  },
+  "subgoal_self_improve_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.subgoal_self_improve_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_SELF_IMPROVE_ROUNDS",
+   "switch_kind": "num",
+   "registry_default": 3,
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__loop.py"
+   ]
+  },
+  "subgoal_stage_budget_sec": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.subgoal_stage_budget_sec",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 750.0,
+   "declared": 750.0,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__stage.py",
+    "run_eval.py"
+   ]
+  },
+  "subgoal_stage_budget_sec_std": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config.py::AgentConfig.subgoal_stage_budget_sec_std",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 450.0,
+   "declared": 450.0,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__stage.py",
+    "run_eval.py"
+   ]
+  },
+  "subgoal_theorem_search": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.subgoal_theorem_search",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "SUBGOAL_THEOREM_SEARCH",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "symbolic_crosscheck_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_crosscheck_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "deploy/run_112.py",
+    "run_eval.py"
+   ]
+  },
+  "symbolic_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 8192,
+   "declared": 8192,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "run_eval.py"
+   ]
+  },
+  "symbolic_solve_adopt": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_solve_adopt",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "run_eval.py"
+   ]
+  },
+  "symbolic_solve_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_solve_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "cli/test_report__common.py",
+    "deploy/run_112.py",
+    "run_eval.py"
+   ]
+  },
+  "symbolic_solve_feedback": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_solve_feedback",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "run_eval.py"
+   ]
+  },
+  "symbolic_solve_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.symbolic_solve_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 8192,
+   "declared": 8192,
+   "eval_override": null,
+   "refs": [
+    "agent/solver__symbolic.py",
+    "cli/param_usage_report.py",
+    "run_eval.py"
+   ]
+  },
+  "theorem_hint": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.theorem_hint",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "THEOREM_HINT",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/diag_export.py",
+    "agent/param_usage.py",
+    "agent/solver__prompt.py",
+    "agent/sub_goal_solver.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "theorem_hint_backend": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.theorem_hint_backend",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "THEOREM_HINT_BACKEND",
+   "switch_kind": "str",
+   "registry_default": "leanexplore",
+   "value": "leanexplore",
+   "declared": "leanexplore",
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "theorem_hint_block_max_chars": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.theorem_hint_block_max_chars",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "THEOREM_HINT_BLOCK_MAX_CHARS",
+   "switch_kind": "num",
+   "registry_default": 2500,
+   "value": 2500,
+   "declared": 2500,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "theorem_hint_max_queries": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.theorem_hint_max_queries",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
+    "agent/theorem_hint.py",
+    "run_eval.py"
+   ]
+  },
+  "theorem_hint_top_k_by_stage": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.theorem_hint_top_k_by_stage",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "THEOREM_HINT_TOP_K_BY_STAGE",
+   "switch_kind": "str",
+   "registry_default": "{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}",
+   "value": "{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}",
+   "declared": "{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}",
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/theorem_hint.py"
+   ]
+  },
+  "theorem_memory_enable": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.theorem_memory_enable",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "tools/lean_local/lean_gate__support.py"
+   ]
+  },
+  "toolcall_text_fallback": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.toolcall_text_fallback",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "TOOLCALL_TEXT_FALLBACK",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/base__toolcall.py",
+    "agent/param_usage.py"
+   ]
+  },
+  "use_blueprint": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.use_blueprint",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/solver.py",
+    "agent/solver__improve.py",
+    "agent/solver__prompt.py",
+    "agent/sub_goal_solver__planner.py",
+    "cli/leap_eval.py",
+    "cli/smoke_dag_replan.py",
+    "run_eval.py"
+   ]
+  },
+  "use_blueprint_dag": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_blueprint_dag",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/sub_goal_solver__planner.py",
+    "cli/smoke_dag_replan.py",
+    "cli/validate_blueprint.py"
+   ]
+  },
+  "use_bug_report_feedback": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_bug_report_feedback",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__report.py"
+   ]
+  },
+  "use_challenge": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_challenge",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/audit_gate.py",
+    "agent/verifier.py",
+    "agent/vote_gate.py",
+    "user_agent.py"
+   ]
+  },
+  "use_leansearch": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_leansearch",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "USE_LEANSEARCH",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "agent/verifier__lemma.py",
+    "cli/leap_eval.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "tools/lean_local/lean_refiner.py"
+   ]
+  },
+  "use_lemma_accumulation": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_lemma_accumulation",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "USE_LEMMA_ACCUMULATION",
+   "switch_kind": "bool",
+   "registry_default": true,
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__lemma.py",
+    "agent/sub_goal_solver__solve.py",
+    "cli/test_report__common.py"
+   ]
+  },
+  "use_proof_channel": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_proof_channel",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": true,
+   "refs": [
+    "agent/solver.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py",
+    "user_agent.py"
+   ]
+  },
+  "use_rubric": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_rubric",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": false,
+   "declared": false,
+   "eval_override": null,
+   "refs": [
+    "agent/audit_gate.py",
+    "agent/verifier.py",
+    "agent/vote_gate.py",
+    "deploy/run_112.py",
+    "user_agent.py"
+   ]
+  },
+  "use_scoring": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config.py::AgentConfig.use_scoring",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": true,
+   "refs": [
+    "agent/verifier.py",
+    "agent/verifier__vote.py",
+    "agent/vote_gate.py",
+    "cli/test_report__common.py",
+    "run_eval.py",
+    "run_eval__engine.py",
+    "user_agent.py"
+   ]
+  },
+  "verifier_deep_final_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_deep_final_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__deep.py",
+    "cli/test_report__common.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_deep_final_min_remaining": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_deep_final_min_remaining",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 150.0,
+   "declared": 150.0,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__deep.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_deep_review_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_deep_review_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 16384,
+   "declared": 16384,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/verifier__deep.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_deep_review_min_chars": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_deep_review_min_chars",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 200,
+   "declared": 200,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__deep.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_deep_review_temperature": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_deep_review_temperature",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__deep.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_disagreement_temperature": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_disagreement_temperature",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.7,
+   "declared": 0.7,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__vote.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_disagreement_votes": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_disagreement_votes",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 3,
+   "declared": 3,
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/verifier__vote.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_diversify_enabled": {
+   "tier": "A",
+   "status": "ok",
+   "type": "bool",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_diversify_enabled",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": true,
+   "declared": true,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__vote.py",
+    "cli/test_report__common.py",
+    "run_eval.py"
+   ]
+  },
+  "verifier_temperature": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_temperature",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "agent/verifier__vote.py"
+   ]
+  },
+  "verifier_vote_reasoning": {
+   "tier": "A",
+   "status": "ok",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.verifier_vote_reasoning",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "env": "VERIFIER_VOTE_REASONING",
+   "switch_kind": "str",
+   "registry_default": "disagree",
+   "value": "disagree",
+   "declared": "disagree",
+   "eval_override": null,
+   "refs": [
+    "agent/param_usage.py",
+    "agent/verifier.py"
+   ]
+  },
+  "verifier_voting_times": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verifier_voting_times",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 1,
+   "eval_override": 2,
+   "refs": [
+    "agent/orchestrator__verify.py",
+    "agent/param_usage.py",
+    "agent/verifier.py",
+    "agent/verifier__vote.py",
+    "run_eval.py",
+    "run_eval__engine.py",
+    "user_agent.py"
+   ]
+  },
+  "verify_reserve_seconds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "float",
+   "source": "user_agent__config_base.py::_AgentConfigBase.verify_reserve_seconds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 0.0,
+   "declared": 0.0,
+   "eval_override": null,
+   "refs": [
+    "run_eval.py"
+   ]
+  }
+ },
+ "b": {
+  "flow.adversarial_tiers": {
+   "tier": "B",
+   "status": "struct",
+   "type": "list",
+   "source": "user_agent__config.py::AgentConfig.adversarial_tiers",
+   "reason": "非标量（list）：候选无法用一行 JSON 表达，只能人改",
+   "refs": [
+    "agent/adversarial_verifier.py"
+   ],
+   "default_src": "field(default_factory=lambda: ['deep', 'standard'])"
+  },
+  "flow.lemma_domains": {
+   "tier": "B",
+   "status": "struct",
+   "type": "list",
+   "source": "user_agent__config.py::AgentConfig.lemma_domains",
+   "reason": "非标量（list）：候选无法用一行 JSON 表达，只能人改",
+   "env": "LEMMA_DOMAINS",
+   "switch_kind": "str",
+   "registry_default": "Number theory,数论",
+   "refs": [
+    "agent/param_usage.py",
+    "agent/solver__lemma.py",
+    "agent/sub_goal_solver__solve.py"
+   ],
+   "default_src": "field(default_factory=lambda: ['Number theory', '数论'])"
+  },
+  "flow.llm_min_max_tokens": {
+   "tier": "B",
+   "status": "unwired",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.llm_min_max_tokens",
+   "reason": "有读取点但不在覆盖白名单：kwargs/CLI 会被静默丢弃，须先接线",
+   "refs": [
+    "agent/base.py"
+   ],
+   "default_src": "16384"
+  },
+  "flow.max_subgoals_by_tier": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.max_subgoals_by_tier",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "refs": [
+    "agent/param_usage.py",
+    "agent/sub_goal_solver__planner.py",
+    "deploy/run_112.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.params_json_path": {
+   "tier": "B",
+   "status": "meta",
+   "type": "str",
+   "source": "user_agent__config.py::AgentConfig.params_json_path",
+   "reason": "参数层自身的开关（路径等）：不作为候选，由人指定",
+   "env": "MP_PARAMS_JSON",
+   "switch_kind": "str",
+   "registry_default": "",
+   "refs": [
+    "agent/param_usage.py",
+    "run_eval__engine.py",
+    "tools/params_export.py"
+   ],
+   "default_src": "''"
+  },
+  "flow.rewrite_max_rounds": {
+   "tier": "B",
+   "status": "unwired",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.rewrite_max_rounds",
+   "reason": "有读取点但不在覆盖白名单：kwargs/CLI 会被静默丢弃，须先接线",
+   "refs": [
+    "agent/rewrite_gate.py"
+   ],
+   "default_src": "2"
+  },
+  "flow.tier_budget": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_budget",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "eval_override": {
+    "deep": 86400.0
+   },
+   "refs": [
+    "agent/orchestrator__prep.py",
+    "run_eval.py",
+    "run_eval__engine.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.tier_max_calls": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_max_calls",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "eval_override": {
+    "deep": 100
+   },
+   "refs": [
+    "agent/orchestrator__prep.py",
+    "run_eval__engine.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.tier_max_completions": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_max_completions",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "eval_override": {
+    "deep": 2
+   },
+   "refs": [
+    "agent/orchestrator__solve.py",
+    "deploy/run_112.py",
+    "run_eval__engine.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.tier_sample_times": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_sample_times",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "eval_override": {
+    "deep": 3
+   },
+   "refs": [
+    "agent/solver.py",
+    "deploy/run_112.py",
+    "run_eval__engine.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.tier_temperatures": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_temperatures",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "refs": [
+    "agent/solver.py"
+   ],
+   "default_src": "None"
+  },
+  "flow.tier_voting_times": {
+   "tier": "B",
+   "status": "struct",
+   "type": "dict",
+   "source": "user_agent__config.py::AgentConfig.tier_voting_times",
+   "reason": "非标量（dict）：候选无法用一行 JSON 表达，只能人改",
+   "eval_override": {
+    "deep": 3
+   },
+   "refs": [
+    "agent/orchestrator__verify.py",
+    "deploy/run_112.py",
+    "run_eval__engine.py"
+   ],
+   "default_src": "None"
+  },
+  "prompt.blueprint.blueprint_dag_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/blueprint.py::BLUEPRINT_DAG_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 14170,
+   "placeholders": [],
+   "sha1": "fe1859ff8213",
+   "refs": []
+  },
+  "prompt.blueprint.blueprint_dag_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/blueprint.py::BLUEPRINT_DAG_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 210,
+   "placeholders": [
+    "problem"
+   ],
+   "sha1": "cf75928b5246",
+   "refs": []
+  },
+  "prompt.blueprint.blueprint_improve_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/blueprint.py::BLUEPRINT_IMPROVE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 510,
+   "placeholders": [
+    "prior_dag",
+    "problem"
+   ],
+   "sha1": "0b308feffa9d",
+   "refs": []
+  },
+  "prompt.blueprint.blueprint_replan_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/blueprint.py::BLUEPRINT_REPLAN_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 454,
+   "placeholders": [
+    "feedback_block",
+    "problem"
+   ],
+   "sha1": "e6678fb7c3dd",
+   "refs": []
+  },
+  "prompt.blueprint.blueprint_subtree_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/blueprint.py::BLUEPRINT_SUBTREE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 716,
+   "placeholders": [
+    "feedback_block",
+    "problem",
+    "root_id",
+    "target_statement"
+   ],
+   "sha1": "43ad37d6dbee",
+   "refs": []
+  },
+  "prompt.dag_review.dag_review_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/dag_review.py::DAG_REVIEW_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 3445,
+   "placeholders": [],
+   "sha1": "76ae7696bd71",
+   "refs": []
+  },
+  "prompt.dag_review.dag_review_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/dag_review.py::DAG_REVIEW_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 743,
+   "placeholders": [
+    "children_statements",
+    "deps_statements",
+    "lemma_block",
+    "node_id",
+    "node_type",
+    "parent_statement",
+    "problem",
+    "rationale",
+    "statement"
+   ],
+   "sha1": "13e84fb34bcc",
+   "refs": []
+  },
+  "prompt.final_select.multi_answer_judge_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/final_select.py::MULTI_ANSWER_JUDGE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 595,
+   "placeholders": [],
+   "sha1": "3573a176d628",
+   "refs": []
+  },
+  "prompt.final_select.multi_answer_judge_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/final_select.py::MULTI_ANSWER_JUDGE_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 223,
+   "placeholders": [
+    "answers",
+    "problem"
+   ],
+   "sha1": "b5c2698ef9bd",
+   "refs": []
+  },
+  "prompt.policy.self_improve_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/policy.py::SELF_IMPROVE_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 576,
+   "placeholders": [
+    "candidate_solution",
+    "problem"
+   ],
+   "sha1": "6da0fd218fe5",
+   "refs": []
+  },
+  "prompt.policy.policy_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/policy.py::POLICY_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 349,
+   "placeholders": [],
+   "sha1": "8e857ee0f9a6",
+   "refs": []
+  },
+  "prompt.policy.blueprint_policy_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/policy.py::BLUEPRINT_POLICY_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 867,
+   "placeholders": [],
+   "sha1": "8b83cd3c0496",
+   "refs": []
+  },
+  "prompt.policy.blueprint_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/policy.py::BLUEPRINT_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 214,
+   "placeholders": [
+    "domain_hint",
+    "problem"
+   ],
+   "sha1": "c9e0ec04a8d3",
+   "refs": []
+  },
+  "prompt.proof.proof_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/proof.py::PROOF_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 482,
+   "placeholders": [],
+   "sha1": "8615aeb3851c",
+   "refs": []
+  },
+  "prompt.proof.proof_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/proof.py::PROOF_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 107,
+   "placeholders": [
+    "conditions",
+    "problem",
+    "strategy_hint"
+   ],
+   "sha1": "86bc3bea413e",
+   "refs": []
+  },
+  "prompt.proof.proof_verify_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/proof.py::PROOF_VERIFY_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 466,
+   "placeholders": [],
+   "sha1": "1ab4556d460f",
+   "refs": []
+  },
+  "prompt.proof.proof_verify_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/proof.py::PROOF_VERIFY_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 71,
+   "placeholders": [
+    "problem",
+    "solution"
+   ],
+   "sha1": "eae9760b0215",
+   "refs": []
+  },
+  "prompt.revise.revise_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/revise.py::REVISE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 313,
+   "placeholders": [],
+   "sha1": "7cfa9e5c596a",
+   "refs": []
+  },
+  "prompt.revise.revise_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/revise.py::REVISE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 371,
+   "placeholders": [
+    "feedback",
+    "prev_answer",
+    "problem"
+   ],
+   "sha1": "6a562a323d0d",
+   "refs": []
+  },
+  "prompt.rewrite.rewrite_diag_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/rewrite.py::REWRITE_DIAG_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 477,
+   "placeholders": [],
+   "sha1": "99774b167f20",
+   "refs": []
+  },
+  "prompt.rewrite.rewrite_diag_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/rewrite.py::REWRITE_DIAG_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 98,
+   "placeholders": [
+    "errors",
+    "problem",
+    "rejected"
+   ],
+   "sha1": "0f355e95fa85",
+   "refs": []
+  },
+  "prompt.self_audit.self_audit_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/self_audit.py::SELF_AUDIT_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 1107,
+   "placeholders": [],
+   "sha1": "d322368ce3ed",
+   "refs": []
+  },
+  "prompt.self_audit.self_audit_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/self_audit.py::SELF_AUDIT_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 102,
+   "placeholders": [
+    "answer",
+    "obligations",
+    "problem",
+    "reasoning"
+   ],
+   "sha1": "a56e471658cf",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_plan_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_PLAN_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 4030,
+   "placeholders": [],
+   "sha1": "13ed6f4938b2",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_plan_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_PLAN_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 249,
+   "placeholders": [
+    "domain_hint",
+    "problem"
+   ],
+   "sha1": "399dbeb166c7",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_step_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_STEP_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 1191,
+   "placeholders": [],
+   "sha1": "16c7d0d41e1e",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_conclusion_contract": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_CONCLUSION_CONTRACT",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 1173,
+   "placeholders": [],
+   "sha1": "70259544501a",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_lean_sig_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_LEAN_SIG_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 843,
+   "placeholders": [
+    "formal_sig"
+   ],
+   "sha1": "6ddb17a8a50c",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_succession_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_SUCCESSION_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 108,
+   "placeholders": [
+    "items"
+   ],
+   "sha1": "9439730b102e",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_step_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_STEP_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 574,
+   "placeholders": [
+    "lemma_context",
+    "previous_results",
+    "problem",
+    "subgoal_description",
+    "subgoal_expected_output",
+    "subgoal_id",
+    "subgoal_plan_summary",
+    "subgoal_title",
+    "subgoal_type",
+    "type_discipline"
+   ],
+   "sha1": "33ffddef2041",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_improve_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_IMPROVE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 263,
+   "placeholders": [],
+   "sha1": "7eb7596645a7",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_improve_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_IMPROVE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 104,
+   "placeholders": [
+    "prev_result",
+    "problem",
+    "subgoal"
+   ],
+   "sha1": "61400d0e52ed",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_merge_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_MERGE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 660,
+   "placeholders": [],
+   "sha1": "5be6fbc78fca",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_merge_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_MERGE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 511,
+   "placeholders": [
+    "all_results",
+    "blueprint_conclusion",
+    "merge_strategy",
+    "problem",
+    "subgoal_plan_summary"
+   ],
+   "sha1": "cbd904360278",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_crosscheck_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_CROSSCHECK_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 614,
+   "placeholders": [],
+   "sha1": "fc40b567f08a",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_crosscheck_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_CROSSCHECK_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 268,
+   "placeholders": [
+    "problem",
+    "subgoal_conclusions",
+    "subgoal_plan_summary"
+   ],
+   "sha1": "a8b6f52dd071",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_backward_premise_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/sub_goal.py::SUBGOAL_BACKWARD_PREMISE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 747,
+   "placeholders": [],
+   "sha1": "61067bf059a4",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_backward_premise_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_BACKWARD_PREMISE_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 260,
+   "placeholders": [
+    "failed_result",
+    "prev_results",
+    "problem",
+    "subgoal_description",
+    "subgoal_expected_output",
+    "subgoal_id",
+    "subgoal_title"
+   ],
+   "sha1": "1eb738135372",
+   "refs": []
+  },
+  "prompt.sub_goal.subgoal_backward_block_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/sub_goal.py::SUBGOAL_BACKWARD_BLOCK_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 105,
+   "placeholders": [
+    "items"
+   ],
+   "sha1": "4d280fb8cacf",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_json_seed": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_JSON_SEED",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 8,
+   "placeholders": [],
+   "sha1": "ed1ba7a44a32",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_model_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_MODEL_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 568,
+   "placeholders": [],
+   "sha1": "9230a8eaa0a2",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_model_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_MODEL_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 51,
+   "placeholders": [
+    "problem"
+   ],
+   "sha1": "d7720af572a9",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_solve_seed": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_SOLVE_SEED",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 11,
+   "placeholders": [],
+   "sha1": "282df880aec6",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_solve_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_SOLVE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 465,
+   "placeholders": [],
+   "sha1": "d09256ec1dfb",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_solve_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_SOLVE_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 104,
+   "placeholders": [
+    "problem"
+   ],
+   "sha1": "4dbfa450b280",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_solve_retry_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_SOLVE_RETRY_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 198,
+   "placeholders": [],
+   "sha1": "0c6a835fd486",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_solve_retry_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_SOLVE_RETRY_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 109,
+   "placeholders": [
+    "previous",
+    "problem",
+    "reason"
+   ],
+   "sha1": "a05451504b63",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_feedback_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_FEEDBACK_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 317,
+   "placeholders": [],
+   "sha1": "31833433c7e5",
+   "refs": []
+  },
+  "prompt.symbolic_model.symbolic_feedback_user": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/symbolic_model.py::SYMBOLIC_FEEDBACK_USER",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 131,
+   "placeholders": [
+    "equations",
+    "problem",
+    "target",
+    "value"
+   ],
+   "sha1": "23e7fd11556c",
+   "refs": []
+  },
+  "prompt.verifier.verifier_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 2110,
+   "placeholders": [],
+   "sha1": "92f5ab4e0e32",
+   "refs": []
+  },
+  "prompt.verifier.verifier_user_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_USER_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 214,
+   "placeholders": [
+    "candidate_answer",
+    "problem",
+    "theorem_context"
+   ],
+   "sha1": "53efda71ef0f",
+   "refs": []
+  },
+  "prompt.verifier.verifier_deep_review_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_DEEP_REVIEW_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 1361,
+   "placeholders": [],
+   "sha1": "dc5cb9a7cda8",
+   "refs": []
+  },
+  "prompt.verifier.verifier_deep_review_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_DEEP_REVIEW_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 153,
+   "placeholders": [
+    "candidate_answer",
+    "problem",
+    "theorem_context"
+   ],
+   "sha1": "a39823e91380",
+   "refs": []
+  },
+  "prompt.verifier.verifier_scoring_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_SCORING_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 402,
+   "placeholders": [],
+   "sha1": "7ae51d5311e5",
+   "refs": []
+  },
+  "prompt.verifier.verifier_scoring_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_SCORING_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 63,
+   "placeholders": [
+    "candidate_answer",
+    "problem"
+   ],
+   "sha1": "1751d05cf7f3",
+   "refs": []
+  },
+  "prompt.verifier.verifier_feedback_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_FEEDBACK_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 175,
+   "placeholders": [],
+   "sha1": "07a5c1db02f4",
+   "refs": []
+  },
+  "prompt.verifier.verifier_feedback_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_FEEDBACK_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 68,
+   "placeholders": [
+    "candidate_answer",
+    "problem"
+   ],
+   "sha1": "bfc3577672e4",
+   "refs": []
+  },
+  "prompt.verifier.verifier_bugreport_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_BUGREPORT_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 1045,
+   "placeholders": [],
+   "sha1": "8c6a318afdbd",
+   "refs": []
+  },
+  "prompt.verifier.verifier_bugreport_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_BUGREPORT_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 68,
+   "placeholders": [
+    "candidate_answer",
+    "problem"
+   ],
+   "sha1": "b29ba79ce55e",
+   "refs": []
+  },
+  "prompt.verifier.verifier_rubric_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_RUBRIC_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 512,
+   "placeholders": [],
+   "sha1": "d6afbfe957a1",
+   "refs": []
+  },
+  "prompt.verifier.verifier_rubric_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_RUBRIC_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 74,
+   "placeholders": [
+    "candidate_answer",
+    "problem"
+   ],
+   "sha1": "52201e29e72b",
+   "refs": []
+  },
+  "prompt.verifier.verifier_challenge_system": {
+   "tier": "B",
+   "status": "ok",
+   "type": "text",
+   "source": "prompts/verifier.py::VERIFIER_CHALLENGE_SYSTEM",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 237,
+   "placeholders": [],
+   "sha1": "9f321b4f9cac",
+   "refs": []
+  },
+  "prompt.verifier.verifier_challenge_template": {
+   "tier": "B",
+   "status": "ok",
+   "type": "template",
+   "source": "prompts/verifier.py::VERIFIER_CHALLENGE_TEMPLATE",
+   "reason": "提示词文本：语义改动必须人审（机器只碰 A 档）",
+   "chars": 73,
+   "placeholders": [
+    "candidate_answer",
+    "problem"
+   ],
+   "sha1": "93215aaf3007",
+   "refs": []
+  },
+  "mem.lesson.E-check": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-check]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "数值答案代回自检",
+   "qtypes": "解答题, 计算题",
+   "refs": []
+  },
+  "mem.lesson.E-form": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-form]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "解族完整性（常数项/参数）",
+   "qtypes": "解答题,",
+   "refs": []
+  },
+  "mem.lesson.E-eq": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-eq]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "符号形变等价自检",
+   "qtypes": "解答题, 证明题",
+   "refs": []
+  },
+  "mem.lesson.E-extreme": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-extreme]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "极值/最值声称先数值验证",
+   "qtypes": "解答题, 证明题",
+   "refs": []
+  },
+  "mem.lesson.E-count": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-count]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "计数/枚举完备性自检",
+   "qtypes": "解答题, 填空题",
+   "refs": []
+  },
+  "mem.lesson.E-bound": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-bound]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "极值必须构造+上界双向论证",
+   "qtypes": "解答题, 证明题",
+   "refs": []
+  },
+  "mem.lesson.E-magnitude": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "prompts/error_lessons.py::LESSONS[E-magnitude]",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "数值答案的量级合理性核对",
+   "qtypes": "解答题, 填空题",
+   "refs": []
+  },
+  "mem.kb.experience_library": {
+   "tier": "B",
+   "status": "ok",
+   "type": "entry",
+   "source": "docs/经验库.jsonl",
+   "reason": "记忆条目文本：改一条即改行为，须人审",
+   "name": "",
+   "qtypes": "",
+   "refs": []
+  }
+ },
+ "c": {
+  "tool.calc_verify": {
+   "tier": "C",
+   "status": "structural",
+   "type": "function",
+   "source": "tools/agent_toolkit/calc_verify.py",
+   "reason": "工具实现与签名：增删工具会改控制流拓扑，永不进候选池（描述文本由人改）",
+   "exported": true
+  },
+  "tool.lean_check": {
+   "tier": "C",
+   "status": "structural",
+   "type": "function",
+   "source": "tools/agent_toolkit/lean_check.py",
+   "reason": "工具实现与签名：增删工具会改控制流拓扑，永不进候选池（描述文本由人改）",
+   "exported": true
+  },
+  "tool.leansearch": {
+   "tier": "C",
+   "status": "structural",
+   "type": "function",
+   "source": "tools/agent_toolkit/leansearch.py",
+   "reason": "工具实现与签名：增删工具会改控制流拓扑，永不进候选池（描述文本由人改）",
+   "exported": true
+  },
+  "tool.smt_check": {
+   "tier": "C",
+   "status": "structural",
+   "type": "function",
+   "source": "tools/agent_toolkit/smt_check.py",
+   "reason": "工具实现与签名：增删工具会改控制流拓扑，永不进候选池（描述文本由人改）",
+   "exported": false
+  },
+  "tool.to_lean": {
+   "tier": "C",
+   "status": "structural",
+   "type": "function",
+   "source": "tools/agent_toolkit/to_lean.py",
+   "reason": "工具实现与签名：增删工具会改控制流拓扑，永不进候选池（描述文本由人改）",
+   "exported": true
+  }
+ }
+}

@@ -208,8 +208,6 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "eval_alpha_equiv": (
         "EVAL_ALPHA_EQUIV", "bool", False, "字母等价（A/a）判定（默认关）"),
     # ---- deploy/run_112.py ----
-    "mp_arm": (
-        "MP_ARM", "str", "baseline", "实验臂名称（deploy 用）"),
     # ---- agent/artifact_store.py（2026-10-02 中间结果存储层）----
     "artifact_store_enabled": (
         "ARTIFACT_STORE_ENABLED", "bool", True,
@@ -341,19 +339,6 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "ENABLE_THEOREM_QUERY_LLM", "bool", True,
         "**LLM 辅助 query**（用户 A1）：先让大模型给出 2–3 条检索方向（只给关键词、"
         "不给定理名，防幻觉），再交检索器出事实；失败自动回退纯规则 query"),
-    "enable_lean_before_vote": (
-        "ENABLE_LEAN_BEFORE_VOTE", "bool", False,
-        "**4.7_lean**：把候选级 Lean 硬验证前移到投票之前（用户 Q30）。"
-        "默认 False —— 主链改动，先 A/B 验证再考虑翻默认；开时会把不通过者投票前淘汰，"
-        "并把淘汰反馈注入 revise"),
-    "enable_verify_chain_reorder": (
-        "ENABLE_VERIFY_CHAIN_REORDER", "bool", True,
-        "4_verify 的**候选判定强度**：True（默认）= 多票（tier_votes=3，强度=基线）；"
-        "False = 单票（**A/B 对照组**）。"
-        "⚠ 2026-10-13 更正：票数**不参与终选**（终选由 final_selector 独立完成，"
-        "它只看证伪结果与可解析性）⇒ 2026-10-12「降为 1 票」的默认已回滚 —— "
-        "实测该降法让「全 0 票 ⇒ 强制重解」不再触发（5_revise 5805s→306s），"
-        "致 official112-008 由对变错"),
     "pool_empty_clear": (
         "POOL_EMPTY_CLEAR", "bool", True,
         "候选全被滤掉时**清空池并走兜底**（用户 Q32）；=0 回退 2026-09-18 "
@@ -430,15 +415,6 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     "enable_question_type": (
         "ENABLE_QUESTION_TYPE", "bool", True, "题型惰性分类总开关"),
     # ---- agent/orchestrator.py（零多样性补采，2026-10-06 新增）----
-    "diversity_resample_enabled": (
-        "DIVERSITY_RESAMPLE", "bool", True,
-        "候选**零多样性**（全题只有 1 种答案）时是否触发**高温度补充采样**。"
-        "实测题 000：5 个候选答案全同 ⇒ 置信度被刷到 1.00 ⇒ 直接放行（答案错）。"
-        "「答案一致」在采样无多样性时是**采样失败信号**而非可靠性证据 ⇒ 应去创造分歧。"
-        "置 False 回退旧行为（直接按高置信放行）做 A/B"),
-    "diversity_resample_count": (
-        "DIVERSITY_RESAMPLE_COUNT", "int", 3,
-        "零多样性时补充采样的候选数（默认 3），用高温度 0.8/0.9/1.0 求差异"),
     # ---- agent/orchestrator.py（门全拒的处置策略，2026-10-06 新增）----
     "strict_all_rejected": (
         "STRICT_ALL_REJECTED", "bool", False,
@@ -452,24 +428,7 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     # 约束 ⇒ 单题最多调用 ≤5 次（smoke10 实测 ≤2）⇒ 阈值**结构性不可达**、
     # decision 恒为 HOLD（10/10 题只出现 HOLD）⇒ AcceptGate 是空闸门；且 ACCEPT
     # 分支当时无消费者。本组开关把它变成可达且被消费的真闸门。
-    "accept_gate_enforce": (
-        "ACCEPT_GATE_ENFORCE", "bool", True,
-        "让 AcceptGate 真正生效（默认 True = 修好后行为）：阈值改为可达口径且 "
-        "ACCEPT/REJECT 均改变 revise 行为。=0 回退旧行为（阈值 5/10、恒 HOLD、无约束）做 A/B"),
-    "accept_gate_pass_threshold": (
-        "ACCEPT_GATE_PASS_THRESHOLD", "num", 1.0,
-        "连续通过达 N 次 → ACCEPT（默认 1；仅在 accept_gate_enforce 打开时生效）"),
-    "accept_gate_reject_defect_threshold": (
-        "ACCEPT_GATE_REJECT_DEFECT_THRESHOLD", "num", 2.0,
-        "连续重大缺陷达 N 次 → REJECT（默认 2；仅在 accept_gate_enforce 打开时生效）"),
     # ---- agent/orchestrator.py（revise 耗时归属，2026-10-07 新增）----
-    "stage_timer_reassign_revise": (
-        "STAGE_TIMER_REASSIGN_REVISE", "bool", True,
-        "把 revise 回环墙钟从调用方阶段（4_verify/4.6/5.5）改归到 "
-        "`5_revise_or_fallback`（默认 True，纯可观测性、不改行为）。"
-        "依据 smoke10：题 001 revise_round=4 却记 `4_verify=5546s` 而 "
-        "`5_revise_or_fallback=7.4e-06s`；题 000 同机制却记 3683s ⇒ 归属不一致。"
-        "=0 回退旧埋点做 A/B"),
     # ---- agent/solver.py（revise 候选数下限，2026-10-06 新增）----
     "revise_min_candidates": (
         "REVISE_MIN_CANDIDATES", "int", 3,
@@ -520,22 +479,6 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     #   `_review_bug_feedback` 把模型裸输出不加限直接当反馈返回）；
     #   ② 该函数把 verifier 保留的深复核推理**整段重新摘要成短清单**再覆盖
     #   `ctx.revise_feedback` ⇒ 两处修复互相抵消、推理始终没到模型手上。
-    "feedback_review_append": (
-        "FEEDBACK_REVIEW_APPEND", "bool", True,
-        "Step 4 复核产物**附加**而非覆盖（默认 True = 修好后行为）："
-        "复核只做「是否属实」的判定与标注，以 `【复核意见】` 段并入原反馈，"
-        "不摘要掉 verifier 保留的深复核推理；=0 回退旧行为（整段覆盖）做 A/B"),
-    "feedback_review_max_chars": (
-        "FEEDBACK_REVIEW_MAX_CHARS", "num", 8000,
-        "Step 4 复核产物长度上限（默认 8000，与 verifier 复核反馈同口径："
-        "`verifier.py:1821` 结构化分支 `[:8000]`；**保头**截断，末尾加「…（已截断）」）。"
-        "治实测 157,550 字符裸输出灌进提示词；=0 不截断（回退旧行为）"),
-    "feedback_review_clip": (
-        "FEEDBACK_REVIEW_CLIP", "bool", True,
-        "Step 4 复核产物**越权结论/重做正文清洗**（默认 True = 修好后行为，复用 "
-        "`verifier._clip_review_prose`）：实测题 000 复核者输出「正确答案应为 0。"
-        "下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而"
-        "标准 20460。=0 回退旧行为（不清洗）做 A/B"),
     # ---- agent/deterministic.py（2026-10-07「审计闸门对解答题结构性无输出」修复）----
     "deterministic_solution_check": (
         "DETERMINISTIC_SOLUTION_CHECK", "bool", True,
@@ -563,10 +506,6 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
     #   或模块级常量，env 能生效（优先级不变）但 config 覆盖读不到，需改为实时读注册表。
     # ★ 2026-10-15（用户定案「删直答兜底」）：以下 3 个直答专用字段已随
     #   `_emergency_direct_solve` / `_emergency_answer` 删除，无消费者，四表同步移除。
-    "rework_reserve_sec": (
-        "REWORK_RESERVE_SEC", "num", 300.0,
-        "6.5 终审重做循环为「一次重做 + 复验」预留的秒数（防跨硬墙）。"
-        "读取处 agent/orchestrator.py:2497"),
     "deep_max_rework": (
         "DEEP_MAX_REWORK", "num", -1,
         "6.5 审核重做的候选数上限（deep 档）。**-1 = 无上限**（研究期默认；比赛期曾为 3）。"
@@ -683,6 +622,16 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "OBJECTIVE_ITEMWISE_PLAN", "bool", True,
         "子目标**规划**阶段的客观题逐项策略（=0 关闭）。"
         "读取处 agent/sub_goal_solver.py:1376"),
+    # ---- L0 参数层（三体架构的地基，2026-10-27）----
+    "params_json_path": (
+        "MP_PARAMS_JSON", "str", "",
+        "L0 参数层文件路径（空=不启用）。非空时 `EvalEngine` 把该文件的 **A 段**"
+        "（机器可改的标量值，由 tools/params_export.py 生成并已验证白名单）并入"
+        " `DEFAULT_AGENT_OVERRIDES` 之上、CLI/实验臂之下 ⇒ 候选改动用一个 JSON "
+        "patch 就能整批判测。**默认空 ⇒ 行为与不接该层完全一致**；"
+        "生效指纹与「被丢弃的键」会打在启动横幅里，防静默失效。"
+        "⚠ 只在 `run_eval`→`EvalEngine` 链路生效；直接 `ReasoningAgent(...)` 的"
+        "脚本不读它（那些入口要接需显式调用 `contracts.params_io`）"),
 }
 
 _OFF = {"0", "false", "no", "off", ""}

@@ -120,7 +120,6 @@ _CONFIG_OVERRIDE_KEYS = (
     #   必须在此白名单，否则 CLI/kwargs 传入会被静默丢弃（本项目多次踩坑）。
     "pool_gate_v2", "check_protocol_guard",
     "strict_all_rejected",
-    "diversity_resample_enabled", "diversity_resample_count",
     "use_proof_channel", "use_lemma_accumulation",
     "lemma_domains",
     "max_answer_tokens", "revise_sample_times", "revise_min_candidates",
@@ -150,7 +149,6 @@ _CONFIG_OVERRIDE_KEYS = (
     "lean_xcheck_numeric",
     "llm_retry_on_timeout",
     "llm_timeout",
-    "mp_arm",
     "minimal_mode",  # 2026-10-02 最小基础模式（只留主链）
     "numericize_final",
     "objective_itemwise_priority",
@@ -182,8 +180,7 @@ _CONFIG_OVERRIDE_KEYS = (
     "blueprint_multi_gen_rounds", "blueprint_self_review",
     "blueprint_self_review_reject_ratio",
     "subgoal_inputs_validation",
-    "enable_verify_chain_reorder", "pool_empty_clear",
-    "enable_lean_before_vote",
+    "pool_empty_clear",
     "enable_theorem_query_llm",
     "subgoal_self_improve_rounds",
     # 2026-10-15（用户「2 与 3 之间建一个环」）：求解期动态倒推 + 递归层数上限
@@ -234,7 +231,6 @@ _CONFIG_OVERRIDE_KEYS = (
     # 时间预算（2026-08-28 新增；2026-09-29 删除 deep_quota_ratio 键）
     "critical_tail_seconds", "deep_critical_tail_seconds",
     # L1 验证优先（2026-08-31）
-    "verify_only_seconds",
     # 结构化 bug report 反馈
     "use_bug_report_feedback",
     # Step 2 无条件自改进（IMO2025 论文）
@@ -255,20 +251,14 @@ _CONFIG_OVERRIDE_KEYS = (
     # 易错点记忆注入（2026-09-06 A 档轻量经验）
     "enable_error_lessons",
     # Step 4 bug report 复核
-    "enable_feedback_review",
     # 2026-10-06：Step 4 复核的修复（附加而非覆盖 / 产物长度上限 / 越权清洗）
-    "feedback_review_append", "feedback_review_max_chars",
-    "feedback_review_clip",
     # 对抗式验证（#16）
     "enable_adversarial_verify", "adversarial_tiers",
     "adversarial_min_confidence", "adversarial_max_tokens",
     "adversarial_max_reasoning",
-    "verify_enhance_est_seconds",
     # 检测链（2026-09-06 去 Lean 化；顶替原 Lean 硬验证开关）
-    "enable_audit_gate",
     # Lean 双通道（2026-09-06 晚恢复：lean-toolchain 离线可用后接入）
-    "enable_lean_verify", "enable_lean_preverify", "lean_preverify_tiers",
-    "preverify_max_rounds", "preverify_timeout",
+    "enable_lean_verify", "enable_lean_preverify",     "preverify_max_rounds", "preverify_timeout",
     "lean_gate_all_proofs", "lean_gate_nonproof", "lean_gate_strict",
     "lean_gate_nonproof_deep_only",
     "lean_gate_unknown_stop",
@@ -294,15 +284,10 @@ _CONFIG_OVERRIDE_KEYS = (
     "deterministic_solution_check",   # 解答题确定性判别重写（默认 True）
     "audit_gate_rubric_nonproof",     # 解答题也跑 Level2 rubric（默认 False）
     # ★ 2026-10-07 开关注册制（fix-gate-timing-diag：AcceptGate 生效 + 计时归属）
-    "accept_gate_enforce",            # AcceptGate 真实生效（默认 True）
-    "accept_gate_pass_threshold",
-    "accept_gate_reject_defect_threshold",
-    "stage_timer_reassign_revise",    # revise 耗时归属修正（默认 True）
     # ★ 2026-10-07 开关注册制补齐（fix-switch-debt）：
     #   ① 6 个账外 gate 型 env 的配置字段（默认值见 switch_registry 各条）；
     #   ★ 2026-10-15：emergency_direct_max_tokens / emergency_answer_max_tokens /
     #     final_answer_min_sec 已随直答兜底删除。
-    "rework_reserve_sec",
     "deep_max_rework", "objective_itemwise_plan",
     #   ② 9 条此前**漏加白名单**的键 ⇒ 相关开关的 CLI/kwargs **回退路径在
     #      代码层面不存在**（传参被 `__init__` 静默丢弃；本项目已因漏加
@@ -314,6 +299,10 @@ _CONFIG_OVERRIDE_KEYS = (
     "enable_subgoal_main_path", "inject_mathlib_to_solver",
     "objective_tactic_enabled",
     "symbolic_max_tokens", "symbolic_solve_max_tokens",
+    # ★ 2026-10-27（L0 参数层）：params.json 路径。缺此条 ⇒ 想用 CLI/kwargs 指定
+    #   参数层文件会被 `__init__` **静默丢弃**（本项目踩过最多的一类坑）；
+    #   常规用法是 env `MP_PARAMS_JSON=<path>`，同样需要本白名单兜住 kwargs 路径。
+    "params_json_path",
 )
 
 

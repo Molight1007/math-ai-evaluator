@@ -17,7 +17,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 from user_agent import ReasoningAgent
+from user_agent import _CONFIG_OVERRIDE_KEYS  # L0 参数层：注入前必须过覆盖白名单
 from utils.llm_client import LLMClient
+from contracts.params_io import ParamsError, a_values, fingerprint, load as load_params
+from contracts.switch_registry import SWITCHES as SWITCH_FIELDS
+from contracts.switch_registry import get_str as get_switch_str
+from contracts.switch_registry import source_of as switch_source_of
 
 from run_eval__classify import _classify_error
 from run_eval__scoring import answers_match
@@ -124,6 +129,28 @@ def _llm_call_snapshot() -> dict:
         return {"calls": 0, "truncated": 0}
 
 
+def _token_snapshot() -> dict:
+    """token 用量的全局快照（用于算单题增量）。
+
+    ★ 2026-10-24 审计层：与 `_llm_call_snapshot` **数据源同源**
+    （`utils.llm_client.get_usage_stats()`），但**不并入 `llm_calls`** ——
+    那个字段的语义是"调用次数"，混进 token 会污染既有下游
+    （`test_result_detail_export` 断言 `llm_calls["calls"]` 为 int）。
+    缺字段一律补 0，绝不打断评测。
+    """
+    try:
+        from utils.llm_client import get_usage_stats
+        st = get_usage_stats() or {}
+        return {"prompt_tokens": int(st.get("prompt_tokens", 0) or 0),
+                "completion_tokens": int(st.get("completion_tokens", 0) or 0),
+                "total_tokens": int(st.get("total_tokens", 0) or 0),
+                "calls_with_usage": int(st.get("calls_with_usage", 0) or 0),
+                "usage_unavailable": int(st.get("usage_unavailable", 0) or 0)}
+    except Exception:  # noqa: BLE001
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+                "calls_with_usage": 0, "usage_unavailable": 0}
+
+
 def _mcp_call_snapshot() -> dict:
     """Lean MCP 诊断调用的全局快照（用于算单题增量）。
 
@@ -178,13 +205,16 @@ class EvalEngine:
             base_url=base_url or None,
             model=model or None,
         )
-        # 配置覆盖：先取本地评测默认值，再叠加 CLI 传入的 A/B 开关
+        # 配置覆盖：先取本地评测默认值，**再叠 L0 参数层**，最后叠 CLI 传入的 A/B 开关。
+        # 三层次序是刻意的：CLI 临时指定 > 参数层（当前基线） > DEFAULT_AGENT_OVERRIDES。
         overrides = dict(DEFAULT_AGENT_OVERRIDES)
+        self._apply_params_layer(overrides, agent_overrides or {})
         if agent_overrides:
             overrides.update(agent_overrides)
         # 保存生效覆盖（小样本自适应要用），避免二次重建时丢失
         self._effective_overrides = overrides
         self.agent = ReasoningAgent(self.llm_client, **overrides)
+        self._verify_params_layer()
         # ★ 2026-10-02 中间结果存储层接线：本轮评测 run_id（一轮一个目录：
         #   results/<run_id>/<qid>/）。显式设定后由 artifact_store 统一取用；
         #   平台直调（不经本脚本）时回退进程级稳定默认值。失败不阻断评测。
@@ -202,6 +232,87 @@ class EvalEngine:
         self.domain_stats: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {"total": 0, "correct": 0}
         )
+
+    # ------------------------------------------------------------------
+    # L0 参数层（2026-10-27，三体架构的地基）
+    # ------------------------------------------------------------------
+    def _apply_params_layer(self, overrides: Dict[str, Any],
+                            explicit: Dict[str, Any]) -> None:
+        """把 params.json 的 A 段并入 overrides（DEFAULT < 参数层 < 显式覆盖）。
+
+        记录写 `self._params_layer`（进 run manifest）⇒ 任何一份结果都能回答
+        「这轮用的是哪份参数（sha）／哪些键被 CLI 顶掉／哪些键没注进去」。
+
+        失败一律抛异常：参数层静默失效 = 分数记在错误版本头上，比跑挂更贵。
+        """
+        rec = {"enabled": False, "path": "", "sha": "", "n_a": 0,
+               "applied": 0, "shadowed": [], "dropped": []}
+        self._params_layer = rec
+        self._params_values: Dict[str, Any] = {}
+        path = ""
+        try:
+            path = get_switch_str("params_json_path") or ""
+        except Exception:  # noqa: BLE001  注册表被改动/降级时不影响评测（显式参数仍可用）
+            path = ""
+        path = path or str(explicit.get("params_json_path") or "")
+        if not path:
+            return
+        try:
+            doc = load_params(path)
+        except ParamsError as e:
+            raise RuntimeError(
+                "L0 参数层不可用（MP_PARAMS_JSON=%s）：%s" % (path, e)) from e
+        vals = a_values(doc)
+        unknown = sorted(set(vals) - set(_CONFIG_OVERRIDE_KEYS))
+        if unknown:
+            raise RuntimeError(
+                "L0 参数层含不可注入的键（不在 _CONFIG_OVERRIDE_KEYS，注了也会被"
+                "静默丢弃）：%s" % ", ".join(unknown))
+        shadowed = sorted(set(vals) & set(explicit))
+        overrides.update(vals)
+        self._params_values = vals
+        rec.update(
+            enabled=True, path=os.path.abspath(path), sha=fingerprint(doc),
+            n_a=len(vals), applied=len(vals) - len(shadowed), shadowed=shadowed)
+        logger.info("L0 参数层：%s（sha=%s, A 段 %d 个, CLI 顶掉 %d 个）",
+                    rec["path"], rec["sha"], rec["n_a"], len(shadowed))
+
+    def _verify_params_layer(self) -> None:
+        """端到端验收：注进去的值必须真落在 `agent.config` 上。
+
+        为什么单独验一次：本项目有过「四处登记齐全、却没人调 bind_config ⇒
+        中间层是死的」的先例。**登记 ≠ 链通**，必须看产物。
+        """
+        rec = getattr(self, "_params_layer", None)
+        if not rec or not rec.get("enabled"):
+            return
+        cfg = getattr(self.agent, "config", None)
+        dropped = []
+        env_win = []
+        for k, v in (getattr(self, "_params_values", {}) or {}).items():
+            if k in rec.get("shadowed", []):
+                continue
+            # 环境变量优先级高于参数层（四件套口径 env > config > 默认）：
+            # 被 env 顶掉的键不算"注入失败"，但要留痕（否则看起来像参数层没生效）。
+            if k in SWITCH_FIELDS and switch_source_of(k) == "env":
+                env_win.append(k)
+                continue
+            try:
+                got = getattr(cfg, k)
+            except AttributeError:
+                dropped.append("%s（config 无此字段）" % k)
+                continue
+            if got != v:
+                dropped.append("%s=%r→%r" % (k, v, got))
+        rec["dropped"] = dropped
+        rec["env_win"] = sorted(env_win)
+        if env_win:
+            logger.info("L0 参数层：%d 个键被环境变量顶掉（env 优先）：%s",
+                        len(env_win), ", ".join(sorted(env_win)))
+        if dropped:
+            raise RuntimeError(
+                "L0 参数层注入后与生效配置不一致（%d 处）：%s"
+                % (len(dropped), "; ".join(dropped[:8])))
 
     def load_tests(self, filepath: str) -> List[Dict[str, Any]]:
         tests = []
@@ -241,6 +352,8 @@ class EvalEngine:
         _llm_before = _llm_call_snapshot()
         _mcp_before = _mcp_call_snapshot()
         _web_before = _web_call_snapshot()
+        # ★ 2026-10-24 审计层：token 也做前后差分 ⇒ 「本题用了多少 token」
+        _tk_before = _token_snapshot()
         # ★★ 2026-09-16 修既有 bug（由 tests/test_result_detail_export.py 抓到）：
         # `result` 原先**只在 try 内赋值**，一旦 `agent.solve()` 抛异常，
         # 紧随其后的 `isinstance(result, dict)` 会抛 `UnboundLocalError`
@@ -261,6 +374,11 @@ class EvalEngine:
         _llm_after = _llm_call_snapshot()
         llm_calls = {k: (_llm_after.get(k, 0) - _llm_before.get(k, 0))
                      for k in set(_llm_before) | set(_llm_after)}
+        # ★ 2026-10-24 审计层：本题 token 增量（并发>1 时是进程级串味值，
+        #   run manifest 会把 cost_accuracy 标成 "coarse"）
+        _tk_after = _token_snapshot()
+        tokens = {k: (_tk_after.get(k, 0) - _tk_before.get(k, 0))
+                  for k in _tk_after}
         # ★ 工具级埋点（用户 2026-09-16 要求）：本题 Lean MCP 的调用次数/成功/失败/耗时。
         _mcp_after = _mcp_call_snapshot()
         mcp_calls = {
@@ -366,12 +484,84 @@ class EvalEngine:
             "cluster": cluster_out,
             "trace": trace_out,
             "llm_calls": llm_calls,
+            # ★ 2026-10-24 审计层：本题 token（prompt/completion/total）
+            "tokens": tokens,
             # ★ 工具级埋点：Lean MCP + 通用联网搜索（calls/ok/fail/seconds + 派生判读）
             "tool_calls": {"lean_mcp": mcp_calls, "web_search": web_calls},
         }
 
+    def _write_manifest(self, output_file: str, test_file: str,
+                        tests: List[Dict]) -> None:
+        """写 run 身份 sidecar：``<output>.manifest.json``（2026-10-24 审计层）。
+
+        为什么必须：δ（噪声带）的语义是「**同一版本**重复评测」。仅凭文件名
+        无法证明 5 份结果是同一版本；一旦中间改过一行代码，δ 就变成跨版本
+        差异，测出来的噪声带毫无意义。因此记录三元身份：
+
+          · ``git_sha``      —— 提交号；
+          · ``worktree_sha`` —— `git diff HEAD` 的指纹（未提交改动也算版本的一部分）；
+          · ``bank_sha``     —— 题集文件指纹（防止题集被换过）。
+
+        `delta` 子命令据此硬校验，不一致直接拒绝。失败只告警，绝不阻断评测。
+        """
+        try:
+            import hashlib
+            import subprocess as _sp
+
+            _root = os.path.dirname(os.path.abspath(__file__))
+
+            def _run_git(args, timeout=15):
+                try:
+                    r = _sp.run(["git"] + args, cwd=_root, capture_output=True,
+                                text=True, encoding="utf-8", errors="replace",
+                                timeout=timeout)
+                    return (r.stdout or "").strip()
+                except Exception:  # noqa: BLE001
+                    return ""
+
+            _sha = _run_git(["rev-parse", "HEAD"]) or "unknown"
+            _diff_text = _run_git(["diff", "HEAD"], timeout=30)
+            _worktree_sha = (hashlib.sha256(_diff_text.encode("utf-8")).hexdigest()[:16]
+                             if _diff_text else "clean")
+            _bank_sha = ""
+            try:
+                with open(test_file, "rb") as fh:
+                    _bank_sha = hashlib.sha256(fh.read()).hexdigest()[:16]
+            except OSError:
+                pass
+            mf = {
+                "run_id": self.run_id,
+                "git_sha": _sha,
+                "worktree_sha": _worktree_sha,
+                "git_dirty": _worktree_sha != "clean",
+                "model": getattr(self.llm_client, "model", ""),
+                "base_url": getattr(self.llm_client, "base_url", ""),
+                "test_file": os.path.abspath(test_file),
+                "bank_sha": _bank_sha,
+                "question_ids": [str(t.get("id", t.get("_line_no"))) for t in tests],
+                "n_questions": len(tests),
+                "concurrency": self.concurrency,
+                # 诚实字段：进程级计数器在多线程下差分必然串味
+                "cost_accuracy": "exact" if int(self.concurrency) <= 1 else "coarse",
+                "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "resume": bool(self.resume),
+                # 开关快照：没有它，两版结果无法解释"差在哪"
+                "engine_overrides": {
+                    k: v for k, v in (self._effective_overrides or {}).items()
+                    if isinstance(v, (bool, int, float, str)) or v is None},
+                # L0 参数层：这轮用的是哪份 params.json（sha）+ 谁被 CLI 顶掉 + 有没有丢键
+                "params_layer": dict(getattr(self, "_params_layer", {}) or {}),
+            }
+            with open(output_file + ".manifest.json", "w", encoding="utf-8") as fh:
+                json.dump(mf, fh, ensure_ascii=False, indent=2)
+            logger.info("run manifest: %s.manifest.json (sha=%s wt=%s)",
+                        output_file, _sha[:8], _worktree_sha)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("run manifest 写入失败（不阻断评测）：%s", e)
+
     def run(self, test_file: str, output_file: str) -> Dict[str, Any]:
         tests = self.load_tests(test_file)
+        self._write_manifest(output_file, test_file, tests)
         done_ids = set()
         results = []
         if self.resume and os.path.exists(output_file):

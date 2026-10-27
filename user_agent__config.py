@@ -36,6 +36,12 @@ class AgentConfig(_AgentConfigBase):
     #   max_tokens 是**上限不是预留**，抬到 16384 不会让短调用变慢。
     llm_min_max_tokens: int = 16384
     max_workers: int = 3               # 并发验证线程数（匹配系统并发度=3）
+    # ★ 2026-10-27（L0 参数层）：params.json 路径。空 = 不启用，行为与改前完全一致。
+    #   非空时由 `run_eval__engine.EvalEngine` 读取并把 A 段并入 overrides；
+    #   注册表 `SWITCHES["params_json_path"]`（env `MP_PARAMS_JSON`）同源。
+    #   ★ 声明在此只为满足「开关注册四件套」：本字段**不被任何业务逻辑读取**，
+    #     唯一消费点是注册表读取器（env > 本字段 > 默认值）。
+    params_json_path: str = ""
     # ★ 2026-09-16 删除两个**死字段**（全仓 0 读取点，已实测确认）：
     #   · `max_tokens`  —— 实际生效的是 `max_answer_tokens`（solver 侧）
     #      与 `policy_max_tokens`；此处那份从未被读。
@@ -151,23 +157,19 @@ class AgentConfig(_AgentConfigBase):
     # 验证器给出缺陷反馈后，让模型先复核反馈是否属实、可驳回误报——
     # 论文：模型可驳回验证器的错误反馈，避免好答案被误报引导改坏。
     # 仅 deep 档 revise 回环触发（每次 +1 次 LLM 调用，预算可承受）。
-    enable_feedback_review: bool = True
     # ★ 2026-10-06 修两处已确认缺陷（见 agent/orchestrator.py:2759 `_review_bug_feedback`）：
     #   ① 复核产物**附加**而非覆盖：verifier 已把深复核推理（`【复核依据（判错报告
     #      原文摘录）】`，上限 8000）保留进 feedback，但复核会把它整段摘要成短清单
     #      再覆盖 `ctx.revise_feedback`（实测 q1–q6 最长仅 2.4–3.0k、且不含该段）
     #      ⇒ 推理始终没到模型手上。默认 True = 复核只做判定/标注、以 `【复核意见】`
     #      段并入；设 False 回退旧的「整段覆盖」做 A/B。已登记 switch_registry。
-    feedback_review_append: bool = True
     #   ② 复核产物**长度上限**（保头截断）：实测 official112-007 单题返回了
     #      157,550 字符裸输出并被原样拼进提示词。默认 8000，与 verifier 的复核反馈
     #      同口径（verifier.py:1821 结构化分支 `[:8000]`）。设 0 = 不截断。
-    feedback_review_max_chars: int = 8000
     #   ③ 复核产物**越权结论/重做正文清洗**：实测题 000 复核者输出「正确答案应为 0。
     #      下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而
     #      标准 20460。默认 True = 复用 `verifier._clip_review_prose` 同一道清洗
     #      （不复制正则，避免两处口径分叉）；设 False 回退旧行为做 A/B。
-    feedback_review_clip: bool = True
 
     # ---- 对抗式验证（#16，2026-08-30）----
     # 正向验证**通过**后主动证伪：假设答案错误，反向找反例 / 第一个错误步骤。
@@ -193,7 +195,6 @@ class AgentConfig(_AgentConfigBase):
     # 4.5/4.6 是可弃增强：放行前要求剩余时间 ≥ 本值 + critical_tail + 30s 缓冲
     # （deep 需 ~450s / standard ~510s），否则跳过直进 6.5——宁少一层深查，
     # 不饿死最终闸门。设 0 = 关闭护栏（旧行为）。对齐 LLMClient 180s×2 重试上限。
-    verify_enhance_est_seconds: float = 360.0
 
     # ---- 2026-09-29：难度路由（DifficultyRouter）已删除 ----
     # 原 `enable_difficulty_router` / `enable_llm_difficulty` / `algebra_force_deep`
@@ -217,7 +218,6 @@ class AgentConfig(_AgentConfigBase):
     # 净 −1、McNemar p=1.0 → **噪声内，无收益** → 默认关闭（=0 不触发）。
     # 机制与测试保留（tests/test_verify_only.py）；若将来再试，
     # 先补「预算跳过/None 投票计数器」量化验证假设，再调阈值。
-    verify_only_seconds: int = 0
     deep_use_sub_goal: bool = True
     # ============================================================
     # 2026-10-01 开关注册制（审查 A 级第 2 条）
@@ -254,7 +254,6 @@ class AgentConfig(_AgentConfigBase):
     llm_retry_on_timeout: bool = False  # LLM_RETRY_ON_TIMEOUT — LLM 超时是否重试（默认不重试）
     # ★ 2026-10-07 补登：LLM 读超时（秒）。原为 utils/llm_client 的模块级常量，import 期求值 + 不入注册表 ⇒ config/CLI 覆盖读不到。
     llm_timeout: int = 120
-    mp_arm: str = 'baseline'  # MP_ARM — 实验臂名称（deploy 用）
     minimal_mode: bool = False  # MINIMAL_MODE — 最小基础模式（只留主链，默认关）
     numericize_final: bool = True  # NUMERICIZE_FINAL — 终答数值化（把精确式转小数）
     objective_itemwise_priority: bool = True  # OBJECTIVE_ITEMWISE_PRIORITY — 客观题逐项优先策略
@@ -289,7 +288,6 @@ class AgentConfig(_AgentConfigBase):
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
     # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。
     # 读取处仍需改为实时读注册表，见 agent/switch_registry.py 各条注释与交付清单。
-    rework_reserve_sec: float = 300.0         # REWORK_RESERVE_SEC — 6.5 重做预留秒数
     deep_max_rework: int = -1                 # DEEP_MAX_REWORK — 6.5 重做候选上限（deep；-1=无上限）
     objective_itemwise_plan: bool = True      # OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略
           # 子目标分解主路径（统一档位下每题执行）
@@ -429,7 +427,6 @@ class AgentConfig(_AgentConfigBase):
     # Lean 环境可用 → 2.6 preverify / 3.6 候选 / 6.5 最终闸门走 LeanGate 硬验证
     # （证明题整题 verify、非证明题 verify_answer），Lean 不可用/异常自动回落
     # AuditGate（AI 判分链），本地评测与平台两种环境同一份代码都正确。
-    enable_audit_gate: bool = True          # AuditGate 检测链总开关（lean 不可用时兜底）
     # ---- Lean 双通道开关（2026-09-06 晚恢复；9/6 去 Lean 化前字段全量回归）----
     enable_lean_verify: bool = True         # Lean 通道总开关（配合环境探测，无 Lean 自动回落 AuditGate）
     # 2026-09-12 **按实测数据关闭**：2.6 前置形式化在冒烟中 **5/5 题全部 fail**
@@ -448,7 +445,6 @@ class AgentConfig(_AgentConfigBase):
     # 而非数学理解错误 ⇒ standard 扩展属**纯耗时无产出**（每题 100-150s），已回退。
     # 另：2.6 的耗时主要在"LLM 把题目翻译成 Lean"（20-40s/次），Lean 编译本身仅 3s
     # （日志实测）。deep 档是否保留 preverify，待全量数据再评估。
-    lean_preverify_tiers: tuple = ("deep",)  # preverify 适用档位
     preverify_max_rounds: int = 2           # preverify 编译失败重试上限（强制重新审题）
     preverify_timeout: float = 60.0         # preverify 单次编译/转化超时（秒）
     # 2026-10-12 补齐（原为裸 getattr，读取点 tools/lean_local/lean_pre_verifier.py:169）：
@@ -497,8 +493,6 @@ class AgentConfig(_AgentConfigBase):
     subgoal_dynamic_backward: bool = True
     subgoal_backward_max_depth: int = 2
     enable_theorem_query_llm: bool = True
-    enable_lean_before_vote: bool = False
-    enable_verify_chain_reorder: bool = True
     pool_empty_clear: bool = True
     # ★ 2026-10-14 五道审核链（用户定案）：规范化前置 → ①AI 自审 → ②对抗证伪
     #   → ③Lean 代回 → ④计算检测 → ⑤投票（先判多答案再投票）。
@@ -547,12 +541,6 @@ class AgentConfig(_AgentConfigBase):
     # 余下 9 个只经 `get_bool()/get_num()/get_str()` 读取（行为本就正确），
     # 缺字段的唯一后果是 `param_usage` 报表显示代码默认值、与实际 env 覆盖值不符。
     # 一并补齐，使「注册表 / config / 白名单 / param_usage」四件套完整。
-    diversity_resample_enabled: bool = True
-    diversity_resample_count: int = 3
-    accept_gate_enforce: bool = True
-    accept_gate_pass_threshold: float = 1.0
-    accept_gate_reject_defect_threshold: float = 2.0
-    stage_timer_reassign_revise: bool = True
     pool_gate_v2: bool = True
     check_protocol_guard: bool = True
     verifier_vote_reasoning: str = "disagree"

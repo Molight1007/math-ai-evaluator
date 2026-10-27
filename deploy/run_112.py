@@ -323,6 +323,10 @@ def _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_o
           f"model={os.environ.get('LLM_MODEL')}  "
           f"timeout={os.environ.get('LLM_TIMEOUT')}  "
           f"retry={os.environ.get('LLM_RETRY_ON_TIMEOUT')}", flush=True)
+    # ★ 2026-10-27（L0 参数层）：本轮用的参数文件（空=不启用，行为与改前一致）。
+    #   生效 sha / 被 CLI 顶掉的键 / 注入失败都会写进 <输出>.manifest.json 的 params_layer。
+    print(f"参数层 MP_PARAMS_JSON={os.environ.get('MP_PARAMS_JSON') or '（空=不启用）'}",
+          flush=True)
     print(f"语料   {os.environ.get('LEANSEARCH_CORPUS_PATH')}  "
           f"存在={os.path.isfile(os.environ.get('LEANSEARCH_CORPUS_PATH', ''))}", flush=True)
     print(f"LEAN   PATH={'有' if os.environ.get('LEAN_PATH') else '无'}  "
