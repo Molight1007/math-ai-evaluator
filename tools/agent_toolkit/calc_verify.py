@@ -123,6 +123,32 @@ def _constraints_hold(sub: dict, prepared, tol: float = 1e-9) -> bool:
     return True
 
 
+def _exponent_symbols(expr) -> set:
+    """出现在**指数位置**的自由符号名集合。
+
+    ★ 2026-10-27（离线回放床实测误杀 2 条）：
+      `r^i < r^j`、`r^a < r^b` —— i/j、a/b 是**指示变量**（下标/序数），不是可取
+      任意实数的量。给它们代值等于替题设凭空规定 `i<j` 或 `i>j`：取 i=1,j=2 时
+      `r^1 < r^2` 对 r>1 成立，取 i=2,j=1 时反过来 —— 于是"反例"必然存在，
+      与命题真值无关。这与 ④ 界限陈述是同一类错误：**工具替未知量词做了选择**。
+
+      处理：指数位置的符号**不参与代值**。若一侧所有符号都在指数位，代值集合
+      变空 ⇒ 后续 `float(N(expr))` 对含符号表达式抛错 ⇒ 全部跳过 ⇒ 返回 None
+      （记疑，调用方不淘汰）。这是有意的窄修：宁可放过，不做新判断。
+    """
+    out = set()
+    try:
+        import sympy as _sympy
+        for _p in expr.atoms(_sympy.Pow):
+            _base, _exp = _p.as_base_exp()
+            _fs = getattr(_exp, "free_symbols", None)
+            if _fs:
+                out |= {str(s) for s in _fs}
+    except Exception:  # noqa: BLE001  探测失败 ⇒ 不过滤（保持原行为）
+        pass
+    return out
+
+
 def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
                        constraints=None) -> "bool | None":
     """判定 ``lhs op rhs``（op: ge/le/gt/lt）—— True 成立 / False 有反例 / None 无法判定。
@@ -191,6 +217,13 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
     #     任何 NameError 都会被下面的 `except Exception: pass` 吞掉 ⇒ 静默退化成
     #     「全部无法判定」（实测踩到，所有不等式一律 None）。
     _prep = _prepare_constraints(constraints)
+    # 题设已交代取值域的符号 —— ④ 与 ⑤ 共用同一口径（覆盖 ⇒ 代值合法）
+    _covered = set()
+    try:
+        for _cd, _co in _prep:
+            _covered |= {str(s) for s in getattr(_cd, "free_symbols", set())}
+    except Exception:  # noqa: BLE001  前提解析失败 ⇒ 视为"什么都没覆盖"
+        _covered = set()
     # ④ 界限陈述 vs 代数关系（★ 2026-10-26 离线回放床实测误杀）
     #
     #   两侧**共享**自由符号 ⇒ 关于这些符号的代数关系（`a^2+3b^2 >= 4|a||b|^3`），
@@ -212,9 +245,6 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
         _free_b = {str(s) for s in getattr(b, "free_symbols", set())}
         _free_all = _free_a | _free_b
         if _free_all and not (_free_a & _free_b):
-            _covered = set()
-            for _cd, _co in _prep:
-                _covered |= {str(s) for s in getattr(_cd, "free_symbols", set())}
             if not _free_all <= _covered:
                 return None
     except Exception:
@@ -222,6 +252,23 @@ def _verify_inequality(lhs, rhs, op: str, tol: float = 1e-9,
     try:
         import itertools
         import random
+        # ⑤ **两侧**指数都含未受前提约束的自由符号 ⇒ 记疑，不代值（★ 2026-10-27）
+        #
+        #   现场（official112-002，回放床实测 2 条误杀）：候选写 `r^i < r^j`，
+        #   i/j 是题设给定的**下标序**（i<j），不是可取任意实数的量。
+        #   旧实现在 `{r,i,j}` 上做 1..5 的笛卡尔枚举 ⇒ 取到 i=2,j=1 时
+        #   `r^2 < r^1` 对 r>1 必假 ⇒ 判「不等式不成立」⇒ 淘汰正确候选。
+        #   注意：只把 i/j 从代值集合里剔掉**仍然会误判** —— 剩下的 r=1 让
+        #   `r^i == r^j == 1`，严格不等式在边界点恒取等。所以不是"少代几个"，
+        #   而是整条不判：`r^A vs r^B` 的真值取决于 A 与 B 的相对大小，
+        #   而 A-B 的符号未定 ⇒ 代值等于替题设选定 A>B（与 ④ 同类错误）。
+        #
+        #   **只拦"两侧都有自由指数"**：`x^(d-1) >= x` 右侧指数是常数 1，
+        #   反例来自 d=1 使幂退化，属正常检测（题设给 `d>=2` 时由 constraints
+        #   过滤掉该点，见 test_conditional_inequality_respects_premise）。
+        if ((_exponent_symbols(a) - _covered)
+                and (_exponent_symbols(b) - _covered)):
+            return None
         syms = sorted(d_raw.free_symbols, key=lambda x: str(x))[:3]
 
         def _sample(pos: bool, den: int = 1) -> dict:

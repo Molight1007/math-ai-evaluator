@@ -415,6 +415,30 @@ def test_bound_statement_salvaged_by_premise():
     assert _verify_inequality("x^2", "4", "ge", constraints=c) is not False
 
 
+def test_exponent_variable_not_sampled():
+    """★ 2026-10-27 回放床实测误杀：指数位置的**指示变量**不得代值。
+
+    official112-002 原文的候选写 `r^i < r^j`（i、j 是题设给定的下标序）。
+    工具给 i/j 随机代值 ⇒ 取到 i=2, j=1 时 `r^2 < r^1` 对 r>1 必假
+    ⇒ 判「不等式不成立」⇒ 候选被淘汰。但"反例"是工具**凭空规定 i>j**
+    造出来的，与命题真值无关（i<j 是前提，不是可代值的自由量）。
+
+    处理与 ④ 界限陈述同类：宁可记疑（None ⇒ 不淘汰），不做新判断。
+    """
+    from tools.agent_toolkit.calc_verify import _verify_inequality
+    assert _verify_inequality("r^i", "r^j", "lt") is None
+    assert _verify_inequality("r^a", "r^b", "lt") is None
+
+
+def test_exponent_fix_keeps_base_sampling():
+    """修得不能过宽：底数符号照旧代值，017 型检出能力与常数指数不受影响。"""
+    from tools.agent_toolkit.calc_verify import _verify_inequality
+    # 两侧共享底数符号 + 常数指数 ⇒ 仍须抓出反例（017 型）
+    assert _verify_inequality("a^2+3*b^2", "4*Abs(a)*Abs(b)^3", "ge") is False
+    # 指数是常数 ⇒ r 不在指数位 ⇒ 照旧代值，r=1 时 r^4<r^3 不成立
+    assert _verify_inequality("r^4", "r^3", "lt") is False
+
+
 def test_inequality_sampling_is_deterministic():
     """正整数区改为确定性枚举 —— 同一候选两次运行必须同结论（可复现）。"""
     from tools.agent_toolkit.calc_verify import _verify_inequality
