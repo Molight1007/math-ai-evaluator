@@ -303,6 +303,11 @@ _CONFIG_OVERRIDE_KEYS = (
     #   参数层文件会被 `__init__` **静默丢弃**（本项目踩过最多的一类坑）；
     #   常规用法是 env `MP_PARAMS_JSON=<path>`，同样需要本白名单兜住 kwargs 路径。
     "params_json_path",
+    # ★ 2026-10-27（L0 补接线）：这两个键**有读取点却没进白名单** ⇒ 机器改不动
+    #   （params.json 里只能标 unwired）。补进来即变 A 档候选，行为不变：
+    #   · `llm_min_max_tokens` —— agent/base.py 的输出保底上限（推理模型思考会吃光短输出）
+    #   · `rewrite_max_rounds` —— agent/rewrite_gate.py 的 4.6 重写轮数上限
+    "llm_min_max_tokens", "rewrite_max_rounds",
 )
 
 

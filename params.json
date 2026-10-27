@@ -7,11 +7,11 @@
   "C": "结构性，永不进候选池：阶段顺序/工具实现/硬编码上下文切片"
  },
  "counts": {
-  "A": 203,
-  "B": 83,
+  "A": 205,
+  "B": 81,
   "C": 5,
   "dead": 0,
-  "unwired": 2,
+  "unwired": 0,
   "struct": 9,
   "context_excluded": 467,
   "total_in_file": 291
@@ -1782,6 +1782,19 @@
     "tools/lean_local/lean_refiner.py"
    ]
   },
+  "llm_min_max_tokens": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.llm_min_max_tokens",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 16384,
+   "declared": 16384,
+   "eval_override": null,
+   "refs": [
+    "agent/base.py"
+   ]
+  },
   "llm_retry_on_timeout": {
    "tier": "A",
    "status": "ok",
@@ -2277,6 +2290,19 @@
    "eval_override": null,
    "refs": [
     "agent/param_usage.py",
+    "agent/rewrite_gate.py"
+   ]
+  },
+  "rewrite_max_rounds": {
+   "tier": "A",
+   "status": "ok",
+   "type": "int",
+   "source": "user_agent__config.py::AgentConfig.rewrite_max_rounds",
+   "reason": "标量 + 有读取点 + 在白名单：改它只动一个值",
+   "value": 2,
+   "declared": 2,
+   "eval_override": null,
+   "refs": [
     "agent/rewrite_gate.py"
    ]
   },
@@ -3316,17 +3342,6 @@
    ],
    "default_src": "field(default_factory=lambda: ['Number theory', '数论'])"
   },
-  "flow.llm_min_max_tokens": {
-   "tier": "B",
-   "status": "unwired",
-   "type": "int",
-   "source": "user_agent__config.py::AgentConfig.llm_min_max_tokens",
-   "reason": "有读取点但不在覆盖白名单：kwargs/CLI 会被静默丢弃，须先接线",
-   "refs": [
-    "agent/base.py"
-   ],
-   "default_src": "16384"
-  },
   "flow.max_subgoals_by_tier": {
    "tier": "B",
    "status": "struct",
@@ -3355,17 +3370,6 @@
     "tools/params_export.py"
    ],
    "default_src": "''"
-  },
-  "flow.rewrite_max_rounds": {
-   "tier": "B",
-   "status": "unwired",
-   "type": "int",
-   "source": "user_agent__config.py::AgentConfig.rewrite_max_rounds",
-   "reason": "有读取点但不在覆盖白名单：kwargs/CLI 会被静默丢弃，须先接线",
-   "refs": [
-    "agent/rewrite_gate.py"
-   ],
-   "default_src": "2"
   },
   "flow.tier_budget": {
    "tier": "B",
