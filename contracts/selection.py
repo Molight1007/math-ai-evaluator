@@ -175,7 +175,9 @@ def decide(cands, cal: dict, guard=None, require_measured: bool = True) -> dict:
     rows, notes = [], []
     usable, why_unusable = calibration_usable(cal, require_measured=require_measured)
     out = {"schema": SCHEMA,
-           "calibration": {k: (cal or {}).get(k) for k in _REQUIRED + ("source",)},
+           "calibration": {k: (cal or {}).get(k) for k in
+                           _REQUIRED + ("source", "beta_source", "method",
+                                        "n_repeats", "measured_at")},
            "usable": usable, "reason": why_unusable,
            "rows": rows, "selected": None, "ranking": []}
     if not cands:
