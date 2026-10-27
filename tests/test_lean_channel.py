@@ -516,3 +516,41 @@ def test_lean_check_does_not_fall_back_on_real_compile_error(monkeypatch):
     r = _m.lean_check(lean_code="theorem t : 1 = 1 := rfl", work_dir="/stub/proj")
     assert r["runner_used"] == "mcp"
     assert r["verdict"] == "statement_error"
+
+
+def test_lean_check_switch_off_keeps_code_untouched(monkeypatch):
+    """开关关 ⇒ 完全不归一化（A/B 底线），且必须留痕 `switch-off`。
+
+    ★ 顺序约定：开关先判，再做 Mathlib 探测 —— 关掉时不该白耗一次 bridge 探测
+      （探测要 import lean_bridge 并查三条 `.lake` 路径）。
+    """
+    import importlib
+    _m = importlib.import_module("tools.agent_toolkit.lean_check")
+    monkeypatch.setattr(_m, "_normalize_switch_on", lambda: False)
+
+    def _should_not_probe(wd):
+        raise AssertionError("开关关了不该再探测 mathlib")
+
+    monkeypatch.setattr(_m, "_mathlib_ready_for", _should_not_probe)
+    seen = {}
+    code = "theorem t : 1 = 1 := rfl"
+    r = _m.lean_check(lean_code=code, work_dir="/stub/proj",
+                      runner=_stub_runner(seen))
+    assert r["import_norm"] == {"applied": False, "reason": "switch-off"}
+    assert seen["code"] == code
+
+
+def test_normalize_switch_registered_default_on():
+    """开关必须登记且默认 True（四表同步的门禁之外的**值**断言）。
+
+    只有开关、没有探测 ⇒ 会归一化到不可用形式；只有探测、没有开关 ⇒ 失去 A/B
+    且 params.json 里没有该键。本用例锁住「开关这一半」。
+    """
+    from contracts.switch_registry import SWITCHES
+    from user_agent__config import AgentConfig
+
+    assert "lean_check_normalize_imports" in SWITCHES
+    _env, _kind, _default = SWITCHES["lean_check_normalize_imports"][:3]
+    assert _kind == "bool"
+    assert _default is True
+    assert getattr(AgentConfig, "lean_check_normalize_imports", None) is True

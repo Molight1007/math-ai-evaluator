@@ -72,11 +72,20 @@ SWITCHES: Dict[str, Tuple[str, str, Any, str]] = {
         "Lean/Math 工具集注册（2026-10-15 工具化定稿 · 双通道）：大模型可直接调用 "
         "lean_search / calc_verify / to_lean / lean_check（实现在 tools/agent_toolkit）；"
         "=0 关闭做 A/B"),
+    "lean_check_normalize_imports": (
+        "LEAN_CHECK_NORMALIZE_IMPORTS", "bool", True,
+        "工具① Lean 编译前 import 归一化（2026-10-27 接线修复）：模型产出的 Lean "
+        "代码普遍不带 `import`，直送编译器必然 `unknown tactic` / 缺 `LT ℕ` 实例"
+        "（云端实测 14/14 失败、8/8 代码块无 import）。=1（默认）在「Mathlib 已"
+        "就绪」前提下把 import 改写成当前环境可用形式；=0 原样送编译做 A/B。"
+        "★ 真正的判据是能力探测（`LeanBridge._mathlib_ready`），本开关只负责开合"),
     "subgoal_collab_mode": (
         "SUBGOAL_COLLAB_MODE", "bool", True,
         "子目标三角色协作求解（2026-10-15 用户定案）：求解/审核/规划三 agent 合作 "
         "+ 审核用工具①③ + 3 遍「在现有基础上再生成」+ 规划预取与蓝图回传；"
-        "=1 启用；=0（默认）走旧逐步求解，可 A/B"),
+        "=1（默认，**当前主链**）；=0 走旧逐步求解，可 A/B。"
+        "★ 原描述误写「=0（默认）」，与实际默认值相反 —— 按描述读代码会以为 "
+        "collab 只是隐患，实际它就是主链（2026-10-27 更正）"),
     "subgoal_collab_regen_rounds": (
         "SUBGOAL_COLLAB_REGEN_ROUNDS", "num", 3,
         "子目标协作求解的生成遍数（默认 3；1=关闭迭代；上限 5）"),

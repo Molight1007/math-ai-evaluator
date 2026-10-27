@@ -184,6 +184,23 @@ def _mathlib_ready_for(work_dir: str):
     return res
 
 
+def _normalize_switch_on() -> bool:
+    """`lean_check_normalize_imports` 开关（默认 True）。
+
+    ★ 为什么"开关 + 能力探测"**两个条件都要**（2026-10-27 合并口径）：
+      只有开关 ⇒ 开关开着但环境里 Mathlib 未就绪时，归一化会产出
+      `import Mathlib.Tactic`，在裁剪闭包（无聚合入口 olean）下**必败**
+      —— 等于把「缺 import」换成「import 不可用」，失败原因更难查。
+      只有探测 ⇒ 失去 A/B 能力，`params.json` 里也没有该键。
+    读取失败按默认开处理（与注册表默认一致）。
+    """
+    try:
+        from contracts.switch_registry import get_bool as _g
+        return bool(_g("lean_check_normalize_imports"))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def _normalize_imports_for_env(code: str, work_dir: str, out: dict):
     """送编译前把 Mathlib import 归一化成**当前环境可用**的形式。
 
@@ -198,12 +215,17 @@ def _normalize_imports_for_env(code: str, work_dir: str, out: dict):
     返回**实际送编译**的代码。任何一步不可用时原样返回并在 `out` 里留痕
     （`import_norm`），不静默、不阻断。
     """
+    if not _normalize_switch_on():
+        out["import_norm"] = {"applied": False, "reason": "switch-off"}
+        return code
     ready, why = _mathlib_ready_for(work_dir)
     if not ready:
         out["import_norm"] = {"applied": False, "reason": why}
         return code
     try:
-        from tools.lean_local.lean_bridge import _prepend_mathlib_import
+        # ★ 从零依赖模块导（`lean_bridge__env` 只依赖 stdlib）；不走
+        #   `lean_bridge` 的 re-export 面，避免将来分层/循环导入牵连。
+        from tools.lean_local.lean_bridge__env import _prepend_mathlib_import
     except Exception as exc:  # noqa: BLE001  环境模块不可用 → 原样返回
         out["import_norm"] = {"applied": False,
                               "reason": "env-module-unavailable: %s"

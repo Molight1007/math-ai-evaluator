@@ -277,7 +277,11 @@ class AgentConfig(_AgentConfigBase):
     self_improve_stage: bool = False
     # ★ 2026-10-15（审核 F5 补登记）：numbers 叶子 Lean 数值核验（默认 False）
     enable_numeric_lean_verify: bool = False
-    # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认关，可 A/B）
+    # ★ 2026-10-27（Lean 接线修复）：工具① 编译前 import 归一化（默认开）
+    #   与 contracts/switch_registry.py 的 LEAN_CHECK_NORMALIZE_IMPORTS 同值；
+    #   实际生效还要求 Mathlib 就绪（能力探测在 lean_check 内部做）。
+    lean_check_normalize_imports: bool = True
+    # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认开，=0 回退旧逐步求解）
     subgoal_collab_mode: bool = True
     subgoal_collab_regen_rounds: int = 3
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
