@@ -671,6 +671,10 @@ def _diag_budget_health(ctx, stage_durs) -> dict:
             getattr(ctx, "final_response", "") or ""),
         # 阶段耗时（2026-09-03 老师要看 deep 档每环节具体耗时）
         "stage_timers": stage_durs(ctx),
+        # ★ 2026-10-30：阶段级 token（prompt/completion/calls）。
+        # 与 stage_timers 同起点同粒度；快照不可用时为空字典（不是「花了 0」）。
+        # 价值：单题 input 实测 3.7M~6.4M、月配额 90M ⇒ 必须能按阶段归因才能砍。
+        "stage_tokens": dict(getattr(ctx, "_stage_tokens", {}) or {}),
         # ★ 2026-09-17（P1-F）：埋点三态自查 —— 未执行 / 执行无产出 / 有产出。
         # 解决「键存在但值为空 ⇒ 无法判断该环节跑没跑」的归因盲区。
         "diag_completeness": _diag_completeness(ctx),

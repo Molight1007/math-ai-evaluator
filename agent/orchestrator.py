@@ -42,6 +42,44 @@ _DEGRADED_ANSWER_RE = _re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# 阶段级 token 快照（2026-10-30）
+# ---------------------------------------------------------------------------
+# 为什么需要：`diag.stage_timers` 只有秒数，`results/*.log` 里没有 usage 行 ⇒
+# 单题 300 万+ input token **无法归因到任何阶段**。配额是 90M input/月而单题实测
+# 3.7M~6.4M ⇒ 月产能仅 12~24 题，降成本是唯一可测性杠杆，但必须先知道钱花在哪。
+#
+# 取数口径（只读、不新增统计）：
+#   · 优先 `llm_client.get_usage_stats()`（服务器版有，2026-10-24 审计层 P0 加的）
+#   · 回退 `get_truncation_stats()`，它会并进 token 键（同源同口径）
+#   · 两者都拿不到 token 键 ⇒ 返回 None，调用方静默跳过（本地旧版即如此）
+# 刻意**不**在这里自建计数器：单一权威源，避免与评测引擎的「前后快照差分」口径分叉。
+# 已知局限：跨阶段的并发调用会串扰归属（阶段内并发不影响），记在这里不隐藏。
+def _tok_snapshot():
+    try:
+        from utils import llm_client as _lc  # 函数内 import：不改变顶层依赖
+        _get = getattr(_lc, "get_usage_stats", None) or getattr(
+            _lc, "get_truncation_stats", None)
+        if _get is None:
+            return None
+        st = _get()
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        if not isinstance(st, dict):
+            return None
+        _p, _c = st.get("prompt_tokens"), st.get("completion_tokens")
+        if _p is None or _c is None:
+            return None
+        return {
+            "prompt_tokens": int(_p or 0),
+            "completion_tokens": int(_c or 0),
+            "calls": int(st.get("calls_with_usage") or 0),
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 from .base import BaseAgent, TaskContext, Budget
 from .classifier import ClassifierAgent, _KNOWN_DOMAINS
 from .solver import SolverAgent
@@ -229,6 +267,8 @@ class Orchestrator(BaseAgent):
                 Orchestrator._stage_stop(ctx, _old)
         ctx._stage_starts = getattr(ctx, "_stage_starts", {}) or {}
         ctx._stage_starts[name] = time.time()
+        # ★ 2026-10-30：token 基线与耗时同起点（见 _tok_snapshot / stage_tokens）
+        ctx._stage_tok_base = _tok_snapshot()
 
     @staticmethod
     def _stage_stop(ctx, name: str) -> None:
@@ -238,6 +278,22 @@ class Orchestrator(BaseAgent):
             return
         ctx._stage_durs = getattr(ctx, "_stage_durs", {}) or {}
         ctx._stage_durs[name] = ctx._stage_durs.get(name, 0.0) + (time.time() - s)
+        # ★ 2026-10-30：阶段级 token 差分（**消费式** —— stop 后基线推进到当前，
+        # 保证同名阶段被多次 stop 时累加而不重复计数）。
+        # 快照不可用（如本地旧版 llm_client 无 token 累积器）⇒ 静默跳过，零影响。
+        _base = getattr(ctx, "_stage_tok_base", None)
+        _now = _tok_snapshot()
+        try:
+            if isinstance(_base, dict) and isinstance(_now, dict):
+                ctx._stage_tokens = getattr(ctx, "_stage_tokens", {}) or {}
+                _cur = ctx._stage_tokens.get(name) or {
+                    "prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+                for _k in ("prompt_tokens", "completion_tokens", "calls"):
+                    _cur[_k] = int(_cur.get(_k, 0)) + max(0, int(_now[_k]) - int(_base[_k]))
+                ctx._stage_tokens[name] = _cur
+        except Exception:  # noqa: BLE001 —— 埋点绝不打断主流程
+            pass
+        ctx._stage_tok_base = _now
 
     def _collect_stage_durs(self, ctx) -> dict:
         return dict(getattr(ctx, "_stage_durs", {}) or {})
