@@ -220,5 +220,74 @@ class TestProbeGuards(unittest.TestCase):
         self.assertFalse(r.found)
 
 
+class ReasoningProjectionTest(unittest.TestCase):
+    """4.2 的 reasoning 投影口径（2026-10-27）。
+
+    原来 `reasoning[-_max_reasoning:]` 是**从尾部**硬切：reasoning 结构是
+    「题目目标 → 子目标规划 → 逐步求解 → 最终答案」，从尾切只剩最后几步，
+    前面的子目标对审查者完全不可见。而单步正文变长后（3 的出口修复）
+    可见步数还会继续下降 —— 实测平均可见步 75.5% → 55.3%。
+
+    现统一走 `subgoal_result.clip_reasoning`：骨架限额 + 各步均分，
+    保证每一步都能露头，预算数值不变。
+    """
+
+    @staticmethod
+    def _reasoning(n_steps=8, step_len=400):
+        parts = ["# 子目标分解求解过程", "## 题目目标", "要做什么: " + "z" * 200,
+                 "## 子目标规划"]
+        for i in range(1, n_steps + 1):
+            parts.append(f"  #{i} [proof] 步骤{i}: 说明")
+        parts.append("## 逐步求解")
+        for i in range(1, n_steps + 1):
+            parts.append(f"### 子目标 #{i}「步骤{i}」")
+            parts.append("结果: 结论" + str(i) + "。" + "推导文字" * (step_len // 4))
+        parts.append("## 最终答案")
+        parts.append("42")
+        return "\n".join(parts)
+
+    def _capture_prompt(self, reasoning, budget=2400):
+        """跑一次 _call_probe，截下真正送进模型的 messages。
+
+        打桩打在 `llm` 上而不是 `client` 上：`_call_probe` 用的是
+        `BaseAgent.llm`（要读 ctx.deadline 等），直接把 llm 换掉就不必造完整 ctx。
+        """
+        seen = {}
+
+        def _fake_llm(_self, ctx, msgs, **kw):
+            seen["msgs"] = msgs
+            return '{"found": false}'
+
+        v = AdversarialVerifier(None, _cfg(adversarial_max_reasoning=budget))
+        with patch.object(AdversarialVerifier, "llm", _fake_llm):
+            v._call_probe(_Ctx(), reasoning, "42")
+        return "\n".join(m["content"] for m in seen["msgs"])
+
+    def test_every_step_is_visible_to_verifier(self):
+        """8 步 × 400 字，预算 2400 —— 尾截只会剩最后 6 步左右。"""
+        prompt = self._capture_prompt(self._reasoning())
+        missing = [i for i in range(1, 9) if f"### 子目标 #{i}「" not in prompt]
+        self.assertEqual(missing, [], f"这些步骤对 4.2 不可见：{missing}")
+
+    def test_first_step_conclusion_reaches_verifier(self):
+        """第一步的结论必须能进 prompt（尾截会把它切掉）。"""
+        prompt = self._capture_prompt(self._reasoning())
+        self.assertIn("结论1", prompt)
+
+    def test_budget_is_respected(self):
+        """预算数值本身不动，投影后不得显著超出。"""
+        budget = 2400
+        prompt = self._capture_prompt(self._reasoning(20, 800), budget)
+        # prompt 里除了 reasoning 还有题目/清单等固定内容，给固定余量
+        self.assertLess(len(prompt), budget + 4000,
+                        f"投影后总长 {len(prompt)} 明显超预算 {budget}")
+
+    def test_short_reasoning_passes_through_unchanged(self):
+        """短 reasoning 不该被裁剪改动。"""
+        short = "### 子目标 #1「唯一一步」\n结果: 答案 42"
+        prompt = self._capture_prompt(short)
+        self.assertIn("答案 42", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

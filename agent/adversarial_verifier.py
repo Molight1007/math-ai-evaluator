@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .base import BaseAgent, TaskContext
+from .subgoal_result import clip_reasoning
 
 logger = logging.getLogger("MathPilot")
 
@@ -342,10 +343,16 @@ class AdversarialVerifier(BaseAgent):
         checklist = "\n".join(
             f"{i}. {name}：{desc}" for i, (name, desc) in enumerate(ERROR_CHECKLIST, 1))
         _lblock = (ledger_text.rstrip() + "\n\n") if ledger_text else ""
+        # 2026-10-27：`reasoning[-_max_reasoning:]` → `clip_reasoning(...)`。
+        #   原来是**从尾部**硬切，与 4.1 的「从头切」是同一个根因的第二个读点：
+        #   reasoning 结构是「骨架 → 逐步求解 → 最终答案」，从尾切只剩最后几步，
+        #   前面的子目标对审查者不可见；而单步正文变长后（3 的出口修复）
+        #   可见步数还会进一步下降。统一走「骨架限额 + 各步均分」的投影，
+        #   让每一步的结论与推导开头都进得来。预算数值不动。
         user = _ADVERSARY_TEMPLATE.format(
             problem=str(getattr(ctx, "problem", ""))[:2000],
             obligations=_lblock,
-            reasoning=reasoning[-self._max_reasoning:],
+            reasoning=clip_reasoning(reasoning, self._max_reasoning),
             answer=answer[:300],
             n=len(ERROR_CHECKLIST),
             checklist=checklist,

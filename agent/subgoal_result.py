@@ -29,7 +29,8 @@ import re
 
 __all__ = [
     "section", "section_of", "parse_sections", "compose_text", "split_blocks",
-    "clip", "demote_headings", "write_step", "read_step", "read_conclusion",
+    "clip", "clip_reasoning", "demote_headings", "write_step", "read_step",
+    "read_conclusion",
     "conclusion_of", "cached_text", "cached_contract",
 ]
 
@@ -44,6 +45,9 @@ _LEGACY_BLOCKS = {
     "calc": ("计算", "验算", "计算过程"),
     "result": ("结论", "本步结论", "最终结论", "结果"),
 }
+
+#: reasoning 里的「步标题」——`_build_full_reasoning` 产出 `### 子目标 #n「title」`。
+_STEP_HEAD_RE = re.compile(r"^[ \t]*###[ \t]*子目标[ \t]*#", re.M)
 
 
 # ------------------------------------------------------------------ 分节解析
@@ -195,6 +199,79 @@ def _conclusion_name(secs: dict) -> str:
             if n in k:
                 return k
     return ""
+
+
+# ------------------------------------------------------- reasoning 预算裁剪
+def clip_reasoning(text: str, budget: int,
+                   head_budget: int = 1800,
+                   note: str = "…（本步已按预算截断）") -> str:
+    """按**步**均分预算裁剪 `_build_full_reasoning` 产出的全文。
+
+    ★★ 为什么不能 `text[:budget]`（2026-10-27 实证）：
+      `_build_full_reasoning` 的结构是
+          `# 子目标分解求解过程` → `## 题目目标` → `## 子目标规划`（纯标题）
+          → `## 逐步求解`（**唯一有效信息在这里**）→ `## 最终答案`
+      从头截断最先切掉的正是「逐步求解」的后半 —— 读者只能看到前 k 步，
+      后面的步**一个字都看不到**。4.1 `self_auditor` 原来就是
+      `[:6000]`，实测 95 个历史 run：平均只能看到 86% 的步，最长的一题
+      34k 字里只看到 9/23 步。
+
+    ★ 为什么不是「调大 budget」：那是拿阈值当解。把每步产出从 106 字
+      补到 474 字之后，从头截断的可见比例**从 86% 掉到 78%**
+      （`20261020-231047` 25/25 → 12/25）—— 内容更全，读者反而看得更少。
+      预算怎么调都会再撞墙，正确做法是把预算**按步摊开**。
+
+    ★ 分摊口径：先给每步一个基础配额（结论行 + 推导开头），短步用不完的
+      余量**回收再均分**给长步（两轮，不迭代到收敛，够用即可）。
+      步内仍是 `[:配额]` —— 但此时被切的是**该步推导的尾部**，而每步的
+      结论与推导开头都在，语义不丢。
+
+    `budget <= 0` 或文本不超预算 ⇒ 原样返回（与 `clip()` 一致）。
+    """
+    t = str(text or "")
+    if budget is None or budget <= 0 or len(t) <= budget:
+        return t
+    marks = list(_STEP_HEAD_RE.finditer(t))
+    if not marks:
+        # 没有步标题（单步 / 骨架文本）⇒ 退回通用 clip（它保结论节）
+        return clip(t, budget, note)
+
+    head = t[:marks[0].start()]
+    # 骨架（题目目标 + 子目标规划）本身也可能很长 ⇒ 单独给上限
+    if len(head) > head_budget:
+        head = head[:head_budget] + "\n" + note + "\n"
+    blocks = [t[marks[i].start():marks[i + 1].start() if i + 1 < len(marks) else len(t)]
+              for i in range(len(marks))]
+
+    # 第一轮：均分；短块用不完的余量回收
+    total = budget - len(head)
+    if total <= 0:
+        return head
+    per = total // len(blocks)
+    fixed, rest, carry = [], [], 0
+    for b in blocks:
+        if len(b) <= per:
+            fixed.append(b)
+            carry += per - len(b)
+        else:
+            rest.append(b)
+    if not rest:                       # 全部塞得下
+        return head + "".join(fixed)
+    # 第二轮：余量给长块。★ 每个被截块都要追加 `note`，先把它预留出来，
+    #   否则 8 个长块 × note 会把总长顶出预算（服务器自检实测 6101 > 6000）。
+    reserve = len(rest) * (len(note) + 2)
+    per2 = per + max(0, carry - reserve) // len(rest)
+    out = []
+    for b in blocks:
+        if len(b) <= per2:
+            out.append(b)
+        else:
+            out.append(b[:max(1, per2)].rstrip() + "\n" + note + "\n")
+    text_out = head + "".join(out)
+    if len(text_out) > budget:
+        # 预算保证优先于完美分配：这里只会切掉多余 note 的尾巴。
+        text_out = text_out[:budget]
+    return text_out
 
 
 # ------------------------------------------------------------------ 唯一读写

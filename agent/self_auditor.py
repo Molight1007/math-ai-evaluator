@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 from .switch_registry import get_bool as _sw_get_bool
+from .subgoal_result import clip_reasoning
 # 单候选自审的输入截断（防超长上下文；题目 4000 / 推理 6000 与既有阶段同量级）
 _PROBLEM_MAX = 4000
 _REASONING_MAX = 6000
@@ -155,7 +156,16 @@ def self_audit_stage(self, ctx) -> None:
             # 规范化形态优先（4.0 已挂）；否则回退原 answer
             ans = str(getattr(c, "answer_norm", None)
                       or getattr(c, "answer", "") or "")[:_ANSWER_MAX]
-            reasoning = str(getattr(c, "reasoning", "") or "")[:_REASONING_MAX]
+            # ★★ 2026-10-27：裁剪从 `[:N]`（从头截断）改为**按步分配预算**。
+            #   原因是 reasoning 的结构是「题目目标 → 子目标规划（骨架）→
+            #   逐步求解（唯一有效信息）→ 最终答案」，从头截断最先切掉的
+            #   正是逐步求解的后半 —— 审阅者只能看到前几步，后面的步
+            #   一个字都看不到。实测 95 个历史 run 平均只见 86% 的步；
+            #   把每步产出补全（3_solve 修好抽推导）后反而降到 78%
+            #   （`20261020-231047` 25/25 → 12/25）⇒ 内容更全、看得更少。
+            #   预算总量不变（`_REASONING_MAX` 不动），只改分配方式。
+            reasoning = clip_reasoning(
+                str(getattr(c, "reasoning", "") or ""), _REASONING_MAX)
             d = {}
             try:
                 raw = self.llm(ctx, [
