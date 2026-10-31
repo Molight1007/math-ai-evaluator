@@ -30,6 +30,37 @@ from utils.prefill import prefill_messages, stitch
 logger = logging.getLogger("MathPilot")
 
 
+#: 「本步结果」切片**只在这些段头处终止**（2026-10-27）。
+#
+#   ★ 为什么必须是白名单，而不是「遇到任意 `【` 就停」：
+#     `SUBGOAL_STEP_SYSTEM` 要求模型输出「【推导过程】… 【本步结果】…」，
+#     但 `_call_step` 用 prefill 把「【本步结果】」钉在**响应开头**（抑制
+#     CoT）⇒ 模型只能把推导写在它**后面**。旧正则 `(?:$|【)` 一遇到
+#     「【推导过程】」就截断，**把推导整段切掉**。
+#     实测（10 月服务器数据 1368 个子目标）：推导均长 925 字，而进管道的
+#     `result` 中位仅 106 字 —— 约 89% 的推导正文丢在出口。
+#
+#   ★ 为什么白名单只收这四项：它们是 `SUBGOAL_STEP_USER_TEMPLATE` 注入的
+#     上游段头（原题 / 子目标规划 / 前面步骤的结果 / 当前子目标 #n），
+#     模型复述它们 = 开始讲不属于本步的内容。其余 `【…】`（推导过程、
+#     验算、证明、注…）都是**本步内容的内部小标题**，必须保留。
+#     新增注入段头时同步加进这里，不要在正则里写裸 `【`。
+#   ★ 「本步结果」**不**在截断白名单里：模型偶尔写两遍（第二段往往是修正
+#     后的结果），截断会静默丢后半 —— 存储一律宁长勿丢，投影时才裁剪。
+_STEP_RESULT_HEADS = (
+    "原题",
+    "子目标规划",
+    "前面步骤的结果",
+    "当前子目标",
+)
+
+#: 段头匹配：允许 `【当前子目标 #3】` 这类带后缀的形态。
+_STEP_HEAD_RE = r"\n[ \t]*【(?:%s)[^】\n]*】" % "|".join(_STEP_RESULT_HEADS)
+
+_STEP_RESULT_RE = re.compile(
+    r"【本步结果】[ \t]*\n?(.*?)(?=%s|\Z)" % _STEP_HEAD_RE, re.DOTALL)
+
+
 def _improve_subgoal_result(self, ctx, sg, prev_result):
     """子目标结果的**无条件**自改进一轮（2026-10-13，用户 E24）。
 
@@ -549,7 +580,11 @@ def _call_step(self, ctx: TaskContext, user_msg: str,
     # 5 个 `answer` 是字面量 `</tool_call>`（reasoning 却是完整推理）——根因
     # 就是这里把模型原文尾部（工具调用 XML 残留）原样当成"本步结果"返回，
     # 再经 merge 变成最终答案。剥壳后为空则返回空串，交给上层兜底。
-    result_match = re.search(r"【本步结果】\s*\n?(.*?)(?:$|【)", resp, re.DOTALL)
+    # ★★ 2026-10-27：终止条件从「任意 `【`」改为**上游段头白名单**
+    #   （`_STEP_RESULT_HEADS`）。旧写法在 prefill 把「【本步结果】」钉在
+    #   开头后，必然把紧随其后的「【推导过程】」连同推导一起切掉，导致
+    #   4.1/4.2 拿到的 reasoning 只剩结论。
+    result_match = _STEP_RESULT_RE.search(resp)
     if result_match:
         step_result = self._strip_tool_residue(result_match.group(1)).strip()
     else:
