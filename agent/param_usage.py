@@ -352,6 +352,31 @@ _SPEC = (
      None, "bool",
      "BLUEPRINT_NODE_CONTRACT — 蓝图节点契约（每子目标 tool 指派 + inputs.use "
      "承接语义下传；默认 True）", None),
+    ("blueprint_merge_value_mask",
+     lambda cfg, tier, _f="blueprint_merge_value_mask", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "BLUEPRINT_MERGE_VALUE_MASK — 蓝图归并不带值（merge_strategy / 收尾节点"
+     "的赋值答案值在下传投影里换占位符；默认 True）", None),
+    ("blueprint_goal_kind_guidance",
+     lambda cfg, tier, _f="blueprint_goal_kind_guidance", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "BLUEPRINT_GOAL_KIND_GUIDANCE — 2.7 拆法按目标种类约束（陈述纪律 + 具体对象"
+     "题禁止全称/lifting 引理；最值/计数题排除）；默认 True", None),
+    ("problem_goal_emit_answer_slot",
+     lambda cfg, tier, _f="problem_goal_emit_answer_slot", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "PROBLEM_GOAL_EMIT_ANSWER_SLOT — 题意理解 answer_slot 随目标下发（所求对象的"
+     "符号形式，禁写值）；默认 True", None),
+    ("bounded_search",
+     lambda cfg, tier, _f="bounded_search", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "BOUNDED_SEARCH — 有界存在性命题的机械搜索（0-LLM：穷举 + 逐素数幂证书 + "
+     "排除记录，注入蓝图/求解提示词）；默认 True", None),
+    ("step_verification_audit",
+     lambda cfg, tier, _f="step_verification_audit", _d=True: getattr(cfg, _f, _d),
+     None, "bool",
+     "STEP_VERIFICATION_AUDIT — 子目标推导审计（0-LLM）：算术复核假断言 / 本步结论"
+     "自相矛盾 / 跨轮结论冲突；默认 True", None),
     ("blueprint_lean_sig",
      lambda cfg, tier, _f="blueprint_lean_sig", _d=True: getattr(cfg, _f, _d),
      None, "bool",

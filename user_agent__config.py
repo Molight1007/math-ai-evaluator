@@ -624,6 +624,29 @@ class AgentConfig(_AgentConfigBase):
     #   ② `blueprint_tool_exec`：把声明**兑现成机器核验**（lean 实编译 / sympy
     #      判等式 / numeric 跑 norm_num），未过带反馈重解一次。关 ⇒ 零机器开销。
     blueprint_node_contract: bool = True
+    # ★ 2026-10-27（2.7 归并不带值）：`blueprint_merge_value_mask`
+    #   `merge_strategy` 与收尾节点 `statement` 的赋值形态答案值在**下传投影**里
+    #   换成占位符（原文保留在 `ctx.blueprint`）。治的是 prompt 硬性禁令无代码执行的
+    #   缺口 —— 实测 89 份蓝图 36 份 `merge_strategy` 内嵌值（002 写 (√5-1)/2 而
+    #   gold=1/2、001 写 T(m)=-4 而 gold=2-2m），全部泄漏成最终答案。
+    #   关 ⇒ 逐字透传（A/B 对照组）。
+    blueprint_merge_value_mask: bool = True
+    # ★ 2026-10-28（2.7 拆法约束）：`blueprint_goal_kind_guidance`
+    #   系统提示词追加「陈述纪律」（无条件）+「本题拆法」（目标只是给一个具体
+    #   对象/具体值时）。治的是倒推机制把存在性题拆成分类证明题，导致三轮都造
+    #   假引理（omni-3556 实测）。最值/计数题刻意排除。关 ⇒ 提示词逐字不变。
+    blueprint_goal_kind_guidance: bool = True
+    # ★ 2026-10-29（题意理解下发接线）：`problem_goal_emit_answer_slot`
+    #   `answer_slot`（所求对象的纯符号形式）随 `problem_goal` 一并渲染进
+    #   蓝图/子目标/主求解 prompt。改动前只下发 `terminal_state`。
+    #   关 ⇒ 渲染结果逐字回到改动前。
+    problem_goal_emit_answer_slot: bool = True
+    # ★ 2026-10-29：有界存在性命题的机械搜索（穷举 + 证书 + 排除记录）。
+    #   见 `agent/bounded_search.py`。关 ⇒ 不识别也不穷举。
+    bounded_search: bool = True
+    # ★ 2026-10-29：推导审计（0-LLM）——算术复核 / 结论自相矛盾 / 跨轮冲突。
+    #   见 `agent/verification_audit.py`。关 ⇒ 审计全不跑。
+    step_verification_audit: bool = True
     blueprint_tool_exec: bool = True
     # ★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」）：
     #   `blueprint_lean_sig` = **叶子级形式化下传**。`tool=lean` 的节点由蓝图

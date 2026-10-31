@@ -168,6 +168,16 @@ _CONFIG_OVERRIDE_KEYS = (
     "blueprint_or_expand_all",
     # 2026-10-15：子目标承接 + 工具指派（用户「证明就用 lean」）
     "blueprint_node_contract", "blueprint_tool_exec", "blueprint_lean_max_per_q",
+    # 2026-10-27：2.7 归并不带值（merge_strategy / 收尾节点投影掩码）
+    "blueprint_merge_value_mask",
+    # 2026-10-28：2.7 拆法按目标种类约束（陈述纪律 + 具体对象题禁止全称引理）
+    "blueprint_goal_kind_guidance",
+    # 2026-10-29：题意理解 answer_slot 随目标下发（接线错位修复）
+    "problem_goal_emit_answer_slot",
+    # 2026-10-29：有界存在性命题的机械搜索（穷举 + 证书 + 排除记录）
+    "bounded_search",
+    # 2026-10-29：推导审计（算术复核 / 结论自相矛盾 / 跨轮结论冲突）
+    "step_verification_audit",
     # 2026-10-15：蓝图叶子级形式化下传（用户「把 lean 内化到蓝图构建里面」）
     "blueprint_lean_sig",
     # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
