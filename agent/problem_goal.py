@@ -161,6 +161,20 @@ def build_problem_goal(ctx) -> dict:
     }
 
 
+def _emit_answer_slot() -> bool:
+    """`problem_goal_emit_answer_slot` 开关（默认 True，2026-10-29）。
+
+    走 `contracts.switch_registry`（环境变量 > 配置 > 默认）；注册表不可用退回 True
+    （与 `blueprint_decomposition._guidance_on` 同口径）。关 ⇒ 渲染结果逐字回到
+    改动前（A/B 对照组）。
+    """
+    try:
+        from contracts.switch_registry import get_bool
+        return bool(get_bool("problem_goal_emit_answer_slot"))
+    except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
+        return True
+
+
 def render_problem_goal(ctx) -> str:
     """把题目目标渲染成提示词块（蓝图 / 子目标规划共用）。无目标返回空串。
 
@@ -184,6 +198,16 @@ def render_problem_goal(ctx) -> str:
                                    for o in _opts)))
     if g.get("answer_form"):
         lines.append("· 答案形态：" + str(g["answer_form"]))
+    # ★ 2026-10-29 新增：把 `answer_slot` 一并下发。
+    #   为什么：`answer_slot` 是唯一按契约**禁写具体值**的字段（纯符号），
+    #   而在此之前只有 `terminal_state` 被下发 —— 恰好是泄漏最严重、最易漂移的
+    #   那个。实测 `omni-3556`（"find AN integer n"）三次跑出三种槽形态，其中两种
+    #   把约束链（`n ∈ ℤ ∧ 100≤n≤1997 ∧ n | 2^n+2`）当成了目标本身 ⇒ 蓝图无法
+    #   分辨"目标是 n"还是"目标是满足这些条件的对象"，转而去证明引理。
+    #   开关 `problem_goal_emit_answer_slot`（默认 True）可回退。
+    if _emit_answer_slot() and g.get("answer_slot"):
+        lines.append("· 所求对象（**符号形式**，是待求量本身，**不得当作已求出**；"
+                     "约束条件不等于目标）：" + str(g["answer_slot"])[:200])
     if g.get("terminal_state"):
         lines.append("· 目标情形（题目完成后的情形；其中答案槽是**假设**，"
                      "**不得当作已证结论**）：" + str(g["terminal_state"])[:400])

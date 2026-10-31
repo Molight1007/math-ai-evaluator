@@ -17,6 +17,8 @@ import re                     # 2026-10-12 批次 3：`_as_id_list` 归一化模
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .value_mask import mask_assigned_values
+
 logger = logging.getLogger("MathPilot")
 
 # 安全上限：单题 DAG 节点总数（LEAP 论文子目标规模通常 < 30）
@@ -166,6 +168,25 @@ def _lean_sig_on() -> bool:
     try:
         from contracts.switch_registry import get_bool
         return bool(get_bool("blueprint_lean_sig"))
+    except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
+        return True
+
+
+def _merge_value_mask_on() -> bool:
+    """`blueprint_merge_value_mask` 开关是否生效（2026-10-27）。
+
+    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    注册表不可用时退回 True（与 `_lean_sig_on` 同口径）。
+
+    开 ⇒ `to_subgoal_plan` 对 **`merge_strategy`** 与**收尾节点 statement**
+    做赋值形态答案值掩码（`agent/value_mask.mask_assigned_values`）——
+    这两处 `prompts/blueprint.py` 已明令"不得给出合并后的数值""不得内嵌归并
+    结果"，掩码只是把禁令落成代码，原文在 `ctx.blueprint` 里保留。
+    关 ⇒ 逐字透传（A/B 对照组）。
+    """
+    try:
+        from contracts.switch_registry import get_bool
+        return bool(get_bool("blueprint_merge_value_mask"))
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 
@@ -510,10 +531,22 @@ class BlueprintDAG:
         subgoals = []
         # 2026-10-15：叶子级形式化下传开关**在循环外只读一次**（逐节点查注册表没必要）
         _sig_on = _lean_sig_on()
+        # 2026-10-27：`merge_strategy` / 收尾节点 statement 的赋值值掩码（同样只读一次）
+        _valmask_on = _merge_value_mask_on()
+        _valmask_hits = 0
+        _last_idx = len(order)      # 拓扑序最后一步 = 收尾子目标
         # 位置索引（子目标编号从 1 开始），避免在循环里反复 order.index()
         _pos = {nid: i for i, nid in enumerate(order, 1)}
         for idx, nid in enumerate(order, 1):
             node = self.nodes[nid]
+            # ★ 2026-10-27：收尾节点只承担"归并动作"（prompts/blueprint.py 硬性要求），
+            #   它 statement 里的赋值值等于**在最后一环再次锁死答案**。原文不动，
+            #   只掩下传投影；其余节点**一律不碰**（中间节点的值可能是合法骨架，
+            #   如夹逼法必须写出 d=90 可行 / d=89 不可行）。
+            _stmt_proj = node.statement
+            if _valmask_on and idx == _last_idx:
+                _stmt_proj, _vk = mask_assigned_values(_stmt_proj)
+                _valmask_hits += _vk
             # 依赖：nid 的**依赖锥** = 必须早于它求解的叶子集合（见 _preceding_leaves）。
             if with_deps:
                 deps = [p for d, p in _pos.items()
@@ -533,8 +566,8 @@ class BlueprintDAG:
             deps = sorted(set(deps))
             subgoals.append({
                 "id": idx,
-                "title": f"子目标{idx}: {self._short(node.statement)}",
-                "description": node.statement,
+                "title": f"子目标{idx}: {self._short(_stmt_proj)}",
+                "description": _stmt_proj,
                 "type": self._infer_type(node.statement),
                 "depends_on": deps,
                 # ★★ 2026-10-06（子目标交付重写 A）：原实现**硬编码空串** ⇒ 蓝图
@@ -602,9 +635,21 @@ class BlueprintDAG:
                     "title": str(_up.get("title") or "").strip(),
                 })
             _s["inputs_from"] = _from
+        # ★ 2026-10-27：`merge_strategy` 只回答"如何组合"（prompts/blueprint.py:93），
+        #   写死的值会被原样注入合并提示词 ⇒ 指令模型输出该值。原文在
+        #   `ctx.blueprint` 里保留，此处只掩下传投影。
+        _ms_proj = self.merge_strategy
+        if _valmask_on:
+            _ms_proj, _mk = mask_assigned_values(_ms_proj)
+            _valmask_hits += _mk
+        if _valmask_hits:
+            # 诊断留痕：>0 = 蓝图违反了「归并不带值」的硬性契约（prompts/blueprint.py）
+            logger.info(
+                "Blueprint: 归并/收尾节点内嵌 %d 处答案值 → 下传投影已换占位符"
+                "（原文保留在 ctx.blueprint）", _valmask_hits)
         return {
             "subgoals": subgoals,
-            "merge_strategy": self.merge_strategy,
+            "merge_strategy": _ms_proj,
             "anticipatory_lemmas": anticipatory,   # ★ 前瞻引理（供引理记忆消费）
         }
 

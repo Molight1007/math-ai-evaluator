@@ -332,17 +332,20 @@ class LeanPreVerifier(BaseAgent):
             # ★ 2026-10-14（item ②）：**机械化剥离**被写死的数值。答案槽用激进口径
             #   （连 `T = \frac{...}` 这类赋值也掩掉），终态用 K11 既有口径（只掩
             #   「…为/是/等于 N」形态，避免误伤符号等式）。
+            # ★ 2026-10-29：三处都传 `problem` —— 掩码内部用题面数字做白名单，
+            #   避免把「共有 10 个正整数」这类条件复述抹成占位符。
+            _pb = str(getattr(ctx, "problem", "") or "")
             out["terminal_state"] = _mask_answer_values(
-                str(payload.get("terminal_state") or ""))
+                str(payload.get("terminal_state") or ""), problem=_pb)
             out["answer_slot"] = _mask_answer_values(
-                str(payload.get("answer_slot") or ""), aggressive=True)
+                str(payload.get("answer_slot") or ""), aggressive=True, problem=_pb)
             a_gaps, b_gaps = split_gaps(payload.get("gaps"))
             out["gaps_a"], out["gaps_b"] = a_gaps, b_gaps
             # ★ 2026-10-18 审核：attention_focus 也必须走**答案掩码**——
             #   2.6 提示词虽要求「只写风险不写答案」，但模型可能违规写入具体数值，
             #   直接注入求解 prompt 会重蹈 K11「答案泄漏」覆辙。
             out["attention_focus"] = [
-                str(_mask_answer_values(str(f)))[:120]
+                str(_mask_answer_values(str(f), problem=_pb))[:120]
                 for f in (payload.get("attention_focus") or [])
                 if str(f).strip()][:5]
             ctx.attention_focus = out["attention_focus"]
@@ -446,14 +449,27 @@ _VALUE_ASSIGN_RES = (
 _MASK_LOCKED_VALUE = "[待求解值：由过程现场确定]"
 
 
-def _mask_answer_values(text: str, aggressive: bool = False) -> str:
+def _mask_answer_values(text: str, aggressive: bool = False,
+                        problem: str = "") -> str:
     """把答案槽 / 终态里**被写死的具体数值**换成占位符（K11 防泄漏，机械兜底）。
 
-    · 基础口径（两处都跑）：复用 `agent/sub_goal_solver._mask_asserted_values`
-      （既有 K11 掩码，覆盖中英「…为/是/等于 N」形态）；
-      import 失败（缺依赖 / 循环）时静默跳过，不影响理解链本身。
+    ★ 2026-10-29 修正（实测旧口径对真实泄漏 **0 命中**）：
+      旧实现只调 `agent.sub_goal_solver._mask_asserted_values`，其正则要求
+      「最小/最大」后**紧跟**「为/是/等于」（中间只允许 `\\s*值?\\s*`）。而终态是
+      自然语言，真实句式全是「最小**照亮点数**为 28」这种**锚点与数字之间夹名词**
+      的形态 ⇒ 实测 4/4 泄漏原句原样放过（服务器 63 份产物复核）：
+        · omni-3593 `最大社区数为4。`
+        · omni-2163 `并集大小为 28` / `最小照亮点数为 28`
+        · omni-3876 `f(1988) 的值唯一确定为 1988。`
+        · omni-1322 `恰好有 8 个`
+      现在先走 `agent.value_mask.mask_result_values`（两级判据 + 题面数字白名单），
+      再叠加旧口径。离线回放 `replay_answer_mask.py` 实测：5 拦截 / 0 误伤 /
+      38 条含数字的均为题面条件复述（不该拦）⇒ 纯增益，故不设开关。
+
+    · 基础口径（两处都跑）：`mask_result_values` + `_mask_asserted_values`。
     · ``aggressive=True``（**只给 answer_slot**）：额外掩掉「赋值给具体值」的形态
       —— 含实测泄漏原句 `T = \\frac{\\sqrt{5}-1}{2}`。
+    · ``problem`` 传题面时启用白名单（题面已有数字不掩）；传空则从严。
 
     为什么只对 answer_slot 用激进口径：终态是自然语言描述，激进口径会误伤其中的
     符号等式（如 `n² - n = 2k`）；而 answer_slot 按契约本就只该是符号，掩错代价极低。
@@ -461,6 +477,11 @@ def _mask_answer_values(text: str, aggressive: bool = False) -> str:
     t = str(text or "")
     if not t:
         return ""
+    try:
+        from agent.value_mask import mask_result_values as _mrv
+        t, _n0 = _mrv(t, problem)
+    except Exception:  # noqa: BLE001  掩码是增益，取不到不阻断
+        pass
     try:
         from agent.sub_goal_solver import _mask_asserted_values as _m
         t, _n = _m(t)

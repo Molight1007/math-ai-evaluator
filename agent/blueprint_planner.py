@@ -146,6 +146,35 @@ def _effective_problem(ctx) -> str:
     return p
 
 
+def _system_for(ctx) -> str:
+    """按**目标种类**给系统提示词追加「拆法约束」（2026-10-28）。
+
+    三条生成路径（首次生成 / 整树重生成 / 局部子树重写）共用 `BLUEPRINT_DAG_SYSTEM`，
+    所以约束**必须挂在系统提示词上**，挂 user 侧只能覆盖第一条路径。
+
+    约束块插在「输出格式」小节**之前**（见 `blueprint_decomposition._OUTPUT_SECTION_ANCHOR`），
+    绝不追加到末尾 —— 那会破坏「只输出 JSON」的收尾结构。
+
+    开关 `blueprint_goal_kind_guidance`（默认 True）；关 ⇒ 逐字返回原文（A/B 对照）。
+    """
+    try:
+        from .blueprint_decomposition import (
+            goal_kind, guidance_block, inject_into_system, _guidance_on,
+        )
+        if not _guidance_on():
+            return BLUEPRINT_DAG_SYSTEM
+        _kind = goal_kind(ctx)
+        _sys = inject_into_system(BLUEPRINT_DAG_SYSTEM, _kind)
+        if _sys != BLUEPRINT_DAG_SYSTEM:
+            try:
+                ctx._blueprint_goal_kind = _kind or "未判定"
+            except Exception:  # noqa: BLE001
+                pass
+        return _sys
+    except Exception:  # noqa: BLE001  提示词增强失败 → 退回原文，绝不阻断
+        return BLUEPRINT_DAG_SYSTEM
+
+
 def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
     """从 LLM 输出 dict 构造 BlueprintDAG（宽容字段名），非法返回 None。
 
@@ -329,6 +358,25 @@ class BlueprintPlannerAgent(BaseAgent):
                 problem_text = problem_text + "\n\n" + _anchor
         except Exception:  # noqa: BLE001  目标是增益，取不到就退回纯题干
             pass
+        # ★ 2026-10-29（E12，用户「你联网去找相关论文和搜索器吧」→ 路线①）：
+        #   **有界存在性命题的机械搜索结果**必须在场。诊断第 1 条「把搜索当演绎做」
+        #   就是这里：`omni-3556`（100≤n≤1997，求 (2^n+2)/n ∈ ℤ）开臂 22 步 + 3 个
+        #   假引理 ⇒ 池空 5.7h，而穷举 1898 个候选只要 4.7ms（关臂 6 步判对 946）。
+        #   根因是蓝图侧没有任何「已排除」的事实可引用 ⇒ 只能猜值 ⇒ 再造引理去生成它。
+        #   注入位置与 `problem_goal` 同源（**仍在「题目」占位符内部**，al-075 纪律）。
+        #   识别不到 / 判不了 ⇒ 空串，逐字不影响原提示词。
+        try:
+            from .bounded_search import ensure as _bs_ensure, render_block as _bs_render
+            _bs = _bs_ensure(ctx)
+            _bs_block = _bs_render(_bs) if _bs else ""
+            if _bs_block:
+                problem_text = problem_text + "\n\n" + _bs_block
+                if not getattr(ctx, "_bounded_search_recorded", False):
+                    setattr(ctx, "_bounded_search_recorded", True)
+                    from .bounded_search import summary as _bs_summary
+                    self.record(ctx, "bounded_search", _bs_summary(_bs))
+        except Exception:  # noqa: BLE001  搜索是增益，失败绝不阻断蓝图
+            pass
 
         if prior_dag_json:
             # 迭代式自改进轮（2026-10-12 批次 2）：把上一轮 DAG 原样喂回，要求改进。
@@ -363,7 +411,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ctx,
                 prefill_messages(
                     [
-                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "system", "content": _system_for(ctx)},
                         {"role": "user", "content": user_msg},
                     ],
                     _PREFILL,
@@ -398,6 +446,23 @@ class BlueprintPlannerAgent(BaseAgent):
             self.record(ctx, "blueprint",
                         f"Blueprint DAG 生成成功: {len(dag.nodes)} 节点, "
                         f"根={dag.root_id}")
+            # ★ 2026-10-28：目标种类 + 拆法自检（**advisory，不拦截**）。
+            #   不拦截的原因见 `blueprint_decomposition.scope_leak_nodes` 文档：
+            #   「满足 n|2^n+2 的 n 必为偶数」也是全称命题，但它是对的、必要的。
+            #   先观测、后定判据 —— 这一轮只统计，不改 DAG。
+            try:
+                _kind = getattr(ctx, "_blueprint_goal_kind", "")
+                if _kind:
+                    self.record(ctx, "blueprint", f"目标种类：{_kind}")
+                from .blueprint_decomposition import scope_leak_nodes
+                _leaks = scope_leak_nodes(dag)
+                if _leaks:
+                    self.record(
+                        ctx, "blueprint",
+                        "拆法自检（advisory）：%d 个节点呈全称/引理形态 → %s"
+                        % (len(_leaks), ", ".join(str(n) for n, _ in _leaks[:6])))
+            except Exception:  # noqa: BLE001  观测绝不阻断
+                pass
             return dag
 
         self.record(ctx, "blueprint",
@@ -456,7 +521,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ctx,
                 prefill_messages(
                     [
-                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "system", "content": _system_for(ctx)},
                         {"role": "user", "content": user_msg},
                     ],
                     _PREFILL,
@@ -569,7 +634,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ctx,
                 prefill_messages(
                     [
-                        {"role": "system", "content": BLUEPRINT_DAG_SYSTEM},
+                        {"role": "system", "content": _system_for(ctx)},
                         {"role": "user", "content": user_msg},
                     ],
                     _PREFILL,
