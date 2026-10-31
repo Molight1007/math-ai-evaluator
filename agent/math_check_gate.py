@@ -184,12 +184,12 @@ def _normalize_math(text: str) -> str:
 
 # 段字符集：空格在内（`1 - 6` 合法）；中文已变哨兵，故不会跨句。
 _OPERAND_CHARS = frozenset(
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._+-*/^()|! ")
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._+-*/^()|!% ")
 _REL_RE = re.compile(r">=|<=|<>|!=|==|≥|≤|=|<|>")
 _REL_OPS = {">=": "ge", "<=": "le", "≥": "ge", "≤": "le",
             ">": "gt", "<": "lt", "=": "eq", "==": "eq"}
-_LEAD_BAD = "*/^)!>="      # 不能作段首（`-` 可以：负数）
-_TAIL_BAD = "+-*/^<(="     # 不能作段尾（`!` `)` 可以：阶乘/右括号）
+_LEAD_BAD = "*/^)!>=%"      # 不能作段首（`-` 可以：负数）
+_TAIL_BAD = "+-*/^<(=%"     # 不能作段尾（`!` `)` 可以：阶乘/右括号）
 
 
 def _operand_left(s: str, end: int) -> str:
@@ -316,7 +316,71 @@ def _looks_numeric(s: str) -> bool:
     return not re.search(r"[A-Za-z]", t)
 
 
-def _extract_numeric_equations(text: str) -> list:
+# ============================================================ 段残片拒收（2026-10-29）
+# ★ 实测来源（`e09_3q_1028_2205` / `omni-3556`，用服务器 `05_candidates.json`
+#   重跑提取+复算复现）：4.4 判「整池算错」的那批 bad，逐条复核后
+#   **没有一条是候选真算错**，全是段切错产生的残片：
+#     `1 = 0` / `2 = 1` / `3 = 0`  —— 两侧皆单个数字（来自 `#1`/`_1` 编号与下标）
+#     `(2) = 6`                     —— 原文 `(2^6)^{111}`，段被括号切开
+#     `9)`                          —— 括号不平衡（已按 n_err 处理）
+#     `-  2^3 = 8`                  —— 原文 `A - 2^3`，左操作数被切掉
+#   `n_bad > 0` 即淘汰**整个候选**，所以一条残片就足以误杀正确解
+#   （3556 的候选答案 946 = gold，却被 4.4 清池）。故在**提取层**拒收：
+#   残片不进判定，不产生任何「算错」结论 —— 与「宁可放过」一致，
+#   且**不动任何阈值**（阈值只会连带放过真错误）。
+_ATOM_RE = re.compile(r"^\(?\s*[-+]?\d+(?:\.\d+)?\s*\)?$")
+
+
+def _atom_key(seg):
+    """单原子的**字面**归一（去空格/外层括号/前导 `+`/前导零/尾随 `.0`）。
+
+    只用于 F2 的「两侧是否同一个数」判断，不做求值。
+    """
+    t = (seg or "").strip()
+    while t.startswith("(") and t.endswith(")"):
+        t = t[1:-1].strip()
+    if t.startswith("+"):
+        t = t[1:].strip()
+    neg = t.startswith("-")
+    if neg:
+        t = t[1:].strip()
+    if "." in t:
+        t = t.rstrip("0").rstrip(".")
+    else:
+        t = t.lstrip("0") or "0"
+    return ("-" if neg else "") + t
+
+
+def _is_fragment(lhs, rhs, op="eq"):
+    """段是否由**切分错误**产生（不可能是一条「声称的算式」）。三条判据：
+
+      F1 括号不平衡 —— 段从括号中间起止，语义已丢（`9)`）；
+      F2 等式两侧皆单原子而**字面不同** —— 数学写作里不会出现「2 等于 1」这种
+         断言，只可能是编号/下标/上标被截（`1 = 0` / `(2) = 6`）。
+         字面相同（`-5 = -5` / `2 = 2`）保留：那是同义反复，可正常验证；
+      F3 以悬空符号开头 —— 段首是 `+`/`-` 且其后紧跟空白 ⇒ 原文是 `A - B`，
+         左操作数被切掉，段内那个符号实为二元号（`-  2^3`）。
+
+    三条都是「宁可放过」方向：命中只**少一条证据**，绝不产生「算错」。
+    反例保护：`2^2 = 4`、`6*111 = 666`、`262144+2 = 262146` 两侧非双原子 ⇒ 保留。
+
+    ★ 只放**提取层**：`calc_verify` 的判定与阈值一字未动。
+    """
+    a, b = (lhs or "").strip(), (rhs or "").strip()
+    if not a or not b:
+        return True
+    if a.count("(") != a.count(")") or b.count("(") != b.count(")"):
+        return True                                    # F1
+    if op == "eq" and _ATOM_RE.match(a) and _ATOM_RE.match(b):
+        if _atom_key(a) != _atom_key(b):
+            return True                                # F2（仅等式；不等式保留判定）
+    for seg in (a, b):
+        if len(seg) > 1 and seg[0] in "+-" and seg[1].isspace():
+            return True                                # F3
+    return False
+
+
+def _extract_numeric_equations(text: str, stats=None) -> list:
     """从推理文本提取数值等式 [(lhs, rhs), ...]（最多 8 条）。
 
     链式 `a=b=c=d` 的每个 `=` 各成一对 ⇒ 相邻段逐对判等（= 整链验证）。
@@ -328,6 +392,11 @@ def _extract_numeric_equations(text: str) -> list:
         if op != "eq":
             continue
         if not (_looks_numeric(lhs) and _looks_numeric(rhs)):
+            continue
+        if _is_fragment(lhs, rhs, op):
+            if stats is not None:
+                stats.append({'expr': lhs[:60], 'claimed': rhs[:60],
+                              'op': op, 'why': 'fragment'})
             continue
         key = (lhs, rhs)
         if key in seen:
@@ -362,7 +431,7 @@ def _has_undef_call(seg: str) -> bool:
     return bool(_CALL_RE.search(t))
 
 
-def _extract_inequalities(text: str) -> list:
+def _extract_inequalities(text: str, stats=None) -> list:
     """从推理文本提取**可机器复算的不等式** [(lhs, rhs, op), ...]（最多 8 条）。
 
     ★ 2026-10-17（用户要求「计算错误要靠工具检」）：原工具只验数值等式，
@@ -390,6 +459,11 @@ def _extract_inequalities(text: str) -> list:
         if not (_LOOKS_STRONG.search(lhs) and _LOOKS_STRONG.search(rhs)):
             if len(lhs) > 24 or len(rhs) > 24:
                 continue
+        if _is_fragment(lhs, rhs, op):
+            if stats is not None:
+                stats.append({'expr': lhs[:60], 'claimed': rhs[:60],
+                              'op': op, 'why': 'fragment'})
+            continue
         out.append((lhs, rhs, op))
         if len(out) >= 8:
             break
@@ -542,8 +616,9 @@ def math_check_stage(self, ctx) -> None:
             try:
                 from tools.agent_toolkit.calc_verify import calc_verify as _cv
                 _txt = str(getattr(c, "reasoning", "") or "")
-                _eqs = _extract_numeric_equations(_txt)
-                _ineq = _extract_inequalities(_txt)
+                _frags = []
+                _eqs = _extract_numeric_equations(_txt, stats=_frags)
+                _ineq = _extract_inequalities(_txt, stats=_frags)
                 _items = [{"expr": a, "claimed": b} for a, b in _eqs[:8]]
                 _items += [{"expr": a, "claimed": b, "op": op}
                            for a, b, op in _ineq[:8]]
@@ -552,6 +627,15 @@ def math_check_stage(self, ctx) -> None:
                     _nb = int(_rv.get("n_bad") or 0)
                     _snap = _build_calc_snapshot(cid, kind, _items, _rv)
                     _snap["n_conditions"] = len(_conds)
+                    _snap["fragments"] = _frags[:12]
+                    if _frags:
+                        self.record(
+                            ctx, "math_check",
+                            "cid=%s 工具③：拒收段残片 %d 条（切分错误，"
+                            "不参与判定）例 `%s` = %s"
+                            % (cid, len(_frags),
+                               str(_frags[0].get("expr"))[:40],
+                               str(_frags[0].get("claimed"))[:24]))
                     if len(_snaps) < _SNAP_CANDS_MAX:
                         _snaps.append(_snap)
                     if _nb > 0:
