@@ -319,6 +319,16 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
                           "contract": self._contract_snapshot(sg)}
         # v2.9：结构化输出每步子目标的过程与中间结果
         ctx.subgoal_trace.append(self._build_trace_item(sg, step_result))
+        # ★ 2026-10-29：把本步登记进「推导审计账本」——**跨轮结论冲突**只能
+        #   在账本层面看见：一轮结束时 `04_subgoal_results.jsonl` 只是 append，
+        #   轮与轮之间没有任何比较点（实测 3556 一次运行内 3 轮，结论 66 / 946 /
+        #   66 并存，全靠某一轮蒙对）。审计异常一律放行。
+        try:
+            from .verification_audit import enabled as _va_on, note_step as _va_note
+            if _va_on(getattr(self, "config", None)):
+                _va_note(ctx, ctx.subgoal_trace[-1])
+        except Exception:  # noqa: BLE001
+            pass
         # ★ 2026-10-02 hook 04：子目标结果即时落盘（存储层 04，append-only jsonl）。
         try:
             _artifact_append(ctx, "04_subgoal_results", ctx.subgoal_trace[-1])

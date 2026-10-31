@@ -449,6 +449,28 @@ def _prepare_merge_prompt(self, ctx: TaskContext, subgoals: list[dict],
                         "（无推导支撑/客观判定不成立）")
     except Exception:  # noqa: BLE001  标记注入失败不阻断 merge
         pass
+    # ★★ 2026-10-29（推导审计）：把「算术复核失败 / 本步结论与自身推导冲突 /
+    #   跨轮结论冲突」显式交给合并层。既有的 `_cross_conflicts` 只比**同一轮内
+    #   跨子目标**的同名变量（且要求 LHS 是标识符，`值 = 666` 直接跳过）⇒
+    #   实测 3556 一次运行内 3 轮结论 66 / 946 / 66 并存，此前**无人发现**。
+    #   其中「算术复核失败」是精确整数运算判定的，不是评审意见。
+    try:
+        from .verification_audit import enabled as _va_on
+        from .verification_audit import verify_note_for_merge as _va_note
+        if _va_on(getattr(self, "config", None)):
+            _vn = _va_note(ctx)
+            if _vn:
+                user_msg = user_msg + _vn
+                _led = getattr(ctx, "_verify_ledger", {}) or {}
+                self.record(
+                    ctx, "subgoal_merge",
+                    "合并前注入推导审计：算术不成立 %d 条 / 结论自相矛盾 %d 条 /"
+                    " 验证不可复核 %d 条"
+                    % (len(_led.get("false") or []),
+                       len(_led.get("refuted") or []),
+                       len(_led.get("unverifiable") or [])))
+    except Exception:  # noqa: BLE001  审计注入失败不阻断 merge
+        pass
     _merge_system = SUBGOAL_MERGE_SYSTEM
     # ★ 2026-09-29（截图 #8）：合并阶段是"把子目标答案总结成最终答案"的出口，
     # 是定理线索真正能落到**最终答案**上的最后机会，故同样注入。

@@ -403,6 +403,42 @@ def _subgoal_light_check(self, ctx: TaskContext, sg: dict,
                         "（若结论为 no，另加一段『遗漏解族: …』）")
     except Exception:  # noqa: BLE001
         pass
+    # ★★ 2026-10-29：**算术复核**（0-LLM，精确整数运算）。
+    #   实测铁证 omni-3556（`results/20261028-215738/qfaed7d35` 第 6 步）：
+    #   正文写「已分别验证 2^666+2 ≡ 0 (mod 2)、(mod 3)、(mod 9)、(mod 37)」，
+    #   而实算 mod 9 = 3、mod 37 = 1 ⇒ 两条「已验证」是假的；同一份文件
+    #   第 5 步自己还写着「模 9 不满足……确实不整除」。
+    #   这类不是「判断分歧」而是**算术错误**，机械可判 ⇒ 直接打回重解，
+    #   不违反「宁可放过」（放过的对象是判断分歧，不是算错）。
+    try:
+        from .verification_audit import audit_step as _va_audit
+        from .verification_audit import enabled as _va_on
+        if _va_on(getattr(self, "config", None)):
+            _aud = _va_audit(result)
+            if _aud.get("false_claims"):
+                self.record(
+                    ctx, "subgoal_verification_audit",
+                    "算术复核失败（精确整数运算），打回重解："
+                    + "；".join(_aud["false_claims"])[:200])
+                return (
+                    "【本步结果】含**算术上不成立**的断言 —— 以下结论由系统"
+                    "用精确整数运算重新计算得出（不是评审意见，是算错）：\n"
+                    + "\n".join("  - " + c for c in _aud["false_claims"])
+                    + "\n请重新计算相关同余/整除（可用模幂逐步验算），"
+                    "并据实修正结论；**不要**保留未验算就写「已验证/成立」的句子。")
+            if _aud.get("conclusion_refuted"):
+                self.record(
+                    ctx, "subgoal_verification_audit",
+                    "本步结论与自身推导冲突（结论 %s 在正文中被判定不成立），"
+                    "打回重解" % _aud.get("conclusion"))
+                return (
+                    "【本步结果】自相矛盾：头部结论写 `值 = %s`，但正文里"
+                    "同一个值被判定「不满足/已失败」。结论必须是从推导得到的"
+                    "那个值。请重写：只保留真正通过验证的结论；若尚无通过验证"
+                    "的结果，请如实写明当前失败点与下一步方向，不要给出未经"
+                    "验证的数值。" % _aud.get("conclusion"))
+    except Exception:  # noqa: BLE001  审计异常一律放行，绝不阻断求解
+        pass
     # L1 lean 代码片编译（仅 deep 档 + lean 可用；禁网纯本地）
     try:
         if str(getattr(ctx, "tier", "") or "") != "deep":

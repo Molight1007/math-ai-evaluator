@@ -429,6 +429,14 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
             # 复用缓存存完整文本（解析不出摘要时也有原文可用）
             _done[_fp] = {"result": step_result, "contract": _contract}
             ctx.subgoal_trace.append(solver._build_trace_item(sg, step_result))
+            # ★ 2026-10-29：登记进推导审计账本（跨轮结论冲突的唯一观测点；
+            #   与旧循环 `sub_goal_solver__loop` 同一入口，异常一律放行）。
+            try:
+                from .verification_audit import enabled as _va_on, note_step as _va_note
+                if _va_on(getattr(solver, "config", None)):
+                    _va_note(ctx, ctx.subgoal_trace[-1])
+            except Exception:  # noqa: BLE001
+                pass
             _artifact_append(ctx, "04_subgoal_results", ctx.subgoal_trace[-1])
         except Exception as _e_w:  # noqa: BLE001
             solver.record(ctx, "subgoal_collab",
