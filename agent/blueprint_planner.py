@@ -42,6 +42,8 @@ from .blueprint_planner__dag import (  # noqa: F401
     _normalize_tool,      # 2026-10-15：工具指派白名单归一（parse_blueprint 用）
     _flatten_formal_sig,  # 2026-10-15：Lean 形式化陈述归一（tool=lean 叶子用）
     _input_use_map,       # 2026-10-15：inputs 的 use（承接语义）抽取
+    _flatten_goal,        # 2026-11-02：待证目标归一（不回落 statement）
+    _as_str_list,         # 2026-11-02：未闭合前提清单归一
     BlueprintNode,
     BlueprintDAG,
 )
@@ -262,6 +264,15 @@ def parse_blueprint(raw: dict) -> Optional[BlueprintDAG]:
             # prompts/blueprint.py:130/187/222 明确要求前瞻引理节点写 "role": "anticipatory"。
             # 与同文件 BlueprintDAG.from_dict()（:526）写法完全一致。
             node_role=nd.get("node_role", nd.get("role", "required")) or "required",
+            # ★★ 2026-11-02：语义槽位拆分（见 BlueprintNode.goal / open_goals）。
+            #   `goal` 只读模型**显式**声明；缺失即空，**不回落 statement**
+            #   —— 回落会把「没声明目标」这个事实静默抹掉。
+            #   兼容别名 `goal_statement`。
+            goal=_flatten_goal(nd.get("goal", nd.get("goal_statement", ""))),
+            #   `open_goals` = 未闭合前提清单（命题级欠账，区别于结构引用 `inputs`）。
+            #   兼容别名 `unclosed` / `pending_premises`。
+            open_goals=_as_str_list(nd.get("open_goals", nd.get("unclosed",
+                                    nd.get("pending_premises", [])))),
         )
     if not nodes:
         return None

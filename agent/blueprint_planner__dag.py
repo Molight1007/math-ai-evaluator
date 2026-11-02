@@ -88,6 +88,54 @@ def _as_id_list(value) -> list:
     return [p.strip() for p in re.split(r"[,\s、;；]+", str(value)) if p.strip()]
 
 
+def _as_str_list(value) -> list:
+    """把模型给的前提/欠账清单归一化为文本列表（保留顺序、去空、去重）。
+
+    ★ 与 `_as_id_list` 的区别：这里**不切分**逗号 —— 一条前提就是一个句子，
+      里面天然带逗号（"设 n 为奇数，且 n > 3"）。按逗号切会把一句拆成两句，
+      下游就无法把「一条前提」当成一个整体去闭合。
+      只接受 list 形态；字符串形态按换行切（模型常写成多行）。
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        seq = re.split(r"[\n；;]+", value)
+    elif isinstance(value, (list, tuple, set)):
+        seq = list(value)
+    else:
+        return []
+    out, seen = [], set()
+    for v in seq:
+        if v is None:
+            continue
+        if isinstance(v, dict):
+            # 兼容 {"statement": ...} / {"goal": ...} 形态
+            v = v.get("statement") or v.get("goal") or v.get("text") or ""
+        s = re.sub(r"\s+", " ", str(v)).strip()
+        if not s or s.lower() == "none":
+            continue
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
+def _flatten_goal(value) -> str:
+    """归一化模型声明的「待证目标」。空输入 ⇒ 空串（**不回落 statement**）。
+
+    允许模型把 goal 写成 dict（{"statement": ...} / {"claim": ...}），
+    与 `_flatten_formal_sig` 同口径处理。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        value = (value.get("statement") or value.get("goal")
+                 or value.get("claim") or value.get("text") or "")
+    s = re.sub(r"\s+", " ", str(value)).strip()
+    return "" if s.lower() in ("none", "null", "n/a") else s
+
+
 def _flatten_produces(value) -> str:
     """把模型声明的「产出物」字段摊平成单行文本（2026-10-06，子目标交付重写 A）。
 
@@ -330,6 +378,40 @@ class BlueprintNode:
     #   ⚠ 允许为空 —— 形式化失败是常态（历史实测 2.6 前置形式化 5/5 fail），
     #     下游必须**回落**到"求解侧自行写整段 Lean"，绝不因缺签名而阻断。
     formal_sig: str = ""
+    # ★★ 2026-11-02（语义槽位拆分）：`statement` 一个槽同时承载三种语义 ——
+    #   ① 计划期的「要证什么」（目标，允许错）
+    #   ② 求解期的「我猜结果是这个」（猜想，未判定）
+    #   ③ 入库期的「这已是事实」（结论，必须已验证）
+    #   三者共用一个槽 ⇒ 下游无法区分权威性 ⇒「先证明、再声明」在结构上
+    #   无法执行（只能靠提示词约定，而禁令从来没有代码执行）。
+    #
+    #   本字段是 ① 的落点：**模型显式声明**的待证目标。
+    #   ⚠ 刻意**不**在为空时回落成 `statement` 再假装拆分完成 ——
+    #     回落会把「模型没声明目标」这个事实静默抹掉（兜底≠修复）。
+    #     调用方若要用，须经 `goal_of()` 并**如实**接受来源标记 derived。
+    goal: str = ""
+    # ★★ 2026-11-02：未闭合前提清单（依赖哪些尚未证明的上游命题）。
+    #   与 `inputs`（依赖哪些上游节点 id）不同：`inputs` 是结构引用，
+    #   本字段是**命题级**的欠账 —— "要证 P 还差 Q 和 R"。
+    #   一个节点的 `open_goals` 非空，就说明它**不构成可入库的事实**。
+    open_goals: list = field(default_factory=list)
+
+    def goal_of(self) -> tuple:
+        """返回 (目标文本, 来源标记)。
+
+        来源标记只有两个合法值：
+            "declared" —— 模型显式声明了 `goal`，可当目标使用；
+            "derived"  —— 未声明，仅从 `statement` 取来兜底，
+                          **调用方必须把它当"未经确认的目标"**。
+
+        ★ 为什么返回二元组而不是直接返回字符串：
+          把来源和文本捆在一起传，调用方就无法"顺手"忽略来源。
+          这是「单一权威源」在接口层的最小实现。
+        """
+        g = str(self.goal or "").strip()
+        if g:
+            return g, "declared"
+        return str(self.statement or "").strip(), "derived"
 
     @property
     def is_anticipatory(self) -> bool:
@@ -547,6 +629,21 @@ class BlueprintDAG:
             if _valmask_on and idx == _last_idx:
                 _stmt_proj, _vk = mask_assigned_values(_stmt_proj)
                 _valmask_hits += _vk
+            # ★★ 2026-11-02（语义槽位拆分）：目标单列下传。
+            #   declared ⇒ 用模型声明的 goal（收尾节点同样过值掩码，理由同 statement：
+            #     目标里若已写出答案值，等于在最后一环把答案锁死）；
+            #   derived  ⇒ 只能取 _stmt_proj（已掩码，不再重复掩）。
+            #   来源标记必须一起下传 —— 下游要能分辨「这是模型声明的目标」
+            #   还是「从陈述里兜底取的」，否则抹掉事实（兜底≠修复）。
+            if str(getattr(node, "goal", "") or "").strip():
+                _goal_proj = str(node.goal).strip()
+                _goal_src = "declared"
+                if _valmask_on and idx == _last_idx:
+                    _goal_proj, _vk_g = mask_assigned_values(_goal_proj)
+                    _valmask_hits += _vk_g
+            else:
+                _goal_proj = _stmt_proj
+                _goal_src = "derived"
             # 依赖：nid 的**依赖锥** = 必须早于它求解的叶子集合（见 _preceding_leaves）。
             if with_deps:
                 deps = [p for d, p in _pos.items()
@@ -569,6 +666,16 @@ class BlueprintDAG:
                 "title": f"子目标{idx}: {self._short(_stmt_proj)}",
                 "description": _stmt_proj,
                 "type": self._infer_type(node.statement),
+                # ★★ 2026-11-02（语义槽位拆分）：目标与「未闭合前提」单列下传。
+                #   `description` 仍保留 statement 投影（下游大量读取点依赖它），
+                #   但**目标**从此有自己的槽位，且带来源标记。
+                #   求解侧应优先用 `goal`；`goal_source == "derived"` 时
+                #   不得把它当「模型已确认的目标」引用（例如不得据它断言已闭合）。
+                "goal": _goal_proj,
+                "goal_source": _goal_src,
+                #   未闭合前提清单：非空即表示本节点**不构成可入库的事实**
+                #   （命题级欠账，与结构引用 `inputs` 是两回事）。
+                "open_goals": list(getattr(node, "open_goals", None) or []),
                 "depends_on": deps,
                 # ★★ 2026-10-06（子目标交付重写 A）：原实现**硬编码空串** ⇒ 蓝图
                 #   路径（实测 smoke10 8/10 题走此路径）下每个子目标的
@@ -911,7 +1018,10 @@ class BlueprintDAG:
                  # ★ 2026-10-15：Lean 形式化陈述（`tool=lean` 叶子用）——
                  #   与 tool/inputs_use 同理，必须随序列化保留，否则
                  #   子树重写回流的节点会**静默丢掉签名**，求解侧退化为自行形式化。
-                 "formal_sig": n.formal_sig}
+                 "formal_sig": n.formal_sig,
+                 # ★ 2026-11-02：目标与未闭合前提必须随序列化保留，理由同
+                 #   formal_sig —— 回路上静默丢字段的坑本项目已踩多次。
+                 "goal": n.goal, "open_goals": list(n.open_goals)}
                 for n in self.nodes.values()
             ],
         }
@@ -950,6 +1060,12 @@ class BlueprintDAG:
                                                nd.get("signature", ""))))
                     if _normalize_tool(nd.get("tool", nd.get("use_tool", ""))) == "lean"
                     else ""),
+                # ★ 2026-11-02：目标 / 未闭合前提（见 BlueprintNode.goal）。
+                #   旧序列化无这两个键 ⇒ 空值，语义就是「模型没声明」，
+                #   **不回落成 statement**（回落会掩盖未声明这一事实）。
+                goal=_flatten_goal(nd.get("goal", nd.get("goal_statement", ""))),
+                open_goals=_as_str_list(nd.get("open_goals",
+                                                nd.get("unclosed", []))),
             )
         return cls(
             nodes=nodes,
