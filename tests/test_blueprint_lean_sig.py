@@ -145,7 +145,7 @@ class _Agent:
     def _strip_tool_residue(self, text):
         return text
 
-    def _apply_conclusion_contract(self, sg, result, raw_text=None):
+    def _apply_conclusion_contract(self, sg, result, raw_text=None, ctx=None):
         return None
 
 

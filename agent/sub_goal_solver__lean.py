@@ -29,6 +29,12 @@ from .base import TaskContext
 logger = logging.getLogger("MathPilot")
 
 
+def _sp_symtab():
+    """延迟获取符号表模块（避免本文件顶层依赖 sympy 影响无 sympy 环境）。"""
+    from utils import symbol_table
+    return symbol_table
+
+
 def _zero_state(expr):
     """判断表达式是否恒等于 0，返回 True / False / None（判不出）。
 
@@ -280,7 +286,7 @@ def _is_single_symbol(s: str) -> bool:
     return bool(re.fullmatch(r"[^\W\d]\w*", _s, flags=re.UNICODE))
 
 
-def _sympy_judge(self, L: str, R: str):
+def _sympy_judge(self, L: str, R: str, symtab=None):
     """sympy 判定 L=R。返回 ("pass"|"fail"|"unknown", 说明/真值串)。
 
         判据（防误报红线）：
@@ -290,7 +296,8 @@ def _sympy_judge(self, L: str, R: str):
           声明赋值结果，误当恒等断言会误报把对的改错）；
         - 整式/数值（无除号无函数）→ expand(L-R) 为 0 才 pass；差是**非零常数**
           → fail；
-        - ★ 差含自由符号 → **unknown（放行）**，不再判 fail。见下方长注释；
+        - ★ 差含自由符号 → 先用 `symtab`（本题已定义符号）代入再判；代入后仍是
+          非零常数 → fail；仍含**未定义**符号 → unknown，且原因里写出缺哪些符号；
         - 含除号/函数 → 仅 simplify(L-R) 为 0 → pass、为非零常数 → fail，
           非常数一律 unknown（放行，绝不误报）。
 
@@ -308,9 +315,35 @@ def _sympy_judge(self, L: str, R: str):
         判据里没有符号表，**无法区分「自由变量」与「前面已定义的常量」**，
         于是任何用到已定义量的正确步骤都会被判死。
 
-        ⇒ 只有在差是「非零常数」时才有资格判 fail（此时两侧都是封闭数值，
-        与符号表无关）。这条与项目「宁可放过」原则一致：放过的是分歧，
-        判死的是算错。
+        ★★ 2026-11-03 修正那个修正
+        ---------------------------
+        当时处置成「含符号一律 unknown 放行」—— 这是用**删除判据**解决**信息缺失**，
+        实测在 112 行里直接放弃了 35 次判定。而定义本来就在盘上（前序步骤结论行、
+        本步依据、题设）。改为：**能代入就代入后再判，不能代入才 unknown，且原因
+        写明缺哪个符号**。`symtab` 为 None 时行为与「放行」一致，但原因可区分，
+        供 A/B 对照逐条量化「救回多少」。
+
+        ★★★ 2026-11-03 实测**负结果** —— `symtab` 禁止接进生产链路
+        ----------------------------------------------------------
+        干净 A/B（63 题次 / 112 行，两臂同一份代码、只翻 symtab 一个变量；
+        两臂的符号表都从历史原始数据独立构建，不是拿自己的判定结果喂自己）：
+            undecided -> correct   3
+            undecided -> incorrect 5
+            反向退化（确定判词变判不出）0
+        但**逐条抽验这 8 条，只有 1 条经得起检验**（`a = m(m+1)` ⇒
+        `4a+1 = (2m+1)^2` 成立），其余 7 条是**符号表污染**造成的误判：
+
+            P(x) = x - 4     判「实际值应为 x」      把函数名当常量（P = 1）
+            a+b+c = 10       判「实际值应为 2」      a=1,b=1 抄自某特例分支
+            x^2 = 3-y^2-z^2  判不成立               x=0 / z=x^3 是错误绑定
+
+        根因有两层：① 用正则从散文里抽「某符号 = 某式」本身不可靠，抽错一条
+        就毒化后续所有判定；② 数学推导里同一符号在不同分支/不同子目标下含义
+        可以不同，**「全局单一符号表」在语义上就不成立**（分类讨论是常规写法）。
+
+        ⇒ 因此 `symtab` 只作**回放/诊断入口**，生产链路一律不传（默认 None，
+        行为与改动前完全一致）。真要做得对，绑定必须来自受控句式（`设/记/令`）
+        或结构化字段，并且按分支作用域隔离 —— 不是事后从散文里挖。
         """
     try:
         from utils.sympy_tools import _try_parse
@@ -337,15 +370,36 @@ def _sympy_judge(self, L: str, R: str):
             _zs = _zero_state(d)
             if _zs is True:
                 return "pass", ""
+            if getattr(d, "free_symbols", None) and symtab:
+                d2, _unres, _used = _sp_symtab().substitute(d, symtab)
+                d2 = _sp.simplify(d2)
+                if _zero_state(d2) is True:
+                    return "pass", "代入已定义符号（%s）后成立" % _sp_symtab().describe(_used)
+                if not getattr(d2, "free_symbols", None):
+                    return "fail", ("代入已定义符号后左式实际值应为 %s"
+                                    % _sp.simplify(_sp_symtab().substitute(a, symtab)[0]))
+                return "unknown", ("代入后仍含未定义符号 %s"
+                                   % ",".join(sorted(_unres))[:60])
             if _zs is False and d.is_number:
                 return "fail", f"左式实际值应为 {_sp.simplify(a)}"
             return "unknown", ""
         d = _sp.expand(a - b)
         if _zero_state(d) is True:
             return "pass", ""
-        # ★ 差含自由符号 ⇒ 判不出（放行）。理由见 docstring 的 2026-11-02 段：
-        #   判据没有符号表，无法区分自由变量与已定义常量，硬判必大面积误杀。
         if d.free_symbols:
+            # ★ 2026-11-03：不再一律放行 —— 先拿本题已定义符号代入，能判就判。
+            if symtab:
+                d2, _unres, _used = _sp_symtab().substitute(d, symtab)
+                d2 = _sp.expand(d2)
+                if _zero_state(d2) is True:
+                    return "pass", ("两侧相差在代入已定义符号（%s）后为零"
+                                    % _sp_symtab().describe(_used))
+                if not d2.free_symbols:
+                    return "fail", ("代入已定义符号后左式实际值应为 %s"
+                                    % _sp.simplify(_sp_symtab().substitute(a, symtab)[0]))
+                return "unknown", ("两侧相差 %s（代入后仍含未定义符号 %s，无定义可代入）"
+                                   % (_sp.simplify(d2),
+                                      ",".join(sorted(_unres))[:60] or "?"))
             return "unknown", f"两侧相差 {_sp.simplify(d)}（含符号，无符号表不可判）"
         if _zero_state(d) is False:
             return "fail", f"左式实际值应为 {_sp.simplify(a)}"

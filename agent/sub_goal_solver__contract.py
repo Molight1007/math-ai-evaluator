@@ -99,7 +99,8 @@ def _tail_after_conclusion(cls, text: str) -> str:
 def _judge_subgoal_objective(self, sg: dict, contract: dict,
                              result_text: str,
                              answers: list,
-                             existing_idx: int = -1) -> tuple:
+                             existing_idx: int = -1,
+                             symtab: dict = None) -> tuple:
     """对一个子目标结论做 **0-LLM 客观判定**。
 
         返回 ``(verified_index, verdict, reason)``：
@@ -122,7 +123,7 @@ def _judge_subgoal_objective(self, sg: dict, contract: dict,
     _chk = []          # [(L, R, info)] 通过的 / 失败的
     if contract.get("kind") == "equation" and contract.get("lhs") \
             and contract.get("rhs"):
-        _v, _info = self._sympy_judge(contract["lhs"], contract["rhs"])
+        _v, _info = self._sympy_judge(contract["lhs"], contract["rhs"], symtab=symtab)
         if _v == "fail":
             return (-1, "incorrect",
                     "本步结论等式经 SymPy 客观判定**不成立**"
@@ -132,7 +133,7 @@ def _judge_subgoal_objective(self, sg: dict, contract: dict,
     # ③ <check> 协议断言（结论行未给等式时兜底）
     if not _chk:
         for L, R in self._extract_check_asserts(result_text):
-            _v, _info = self._sympy_judge(L, R)
+            _v, _info = self._sympy_judge(L, R, symtab=symtab)
             if _v == "fail":
                 return (-1, "incorrect",
                         f"结果中 <check> 断言「{L} = {R}」客观判定不成立"
