@@ -27,6 +27,43 @@ import time
 from .base import TaskContext
 
 logger = logging.getLogger("MathPilot")
+
+
+def _zero_state(expr):
+    """判断表达式是否恒等于 0，返回 True / False / None（判不出）。
+
+    ★★ 2026-11-02：此前一律用 `expr == 0` 判，而这是**结构比较**。
+      根因在 `utils/sympy_tools._try_parse` 用 `sympify(..., evaluate=False)` 解析，
+      数字和会保留成**未求值的 Add**：
+
+          expand(10 + 18*100 - 1810)  ->  -1800 + 1800
+          (-1800 + 1800) == 0         ->  False      # 结构不等
+          (-1800 + 1800).is_zero      ->  True       # 这才是对的问题
+
+      后果是**只要断言左式写成乘积/幂的形态，即使算对也一律判「不成立」**。
+      服务器 109 题次实测：闸门下 93% 的「上游不达标」是这一类假阳性，
+      例如「18*100 + 10 = 1810」判词自己写着「左式实际值应为 1810」却判 fail。
+
+    ★ 返回 None 而非 False：判不出时必须能区分「确定非零」与「算不出」，
+      否则会把未知当错误（本项目「宁可放过」原则）。
+    """
+    try:
+        if expr == 0:
+            return True
+        _z = getattr(expr, "is_zero", None)
+        if _z is not None:
+            return bool(_z)
+        import sympy as _sp
+        _s = _sp.simplify(expr)
+        if _s == 0:
+            return True
+        if getattr(_s, "is_number", False):
+            return False
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _numeric_lean_verify(self, ctx: TaskContext, result: str) -> str:
     """L2 数值断言 Lean 验证，返回反馈文本（空=通过/无可验断言/放行）。"""
     if not getattr(self.config, "enable_numeric_lean_verify", False):
@@ -265,18 +302,24 @@ def _sympy_judge(self, L: str, R: str):
             r"(sqrt|sin|cos|tan|log|ln|exp|abs|floor|ceil)\(", L2 + R2))
         if has_frac:
             d = _sp.simplify(a - b)
-            if d == 0:
+            _zs = _zero_state(d)
+            if _zs is True:
                 return "pass", ""
-            if d.is_number and d != 0:
+            if _zs is False and d.is_number:
                 return "fail", f"左式实际值应为 {_sp.simplify(a)}"
             return "unknown", ""
         d = _sp.expand(a - b)
-        if d == 0:
+        if _zero_state(d) is True:
             return "pass", ""
-        # 整式差非 0：确定性不恒等 → fail（语义化说明供反馈）
+        # ★ 多项式恒等性在 expand 后是**可判定**的：expand 已把同类项合并，
+        #   若还带自由符号就不是零多项式。所以这里不能因为 `_zero_state` 返回
+        #   None（is_zero 未定）就降级成 unknown —— 那会把真错放行，
+        #   比误杀更危险（历史口径也是 fail，此处保持不变）。
         if d.free_symbols:
             return "fail", f"两侧展开后相差 {_sp.simplify(d)}，并非恒等"
-        return "fail", f"左式实际值应为 {_sp.simplify(a)}"
+        if _zero_state(d) is False:
+            return "fail", f"左式实际值应为 {_sp.simplify(a)}"
+        return "unknown", ""
     except Exception:  # noqa: BLE001
         return "unknown", ""
 
