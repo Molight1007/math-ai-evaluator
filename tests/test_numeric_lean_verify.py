@@ -197,8 +197,12 @@ class SympyJudgeTest(unittest.TestCase):
     def test_judge_poly(self):
         self.assertEqual(
             self.ag._sympy_judge("(x-1)*(x+2)", "x^2+x-2")[0], "pass")
+        # ★ 2026-11-02 口径修正：差含符号时判据**判不出**，不再判 fail。
+        #   推导里写的是「该配置下的等式」而非恒等断言，判据又没有符号表，
+        #   分不清「自由变量」与「前面定义过的量」⇒ 硬判必然大面积误杀。
+        #   实测 112 行里 111 行是这一类假阳性（T_max=76、x²+y²+z²=3 等）。
         v, info = self.ag._sympy_judge("(x-1)*(x+3)", "x^2+x-2")
-        self.assertEqual(v, "fail")
+        self.assertEqual(v, "unknown")
         self.assertIn("相差", info)
 
     def test_judge_frac(self):

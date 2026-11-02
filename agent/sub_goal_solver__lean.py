@@ -267,30 +267,62 @@ def _lean_backup_fails(self, fails: list) -> list:
         return []
 
 
+def _is_single_symbol(s: str) -> bool:
+    """这段文本是不是**一个符号**（x / T_max / x_k / Δ / λ）。
+
+    ★ 2026-11-02：原来只认单个 ASCII 字母，导致 `T_max = 76`、`Δ = ...`、
+      `x_k = ...` 这类**赋值式**被当成恒等断言去判，必然判「并非恒等」。
+    """
+    _s = (s or "").strip()
+    if not _s:
+        return False
+    # 允许 Unicode 希腊字母等单字符符号，以及带下标的标识符
+    return bool(re.fullmatch(r"[^\W\d]\w*", _s, flags=re.UNICODE))
+
+
 def _sympy_judge(self, L: str, R: str):
     """sympy 判定 L=R。返回 ("pass"|"fail"|"unknown", 说明/真值串)。
 
         判据（防误报红线）：
-        - **赋值式跳过**：任一侧是单个未知变量（x = 5、s = 265/247）→
-          这是"求解结果"而非"恒等断言"，无 ground truth 可验 → unknown
+        - **赋值式跳过**：任一侧是单个符号（x = 5、T_max = 76、Δ = -4a+5）→
+          这是"求解结果/定义"而非"恒等断言"，无 ground truth 可验 → unknown
           放行（2026-09-08 smoke10 实证：模型大量用 <check>x = 值</check>
           声明赋值结果，误当恒等断言会误报把对的改错）；
-        - 整式/数值（无除号无函数）→ expand(L-R)==0 才 pass；非 0 差为常数
-          或含自由变量 → fail（多项式不恒等=断言错，无限域可靠）；
+        - 整式/数值（无除号无函数）→ expand(L-R) 为 0 才 pass；差是**非零常数**
+          → fail；
+        - ★ 差含自由符号 → **unknown（放行）**，不再判 fail。见下方长注释；
         - 含除号/函数 → 仅 simplify(L-R) 为 0 → pass、为非零常数 → fail，
           非常数一律 unknown（放行，绝不误报）。
+
+        ★★ 2026-11-02 口径修正（推翻同日早些时候「有自由符号即 fail」的判断）
+        ----------------------------------------------------------------
+        当时的理由是「多项式恒等性在 expand 后可判定，带自由符号就不是零多项式
+        ⇒ 断言必错」。这个推理只对**恒等断言**成立，而推导里的 `等式 = L = R`
+        绝大多数**不是恒等断言**，是「在该配置下 L 等于 R」。
+
+        服务器 63 题次实测：重判后仍判 fail 的 51 行里 50 行是这一类，典型：
+            T_max - 76              # T_max 是前面步骤定义的量
+            -4*a + Δ - 5            # Δ 是定义过的常量
+            x**2 + y**2 + z**2 - 3  # 这是**题设条件**，不是恒等式
+            -x_k**2 + y_k           # 下标符号别名
+        判据里没有符号表，**无法区分「自由变量」与「前面已定义的常量」**，
+        于是任何用到已定义量的正确步骤都会被判死。
+
+        ⇒ 只有在差是「非零常数」时才有资格判 fail（此时两侧都是封闭数值，
+        与符号表无关）。这条与项目「宁可放过」原则一致：放过的是分歧，
+        判死的是算错。
         """
     try:
         from utils.sympy_tools import _try_parse
     except Exception:  # noqa: BLE001
         return "unknown", ""
     try:
-        # 赋值式跳过：一侧是单个变量 v 且另一侧**不含 v**（x = 5、s = 265/247）
-        # 才是"求解结果"；若另一侧也含 v（如 (x^2-1)/(x-1) = x）则是恒等
+        # 赋值式跳过：一侧是单个符号 v 且另一侧**不含 v**（x = 5、T_max = 76）
+        # 才是"求解结果/定义"；若另一侧也含 v（如 (x^2-1)/(x-1) = x）则是恒等
         # 断言，仍正常判定。
         _Lt, _Rt = L.strip(), R.strip()
-        if (re.fullmatch(r"[a-zA-Z]", _Lt) and _Lt not in R) or (
-                re.fullmatch(r"[a-zA-Z]", _Rt) and _Rt not in L):
+        if (_is_single_symbol(_Lt) and _Lt not in R) or (
+                _is_single_symbol(_Rt) and _Rt not in L):
             return "unknown", ""
         L2, R2 = self._pow_to_python(L), self._pow_to_python(R)
         a, _ = _try_parse(L2)
@@ -311,12 +343,10 @@ def _sympy_judge(self, L: str, R: str):
         d = _sp.expand(a - b)
         if _zero_state(d) is True:
             return "pass", ""
-        # ★ 多项式恒等性在 expand 后是**可判定**的：expand 已把同类项合并，
-        #   若还带自由符号就不是零多项式。所以这里不能因为 `_zero_state` 返回
-        #   None（is_zero 未定）就降级成 unknown —— 那会把真错放行，
-        #   比误杀更危险（历史口径也是 fail，此处保持不变）。
+        # ★ 差含自由符号 ⇒ 判不出（放行）。理由见 docstring 的 2026-11-02 段：
+        #   判据没有符号表，无法区分自由变量与已定义常量，硬判必大面积误杀。
         if d.free_symbols:
-            return "fail", f"两侧展开后相差 {_sp.simplify(d)}，并非恒等"
+            return "unknown", f"两侧相差 {_sp.simplify(d)}（含符号，无符号表不可判）"
         if _zero_state(d) is False:
             return "fail", f"左式实际值应为 {_sp.simplify(a)}"
         return "unknown", ""

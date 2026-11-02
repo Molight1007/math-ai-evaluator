@@ -88,12 +88,37 @@ def test_symbolic_identity_passes(L, R):
     assert _judge(L, R)[0] == "pass"
 
 
-@pytest.mark.parametrize("L,R", [
-    ("a * a", "1"),                 # a^2 != 1
-    ("x_k^2", "y_k"),
+def test_symbolic_non_identity_is_not_fatal():
+    """★ 2026-11-02 口径修正：差含符号时判不出，**不得判死**。
+
+    推导里写的是「该配置下的等式」，不是恒等断言。判据没有符号表，
+    无法区分「自由变量」与「前面已定义的常量」（实测典型：`T_max = 76`、
+    `-4*a + Δ - 5`、`x²+y²+z² = 3` 是题设条件），硬判必大面积误杀。
+    """
+    for L, R in [("a * a", "1"), ("x_k^2", "y_k"), ("T_max", "76"),
+                 ("-4*a + Delta", "5")]:
+        assert _judge(L, R)[0] in ("unknown", "pass"), "%s = %s" % (L, R)
+
+
+def test_pure_numeric_mismatch_still_fatal():
+    """两侧都是封闭数值时，差是非零常数 —— 这是唯一有资格判 fail 的情形。"""
+    assert _judge("3 + 4", "8")[0] == "fail"
+
+
+# --------------------------------------------------- Z6 单个符号识别（含下标/希腊）
+@pytest.mark.parametrize("s,expect", [
+    ("x", True),
+    ("T_max", True),
+    ("x_k", True),
+    ("Δ", True),
+    ("a * a", False),
+    ("x^2", False),
+    ("sin(x)", False),
+    ("", False),
+    ("2", False),
 ])
-def test_symbolic_non_identity_fails(L, R):
-    assert _judge(L, R)[0] == "fail"
+def test_is_single_symbol(s, expect):
+    assert M._is_single_symbol(s) is expect
 
 
 # ------------------------------------------------- Z5 赋值式仍放行（原有红线）
