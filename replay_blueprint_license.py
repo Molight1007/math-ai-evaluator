@@ -87,6 +87,14 @@ import os
 import re
 import sys
 
+# 闭合判定下沉到契约层（2026-11-02）：agent 侧要从「已闭合集合」投影前提，
+# 若两边各写一份口径必然漂移。这里改为复用同一实现，**不保留本地副本**。
+# 契约层零依赖，不会把 LLM 客户端拉进本脚本。
+from contracts.closure import (  # noqa: E402
+    FAIL_WORDS as _FAIL_WORDS,
+    closure_of,
+)
+
 # ------------------------------------------------------------------ 常量
 
 # 推导/承接动词：出现这些说明该节点在「推」而不是「断言」
@@ -125,8 +133,7 @@ _NODE_REF_RE = re.compile(r"(?<![A-Za-z_])(?:n|N)(\d{1,2})(?![\d])")
 # 子目标标题前缀「子目标3: 」
 _TITLE_PREFIX_RE = re.compile(r"^子目标\s*\d+\s*[:：]\s*")
 
-# 强闭合：tool_ran=True 且 verdict 不是明确的失败
-_FAIL_WORDS = (u"fail", u"error", u"失败", u"错", u"unknown", u"timeout")
+# 强闭合词表与判定已移入 `contracts/closure.py`（单一权威源，见文件头 import）。
 
 
 # ------------------------------------------------------------------ 基础工具
@@ -298,24 +305,8 @@ def map_nodes_to_subgoals(nodes, subgoals, root_id):
     return out, method
 
 
-def closure_of(sg):
-    """子目标的闭合层级 + 依据。
-
-    ★ UNMAPPED 单列，**不计入闭合率分母**：早期一批蓝图根本没有
-      `03_subgoals.json`（n_subgoals=0），把它们的节点算成「OPEN」会让
-      闭合率虚高（实测 109 题次里有 20+ 个 `子=0`）。
-    """
-    if not sg:
-        return "UNMAPPED", "no_subgoal"
-    tool_ran = sg.get("tool_ran")
-    tv = ("%s" % (sg.get("tool_verdict") or "")).lower()
-    if tool_ran is True and not any(w in tv for w in _FAIL_WORDS):
-        return "HARD_CLOSED", "tool_ran=True"
-    ov = sg.get("objective_verdict")
-    has_drv = sg.get("has_derivation")
-    if ov == "correct" and has_drv is not False:
-        return "SOFT_CLOSED", "objective_verdict=correct"
-    return "OPEN", "objective_verdict=%s has_derivation=%s" % (ov, has_drv)
+# `closure_of` 的实现已下沉到 `contracts/closure.py`（见文件头 import）。
+# ★ UNMAPPED 单列、不计入闭合率分母的口径在那里统一维护，本脚本不再重复定义。
 
 
 # ------------------------------------------------------------------ 单题分析
