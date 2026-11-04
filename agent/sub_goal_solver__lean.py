@@ -734,6 +734,21 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
     code = "\n".join(blocks).strip()
     # ★ 2026-10-15：与蓝图签名拼接（求解侧只回证明体时也能成完整声明）
     code = _compose_formal_sig(str((sg or {}).get("formal_sig") or ""), code)
+    # ★ 2026-11-04（E30）门 C **影子打标**：最终拼接代码里若仍带 sorry/axiom，
+    #   说明求解侧根本没给出证明，只把签名占位原样交回来了。
+    #   当前 `_compile(..., allow_sorry=True)` 会把它算成 ok ⇒ 「工具说通过」的
+    #   假凭证。本轮**只记录、不改放行**（闸门后有效硬闭合为 0，E29；直接接门
+    #   会把产出一次砍光）。下一次真接门时，把外层 `_mark` 的 verdict 与
+    #   `sig_gate_proof` 关联即可，无需再动判定逻辑。
+    if isinstance(sg, dict):
+        try:
+            from contracts.formal_sig_gate import proof_credential
+            _cred, _why = proof_credential(code)
+            sg["sig_gate_proof"] = _cred
+            sg["sig_gate_proof_reason"] = _why
+        except Exception:  # noqa: BLE001  门禁不可用 ⇒ 显式留痕
+            sg["sig_gate_proof"] = "UNAVAILABLE"
+            sg["sig_gate_proof_reason"] = "契约层门禁不可用"
     if not code or len(code) > 8000:
         return ""
     meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}

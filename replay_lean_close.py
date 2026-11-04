@@ -63,77 +63,27 @@ import sys
 import tempfile
 import time
 
+# ★ 2026-11-04：切分 / 退化 / 非法原因的**唯一权威源**下沉到契约层，
+#   主流程与回放床共用一份，避免两份正则漂移（项目已因口径漂移吃过亏：
+#   值断言率 4.5% vs 32.4%、闭合率 0% 与 90% 被平均成 34%）。
+from contracts.formal_sig_gate import (  # noqa: E402
+    SORRY_RE, TAIL_RE, TRIVIAL_RULES,
+    is_trivial_prop, split_sig, illegal_kind, classify_stated,
+)
+
 TACTIC = ("first | decide | norm_num | omega | simp | linarith | ring_nf | positivity "
           "| nlinarith | gcongr | assumption | rfl")
 PRELUDE = "import Mathlib.Tactic\n\nset_option maxHeartbeats 400000\n\n"
-SORRY_RE = re.compile(r"\b(sorry|admit)\b")
-TAIL_RE = re.compile(r":=\s*by\s*(?:sorry|admit)\s*$", re.S)
-
-# 非法原因细分（顺序即优先级）。★ 必须用**完整错误文本**匹配，
-# 只取第一行会把「unknown identifier」吞进「Function expected」等类别。
-ILLEGAL_KINDS = (
-    ("未定义符号", r"unknown (identifier|constant|namespace|free variable)"),
-    ("语法/括号", r"unexpected token|expected token|expected '|unexpected identifier"),
-    ("类型实例缺失", r"failed to synthesize|synthInstanceFailed"),
-    ("字段/应用不存在", r"Function expected|Application type mismatch|Invalid field|unknown field"),
-)
-
-# 退化命题的**保守**识别：只认最明确的几种，漏判留给人工抽验，不硬猜语义。
-TRIVIAL_RULES = (
-    ("命题就是True", re.compile(r"^True\s*$")),
-    ("A=A重言式", re.compile(r"^\s*(.+?)\s*=\s*\1\s*$")),
-    ("属于Set.univ", re.compile(r"∈\s*\(?\s*Set\.univ")),
-    ("存在性直接取等", re.compile(r"^∃\s*\(?\s*([A-Za-z]\w*)\s*(?::[^,)]+)?\s*\)?\s*,\s*\1\s*=", re.U)),
-    ("恒等函数", re.compile(r"\(fun\s+(\w+)\s*:[^)]*=>\s*\1\s*\)", re.U)),
-)
-
-
-def is_trivial_prop(prop):
-    """保守判「命题是不是空的」。返回原因串，空串 = 看不出（不等于非平凡）。"""
-    s = (prop or "").strip()
-    for name, pat in TRIVIAL_RULES:
-        if pat.search(s):
-            return name
-    return ""
-
-
-def split_sig(sig):
-    """拆出 (声明头, 命题)。
-
-    先剥掉尾部的 `:= by sorry`，再找**括号深度为 0 的第一个冒号**作为分隔。
-
-    ★ 三种错法都验证过，只有这一种对：
-      - 非贪婪 `^(.*?):` ⇒ `example (x : ℝ) : P` 被在类型标注处切开；
-      - 从右往左找最后一个冒号 ⇒ `example : ∀ k : ℕ, P` 被在 `k : ℕ` 处切开；
-      - 平扫第一个冒号但不看深度 ⇒ `example (x : ℝ) : P` 又被切开。
-    """
-    m = TAIL_RE.search(sig.strip())
-    if not m:
-        return None
-    core = sig.strip()[:m.start()].rstrip()
-    depth = 0
-    for i, ch in enumerate(core):
-        if ch in "([{⟨":
-            depth += 1
-        elif ch in ")]}⟩":
-            depth -= 1
-        elif ch == ":" and depth == 0:
-            if i == 0:
-                return None
-            return core[:i].rstrip(), core[i + 1:].strip()
-    return None
-
-
-def illegal_kind(full_err):
-    """★ 大小写不敏感：Lean 会写 `Unknown constant` / `unknown identifier` 两种。"""
-    for name, pat in ILLEGAL_KINDS:
-        if re.search(pat, full_err or "", re.I):
-            return name
-    return "其它"
 
 
 def classify(first_err, full_err, returncode):
     """一次编译结果的初分类。纯函数，可单测。
+
+    ★ 本函数判的是「自动策略**能否证出**」，不是「命题**能否陈述**」。
+      后者用 `contracts.formal_sig_gate.classify_stated()`（保留 by sorry 编译）。
+      两者失败原因不同：这里把「策略不够」与「命题非法」混在一起，E29 的
+      37% 非法率是从中拆出来的估计 ⇒ 必须用门 A 的干净口径重量，
+      见 `replay_sig_gate.py`。
 
     ★★ 判据不是「有没有 unsolved goals」，而是「有没有**别的** error 行」。
        Lean 在致命错误（unknown constant / Application type mismatch / Invalid field）

@@ -187,6 +187,28 @@ def _flatten_formal_sig(value) -> str:
     return "\n".join(lines).strip()
 
 
+def _sig_gate_shape(sig: str) -> dict:
+    """形式签名**影子门禁**：只做零成本形态判定，不编译、不阻断、不改签名。
+
+    ★ 2026-11-04（E30）：`contracts/formal_sig_gate.py` 的三道门里，
+      规划期只能跑门 B（命题非平凡）与形态检查；门 A 需要 Lean 编译、
+      门 C 需要求解侧证明体，两者都不在规划期可得。
+      ⇒ `evaluate()` 在 `compile_result=None` 时返回 `UNVERIFIED`，
+        **不放行**（E27 教训：静默放行会让分母塌掉）。
+    ★ 本字段只供离线回放统计「若生效会砍谁」。**不得**据此丢弃签名、
+      不得据此改变 tool 指派 —— 闸门后有效硬闭合当前为 0（E29），
+      此刻真接门等于把产出一次性砍光。
+    """
+    try:
+        from contracts.formal_sig_gate import evaluate
+        v = evaluate(sig)
+        return {"stage": v["stage"], "allowed": v["allowed"],
+                "reasons": v["reasons"]}
+    except Exception:  # noqa: BLE001  门禁不可用 ⇒ 显式留痕，绝不静默当通过
+        return {"stage": "UNAVAILABLE", "allowed": False,
+                "reasons": ["契约层门禁不可用"]}
+
+
 # ★ 2026-10-15（用户要求「蓝图为每一个子目标设定工具」）：工具指派的**唯一白名单**。
 #   `符号计算` / `证明` 等五花八门的写法 ⇒ 必须在此归一，下游只认下列四个键。
 #   `""` = 未声明（模型没写 / 写了无法识别），下游按「无工具指令」处理（等价 llm），
@@ -704,6 +726,15 @@ class BlueprintDAG:
                 #   ⚠ 再按 `tool` 收口：签名只对 lean 有意义，其它工具一律传空
                 #     （解析/反序列化两侧都已过滤，此处是**求解前的最后一道闸**）。
                 "formal_sig": (
+                    str(getattr(node, "formal_sig", "") or "").strip()
+                    if (_sig_on
+                        and str(getattr(node, "tool", "") or "").strip().lower()
+                        == "lean") else ""),
+                # ★ 2026-11-04（E30）影子门禁：与上方 `formal_sig` **同一个条件**，
+                #   不得单独改这里的过滤逻辑（两份口径漂移是本项目反复踩的坑）。
+                #   只打标、不丢签名、不改 tool；门 A/C 需要编译与证明体，
+                #   规划期不可得 ⇒ 恒为 UNVERIFIED / NONTRIVIAL / ABSENT。
+                "sig_gate_shape": _sig_gate_shape(
                     str(getattr(node, "formal_sig", "") or "").strip()
                     if (_sig_on
                         and str(getattr(node, "tool", "") or "").strip().lower()
