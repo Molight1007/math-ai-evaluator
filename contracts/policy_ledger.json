@@ -2994,6 +2994,127 @@
     "tools/harness_lint.py": "PASS（新增 466 行，受检 399，无 benchmark-specific 泄漏）"
    },
    "claim": "回归数字只用于证明「无新增失败」，不作为融合等价性或质量的效果量"
+  },
+  "gate_enforcement": {
+   "date": "2026-11-05",
+   "scope": "E31 出口闸门三道门「真判」接线验收（P0，零配额）",
+   "data": "服务器 ~/mathpilot，/tmp/e21_license.json 索引 since=20261015 ⇒ 63 题次 / 151 条形式签名；门 A 用真实 Lean 4.31.0 串行编译 144 条，用时 321s。本地 results/ 未参与。",
+   "method": {
+    "three_lanes": "A 历史可观测（门A 真实编译 + 门B 零成本）／B 反事实（注入 gate_fields 后的 tool_verdict 与 closure_of）／C 不可验（门C 需求解侧证明体，盘上没有）",
+    "holdout_rule": "不用回归分数当效果量；抽样按层与 time 前/后各半，确定性种子 20261105；任何差异必须逐条 disposition",
+    "no_effect_size": "影子→真判的分类逐条一致，B 档是反事实，不写成效果量或预期"
+   },
+   "A_historical_observable": {
+    "rows": 151,
+    "stages": {
+     "NO_PROOF": 90,
+     "STATED": 54,
+     "NONTRIVIAL": 7
+    },
+    "fresh_lean_compiles": 144,
+    "gate_A": {
+     "STATABLE": 90,
+     "ILLEGAL": 54,
+     "SKIPPED": 7
+    },
+    "gate_A_illegal_kinds": {
+     "字段/应用不存在": 26,
+     "语法/括号": 15,
+     "类型实例缺失": 10,
+     "其它": 1,
+     "未定义符号": 2
+    },
+    "reproduce_vs_shadow_cache": "144/144 逐条复现（11-04 影子床编译结论）",
+    "independent_cross_check": {
+     "source": "replay_lean_close.py 的 E29 自动策略五分类（另一条编译路径）",
+     "aligned": 150,
+     "E29_ILLEGAL_56": "门A ILLEGAL 54 + 门B SKIPPED 1 + 门A STATABLE 1",
+     "E29_TRIVIAL_6": "门B SKIPPED 6（一致）",
+     "E29_CONTRADICTION_8": "门A STATABLE 8（反证式命题可陈述，一致）",
+     "E29_LEGAL_80": "门A STATABLE 80（一致）",
+     "note": "1 条旧 ILLEGAL 被门A 判 STATABLE 是旧拆解规则误判、1 条是退化命题被门B 提前拦 ⇒ 与 E30 交叉表逐字复现"
+    },
+    "manual_spot_check": {
+     "n": 29,
+     "layers": {
+      "ILLEGAL/其它": 1,
+      "ILLEGAL/字段/应用不存在": 3,
+      "ILLEGAL/未定义符号": 2,
+      "ILLEGAL/类型实例缺失": 3,
+      "ILLEGAL/语法/括号": 3,
+      "STATABLE/EARLY": 5,
+      "STATABLE/LATE": 5,
+      "NONTRIVIAL": 7
+     },
+     "result": "29 条逐条人工核读，0 条误判",
+     "detail": "ILLEGAL：编造记号 / Nat.abs / 中文标识符 / ∑ 语法 / 绝对值类型实例 / 数学散文当 Lean，全部是真编译错误；NONTRIVIAL：True、A=A、∈Set.univ、恒等函数、∃k,k=式，确实是空命题；STATABLE：命题合法，只因无证明体而 NO_PROOF；: False 两条是反证式，判 STATABLE 正确",
+     "boundary_note": "∃k,k=式 属保守退化规则的边界形态，真实运行时需重点抽验，本轮不据此改判据"
+    }
+   },
+   "B_counterfactual": {
+    "tool_verdict_changed": 151,
+    "closure_level_changed": 60,
+    "closure_reason_changed": 151,
+    "transitions": {
+     "SOFT_CLOSED→OPEN/NO_PROOF": 37,
+     "SOFT_CLOSED→OPEN/STATED": 20,
+     "SOFT_CLOSED→OPEN/NONTRIVIAL": 3
+    },
+    "downgrade_with_substantive_basis": 23,
+    "downgrade_due_to_history_gap": 37,
+    "questions_with_ready": 0,
+    "hist_tool_ran_true": 0,
+    "note": "60 条全部是 SOFT_CLOSED→OPEN：23 条（STATED 20 / NONTRIVIAL 3）有实质依据（命题写不出 / 命题是空的）；37 条 NO_PROOF 只是历史盘上没有求解侧证明体，是数据缺口不是判据结论，不得外推。历史 tool_ran 全 False ⇒ 真判路径从未被触发，本档是反事实，不是观测效果。"
+   },
+   "C_not_verifiable": {
+    "reason": "门 C 需要求解侧补完的证明体；历史 90 条 NO_PROOF，盘上没有任何求解侧证明体",
+    "evidence": "tests/test_gate_enforce_paths.py 17 条构造用例覆盖 A~G 全部生产路径（无签名 / 非 lean 工具 / 无代码块 / 三道门全过 / 证明体 sorry / 编译不可用 / 命题不可陈述 / Lean 不可用），并含决定性反例；本地 17 passed",
+    "claim": "不得说成「历史数据里证明通过」或「真判已被真实运行验证」"
+   },
+   "findings": [
+    {
+     "id": "E32",
+     "title": "落盘断链：闸门否决字段没写进子目标产物",
+     "root_cause": "_build_trace_item 是子目标记录的唯一出口且用显式字段白名单，只抄了 tool_verdict，没抄 sig_gate_allowed；归档回放的 closure_of 因而退化回 FAIL_WORDS 的 unknown 子串巧合，正是 E31 声称要取消的东西",
+     "risk": "一旦 verdict 措辞不含失败词，离线回放会把「没验成」静默算成硬闭合（假凭证）",
+     "fix": "只在闸门确实判过时条件写入四个字段；不补 False 默认值，否则无签名/非 lean 条目会被全量误杀",
+     "evidence": "决定性反例：tool_verdict='OK' + sig_gate_allowed=False ⇒ closure_of 仍判 OPEN；本地 3 条新增构造用例 + 服务器 7/7 验证；全量回归 2468 passed / 1 failed（唯一失败为融合前既有环境性用例，不删不跳过）",
+     "disposition": "applied"
+    },
+    {
+     "id": "F-SOFT",
+     "title": "闸门否决无条件压制软闭合通道（设计决策待确认）",
+     "detail": "closure_of 把 sig_gate_allowed=False 放在最前面，60 条 objective_verdict=correct 的软闭合被降为 OPEN。E31 的论证只算了「硬闭合分母为 0」，没算旁通道代价",
+     "assessment": "23 条有实质依据；37 条是历史数据缺失，真实运行时有证明体后 verdict 会变，不构成真实误杀",
+     "disposition": "open_decision",
+     "reason_not_changed": "改 closure_of 会变更判据语义，属判据类改动，须由用户拍板并配留出集/单变量/人工抽验；本轮验收不擅自扩大范围",
+     "next_step": "P3 真实运行时重点抽验「objective_verdict=correct + 有推导 + 闸门否决」的条目，逐条核是否误杀"
+    }
+   ],
+   "server_verification": {
+    "e32_script": "/tmp/verify_srv_e32.py",
+    "e32_result": "7/7 PASS（含 10 个生产模块导入冒烟）",
+    "fusion_replay": "verify_srv_fusion.py 复跑：import 11 模块 OK、已删模块不可导入、103 题次 NO_UNEXPLAINED_DIFF",
+    "backup": ".bak_e32_20261105_format.py（旧版，可回退）",
+    "synced_files": [
+     "agent/sub_goal_solver__format.py",
+     "replay_gate_enforce.py"
+    ]
+   },
+   "commands": [
+    "cd ~/mathpilot && source deploy/lean-env.sh && source deploy/cloud_run.env",
+    ".venv/bin/python replay_gate_enforce.py --index /tmp/e21_license.json --since 20261015 --shadow /tmp/sig_gate_res.json --out /tmp/gate_enforce_res.json --report /tmp/gate_enforce_report.json",
+    "python -m pytest tests/test_gate_enforce_paths.py -q",
+    "python -m pytest tests tools -q --junitxml=...",
+    ".venv/bin/python /tmp/verify_srv_e32.py"
+   ],
+   "verdict": "NO_UNEXPLAINED_DIFF",
+   "not_claimed": [
+    "不宣称真判有效、不宣称等价、不宣称效果量",
+    "不宣称已跑过真实 LLM 端到端评测（0 配额硬阻塞未解除）",
+    "不把 2468/1 或 144/144 当质量分数，只作「无新增失败 / 逐条复现」证据",
+    "不把 B 档反事实写成观测效果，不把 C 档构造用例写成历史结论"
+   ]
   }
  },
  "test_migration": {

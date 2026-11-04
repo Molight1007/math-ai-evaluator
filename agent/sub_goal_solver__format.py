@@ -99,6 +99,19 @@ def _build_trace_item(sg: dict, step_result: str, reused: bool = False) -> dict:
         "tool_ran": bool(sg.get("tool_ran", False)),
         "tool_verdict": sg.get("tool_verdict", ""),
     }
+    # ★ 2026-11-05（E32）：出口闸门三道门的**显式否决字段必须落盘**。
+    #   E31 把 `sig_gate_allowed` 接到 `closure_of`，但本函数是子目标记录的
+    #   唯一出口且用显式字段白名单 —— 不抄的话，归档产物里只剩
+    #   `tool_verdict="unknown: ..."`，闭合判定会退化回 FAIL_WORDS 的子串巧合
+    #   （正是 E31 声称要取消的东西）；一旦 verdict 措辞改变，离线回放会
+    #   把「没验成」静默算成硬闭合。
+    # ★ 只在闸门**确实判过**时写：无签名 / 非 lean 工具的条目本来就没有
+    #   该字段，补一个 False 默认值会把它们全部误杀（投影显式、存储不降级）。
+    if "sig_gate_allowed" in sg:
+        item["sig_gate_allowed"] = bool(sg["sig_gate_allowed"])
+        item["sig_gate_stage"] = str(sg.get("sig_gate_stage") or "UNAVAILABLE")
+        item["sig_gate_reasons"] = list(sg.get("sig_gate_reasons") or [])
+        item["sig_gate_prop"] = str(sg.get("sig_gate_prop") or "")
     if reused:
         item["reused"] = True
     return item
