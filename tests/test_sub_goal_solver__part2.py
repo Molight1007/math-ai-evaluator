@@ -190,16 +190,7 @@ class SubgoalMultiAgentTest(unittest.TestCase):
         return SubGoalSolverAgent(client=MagicMock(),
                                   config=SimpleNamespace(**base))
 
-    def test_switch_off_returns_one(self):
-        s = SubGoalSolverAgent(client=MagicMock(), config=SimpleNamespace(
-            enable_subgoal_multi_agent=False, subgoal_agents_n=3))
-        self.assertEqual(s._multi_agent_n(_ctx()), 1)
 
-    def test_default_config_is_off(self):
-        """★ 默认必须是关的 —— 否则 baseline 不干净，A/B 无从比较。"""
-        cfg = SimpleNamespace()   # 完全不配这两个键
-        s = SubGoalSolverAgent(client=MagicMock(), config=cfg)
-        self.assertEqual(s._multi_agent_n(_ctx()), 1)
 
     def test_enabled_returns_n(self):
         s = self._solver()

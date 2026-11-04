@@ -137,14 +137,6 @@ def test_faults_keep_candidates():
     assert ctx.adversarial_gate["n_skipped"] == 1
 
 
-# ----------------------------------------------------- 4) 开关与空池
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_FALSIFY", "0")
-    stub = _Stub()
-    ctx = _Ctx([_c(1)])
-    adversarial_gate_stage(stub, ctx, "deep")
-    assert stub.adv_gate_falsifier.calls == []
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_empty_pool_skips():
@@ -186,7 +178,7 @@ def test_cross_model_rejections_counted(monkeypatch):
     import agent.adversarial_gate as ag
     import agent.cross_model_check as cmc
 
-    monkeypatch.setattr(ag, "_sw_get_bool", lambda name: True)
+    # ★ 2026-11-05：跨模型证伪已固化为恒开，不再需要注入 _sw_get_bool。
     monkeypatch.setattr(cmc, "cross_check", lambda **kw: {
         "verdict": "wrong", "evidence": "下界假设 Natasha 不干扰 2×2 块",
         "model": "deepseek-v3"})
@@ -210,7 +202,7 @@ def test_mixed_sources_sum_to_total(monkeypatch):
     import agent.adversarial_gate as ag
     import agent.cross_model_check as cmc
 
-    monkeypatch.setattr(ag, "_sw_get_bool", lambda name: True)
+    # ★ 2026-11-05：跨模型证伪已固化为恒开，不再需要注入 _sw_get_bool。
     monkeypatch.setattr(cmc, "cross_check", lambda **kw: {"verdict": "wrong",
                                                           "evidence": "e"})
 

@@ -28,8 +28,8 @@
 → ⑤投票。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from .switch_registry import get_bool as _sw_get_bool
 from .subgoal_result import clip_reasoning
 # 单候选自审的输入截断（防超长上下文；题目 4000 / 推理 6000 与既有阶段同量级）
 _PROBLEM_MAX = 4000
@@ -108,7 +108,7 @@ def parse_self_audit_json(raw) -> dict:
 def _switch_enabled() -> bool:
     """读「五道链·第 1 道自审」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_self_audit")
+        return POLICY['five_gate_self_audit']
     except Exception:  # noqa: BLE001
         return True
 
@@ -120,7 +120,7 @@ def _obligation_block(ctx, config) -> tuple:
     调用方必须据此回落到**原口径**（不加这一段、不加义务门）。
     """
     try:
-        if not bool(getattr(config, "audit_obligation_ledger", True)):
+        if not bool(POLICY['audit_obligation_ledger']):
             return None, ""
         from .obligation_ledger import build_ledger, render_for_audit
         lg = build_ledger(getattr(ctx, "blueprint", None))

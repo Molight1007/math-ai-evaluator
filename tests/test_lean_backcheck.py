@@ -81,14 +81,17 @@ def test_all_rejected_marked_not_cleared():
     assert any("全部未通过" in m for _, m in stub.events)
 
 
-def test_all_rejected_strict_clears_pool():
+def test_all_rejected_does_not_clear_pool_by_policy():
+    """★ 2026-11-05：`strict_all_rejected` 已固化为 False（E15 撤销清池）。
+
+    原用例靠 config 注入 True 来测清池；融合后注入无效。保留功能断言，
+    改为验证固化态：全拒也不清池（宁可放过，代价不对称）。
+    """
     gate = _Gate(kept=[], fbs=["[Lean] 全拒反馈"])
     stub = _Stub(gate)
-    stub.config.strict_all_rejected = True
     ctx = _Ctx([_c(1)])
     lean_backcheck_stage(stub, ctx, "deep")
-    assert ctx.candidates == []
-    assert any(k == "pool_empty" for k, _ in stub.events)
+    assert len(ctx.candidates) == 1
 
 
 def test_not_applicable_exempt():
@@ -108,13 +111,6 @@ def test_lean_inactive_degrades():
     assert any("未激活" in m for _, m in stub.events)
 
 
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_LEAN_CHECK", "0")
-    stub = _Stub()
-    ctx = _Ctx([_c(1)])
-    lean_backcheck_stage(stub, ctx, "deep")
-    assert stub.lean_gate.calls == 0
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_empty_pool_skips():

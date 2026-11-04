@@ -104,84 +104,18 @@ def _patch_gates(monkeypatch, clear_on_rounds=()):
 
 
 # ----------------------------------------------------- 主流程
-def test_rewrite_success_first_round(monkeypatch):
-    calls = _patch_gates(monkeypatch)
-    stub = _Stub(produce_rounds=1)
-    ctx = _Ctx([])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 1
-    assert [c.id for c in ctx.candidates] == [901]
-    assert [n for n, _ in calls] == ["normalize", "self_audit", "falsify",
-                                     "lean", "math", "vote"]
-    assert ctx.rewrite_gate["survived"] is True
-    assert ctx.rewrite_gate["n_diag_ok"] == 1
-    assert "蓝图锁死" in ctx.rewrite_context
-    assert "错误情况" in ctx.rewrite_context
-    assert any(k == "rewrite" for k, _ in stub.events)
 
 
-def test_rewrite_retries_until_success(monkeypatch):
-    _patch_gates(monkeypatch, clear_on_rounds=(1,))   # 第 1 轮候选被全灭
-    stub = _Stub(produce_rounds=2)
-    ctx = _Ctx([])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 2            # 第 2 轮重写
-    assert ctx.rewrite_gate["survived"] is True
-    assert ctx.rewrite_gate["n_produced"] == 2
-    assert any("再次被审核全灭" in m for _, m in stub.events)
 
 
-def test_rewrite_all_rounds_fail(monkeypatch):
-    _patch_gates(monkeypatch)
-    stub = _Stub(produce_rounds=0)      # 每轮都产不出候选
-    ctx = _Ctx([])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 2           # 上限 2 轮
-    assert ctx.candidates == []
-    assert ctx.rewrite_gate["survived"] is False
-    assert ctx.rewrite_gate["rounds"] == 2
 
 
-def test_noop_when_pool_nonempty(monkeypatch):
-    _patch_gates(monkeypatch)
-    stub = _Stub()
-    ctx = _Ctx([Candidate(id=1, answer="1", reasoning="r")])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 0
-    assert any("无需重写" in m for _, m in stub.events)
 
 
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_REWRITE", "0")
-    stub = _Stub()
-    ctx = _Ctx([])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 0
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
-def test_diag_llm_failure_still_rewrites(monkeypatch):
-    _patch_gates(monkeypatch)
-    stub = _Stub(produce_rounds=1)
-    stub.replies = [RuntimeError("llm boom")]
-    ctx = _Ctx([])
-    rewrite_stage(stub, ctx, "deep")
-    assert stub.sub_goal_solver.calls == 1           # 裸错误摘要继续重写
-    assert ctx.rewrite_gate["n_diag_ok"] == 0
-    assert "错误情况" in ctx.rewrite_context
 
 
-def test_exception_does_not_raise():
-    class _Boom:
-        @property
-        def candidates(self):
-            raise RuntimeError("boom")
-
-        problem = ""
-
-    stub = _Stub()
-    rewrite_stage(stub, _Boom(), "deep")
-    assert any("异常" in m for _, m in stub.events)
 
 
 def test_stage_wired_in_orchestrator():

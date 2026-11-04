@@ -26,11 +26,10 @@
 """
 
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-from agent.switch_registry import (
-    get_bool as _sw_bool)
 import logging
 import re
 import time
@@ -608,7 +607,7 @@ def retrieve_theorems_for_question(
             getattr(config, "enable_theorem_hint", True)):
         out.reason = "开关关闭（enable_theorem_hint=False）"
         return out
-    if not _sw_bool("theorem_hint"):
+    if not POLICY['theorem_hint']:
         out.reason = "环境变量 THEOREM_HINT=0"
         return out
 
@@ -644,8 +643,7 @@ def retrieve_theorems_for_question(
     #   "legacy"             = 原 MathlibTheoremSearcher（官方 API / 源码扫描）
     _backend = "leanexplore"
     try:
-        from contracts.switch_registry import get_str as _sw_get_str
-        _backend = (str(_sw_get_str("theorem_hint_backend") or "").strip()
+        _backend = (str(POLICY['theorem_hint_backend'] or "").strip()
                     or "leanexplore")
     except Exception:  # noqa: BLE001  读不到开关 ⇒ 默认通道
         pass
@@ -748,8 +746,7 @@ def search_for_subgoal(ctx, sg, top_k: int = 6) -> str:
     全局块）。结果按子目标 id 缓存（3 遍迭代同一子目标只检索一次）。
     """
     try:
-        from contracts.switch_registry import get_bool as _g
-        if not _g("subgoal_theorem_search"):
+        if not POLICY['subgoal_theorem_search']:
             return ""
         from tools.agent_toolkit import leansearch as _ls
     except Exception:  # noqa: BLE001
@@ -812,7 +809,7 @@ def run_hint_for(agent, ctx) -> None:
     # ★ 2026-10-13（用户 A1）：**LLM 辅助 query** —— 让大模型先给出检索方向，
     #   再交检索器出事实（LLM 不直接吐定理名，防幻觉）。失败 ⇒ 完全回退规则 query。
     _extra_q: list = []
-    if getattr(agent.config, "enable_theorem_query_llm", True):
+    if POLICY['enable_theorem_query_llm']:
         try:
             _raw_q = agent.llm(ctx, [
                 {"role": "system", "content": THEOREM_QUERY_LLM_SYSTEM},
@@ -872,8 +869,7 @@ def run_hint_for(agent, ctx) -> None:
     # 解析失败/为空 ⇒ 用模块内默认表（避免「配置写错就静默失效」）。
     try:
         import json as _json_th
-        _raw_topk = str(getattr(
-            agent.config, "theorem_hint_top_k_by_stage", "") or "").strip()
+        _raw_topk = str(POLICY['theorem_hint_top_k_by_stage'] or "").strip()
         _parsed = _json_th.loads(_raw_topk) if _raw_topk else {}
         ctx._theorem_topk_by_stage = (dict(_parsed) if isinstance(_parsed, dict)
                                       else dict(DEFAULT_TOPK_BY_STAGE))
@@ -888,8 +884,7 @@ def run_hint_for(agent, ctx) -> None:
     try:
         ctx.theorem_hint_block = res.render_hint_block(
             max_items=int(getattr(agent.config, "leansearch_top_k", 5) or 5),
-            max_chars=int(getattr(
-                agent.config, "theorem_hint_block_max_chars", 2500) or 0))
+            max_chars=int(POLICY['theorem_hint_block_max_chars'] or 0))
     except Exception as e:  # noqa: BLE001  渲染失败不阻断
         logger.warning("[theorem_hint] 渲染注入块失败，跳过注入: %s", e)
         ctx.theorem_hint_block = ""

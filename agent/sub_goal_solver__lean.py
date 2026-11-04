@@ -18,6 +18,7 @@
 本模块**自洽**：只依赖 stdlib（os/re/time/logging）+ `TaskContext`。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import os
@@ -72,7 +73,7 @@ def _zero_state(expr):
 
 def _numeric_lean_verify(self, ctx: TaskContext, result: str) -> str:
     """L2 数值断言 Lean 验证，返回反馈文本（空=通过/无可验断言/放行）。"""
-    if not getattr(self.config, "enable_numeric_lean_verify", False):
+    if not POLICY['enable_numeric_lean_verify']:
         return ""
     if ctx.gen_time_up():
         return ""
@@ -410,7 +411,7 @@ def _sympy_judge(self, L: str, R: str, symtab=None):
 
 def _check_assert_verify(self, ctx: TaskContext, result: str) -> str:
     """<check> 协议验证入口，返回反馈文本（空=通过/无断言/放行）。"""
-    if not getattr(self.config, "enable_numeric_lean_verify", False):
+    if not POLICY['enable_numeric_lean_verify']:
         return ""
     if ctx.gen_time_up():
         return ""
@@ -700,8 +701,7 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
             pass
 
     try:
-        from contracts.switch_registry import get_bool
-        if not get_bool("blueprint_tool_exec"):
+        if not POLICY['blueprint_tool_exec']:
             _mark(False, False)
             return ""
     except Exception:  # noqa: BLE001
@@ -719,7 +719,7 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
             return ""
         # ★ 2026-10-15（审核修复 F5）：开关关 = **未核验**（≠ pass）——原实现
         #   无论是否真跑都 _mark(True, ...) ⇒ "没跑"被标成 pass（假信号）。
-        if not getattr(self.config, "enable_numeric_lean_verify", False):
+        if not POLICY['enable_numeric_lean_verify']:
             _mark(False, False)
             return ""
         _meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}

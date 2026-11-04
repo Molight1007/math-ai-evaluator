@@ -8,14 +8,11 @@
 开关读取：`_sw_bool`（switch_registry.get_bool）**调用时实时读取**，env/config 覆盖生效。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 from typing import List, Optional
 
-try:
-    from agent.switch_registry import get_bool as _sw_bool
-except ImportError:
-    from switch_registry import get_bool as _sw_bool
 
 
 # ===========================================================================
@@ -409,7 +406,7 @@ def answers_match(pred: str, gold: str) -> bool:
         return True
     # ★ 2026-09-18（S3，默认关）：变量 α-等价（ξ≡ω）。仅 `EVAL_ALPHA_EQUIV=1` 时启用。
     #   调用时实时读取（非 import 期常量）⇒ config/CLI 覆盖生效。
-    if _sw_bool("eval_alpha_equiv") and _alpha_equivalent(pred_f, gold_f):
+    if POLICY['eval_alpha_equiv'] and _alpha_equivalent(pred_f, gold_f):
         return True
     return False
 
@@ -548,8 +545,8 @@ def _strip_set_braces(s: str) -> str:
 #      但 SymPy 视之为不同符号 ⇒ 数学等价却判错（official112-091 实况）。
 # ★ 2026-09-18 复核：单独开 S2 **不产生误判**（099 仍为 False，因 pred 只拆出 1 项
 #   而 `_multi_value_match` 要求两侧都 ≥2 项）⇒ 可安全启用为默认。
-# ★ 2026-10-07：两个开关均改为**调用时实时读取**（`_sw_bool("eval_split_cn")` /
-#   `_sw_bool("eval_alpha_equiv")`，见 `_split_multi` 与 `answers_match`）——
+# ★ 2026-10-07：两个开关均改为**调用时实时读取**（`POLICY['eval_split_cn']` /
+#   `POLICY['eval_alpha_equiv']`，见 `_split_multi` 与 `answers_match`）——
 #   原先在此处 import 期求值成模块常量，会把 `ReasoningAgent.__init__` 之前的
 #   注册表值固化，导致 config/CLI 覆盖失效（判分口径不可调）。
 
@@ -566,7 +563,7 @@ def _split_multi(s: str) -> List[str]:
     """
     s = _strip_set_braces(_normalize_ellipsis(s))
     # 调用时实时读取（非 import 期常量）⇒ config/CLI 覆盖生效。
-    parts = (_SPLIT_SEP_RE.split(s) if _sw_bool("eval_split_cn")
+    parts = (_SPLIT_SEP_RE.split(s) if POLICY['eval_split_cn']
              else s.split(","))
     return [p.lstrip("\\").strip() for p in parts if p.lstrip("\\").strip()]
 

@@ -41,10 +41,6 @@ def _orchestrator(monkeypatch, cfg=None, lean_module=True):
     return orch
 
 
-def test_lean_active_env_off(monkeypatch):
-    monkeypatch.setenv("LEAN_VERIFY", "0")
-    orch = _orchestrator(monkeypatch)
-    assert orch._lean_active() is False
 
 
 def test_lean_active_config_off(monkeypatch):
@@ -132,16 +128,6 @@ def test_lean_gate_final_reject_entry(monkeypatch):
     assert "42" in (rej[-1].get("feedback") or "") or rej[-1].get("feedback")
 
 
-# ----------------------------------------------------------------------
-# 3) LEAN_VERIFY 逃生门：关 lean 后 gate 仍为 audit（回落）
-# ----------------------------------------------------------------------
-def test_env_off_keeps_audit_gate(monkeypatch):
-    monkeypatch.setenv("LEAN_VERIFY", "0")
-    from agent.orchestrator import Orchestrator
-    cfg = _make_agent_config()
-    orch = Orchestrator(_DummyClient(), cfg)
-    assert orch._lean_active() is False
-    assert orch.audit_gate is not None
 
 
 # ----------------------------------------------------------------------
@@ -540,17 +526,3 @@ def test_lean_check_switch_off_keeps_code_untouched(monkeypatch):
     assert seen["code"] == code
 
 
-def test_normalize_switch_registered_default_on():
-    """开关必须登记且默认 True（四表同步的门禁之外的**值**断言）。
-
-    只有开关、没有探测 ⇒ 会归一化到不可用形式；只有探测、没有开关 ⇒ 失去 A/B
-    且 params.json 里没有该键。本用例锁住「开关这一半」。
-    """
-    from contracts.switch_registry import SWITCHES
-    from user_agent__config import AgentConfig
-
-    assert "lean_check_normalize_imports" in SWITCHES
-    _env, _kind, _default = SWITCHES["lean_check_normalize_imports"][:3]
-    assert _kind == "bool"
-    assert _default is True
-    assert getattr(AgentConfig, "lean_check_normalize_imports", None) is True

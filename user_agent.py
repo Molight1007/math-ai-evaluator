@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
 """
 MathPilot — 数学推理智能体（多智能体版）
@@ -66,10 +67,13 @@ from user_agent__config import AgentConfig  # noqa: F401
 
 # ============================================================
 # kwargs 覆盖白名单（2026-10-08 从 ReasoningAgent.__init__ 提取为模块级常量）
-#   ★ 不在本白名单的键经 CLI/kwargs 传入会被 ReasoningAgent 静默丢弃；
-#     新增配置项必须同时登记 AgentConfig 与本白名单（本项目已多次踩坑）。
+#   ★ 2026-11-04 改名并收窄：118 个历史开关名已全部从本表移除
+#     （策略值只读 contracts.policy.POLICY，运行期不接受任何覆盖）。
+#     本表只承载**非策略的运行参数**（采样次数、温度、token 上限等）。
+#   ★ 不在此表的键经 CLI/kwargs 传入会被静默丢弃；新增参数须同步登记
+#     AgentConfig 与本表。
 # ============================================================
-_CONFIG_OVERRIDE_KEYS = (
+_CONFIG_KWARGS_KEYS = (
     "policy_sample_times", "policy_temperature", "policy_max_tokens",
     "verifier_voting_times", "verifier_temperature",
     # 2026-09-16 投票方差（候选分歧 → 提高票数 + 非零温度）
@@ -77,18 +81,17 @@ _CONFIG_OVERRIDE_KEYS = (
     "verifier_disagreement_temperature",
     # 2026-09-15：带推理的最终复核（验证器偏松的止血阀）
     "verifier_deep_final_enabled", "verifier_deep_final_min_remaining",
-    "verifier_vote_reasoning",
     "verifier_deep_review_max_tokens",
     "verifier_deep_review_min_chars",
     "verifier_deep_review_temperature",
-    "enable_domain_hint", "enable_question_type",
+    "enable_domain_hint",
     # ★ 2026-09-16 审计修复：以下两个键此前**只有 getattr 兜底、未声明也未列白名单**
     #   ⇒ 注释承诺的"回退/A-B 开关"实际无效（典型假开关）。
     #   `enable_question_type_hint`：solver 注释称"仍可全题型强制开启做 A/B"；
     #   `verify_reserve_seconds`：orchestrator 注释称"可覆盖生成侧预留"。
     "enable_question_type_hint", "verify_reserve_seconds",
     "enable_web_search",
-    "self_improve_stage", "cross_model_falsify", "cross_model_timeout", "subgoal_regen_self_review", "rewrite_on_low_conf", "rewrite_conf_threshold", "subgoal_theorem_search", "attention_focus_enabled", "smt_falsify", "lean_hammer", "answer_shape_strict", "enable_lean_tools",  # 2026-09-16 联网搜索工具（默认 False）
+    # 2026-09-16 联网搜索工具（默认 False）
     "lean_dedup_by_answer",  # 2026-09-17 Lean 同答案去重缓存（默认 False）
     # ★★ 2026-09-16 审计修复（**关键断链**）：以下三键此前
     #   **有 argparse、有 AgentConfig 声明，却不在白名单** ⇒
@@ -101,8 +104,7 @@ _CONFIG_OVERRIDE_KEYS = (
     #   / `calc_mandatory` / `calc_hard_only` / `answer_selfcheck_enabled`
     #   / `subgoal_calc_router` 六键一并从白名单移除。
     "subgoal_reuse_done",  # 2026-09-12 已完成子目标跨 run() 复用
-    "subgoal_collab_mode", "subgoal_collab_regen_rounds",
-    "lean_check_normalize_imports",  # 2026-10-27 工具① 编译前 import 归一化
+    # 2026-10-27 工具① 编译前 import 归一化
     "subgoal_adaptive_recover",  # 2026-09-12 子目标失败二选一（重做/重规划）
     # 2026-09-12 定型前审核修复：以下 5 个键此前**不在白名单** → 尽管
     # run_eval.py 有对应 argparse，kwargs 覆盖会在 __init__ 里被静默
@@ -116,99 +118,43 @@ _CONFIG_OVERRIDE_KEYS = (
     "use_scoring",
     "use_rubric", "use_challenge",  # 2026-09-06 sq 移植（A/B 开关）
     "max_revise_rounds", "max_workers",
-    "require_answer_in_pool",
     # ★ 2026-10-07（问题 2.4 / 2.9）：入池门槛 v2 + `<check>` 协议守卫。
     #   必须在此白名单，否则 CLI/kwargs 传入会被静默丢弃（本项目多次踩坑）。
-    "pool_gate_v2", "check_protocol_guard",
-    "strict_all_rejected",
-    "diversity_resample_enabled", "diversity_resample_count",
-    "use_proof_channel", "use_lemma_accumulation",
-    "lemma_domains",
-    "max_answer_tokens", "revise_sample_times", "revise_min_candidates",
+    "use_proof_channel",
+    "max_answer_tokens", "revise_sample_times",
     # 2026-10-01 开关注册制：29 个已登记开关进入白名单（可经 CLI/kwargs 传入）
     #（2026-10-02 新增 artifact_store_enabled / minimal_mode / enable_subgoal_findings
     #  / enable_final_answer_selection）
-    "artifact_store_enabled",  # 2026-10-02 中间结果存储层总开关
-    "answer_form_gate",
-    "deterministic_timeout_sec",
-    "eval_alpha_equiv",
-    "eval_split_cn",
-    "expr_eval_grounding_guard",
-    "enable_subgoal_findings",  # 2026-10-02 阶段一：主求解注入子目标结论
-    "enable_final_answer_selection",  # 2026-10-02 阶段二-2：终答五层选择
-    "final_answer_single_source",  # 2026-10-07：决策记录与最终产出单一来源
-    "final_select_verify_aware",  # 2026-10-07：选择机制识别未验证候选
-    "lean_gate_parallel",
-    "lean_gate_strict_unknown",
-    "lean_crosscheck_as_unknown",  # 2026-10-07 语义分离（cross_check→unknown）
-    "lean_mcp_autolake",
-    "lean_mcp_goal_loc",
-    "lean_mcp_hover_check",
-    "lean_mcp_multi_attempt",
-    "lean_mcp_timeout_floor",
-    "lean_mcp_verify_axioms",
-    "lean_verify",
-    "lean_xcheck_numeric",
-    "llm_retry_on_timeout",
-    "llm_timeout",
-    "mp_arm",
-    "minimal_mode",  # 2026-10-02 最小基础模式（只留主链）
-    "numericize_final",
-    "objective_itemwise_priority",
-    "objective_majority_vote",
-    "objective_selfcheck",
-    "self_improve_keep_original",
-    "self_improve_objective_skip",
-    "theorem_hint",
-    "toolcall_text_fallback",
+    # 2026-10-02 中间结果存储层总开关
+    # 2026-10-02 阶段一：主求解注入子目标结论
+    # 2026-10-02 阶段二-2：终答五层选择
+    # 2026-10-07：决策记录与最终产出单一来源
+    # 2026-10-07：选择机制识别未验证候选
+    # 2026-10-07 语义分离（cross_check→unknown）
+    # 2026-10-02 最小基础模式（只留主链）
     "use_blueprint", "use_blueprint_dag",
     # 2026-09-15：DAG 依赖边开关（修复 depends_on 结构性恒空）
     "blueprint_deps_enabled",
     # 2026-09-20：OR 节点展开策略开关（默认 False = 保持历史行为）
-    "blueprint_or_expand_all",
     # 2026-10-15：子目标承接 + 工具指派（用户「证明就用 lean」）
-    "blueprint_node_contract", "blueprint_tool_exec", "blueprint_lean_max_per_q",
+    "blueprint_lean_max_per_q",
     # 2026-10-27：2.7 归并不带值（merge_strategy / 收尾节点投影掩码）
-    "blueprint_merge_value_mask",
     # 2026-10-28：2.7 拆法按目标种类约束（陈述纪律 + 具体对象题禁止全称引理）
-    "blueprint_goal_kind_guidance",
     # 2026-10-29：题意理解 answer_slot 随目标下发（接线错位修复）
-    "problem_goal_emit_answer_slot",
     # 2026-10-29：有界存在性命题的机械搜索（穷举 + 证书 + 排除记录）
-    "bounded_search",
     # 2026-10-29：推导审计（算术复核 / 结论自相矛盾 / 跨轮结论冲突）
-    "step_verification_audit",
     # 2026-10-15：蓝图叶子级形式化下传（用户「把 lean 内化到蓝图构建里面」）
-    "blueprint_lean_sig",
     # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：原
     #   `enable_dag_replan` / `dag_replan_gate` / `enable_skeleton_review` /
     #   `skeleton_review_max_rounds` / `dag_replan_lean_check` / `dag_lean_max_nodes`
     #   及孤儿键 `dag_replan_max_rounds` 已随三个默认关闭的门一并撤除。
     #   `dag_review_reject_count` 保留（DagReviewerAgent 仍在读）。
     "dag_review_reject_count",
-    "enable_preverify_sketch_audit",
     # 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛：只留总开关）
-    "enable_understanding_chain",
     # 2026-10-12 批次 2：蓝图多次生成 + 自审
-    "blueprint_multi_gen_rounds", "blueprint_self_review",
-    "blueprint_self_review_reject_ratio",
-    "subgoal_inputs_validation",
-    "enable_verify_chain_reorder", "pool_empty_clear",
-    "enable_lean_before_vote",
-    "enable_theorem_query_llm",
-    "subgoal_self_improve_rounds",
     # 2026-10-15（用户「2 与 3 之间建一个环」）：求解期动态倒推 + 递归层数上限
-    "subgoal_dynamic_backward", "subgoal_backward_max_depth",
-    "enable_type_llm",
-    "theorem_hint_block_max_chars",
-    "theorem_hint_top_k_by_stage",
     # 2026-10-14 五道审核链（0 规范化/1 自审/2 对抗证伪/3 Lean 代回/4 计算检测/5 投票 + 重写通道）
-    "five_gate_normalize", "five_gate_self_audit", "five_gate_falsify",
-    "five_gate_lean_check", "five_gate_lean_check_tool", "five_gate_math_check", "five_gate_vote",
-    "five_gate_math_check_calcverify",
-    "five_gate_rewrite",
     # 2026-10-20：审核侧义务账本总开关（4.1 自审 + 4.2 证伪共用）
-    "audit_obligation_ledger",
     # 2026-09-29：DifficultyRouter 已删除 ⇒ 其开关（enable_difficulty_router /
     # enable_llm_difficulty / algebra_force_deep）不再有任何效果，一并从白名单移除。
     # tier_* 六键保留（仍被 solver / orchestrator 以 .get(tier) 读取，见
@@ -228,10 +174,10 @@ _CONFIG_OVERRIDE_KEYS = (
     # 子目标交叉核对（老师 9/8 建议3：A 确定性冲突闸 0-LLM / B LLM 交叉核对轮）
     "subgoal_conflict_gate", "subgoal_crosscheck_llm",
     # L2 子目标数值/代数断言 Lean 验证（2026-09-08 去门后新钩子）
-    "enable_numeric_lean_verify", "lean_numeric_max_per_q",
+    "lean_numeric_max_per_q",
     # LeanSearch 引理检索（2026-09-15 重启；★ 必须在此白名单，否则 CLI 传参
     # 会被静默丢弃 —— 本项目已因漏加白名单踩过多次，见上方 720/733 行注释）
-    "use_leansearch", "leansearch_top_k", "leansearch_max_calls_per_q",
+    "leansearch_top_k", "leansearch_max_calls_per_q",
     "leansearch_inject_verifier",
     # 时间预算（2026-08-28 新增；2026-09-29 删除 deep_quota_ratio 键）
     "critical_tail_seconds", "deep_critical_tail_seconds",
@@ -250,17 +196,14 @@ _CONFIG_OVERRIDE_KEYS = (
     # 2026-09-30：择优可信度门槛（截图 #9）
     "pick_confidence_floor",
     # 2026-09-30：子目标多 agent 求解（截图 #8 A/B 抓手）
-    "enable_subgoal_multi_agent", "subgoal_agents_n",
+    "subgoal_agents_n",
     # 2026-09-29：领域→定理检索（截图 #3+#4）
     "enable_theorem_hint", "theorem_hint_max_queries",
-    "theorem_hint_backend",
     # 易错点记忆注入（2026-09-06 A 档轻量经验）
     "enable_error_lessons",
     # Step 4 bug report 复核
     "enable_feedback_review",
     # 2026-10-06：Step 4 复核的修复（附加而非覆盖 / 产物长度上限 / 越权清洗）
-    "feedback_review_append", "feedback_review_max_chars",
-    "feedback_review_clip",
     # 对抗式验证（#16）
     "enable_adversarial_verify", "adversarial_tiers",
     "adversarial_min_confidence", "adversarial_max_tokens",
@@ -286,26 +229,21 @@ _CONFIG_OVERRIDE_KEYS = (
     #     原本已在白名单，未重复添加。）
     # 2026-10-06：子目标交付重写（结论契约 / 客观判定）—— 必须在此白名单，
     # 否则 CLI/kwargs 传入会被静默丢弃（本项目已因漏加白名单踩过多次）。
-    "subgoal_conclusion_contract", "subgoal_final_answer_anchor", "subgoal_objective_judge",
-    "k11_mask_statement",     # K11 注入点守卫（消费方 sub_goal_solver）
-    "candidate_pool_limit",   # 候选池上限（0 = 不限）
-    "sub_goal_oracle_check",  # 子目标逐步 oracle 校验（默认关）
-    "falsify_max_per_q",      # 单题最多证伪次数
-    "phase_budget_enabled",   # 阶段时间预算总开关
+    # K11 注入点守卫（消费方 sub_goal_solver）
+    # 候选池上限（0 = 不限）
+    # 子目标逐步 oracle 校验（默认关）
+    # 单题最多证伪次数
+    # 阶段时间预算总开关
     # ★ 2026-10-07 开关注册制（fix-audit-gate「解答题判别力」四件套）
-    "deterministic_solution_check",   # 解答题确定性判别重写（默认 True）
-    "audit_gate_rubric_nonproof",     # 解答题也跑 Level2 rubric（默认 False）
+    # 解答题确定性判别重写（默认 True）
+    # 解答题也跑 Level2 rubric（默认 False）
     # ★ 2026-10-07 开关注册制（fix-gate-timing-diag：AcceptGate 生效 + 计时归属）
-    "accept_gate_enforce",            # AcceptGate 真实生效（默认 True）
-    "accept_gate_pass_threshold",
-    "accept_gate_reject_defect_threshold",
-    "stage_timer_reassign_revise",    # revise 耗时归属修正（默认 True）
+    # AcceptGate 真实生效（默认 True）
+    # revise 耗时归属修正（默认 True）
     # ★ 2026-10-07 开关注册制补齐（fix-switch-debt）：
     #   ① 6 个账外 gate 型 env 的配置字段（默认值见 switch_registry 各条）；
     #   ★ 2026-10-15：emergency_direct_max_tokens / emergency_answer_max_tokens /
     #     final_answer_min_sec 已随直答兜底删除。
-    "rework_reserve_sec",
-    "deep_max_rework", "objective_itemwise_plan",
     #   ② 9 条此前**漏加白名单**的键 ⇒ 相关开关的 CLI/kwargs **回退路径在
     #      代码层面不存在**（传参被 `__init__` 静默丢弃；本项目已因漏加
     #      白名单踩过多次，见上方多处注释）。补齐后可经 CLI/kwargs 生效。
@@ -318,7 +256,6 @@ _CONFIG_OVERRIDE_KEYS = (
     "symbolic_max_tokens", "symbolic_solve_max_tokens",
 )
 
-
 # ============================================================
 # ReasoningAgent 装配门面（薄壳；本地评测引擎的入口）
 #
@@ -326,7 +263,7 @@ _CONFIG_OVERRIDE_KEYS = (
 #    · `run_eval__engine.py::ReasoningAgent(self.llm_client, **overrides)` 依赖它；
 #    · `_finalize_backend` 里 `bind_config(self.config)` 是全仓**唯一**生产调用点，
 #      删掉 ⇒ CLI/kwargs 传入的配置全部静默失效（2026-10-02 修过的 bug 会复活）；
-#    · `_CONFIG_OVERRIDE_KEYS` 是四表之一的覆盖白名单宿主。
+#    · `_CONFIG_KWARGS_KEYS` 是四表之一的覆盖白名单宿主。
 # ============================================================
 class ReasoningAgent:
     """
@@ -344,7 +281,7 @@ class ReasoningAgent:
         self.config = AgentConfig()
 
         # 允许通过 kwargs 覆盖配置（向后兼容 run_eval.py 的传参）
-        for key in _CONFIG_OVERRIDE_KEYS:
+        for key in _CONFIG_KWARGS_KEYS:
             if key in kwargs:
                 setattr(self.config, key, kwargs[key])
         # 覆盖 dict 型配置后需确保各档键完整
@@ -353,52 +290,12 @@ class ReasoningAgent:
         self._finalize_backend(client)
 
     def _finalize_backend(self, client):
-        """构造收尾：绑定配置 / 最小模式 / 初始化 orchestrator（核心模块不可用时降级）。"""
-        # ★ 2026-10-02 修既有 bug（配置覆盖静默失效，team-lead 独立验收查出）：
-        #   把 AgentConfig 的**当前取值**绑定进开关注册表。
-        #   此前 `bind_config` **全仓零调用** ⇒ `_overrides` 恒空 ⇒ 注册表读取链
-        #   退化成「env > 默认值」，中间那层「配置覆盖」是死的 —— 白名单允许
-        #   CLI/kwargs 传入，但**传了不生效、也不报错**（静默失败）。
-        #   必须放在 `__post_init__()` 之后（配置已定型）、任何业务逻辑之前。
-        #   平台扁平导入下 `agent` 包不可用时优雅跳过（绝不影响构造）。
-        _bind_cfg = None
-        try:
-            from agent.switch_registry import bind_config as _bind_cfg
-        except ImportError:
-            try:
-                from switch_registry import bind_config as _bind_cfg
-            except ImportError:  # pragma: no cover  两个路径都不可用 → 跳过
-                _bind_cfg = None
-        if _bind_cfg is not None:
-            try:
-                _bind_cfg(self.config)
-            except Exception as _bc:  # noqa: BLE001  绑定失败不得影响构造
-                logger.warning("bind_config 失败（忽略，按 env/默认跑）: %s", _bc)
+        """构造收尾：初始化 orchestrator（核心模块不可用时抛异常，不降级直答）。
 
-        # ★ 2026-10-02 最小基础模式（MINIMAL_MODE，一键只留主链）：
-        #   开启时关闭与「推导」无关的旁支口径（联网搜索 / 评分投票 / 证明旁路通道
-        #   / rubric / 挑战分支）。读取走开关注册制（env MINIMAL_MODE > 本字段 > 默认 False）。
-        #   ⚠ 此处置为 False 的字段，其 env（如 USE_SCORING）仍按注册表最高优先级生效。
-        try:
-            from agent.switch_registry import (
-                bind_field as _sw_bind, get_bool as _sw_get_bool)
-        except ImportError:
-            from switch_registry import (
-                bind_field as _sw_bind, get_bool as _sw_get_bool)
-        try:
-            _sw_bind("minimal_mode", getattr(self.config, "minimal_mode", None))
-            if _sw_get_bool("minimal_mode"):
-                _minimal_off = ("enable_web_search", "use_scoring",
-                                "use_proof_channel", "use_challenge",
-                                "use_rubric")
-                for _f in _minimal_off:
-                    setattr(self.config, _f, False)
-                logger.warning(
-                    "MINIMAL_MODE 开启：只留主链（题意理解→子目标→求解→形式化验证），"
-                    "已关闭 %s", " / ".join(_minimal_off))
-        except Exception as _me:  # noqa: BLE001
-            logger.warning("MINIMAL_MODE 处理异常（忽略，按常规模式跑）: %s", _me)
-
+        ★ 2026-11-04：开关全量收敛后，这里不再有「kwargs→config→注册表」的
+          绑定链，也不再有 MINIMAL_MODE 一键改配置。所有策略值来自唯一权威的
+          只读 `contracts.policy.POLICY`，运行期没有任何入口能改它们。
+        """
         # ★ 2026-10-15（用户定案）：核心模块初始化失败即抛异常，不做降级直答。
         #   此前「失败 → 置 None → solve 走内置直答后端」会把 agent 链损坏
         #   （import 失败 / Orchestrator 构造失败）静默吞掉、用直答兜底掩盖错误。

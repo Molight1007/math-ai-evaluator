@@ -20,6 +20,7 @@
 （与 solver.py 同一开关来源），故 solver.py 不再需要为其保留 re-export。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import time
 from typing import TYPE_CHECKING
@@ -35,7 +36,6 @@ from utils.extract import (
 
 # 开关读取统一走 switch_registry（与 solver.py 同一来源；此处直接导入，
 # 不再经由 solver.py re-export）。
-from agent.switch_registry import get_bool as _sw_bool
 
 def _improve_loop(self, ctx: TaskContext, targets: list) -> int:
     """段 4–尾：逐候选自改进主循环，返回本轮成功改进个数。"""
@@ -147,7 +147,7 @@ def _improve_loop(self, ctx: TaskContext, targets: list) -> int:
         # （错误）——「无条件替换」会把好答案直接改坏，且没有任何回退机制。
         # 现在改为"原版 + 改进版并存"，交由下游验证/投票择优（不改变下游逻辑）。
         # 开关：SELF_IMPROVE_KEEP_ORIGINAL（默认 1）。
-        if _sw_bool("self_improve_keep_original"):
+        if POLICY['self_improve_keep_original']:
             try:
                 import copy as _copy
                 _orig = _copy.copy(cand)

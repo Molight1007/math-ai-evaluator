@@ -131,21 +131,8 @@ def test_all_unparseable_pool_cleared_by_default():
     assert any("已清空" in m for _, m in stub.events)
 
 
-def test_all_unparseable_kept_when_switch_off():
-    stub, ctx = _Stub(), _Ctx([Candidate(id=1, answer="### 标题", reasoning="r")])
-    stub.config.pool_empty_clear = False
-    normalize_stage(stub, ctx)
-    assert [c.id for c in ctx.candidates] == [1]
-    assert any("保留原池" in m for _, m in stub.events)
 
 
-def test_normalize_stage_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_NORMALIZE", "0")
-    stub, ctx = _Stub(), _Ctx([Candidate(id=1, answer="48", reasoning="r")])
-    normalize_stage(stub, ctx)
-    c = ctx.candidates[0]
-    assert not hasattr(c, "answer_norm")
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_normalize_stage_exception_does_not_raise():

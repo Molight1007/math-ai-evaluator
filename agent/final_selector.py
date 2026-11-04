@@ -65,6 +65,7 @@
       （未归入则写明原因）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import re
@@ -426,9 +427,8 @@ def _select_from_survivors(ctx, uniq, problem, llm, steps, diag, _rec,
             "steps": steps, "diag": diag, "cand": c}
 
 def _switch_enabled() -> bool:
-    from agent.switch_registry import get_bool as _swb
     try:
-        return bool(_swb("enable_final_answer_selection"))
+        return bool(POLICY['enable_final_answer_selection'])
     except Exception:  # noqa: BLE001
         return False
 
@@ -438,9 +438,8 @@ def _single_source_enabled() -> bool:
 
     OFF ⇒ 完全回退改动前（`picked` 仍是决策值/截断值），便于 A/B。
     """
-    from agent.switch_registry import get_bool as _swb
     try:
-        return bool(_swb("final_answer_single_source"))
+        return bool(POLICY['final_answer_single_source'])
     except Exception:  # noqa: BLE001
         return True
 
@@ -450,9 +449,8 @@ def _verify_aware_enabled() -> bool:
 
     OFF ⇒ 回退改动前（未验证候选照旧参与 ④⑤ 且投票并列按推理长度裁决）。
     """
-    from agent.switch_registry import get_bool as _swb
     try:
-        return bool(_swb("final_select_verify_aware"))
+        return bool(POLICY['final_select_verify_aware'])
     except Exception:  # noqa: BLE001
         return True
 

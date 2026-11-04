@@ -123,12 +123,10 @@ def test_solver_keep_uses_votes_not_tail():
 def _bare_solver():
     from agent.solver import SolverAgent
     a = SolverAgent.__new__(SolverAgent)
-    # ★ 2026-10-09：**显式钉住 test-local 的池上限 = 6**。
-    #   背景：`candidate_pool_limit` 全仓默认 6→12（用户拍板），而本组用例的
-    #   "池满" 语义是"池内 6 个"；此前它靠 `SimpleNamespace` 缺字段 ⇒ 落到
-    #   `_pool_room` 的 `getattr(..., 6.0)` 兜底，默认一变就**被动跟着漂**。
-    #   此处把假设显式写进测试（不再依赖全局默认），使 M1 三条用例与默认值解耦。
-    a.config = SimpleNamespace(revise_sample_times=3, candidate_pool_limit=6)
+    # ★ 2026-11-05：`candidate_pool_limit` 已固化为 12（唯一权威 POLICY），
+    #   config 注入不再生效。本组用例的「池满」语义改为池内 12 个，
+    #   M1 三条功能断言（修订轮池满仍生成 / 非修订轮早退 / 剩余容量透传）不变。
+    a.config = SimpleNamespace(revise_sample_times=3)
     return a
 
 
@@ -150,7 +148,7 @@ def test_M1_full_pool_revise_still_generates():
         seen["cap"] = cap
 
     with patch.object(SolverAgent, "_generate_revise", _fake_revise):
-        _bare_solver().run(_ctx(6, revise=True))
+        _bare_solver().run(_ctx(12, revise=True))
 
     assert "cap" in seen, "池满时修订轮被提前 return（M1 回归）"
     assert seen["cap"] is None, "池满时应传 cap=None，由 _generate_revise 自行腾位"
@@ -165,7 +163,7 @@ def test_M1_full_pool_non_revise_still_early_returns():
         seen["count"] = count
 
     with patch.object(SolverAgent, "_generate_initial", _fake_init):
-        _bare_solver().run(_ctx(6, revise=False))
+        _bare_solver().run(_ctx(12, revise=False))
 
     assert "count" not in seen, "非修订轮池满不应触发生成"
 
@@ -180,7 +178,7 @@ def test_M1_partial_pool_revise_passes_positive_cap():
     with patch.object(SolverAgent, "_generate_revise", _fake_revise):
         _bare_solver().run(_ctx(4, revise=True))
 
-    assert seen.get("cap") == 2, "池内 4 个 ⇒ cap=2"
+    assert seen.get("cap") == 8, "池上限 12、池内 4 个 ⇒ cap=8"
 
 
 # ============================ M6：幽灵字段 ============================

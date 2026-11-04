@@ -183,15 +183,3 @@ def test_merge_note_empty_when_clean():
     assert verify_note_for_merge(ctx) == ""
 
 
-def test_switch_off_short_circuits(monkeypatch):
-    """开关关闭 ⇒ 调用方不应记账（这里验 `enabled()` 的读取口径）。"""
-    import agent.verification_audit as va
-
-    monkeypatch.setenv("STEP_VERIFICATION_AUDIT", "0")
-    try:
-        from contracts.switch_registry import reset_overrides  # noqa: F401
-    except Exception:  # noqa: BLE001
-        pass
-    assert va.enabled(None) is False
-    monkeypatch.setenv("STEP_VERIFICATION_AUDIT", "1")
-    assert va.enabled(None) is True

@@ -105,16 +105,15 @@ def _compute_subgoal_gaps(ctx) -> dict:
 
 
 # ---------------------------------------------------------------------------
-def _switch_snapshot() -> dict:
-    """开关注册表生效值快照（2026-10-01 注册制）。
+def _policy_snapshot() -> dict:
+    """固定策略快照 —— 值恒等于只读的 contracts.policy.POLICY。
 
-    永不抛异常：注册表不可用时返回空 dict，不影响 diag 生成。
+    ★ 新数据字段是 `diag.policy_snapshot`；历史归档的
+      `diag.switch_snapshot` 只读保留，不再由新数据产出。
+    ★ 没有 env/config/default 来源分层，也没有「当时谁改了它」这回事。
     """
-    try:
-        from agent.switch_registry import snapshot as _snap
-        return _snap()
-    except Exception:  # noqa: BLE001
-        return {}
+    from contracts.policy import POLICY
+    return {k: {"value": v, "source": "policy"} for k, v in POLICY.items()}
 
 
 def _tool_gateway_summary(ctx) -> dict:

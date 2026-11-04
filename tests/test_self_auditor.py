@@ -122,13 +122,6 @@ def test_uses_answer_norm_when_present():
     assert ctx.candidates == [c]
 
 
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_SELF_AUDIT", "0")
-    stub = _Stub()
-    ctx = _Ctx([_c(1)])
-    self_audit_stage(stub, ctx)
-    assert stub.calls == 0
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_empty_pool_skips():

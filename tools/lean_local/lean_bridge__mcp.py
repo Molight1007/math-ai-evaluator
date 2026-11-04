@@ -18,6 +18,7 @@
 （被 patch 的名字其调用方仍留在 lean_bridge.py ⇒ 查表仍走 lean_bridge 命名空间）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import json
 import logging
@@ -25,7 +26,6 @@ import os
 import subprocess
 import threading
 
-from contracts.switch_registry import get_bool as _sw_bool
 
 from tools.lean_local.lean_bridge__env import _project_root
 
@@ -144,7 +144,7 @@ def _mcp_gate_ok(work_dir: str) -> bool:
     """
     if _is_mcp_project_root(work_dir):
         return True
-    if not _sw_bool("lean_mcp_autolake"):
+    if not POLICY['lean_mcp_autolake']:
         return False
     return _ensure_min_lake_project(work_dir)
 

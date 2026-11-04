@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
 """
 答案规范化智能体（FormatterAgent）
@@ -29,12 +30,11 @@ from .formatter__rank import (  # noqa: F401
     _passes_confidence_floor, _rank_key, _support_of, _is_real_enumeration,
 )
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 # ★ 2026-10-07（fix-tail-gaps）：本文件两处选择题判据原为裸
 #   `_os.environ.get("OBJECTIVE_*", ...) == "1"`，改走本注册制实时读
 #   （默认值与注册表逐条核对一致，见 switch_registry.SWITCHES）。
-from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -410,10 +410,10 @@ class FormatterAgent(BaseAgent):
         # 里有 5 个整体求解的 C，被 5:1 多数投票淹没 ⇒ 必须让**有依据的结论**
         # 优先于**数量多数**。置 OBJECTIVE_ITEMWISE_PRIORITY=0 可回退。
         # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "1"` 已改走注册制
-        #   `_sw_bool("objective_itemwise_priority")`（实时读，默认 True）。
+        #   `POLICY['objective_itemwise_priority']`（实时读，默认 True）。
         #   三态核对（未设/"1"/"0"）与原 `== "1"` 逐条一致；仅非标准值
         #   （如 "true"/"yes"）由 registry 口径判为「开」，属已文档化的统一修正。
-        if (_sw_bool("objective_itemwise_priority")
+        if (POLICY['objective_itemwise_priority']
                 and getattr(ctx, "question_type", "") == "选择题"):
             _iw = [c for c in (getattr(ctx, "candidates", None) or [])
                    if getattr(c, "origin", "") == "itemwise"
@@ -441,9 +441,9 @@ class FormatterAgent(BaseAgent):
 
     def _pick_best_objective(self, ctx: TaskContext):
         # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "1"` 已改走注册制
-        #   `_sw_bool("objective_majority_vote")`（实时读，默认 False）。
-        #   与 orchestrator.py 同名开关判据（`_sw_bool("objective_majority_vote")`）保持同源。
-        if (_sw_bool("objective_majority_vote")
+        #   `POLICY['objective_majority_vote']`（实时读，默认 False）。
+        #   与 orchestrator.py 同名开关判据（`POLICY['objective_majority_vote']`）保持同源。
+        if (POLICY['objective_majority_vote']
                 and getattr(ctx, "question_type", "") == "选择题"):
             _mv: dict = {}
             for _c in (ctx.candidates or []):

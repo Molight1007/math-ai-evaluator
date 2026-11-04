@@ -40,6 +40,7 @@
 2.6 引用 orchestrator 模块级 `_artifact_put` ⇒ 函数内惰性 import（单一来源仍不复制）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 
 def judge_question_type(self, ctx) -> None:
@@ -62,7 +63,7 @@ def judge_question_type(self, ctx) -> None:
       （该路径下 theorem_hint 本来就只见规则判定），不影响任何下游正确性；
       若日后按任务 #2 把定理检索移到子目标求解（在 2.6 之后），该代价自动消失。
     """
-    if not getattr(self.config, "enable_type_llm", True):
+    if not POLICY['enable_type_llm']:
         return
     from agent.question_type import (classify_question_type as _cq,
                                     type_path_plan as _tpp,
@@ -170,7 +171,7 @@ def pre_audit_stage(self, ctx, tier: str) -> None:
     # ⚠ 兜底值必须与 `AgentConfig.enable_understanding_chain`(=True) **一致**：
     #   若写成 False，则任何"字段缺失"的旧 config/测试桩都会**静默关闭**本机制，
     #   与「配置默认开」矛盾 ⇒ 典型的"两套默认值"缺陷（code-audit 路线 C「隐形门控」）。
-    if getattr(self.config, "enable_understanding_chain", True):
+    if POLICY['enable_understanding_chain']:
         try:
             self.lean_pre_verifier.run_understanding_chain(ctx)
         except Exception as _e_uc:  # noqa: BLE001

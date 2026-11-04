@@ -24,13 +24,13 @@
 ④计算检测 → ⑤投票。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from .switch_registry import get_bool as _sw_get_bool
 
 def _switch_enabled() -> bool:
     """读「五道链·第 3 道 Lean 代回」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_lean_check")
+        return POLICY['five_gate_lean_check']
     except Exception:  # noqa: BLE001
         return True
 
@@ -44,7 +44,7 @@ def _tool_channel_enabled() -> bool:
     等云端验证通过后再切换为判定通道（届时把 verdict 并入淘汰条件）。
     """
     try:
-        return _sw_get_bool("five_gate_lean_check_tool")
+        return POLICY['five_gate_lean_check_tool']
     except Exception:  # noqa: BLE001
         return False
 
@@ -154,7 +154,7 @@ def lean_backcheck_stage(self, ctx, tier: str) -> None:
             self.record(ctx, "lean_backcheck",
                         "4.3 Lean 代回：⚠ %d 个候选**全部未通过** ⇒ 已标记 "
                         "_gate_all_rejected（不静默清池）" % _n_in)
-            if bool(getattr(self.config, "strict_all_rejected", False)):
+            if bool(POLICY['strict_all_rejected']):
                 ctx.candidates = []
                 self.record(ctx, "lean_backcheck",
                             "strict_all_rejected=True ⇒ 清空候选池交下游兜底")

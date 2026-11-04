@@ -8,6 +8,7 @@
 原地保留同名**一行委托**，对外签名与返回值逐字不变。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 from typing import TYPE_CHECKING
 
@@ -22,9 +23,9 @@ def _use_lemma(self, ctx: TaskContext) -> bool:
         因此默认按领域路由：lemma_domains 命中才注入，把数论的收益变成
         确定收益，同时避免拖累其他领域。
         """
-    if not getattr(self.config, 'use_lemma_accumulation', False):
+    if not POLICY['use_lemma_accumulation']:
         return False
-    domains = list(getattr(self.config, 'lemma_domains', []) or [])
+    domains = list(POLICY['lemma_domains'] or [])
     if not domains:
         return True  # 空列表 = 全领域开启
     d = str(getattr(ctx, 'domain', '') or '')

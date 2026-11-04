@@ -39,6 +39,7 @@ answer_oracle.verify_proof 在平台上全部 unknown 空转：只付时间不�
   ``problem_goal`` 覆盖。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 
@@ -107,7 +108,7 @@ class AuditGate(BaseAgent):
         #   判别力重新关掉**。故：**仅当 solution_check 关闭时**才保留早退（=旧行为回退路径）。
         if (stage == "final"
                 and getattr(self.config, "audit_gate_skip_non_proof", True)
-                and not getattr(self.config, "deterministic_solution_check", True)):
+                and not POLICY['deterministic_solution_check']):
             _qt = str(getattr(ctx, "question_type", "") or "")
             _dom = str(getattr(ctx, "domain", "") or "")
             if not ((_qt == "证明题") or ("证明" in _dom)):
@@ -153,9 +154,9 @@ class AuditGate(BaseAgent):
         # 2026-10-07：rubric 是否对本题型可用 —— 证明题恒可（旧行为）；解答题仅当
         #   `audit_gate_rubric_nonproof=1` 时可用（默认关，见 switch_registry 说明）。
         use_rubric = bool(getattr(self.config, "use_rubric", False)) and (
-            is_proof or bool(getattr(self.config, "audit_gate_rubric_nonproof", False)))
+            is_proof or bool(POLICY['audit_gate_rubric_nonproof']))
         # 解答题确定性判别重写是否开（开则"结构性无输出"的旧结论不成立）
-        sol_check = bool(getattr(self.config, "deterministic_solution_check", True))
+        sol_check = bool(POLICY['deterministic_solution_check'])
 
         n_fail = 0
         rejected: list[tuple] = []
@@ -350,7 +351,7 @@ class AuditGate(BaseAgent):
         #   只存在于 `audit_candidates`（见该处）。此处**保持不加新限制**（避免回归），
         #   故 `audit_gate_rubric_nonproof` 不影响本方法。
         use_rubric = bool(getattr(self.config, "use_rubric", False))
-        sol_check = bool(getattr(self.config, "deterministic_solution_check", True))
+        sol_check = bool(POLICY['deterministic_solution_check'])
 
         # Level 0：程序硬核验（0 LLM、可复现、客观）。2026-10-07：check_answer 内部
         #   已按 `deterministic_solution_check` 归一答案外壳 + 追加解答题判据。

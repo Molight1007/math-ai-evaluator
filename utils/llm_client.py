@@ -1,13 +1,12 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 # ★ 2026-10-07 架构解耦（阶段 A）：注册表实现已**下沉到零依赖的 `contracts/`**
 #   ⇒ 本模块直接 import `contracts.switch_registry`（**不再**是 `agent.switch_registry`），
 #   `utils/` 由此不再依赖 `agent/`（分层规则禁止 utils→agent/tools；contracts 不在禁令内）。
 #   读取点仍在本文件内（与改前一致）⇒ 行为零变更。
-from contracts.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num)
 """
 轻量级 OpenAI 兼容 LLM 客户端
 ==============================
@@ -21,7 +20,7 @@ from contracts.switch_registry import (
 3. 默认: http://localhost:8000/v1, gpt-3.5-turbo
 
 修改影响:
-- 本模块**不依赖 agent/**（阶段 A 解耦）：开关改经 `contracts.switch_registry` 读。
+- 本模块**不依赖 agent/**（阶段 A 解耦）：策略值读 `contracts.policy.POLICY`。
 - 修改 LLMClient.__init__ 签名时需同步检查: run_eval.py / tools/debug_one_trace.py / tests
 - 修改 chat() 返回值格式时需同步检查: agent/base.py (BaseAgent.llm() 调用者)
 - 被 agent/ 目录下所有 BaseAgent 子类通过 BaseAgent.llm() 间接引用
@@ -57,7 +56,7 @@ _LLM_TIMEOUT_FALLBACK = 120  # 秒；仅在注册表不可用时兜底
 #   ② 超时类故障**默认不重试**（`LLM_RETRY_ON_TIMEOUT=1` 可恢复旧行为）——
 #      "拿同样的请求再赌一次"，实测 5/5 全败，纯亏 timeout 秒。
 # 单次故障成本：365s → 120s。
-# ★ 2026-10-07：该开关为**调用时实时读取** `_sw_bool("llm_retry_on_timeout")`
+# ★ 2026-10-07：该开关为**调用时实时读取** `POLICY['llm_retry_on_timeout']`
 #   （见 `chat` 内 `retry_on_timeout`）—— 若在 import 期求值成模块常量，
 #   会把 `ReasoningAgent.__init__` 之前的注册表值固化，导致 config/CLI 覆盖失效。
 _CONNECT_TIMEOUT = 30  # 秒（2026-09-03：45→30。connect/TLS 握手黑洞探测更快）
@@ -223,7 +222,7 @@ class LLMClient:
         #   注册表来自 `contracts.switch_registry`（零依赖）⇒ 不再为读它而依赖 agent。
         if timeout is None:
             try:
-                timeout = int(_sw_num("llm_timeout"))
+                timeout = int(POLICY['llm_timeout'])
             except Exception:  # noqa: BLE001  注册表不可用时字面兜底
                 timeout = _LLM_TIMEOUT_FALLBACK
         self.timeout = timeout
@@ -265,7 +264,7 @@ class LLMClient:
         """
         url = f"{self.base_url}/chat/completions"
         # 调用时实时读取 ⇒ config/CLI 覆盖生效（原先 import 期求值成模块常量）
-        retry_on_timeout = _sw_bool("llm_retry_on_timeout")
+        retry_on_timeout = POLICY['llm_retry_on_timeout']
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",

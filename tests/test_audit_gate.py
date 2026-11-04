@@ -216,27 +216,15 @@ class SolutionProblemGateTest(unittest.TestCase):
         self.assertTrue(finals)
         self.assertEqual(finals[-1].get("deterministic_method"), "substitution")
 
-    def test_nonproof_early_exit_when_solution_check_off(self) -> None:
-        """solution_check 关 → 恢复旧的"解答题早退"（回退路径）。"""
-        g = make_gate(_solution_cfg(deterministic_solution_check=False))
-        ctx = make_ctx(problem="求解方程 x^2-5x+6=0")
-        ctx.question_type = "解答题"
-        ctx.final_response = r"\boxed{5}"
-        res = g.run(ctx, stage="final")
-        self.assertEqual(res.get("skipped"), "non_proof")
-        self.assertTrue(any(e.get("skipped") == "non_proof_early_exit"
-                            for e in ctx.audit_gate))
 
-    def test_rubric_nonproof_gated_in_audit_candidates(self) -> None:
-        """`audit_gate_rubric_nonproof` 只作用于 `audit_candidates`（候选级）。
+    def test_rubric_nonproof_is_off_by_policy(self) -> None:
+        """★ 2026-11-05 融合：`audit_gate_rubric_nonproof` 已固化为 False。
 
-        "rubric 仅对证明题运行"的限制只在该方法；默认关（=旧行为）；开启后
-        解答题候选也走 Level2 rubric。`gate_final_answer` 的 rubric 本就无题型门，
-        故本开关不影响它（保持不回退）。
+        原用例测「开 / 关两态」；可切换性消失后，保留**固化态的功能断言**：
+        解答题候选不调用 rubric。`gate_final_answer` 的 rubric 本就无题型门，
+        不受此项影响（独立用例覆盖）。
         """
-        # 关（默认）：解答题候选 → 不调用 rubric
-        g = make_gate(_solution_cfg(use_rubric=True,
-                                    audit_gate_rubric_nonproof=False))
+        g = make_gate(_solution_cfg(use_rubric=True))
         ctx = make_ctx(problem="求解方程 x^2-5x+6=0")
         ctx.question_type = "解答题"
         with mock.patch.object(g._verifier_inst, "_vote_one_rubric") as rb, \
@@ -245,19 +233,6 @@ class SolutionProblemGateTest(unittest.TestCase):
                 "verdict": "unknown", "evidence": "x", "method": "parse_only"}
             g.audit_candidates(ctx, "deep", [cand("1", cid=1)])
             rb.assert_not_called()
-        # 开：解答题候选 → 调用 rubric
-        g2 = make_gate(_solution_cfg(use_rubric=True,
-                                     audit_gate_rubric_nonproof=True))
-        ctx2 = make_ctx(problem="求解方程 x^2-5x+6=0")
-        ctx2.question_type = "解答题"
-        with mock.patch.object(
-                g2._verifier_inst, "_vote_one_rubric",
-                return_value={"verdict": "A", "confidence": 0.9}) as rb2, \
-                mock.patch("agent.audit_gate.DeterministicChecker") as D2:
-            D2.return_value.check_answer.return_value = {
-                "verdict": "unknown", "evidence": "x", "method": "parse_only"}
-            g2.audit_candidates(ctx2, "deep", [cand("1", cid=1)])
-            rb2.assert_called_once()
 
 
 if __name__ == "__main__":

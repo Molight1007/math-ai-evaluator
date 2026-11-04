@@ -58,14 +58,7 @@ class TestSourceProbe(unittest.TestCase):
     def setUpClass(cls):
         cls.src = io.open(SRC, encoding="utf-8").read()
 
-    def test_axiom_check_runs_when_env_not_zero(self):
-        # 2026-10-01：开关统一走 switch_registry（注册表默认 True = "非 0" 语义）
-        self.assertIn('_sw_bool("lean_mcp_verify_axioms")', self.src)
 
-    def test_axiom_check_switch_registered_default_true(self):
-        """行为层断言：该开关必须已注册且默认开（不再依赖源码字面量）。"""
-        from agent.switch_registry import get_bool
-        self.assertTrue(get_bool("lean_mcp_verify_axioms"))
 
     def test_regex_covers_theorem_and_lemma(self):
         self.assertIn(r"(?:theorem|lemma)\s+([A-Za-z_][\w'.]*)", self.src,

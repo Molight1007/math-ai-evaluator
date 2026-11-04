@@ -111,9 +111,9 @@ def prepare_env() -> None:
         os.environ.setdefault(k, v)
     # Lean 相关：研究阶段允许 MCP 联网检索；Mathlib 冷启动需抬高超时地板
     os.environ.setdefault("LEAN_MCP_ALLOW_NET", "1")
-    os.environ.setdefault("LEAN_MCP_TIMEOUT_FLOOR", "300")
-    os.environ.setdefault("LLM_TIMEOUT", "300")
-    os.environ.setdefault("LLM_RETRY_ON_TIMEOUT", "1")
+    # ★ 2026-11-04：LLM_TIMEOUT / LLM_RETRY_ON_TIMEOUT / LEAN_MCP_TIMEOUT_FLOOR
+    #   不再由 env 注入 —— 这三个策略值只读 contracts.policy.POLICY，
+    #   注入环境变量也**不生效**，留着只会让人误判「改了就能调」。
     # LeanSearch 本地语料（可选；不存在时自动走在线 API）
     if not os.environ.get("LEANSEARCH_CORPUS_PATH"):
         for cand in (os.path.join(REPO, "data", "mathlib_informal", "data.jsonl"),
@@ -158,12 +158,11 @@ def main() -> int:
     print("并发          : %s（本机 15 GB 内存，建议 1；见 README）"
           % _argval("--concurrency", "2"), flush=True)
     print("-" * 70, flush=True)
-    print("环境: LEAN_MCP_ALLOW_NET=%s  LEAN_MCP_TIMEOUT_FLOOR=%s"
-          % (os.environ.get("LEAN_MCP_ALLOW_NET"),
-             os.environ.get("LEAN_MCP_TIMEOUT_FLOOR")), flush=True)
-    print("      LLM_TIMEOUT=%s  LLM_RETRY_ON_TIMEOUT=%s"
-          % (os.environ.get("LLM_TIMEOUT"),
-             os.environ.get("LLM_RETRY_ON_TIMEOUT")), flush=True)
+    from contracts.policy import POLICY
+    print("策略: LEAN_MCP_TIMEOUT_FLOOR=%s  LLM_TIMEOUT=%s  LLM_RETRY_ON_TIMEOUT=%s"
+          "（固定，见 contracts.policy；运行期不可覆盖）"
+          % (POLICY["lean_mcp_timeout_floor"], POLICY["llm_timeout"],
+             POLICY["llm_retry_on_timeout"]), flush=True)
     print("      OPENAI_BASE_URL=%s  LLM_MODEL=%s"
           % (os.environ.get("OPENAI_BASE_URL") or "（未设置！）",
              os.environ.get("LLM_MODEL") or "（未设置）"), flush=True)

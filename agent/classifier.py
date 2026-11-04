@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 """
 题型识别智能体（ClassifierAgent）
 ===============================
@@ -213,7 +214,7 @@ class ClassifierAgent(BaseAgent):
 
     def run(self, ctx: TaskContext) -> TaskContext:
         # 题型识别（关键词，零 LLM 调用）：证明题/选择题/判断题/填空题/解答题
-        if getattr(self.config, 'enable_question_type', True):
+        if POLICY['enable_question_type']:
             ctx.question_type = classify_question_type(ctx.problem)
             self.record(ctx, "classify_type",
                         f"题型识别结果: {ctx.question_type}", question_type=ctx.question_type)

@@ -6,6 +6,7 @@
 ★ 无模块级 agent.* 依赖（只 import stdlib）⇒ 不破坏 user_agent 的降级导入契约。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 from dataclasses import dataclass, field
 
@@ -44,8 +45,7 @@ class AgentConfig(_AgentConfigBase):
     # ★ 2026-10-06 新增：revise 的**候选数下限**。原 count = 池剩余容量，而每轮都往池里
     #   加候选 ⇒ 剩余容量单调递减 ⇒ 实测 `count` 逐轮为 4→2→1（最后一轮只试 1 个）。
     #   设下限保证"越到后面越没有改对机会"这个退化不再发生。
-    revise_min_candidates: int = 3
-
+    revise_min_candidates: int = POLICY['revise_min_candidates']
     # ---- 新功能开关（简化）----
     # 2026-10-01 按用户决策默认开（研究期不省资源）。
     use_scoring: bool = True           # Verifier 用多维评分（原：不用/简化，减少误判）
@@ -57,8 +57,8 @@ class AgentConfig(_AgentConfigBase):
     # 该字段本就是真死开关（全仓唯一读取点是 logger，不控制行为，审计报告 §四）。
     # 2026-10-01 按用户决策默认开（研究期不省资源）。
     use_proof_channel: bool = True     # 证明题专用通道（原：关闭/简化）
-    use_lemma_accumulation: bool = True  # 引理积累（2026-08-29 起默认开，按领域路由）
-    lemma_domains: list = field(default_factory=lambda: ["Number theory", "数论"])  # 领域路由：A/B 实测数论 +23pp、代数/组合被拖累
+    use_lemma_accumulation: bool = POLICY['use_lemma_accumulation']  # 引理积累（2026-08-29 起默认开，按领域路由）
+    lemma_domains: list = POLICY['lemma_domains']  # 领域路由：A/B 实测数论 +23pp、代数/组合被拖累
     # 2026-10-01 删除 `use_sub_goal`：档位时代遗留，声明+白名单齐全但全仓 **0 读取点**
     # （审查 A 级第 2 条 / B 级死配置）。真正生效的是 `deep_use_sub_goal`（见下方 :485）。
     # Step 2 无条件自改进（2026-08-29 新增，依据 IMO2025 验证-精炼论文）
@@ -96,7 +96,7 @@ class AgentConfig(_AgentConfigBase):
     #     `ENABLE_SUBGOAL_MULTI_AGENT=0` 取回旧基线（开关已注册，可还原）。
     #   · `subgoal_agents_n`：每题每个子目标采样次数（上限 8）。
     #     ⚠ 成本是 N 倍单步生成 —— 时间紧迫/预算不足时实现里会自动退回 1 次。
-    enable_subgoal_multi_agent: bool = True
+    enable_subgoal_multi_agent: bool = POLICY['enable_subgoal_multi_agent']
     subgoal_agents_n: int = 3
     # ---- 领域 → 定理检索（2026-09-29 新增，截图 #3+#4，老师重点关注）----
     # 用户诉求：判断题目属于哪个领域、该用什么定理，用 leansearch 去 Mathlib
@@ -112,29 +112,29 @@ class AgentConfig(_AgentConfigBase):
     theorem_hint_max_queries: int = 2
     # ★ 2026-10-15（工具②接线）：定理检索后端通道。leanexplore（默认）=
     #   工具② tools/agent_toolkit.leansearch；legacy = 原 MathlibTheoremSearcher。
-    theorem_hint_backend: str = "leanexplore"
+    theorem_hint_backend: str = POLICY['theorem_hint_backend']
     # ---- 子目标结论 → 主求解 信息流（2026-10-02 阶段一，用户拍板设计）----
     # 用户原话：「…主求解一定要在子目标的基础上。」
     # 把 2.7/3_solve(P&E) 已求得的子目标结论（ctx.subgoal_trace）作为**中间数据**
     # 注入主求解 prompt（初始 / 证明 / 重解三路径），让主答案建立在子目标之上。
     # 边界：只改信息流，不改投票/采样/终答/阈值。
     # 默认 True；设 False = 三路径均不注入（A/B 抓手）。已登记 switch_registry。
-    enable_subgoal_findings: bool = True
+    enable_subgoal_findings: bool = POLICY['enable_subgoal_findings']
     # ---- 终答五层选择（2026-10-02 阶段二-2，用户拍板：「投票应在最后，不要一开始就投票」）----
     # 用户原话：「把 n 个答案都给大模型让它来判断」「要按照正确率选取」。
     # ON 时终答由 agent/final_selector.select_final_answer 统一选出
     # （②多答案判断→③客观验证→④模型对比→⑤投票兜底），
     # 不再走 formatter._rank_key 票数优先 / objective_majority_vote「一开始就投票」。
     # 默认 True（用户明确要此行为）；设 False = 全部回退改动前（A/B 抓手）。已登记 switch_registry。
-    enable_final_answer_selection: bool = True
+    enable_final_answer_selection: bool = POLICY['enable_final_answer_selection']
     # ---- 终答选择两条阻断级修复（2026-10-07，smoke10 2026-10-06 实测驱动）----
     # ① 决策记录与最终产出单一来源：把 `_pick_diag.picked` 同步为逐字提交值。
     #    依据：official112-002 的 pick_diag.picked=计划句、predicted=`\boxed{...}`。
     # ② 选择机制识别"未验证候选"：无验证记录者不参与胜出（全部未验证时留痕放行）；
     #    ⑤投票并列收尾不再用推理长度。依据：official112-007 未验证的 `\boxed{0}` 胜出。
     # 两者默认 True（= 修好后行为）；设 False 回退做 A/B。均已登记 switch_registry。
-    final_answer_single_source: bool = True
-    final_select_verify_aware: bool = True
+    final_answer_single_source: bool = POLICY['final_answer_single_source']
+    final_select_verify_aware: bool = POLICY['final_select_verify_aware']
     # 依据：3.3 无条件改进实测只有成本没有收益（smoke6_v3：占单题耗时 29~45%、
     # 总耗时 +34%，正确率 1/6 不变）。配合 A2 条件化（只改有缺陷的候选）进一步压成本。
     improve_min_remaining: float = 300.0  # 3.3 改进停手预留（距生成软截止 < 此值不再开新候选；0=关，治 alg-060 3.3=640s 烧穿）
@@ -153,16 +153,13 @@ class AgentConfig(_AgentConfigBase):
     #      再覆盖 `ctx.revise_feedback`（实测 q1–q6 最长仅 2.4–3.0k、且不含该段）
     #      ⇒ 推理始终没到模型手上。默认 True = 复核只做判定/标注、以 `【复核意见】`
     #      段并入；设 False 回退旧的「整段覆盖」做 A/B。已登记 switch_registry。
-    feedback_review_append: bool = True
     #   ② 复核产物**长度上限**（保头截断）：实测 official112-007 单题返回了
     #      157,550 字符裸输出并被原样拼进提示词。默认 8000，与 verifier 的复核反馈
     #      同口径（verifier.py:1821 结构化分支 `[:8000]`）。设 0 = 不截断。
-    feedback_review_max_chars: int = 8000
     #   ③ 复核产物**越权结论/重做正文清洗**：实测题 000 复核者输出「正确答案应为 0。
     #      下面给出严谨证明。…（2000+ 字符重做正文）」被模型整段照抄，最终答 0 而
     #      标准 20460。默认 True = 复用 `verifier._clip_review_prose` 同一道清洗
     #      （不复制正则，避免两处口径分叉）；设 False 回退旧行为做 A/B。
-    feedback_review_clip: bool = True
 
     # ---- 对抗式验证（#16，2026-08-30）----
     # 正向验证**通过**后主动证伪：假设答案错误，反向找反例 / 第一个错误步骤。
@@ -181,7 +178,7 @@ class AgentConfig(_AgentConfigBase):
     adversarial_max_tokens: int = 8192
     adversarial_max_reasoning: int = 2400
     # 2026-10-20：审核侧义务账本（蓝图倒推链反演），见 agent/obligation_ledger.py
-    audit_obligation_ledger: bool = True
+    audit_obligation_ledger: bool = POLICY['audit_obligation_ledger']
     # ---- 验证增强链时间护栏（2026-09-07：治 4.5_oracle / 4.6_adv 烧穿 6.5）----
     # 冒烟 v2 实证：3.3/3.6 止损省下的时间被 4.5 Oracle(365s)/4.6 对抗(372s)
     # 单次 300s+ 不可打断的复核吸收 → 6.5 Lean 终局仍 time_critical、0 绿点。
@@ -223,74 +220,71 @@ class AgentConfig(_AgentConfigBase):
     #   —— 环境变量优先是刻意的，保证既有跑法（X=0 python ...）行为不变。
     # 改动任一开关前请先看 switch_registry 的注释。
     # ============================================================
-    artifact_store_enabled: bool = True  # ARTIFACT_STORE_ENABLED — 中间结果落盘（results/<run_id>/<qid>/，默认开）
-    answer_form_gate: bool = True  # ANSWER_FORM_GATE — 答案形态闸门（非答案形态不放行）
-    deterministic_timeout_sec: float = 5.0  # DETERMINISTIC_TIMEOUT_SEC — 确定性验证通道的单次超时（秒）
-    eval_alpha_equiv: bool = False  # EVAL_ALPHA_EQUIV — 字母等价（A/a）判定（默认关）
-    eval_split_cn: bool = True  # EVAL_SPLIT_CN — 中文答案分隔符切分
-    expr_eval_grounding_guard: bool = True  # EXPR_EVAL_GROUNDING_GUARD — 表达式求值接地护栏
-    lean_gate_parallel: bool = True  # LEAN_GATE_PARALLEL — Lean 门禁并行预取（=0 串行）
-    lean_gate_strict_unknown: bool = True  # LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严
+    artifact_store_enabled: bool = POLICY['artifact_store_enabled']  # ARTIFACT_STORE_ENABLED — 中间结果落盘（results/<run_id>/<qid>/，默认开）
+    answer_form_gate: bool = POLICY['answer_form_gate']  # ANSWER_FORM_GATE — 答案形态闸门（非答案形态不放行）
+    deterministic_timeout_sec: float = POLICY['deterministic_timeout_sec']  # DETERMINISTIC_TIMEOUT_SEC — 确定性验证通道的单次超时（秒）
+    eval_alpha_equiv: bool = POLICY['eval_alpha_equiv']  # EVAL_ALPHA_EQUIV — 字母等价（A/a）判定（默认关）
+    eval_split_cn: bool = POLICY['eval_split_cn']  # EVAL_SPLIT_CN — 中文答案分隔符切分
+    expr_eval_grounding_guard: bool = POLICY['expr_eval_grounding_guard']  # EXPR_EVAL_GROUNDING_GUARD — 表达式求值接地护栏
+    lean_gate_parallel: bool = POLICY['lean_gate_parallel']  # LEAN_GATE_PARALLEL — Lean 门禁并行预取（=0 串行）
+    lean_gate_strict_unknown: bool = POLICY['lean_gate_strict_unknown']  # LEAN_GATE_STRICT_UNKNOWN — Lean 门禁对 unknown 从严
     # ★ 2026-10-07（语义分离）：「形式化不充分」≠「命题为假」。见 agent/switch_registry.py
     #   与 tools/lean_local/lean_bridge.py `_crosscheck_failure_verdict()`。
     #   实测 smoke10：51 条 cross_check_failed **全部 compiled=true**（代码已编译通过）
     #   却因自证拦截被判 proof_invalid（铁证 official112-004 的真命题 (2025:ℕ)/2=1012）。
     #   True（默认）= 这类命中落 unknown（**无法核验，非答案错**）；False = 回退旧
     #   proof_invalid 语义做 A/B。读取链 = env > config > 默认（经 switch_registry）。
-    lean_crosscheck_as_unknown: bool = True  # LEAN_CROSSCHECK_AS_UNKNOWN — cross_check/自证拦截落 unknown
-    lean_mcp_autolake: bool = True  # LEAN_MCP_AUTOLAKE — MCP 自动 lake 环境准备
-    lean_mcp_goal_loc: bool = False  # LEAN_MCP_GOAL_LOC — MCP 回报 goal 位置（默认关）
-    lean_mcp_hover_check: bool = False  # LEAN_MCP_HOVER_CHECK — MCP hover 检查（默认关）
-    lean_mcp_multi_attempt: bool = False  # LEAN_MCP_MULTI_ATTEMPT — MCP 多次尝试（默认关）
-    lean_mcp_timeout_floor: float = 300.0  # LEAN_MCP_TIMEOUT_FLOOR — MCP 调用超时下限（秒）
-    lean_mcp_verify_axioms: bool = True  # LEAN_MCP_VERIFY_AXIOMS — MCP 校验公理使用
-    lean_verify: bool = True  # LEAN_VERIFY — Lean 通道总开关（=0 一键关闭）
-    lean_xcheck_numeric: bool = True  # LEAN_XCHECK_NUMERIC — 数值答案的 Lean 交叉校验
-    llm_retry_on_timeout: bool = False  # LLM_RETRY_ON_TIMEOUT — LLM 超时是否重试（默认不重试）
+    lean_crosscheck_as_unknown: bool = POLICY['lean_crosscheck_as_unknown']  # LEAN_CROSSCHECK_AS_UNKNOWN — cross_check/自证拦截落 unknown
+    lean_mcp_autolake: bool = POLICY['lean_mcp_autolake']  # LEAN_MCP_AUTOLAKE — MCP 自动 lake 环境准备
+    lean_mcp_goal_loc: bool = POLICY['lean_mcp_goal_loc']  # LEAN_MCP_GOAL_LOC — MCP 回报 goal 位置（默认关）
+    lean_mcp_hover_check: bool = POLICY['lean_mcp_hover_check']  # LEAN_MCP_HOVER_CHECK — MCP hover 检查（默认关）
+    lean_mcp_multi_attempt: bool = POLICY['lean_mcp_multi_attempt']  # LEAN_MCP_MULTI_ATTEMPT — MCP 多次尝试（默认关）
+    lean_mcp_timeout_floor: float = POLICY['lean_mcp_timeout_floor']  # LEAN_MCP_TIMEOUT_FLOOR — MCP 调用超时下限（秒）
+    lean_mcp_verify_axioms: bool = POLICY['lean_mcp_verify_axioms']  # LEAN_MCP_VERIFY_AXIOMS — MCP 校验公理使用
+    lean_verify: bool = POLICY['lean_verify']  # LEAN_VERIFY — Lean 通道总开关（=0 一键关闭）
+    lean_xcheck_numeric: bool = POLICY['lean_xcheck_numeric']  # LEAN_XCHECK_NUMERIC — 数值答案的 Lean 交叉校验
+    llm_retry_on_timeout: bool = POLICY['llm_retry_on_timeout']  # LLM_RETRY_ON_TIMEOUT — LLM 超时是否重试（默认不重试）
     # ★ 2026-10-07 补登：LLM 读超时（秒）。原为 utils/llm_client 的模块级常量，import 期求值 + 不入注册表 ⇒ config/CLI 覆盖读不到。
-    llm_timeout: int = 120
-    mp_arm: str = 'baseline'  # MP_ARM — 实验臂名称（deploy 用）
-    minimal_mode: bool = False  # MINIMAL_MODE — 最小基础模式（只留主链，默认关）
-    numericize_final: bool = True  # NUMERICIZE_FINAL — 终答数值化（把精确式转小数）
-    objective_itemwise_priority: bool = True  # OBJECTIVE_ITEMWISE_PRIORITY — 客观题逐项优先策略
-    objective_majority_vote: bool = False  # OBJECTIVE_MAJORITY_VOTE — 客观题多数投票（默认关）
-    objective_selfcheck: bool = True  # OBJECTIVE_SELFCHECK — 客观题自查
-    self_improve_keep_original: bool = True  # SELF_IMPROVE_KEEP_ORIGINAL — 自改进保留原答案
-    self_improve_objective_skip: bool = True  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
-    theorem_hint: bool = True  # THEOREM_HINT — 定理检索注入（=0 关闭）
-    toolcall_text_fallback: bool = True  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
+    llm_timeout: int = POLICY['llm_timeout']
+    minimal_mode: bool = POLICY['minimal_mode']  # MINIMAL_MODE — 最小基础模式（只留主链，默认关）
+    numericize_final: bool = POLICY['numericize_final']  # NUMERICIZE_FINAL — 终答数值化（把精确式转小数）
+    objective_itemwise_priority: bool = POLICY['objective_itemwise_priority']  # OBJECTIVE_ITEMWISE_PRIORITY — 客观题逐项优先策略
+    objective_majority_vote: bool = POLICY['objective_majority_vote']  # OBJECTIVE_MAJORITY_VOTE — 客观题多数投票（默认关）
+    objective_selfcheck: bool = POLICY['objective_selfcheck']  # OBJECTIVE_SELFCHECK — 客观题自查
+    self_improve_keep_original: bool = POLICY['self_improve_keep_original']  # SELF_IMPROVE_KEEP_ORIGINAL — 自改进保留原答案
+    self_improve_objective_skip: bool = POLICY['self_improve_objective_skip']  # SELF_IMPROVE_OBJECTIVE_SKIP — 客观题跳过无条件自改进（=0 则也跑）
+    theorem_hint: bool = POLICY['theorem_hint']  # THEOREM_HINT — 定理检索注入（=0 关闭）
+    toolcall_text_fallback: bool = POLICY['toolcall_text_fallback']  # TOOLCALL_TEXT_FALLBACK — 文本工具调用兜底（2026-10-07 默认翻为**开**：smoke10 实测 10 题共 93 次文本调用被丢弃，含题 000 的自纠错检索请求；执行侧有 web_search 白名单 + 必填参数 + 幂等 + max_rounds 限流。=0 回退旧行为做 A/B）
     # 2026-10-15 双通道：Lean/Math 工具集注册给大模型（默认开）
-    enable_lean_tools: bool = True
+    enable_lean_tools: bool = POLICY['enable_lean_tools']
     # ★ 2026-10-18：Lean 自动化策略链 + 4.0 答案形态严格校验
-    lean_hammer: bool = True
-    smt_falsify: bool = True
-    attention_focus_enabled: bool = True
-    subgoal_theorem_search: bool = True
-    rewrite_on_low_conf: bool = True
-    rewrite_conf_threshold: float = 0.0
-    answer_shape_strict: bool = True
+    lean_hammer: bool = POLICY['lean_hammer']
+    smt_falsify: bool = POLICY['smt_falsify']
+    attention_focus_enabled: bool = POLICY['attention_focus_enabled']
+    subgoal_theorem_search: bool = POLICY['subgoal_theorem_search']
+    rewrite_on_low_conf: bool = POLICY['rewrite_on_low_conf']
+    rewrite_conf_threshold: float = POLICY['rewrite_conf_threshold']
+    answer_shape_strict: bool = POLICY['answer_shape_strict']
     # ★ 2026-10-17（用户定案）：跨模型独立检错 + 子目标生成前自审
-    cross_model_falsify: bool = True
-    cross_model_timeout: float = 90.0
-    subgoal_regen_self_review: bool = True
+    cross_model_falsify: bool = POLICY['cross_model_falsify']
+    cross_model_timeout: float = POLICY['cross_model_timeout']
+    subgoal_regen_self_review: bool = POLICY['subgoal_regen_self_review']
     # ★ 2026-10-17（用户定案内化）：3.3 无条件自改进（默认 False）
-    self_improve_stage: bool = False
+    self_improve_stage: bool = POLICY['self_improve_stage']
     # ★ 2026-10-15（审核 F5 补登记）：numbers 叶子 Lean 数值核验（默认 False）
-    enable_numeric_lean_verify: bool = False
+    enable_numeric_lean_verify: bool = POLICY['enable_numeric_lean_verify']
     # ★ 2026-10-27（Lean 接线修复）：工具① 编译前 import 归一化（默认开）
     #   与 contracts/switch_registry.py 的 LEAN_CHECK_NORMALIZE_IMPORTS 同值；
     #   实际生效还要求 Mathlib 就绪（能力探测在 lean_check 内部做）。
-    lean_check_normalize_imports: bool = True
+    lean_check_normalize_imports: bool = POLICY['lean_check_normalize_imports']
     # ★ 2026-10-15（用户定案）：子目标三角色协作求解（默认开，=0 回退旧逐步求解）
-    subgoal_collab_mode: bool = True
-    subgoal_collab_regen_rounds: int = 3
+    subgoal_collab_mode: bool = POLICY['subgoal_collab_mode']
+    subgoal_collab_regen_rounds: int = POLICY['subgoal_collab_regen_rounds']
     # ---- 2026-10-07 开关注册制补齐（fix-switch-debt）：6 个账外 gate 型 env 的配置字段 ----
     # 这 6 个 env 此前只以裸 `os.environ.get` 读取 ⇒ 不在本类声明、不在白名单、
     # 不在注册表。默认值**逐字 = 现存 env 读取处的字面默认**（只接线，不改行为）。
     # 读取处仍需改为实时读注册表，见 agent/switch_registry.py 各条注释与交付清单。
-    rework_reserve_sec: float = 300.0         # REWORK_RESERVE_SEC — 6.5 重做预留秒数
-    deep_max_rework: int = -1                 # DEEP_MAX_REWORK — 6.5 重做候选上限（deep；-1=无上限）
-    objective_itemwise_plan: bool = True      # OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略
+    objective_itemwise_plan: bool = POLICY['objective_itemwise_plan']      # OBJECTIVE_ITEMWISE_PLAN — 子目标规划客观题逐项策略
           # 子目标分解主路径（统一档位下每题执行）
     deep_revise_rounds: int = 2             # deep 档 0 票时 revise 自纠错轮数（08-30：1→2，LeanSearch v2 反思循环）
     deep_use_playoff: bool = True           # deep 档 0 票且时间宽裕时 playoff 复算
@@ -324,12 +318,12 @@ class AgentConfig(_AgentConfigBase):
     # ⚠ **不影响"防卡死"类护栏**：LLM 超时重试、`lean_timeout`、符号求解线程超时、
     #   各类死循环硬上限（`max_revise_rounds` 等）**均保留** —— 那些不是配额，是"别挂住"。
     # 回退：置 True 即恢复赛期口径（12 个阶段帽全生效）。
-    phase_budget_enabled: bool = False
+    phase_budget_enabled: bool = POLICY['phase_budget_enabled']
     # ---- 2026-10-04 开关注册制补齐：新增 2 个字段（与 switch_registry 同名登记）----
     #   `k11_mask_statement`：消费方已存在（agent/sub_goal_solver.py::_k11_mask_on），
     #     此前字段/注册表皆缺 ⇒ 该函数走 try/except 兜底恒 True；现补全后可配。
     #   `candidate_pool_limit`：候选池上限（0 = 不限），默认 12（2026-10-09 由 6 抬高）。
-    k11_mask_statement: bool = True          # K11 注入点守卫（子目标描述/蓝图结论断言值掩码）
+    k11_mask_statement: bool = POLICY['k11_mask_statement']          # K11 注入点守卫（子目标描述/蓝图结论断言值掩码）
     # ---- 2026-10-06 子目标交付重写（A/B/C）----
     # A: 让每个子目标产出**可独立校验的结论**（值/等式/判定），并把蓝图节点的
     #    `produces` 真正下传为 `expected_output`。依据（smoke10 实测）：73 个子目标
@@ -340,23 +334,23 @@ class AgentConfig(_AgentConfigBase):
     # C: **无推导支撑的结论打标**并警示主求解/合并层。依据：题 007 的 7 个子目标
     #    只给结论无推导（其中一条臆造）却被主求解直接采用 ⇒ 答错。
     # 默认 True = 修好后的行为；=0 一键回退旧行为做 A/B（两开关均已登记注册表）。
-    subgoal_conclusion_contract: bool = True   # A+C：结论契约（结构化结论 + 推导标记）
+    subgoal_conclusion_contract: bool = POLICY['subgoal_conclusion_contract']   # A+C：结论契约（结构化结论 + 推导标记）
     #   2026-10-27：收尾子目标**最终答案唯一锚点** —— 仅整题最后一步要求末行给出
     #   `最终答案: \boxed{...}`。依据：180 候选里仅 59.4% 的 answer 来自 boxed。
-    subgoal_final_answer_anchor: bool = True
-    subgoal_objective_judge: bool = True       # B：结论客观判定 + 判不出留痕
+    subgoal_final_answer_anchor: bool = POLICY['subgoal_final_answer_anchor']
+    subgoal_objective_judge: bool = POLICY['subgoal_objective_judge']       # B：结论客观判定 + 判不出留痕
     #   ★ 2026-10-04（D7）：`candidate_pool_limit` = 候选池上限（原为三处硬编码 6，
     #     现收敛到 `agent/solver._pool_room` 单一来源）。
     #   ★ 2026-10-09（用户拍板「先 12 试试」）：**默认 6 → 12**（与注册表默认逐字一致）。
     #     ⚠ 本值**同时被当作本次生成数量**（`_generate_initial(count=remaining)`）
     #     ⇒ 不要设成天文数字；设 0/负 = "不限"（内部有安全上界 12；抬到 12 后
     #        「0=不限」与「=12」行为等价，安全上界仍生效，不会跑飞）。
-    candidate_pool_limit: float = 12.0       # 候选池上限（0 = 不限，内部上界 12；默认 12）
+    candidate_pool_limit: float = POLICY['candidate_pool_limit']       # 候选池上限（0 = 不限，内部上界 12；默认 12）
     #   ★ 2026-10-04 修（D22）：`sub_goal_oracle_check` 此前**全仓无定义**，
     #     而唯一消费点 `agent/sub_goal_solver.py` 用 `getattr(config, ..., False)`
     #     读它 ⇒ `_oracle_check_step()` **结构性不可达**（代码写了永远跑不到）。
     #     现补上字段 + 注册表 + 白名单 + `_SPEC`，使其可配（默认关，行为不变）。
-    sub_goal_oracle_check: bool = False      # 子目标逐步 oracle 校验（默认关，见注册表说明）
+    sub_goal_oracle_check: bool = POLICY['sub_goal_oracle_check']      # 子目标逐步 oracle 校验（默认关，见注册表说明）
     # ★ 2026-09-15（用户：「子目标上限太少了；不同档位的最佳数量不同吗？」）：
     # **子目标上限按档位分档**。此前 `max_subgoals` 是**全局单一值 6**，
     # 而蓝图提示词已写明"简单 3~5 / 中等 5~12 / 难题 12~30" ⇒ **提示词与代码矛盾**。
@@ -456,22 +450,22 @@ class AgentConfig(_AgentConfigBase):
     # 2026-10-12 补齐（原为裸 getattr，读取点 tools/lean_local/lean_pre_verifier.py:169）：
     #   预验证阶段的**骨架 Lean 审核**。与 2.7 的 DAG 整树审核功能重叠，故默认关；
     #   需要「骨架也过一遍 Lean 语法」时置 True。
-    enable_preverify_sketch_audit: bool = False
+    enable_preverify_sketch_audit: bool = POLICY['enable_preverify_sketch_audit']
     # ---- 2026-10-12 批次 1：题意理解（★ 2026-10-14 收敛）----
     #   默认 **True**（用户 2026-10-12 决策：本轮直接启用以便「全开测 10 题」）。
     #   缺省语义与既有 `lean_pre_verifier.run` **互不影响**（后者行为不变）。
     #   ★ 2026-10-14：删「逻辑链 + 一致性复推 + 链的 Lean 自检」⇒ 只保留
     #   终态 + 答案槽（纯符号）+ 缺口 A/B；配套三开关（understanding_refine_rounds /
     #   understanding_no_gain_stop / understanding_chain_lean_check）一并撤除。
-    enable_understanding_chain: bool = True
+    enable_understanding_chain: bool = POLICY['enable_understanding_chain']
     # ---- 2026-10-12 批次 2：蓝图多次生成（迭代式）+ 自审（用户 Q11–Q13/Q18）----
     #   1 次初始生成 + (N-1) 次在上一轮基础上无条件自改进；采用**最后一轮**；
     #   第 4 次交 LLM 自审（DagReviewer），拒收比例 ≥0.4 才重写 1 轮。
-    blueprint_multi_gen_rounds: int = 3
-    blueprint_self_review: bool = True
-    blueprint_self_review_reject_ratio: float = 0.4
+    blueprint_multi_gen_rounds: int = POLICY['blueprint_multi_gen_rounds']
+    blueprint_self_review: bool = POLICY['blueprint_self_review']
+    blueprint_self_review_reject_ratio: float = POLICY['blueprint_self_review_reject_ratio']
     # ---- 2026-10-12 批次 3：子目标 inputs 机械校验（用户 D19–D21）----
-    subgoal_inputs_validation: bool = True
+    subgoal_inputs_validation: bool = POLICY['subgoal_inputs_validation']
     # ---- 2026-10-12 批次 4：验证链重排（用户 Q29–Q33）----
     #   任一淘汰环节池空 ⇒ 汇总错误点交下游「先找错点 → 再生成」（该部分保留）。
     #   ★★ 2026-10-13 **语义更正**（根因：official112-008 由对变错）：
@@ -488,48 +482,46 @@ class AgentConfig(_AgentConfigBase):
     # ★ 2026-10-13：**LLM 辅助 query**（用户 A1）—— 默认开（研究期用全部手段）。
     # ★ 2026-10-13：子目标级无条件自改进轮数（用户 E24）；=0 关闭。
     # ★ 2026-10-13（§3 方案 A）：题型 LLM 判题；False ⇒ 完全回退规则判定。
-    enable_type_llm: bool = True
-    subgoal_self_improve_rounds: int = 3
+    enable_type_llm: bool = POLICY['enable_type_llm']
+    subgoal_self_improve_rounds: int = POLICY['subgoal_self_improve_rounds']
     # ★ 2026-10-15（用户「2 与 3 之间建一个环」）：**求解期动态倒推**。
     #   生成期倒推（prompts/blueprint.py 构造原则第 2/3 条）只能基于**题面**判断
     #   前提是否具备；求解期才发现的前提缺口由本机制现场补：倒推一层 → 解前提 →
     #   回填 → 重解原目标。此前这种子目标只能写 `ctx.revise_feedback` 交上游，
     #   而上游 replan 已于 2026-10-15 整块删除 ⇒ 反馈无人消费。
     #   默认值与 contracts/switch_registry.py 同名条目逐字一致（门禁强制比对）。
-    subgoal_dynamic_backward: bool = True
-    subgoal_backward_max_depth: int = 2
-    enable_theorem_query_llm: bool = True
-    enable_lean_before_vote: bool = False
-    enable_verify_chain_reorder: bool = True
-    pool_empty_clear: bool = True
+    subgoal_dynamic_backward: bool = POLICY['subgoal_dynamic_backward']
+    subgoal_backward_max_depth: int = POLICY['subgoal_backward_max_depth']
+    enable_theorem_query_llm: bool = POLICY['enable_theorem_query_llm']
+    pool_empty_clear: bool = POLICY['pool_empty_clear']
     # ★ 2026-10-14 五道审核链（用户定案）：规范化前置 → ①AI 自审 → ②对抗证伪
     #   → ③Lean 代回 → ④计算检测 → ⑤投票（先判多答案再投票）。
     #   本字段 = 第 0 道（4.0_normalize）开关；默认值与
     #   contracts/switch_registry.py 同名条目逐字一致（门禁强制比对）。
-    five_gate_normalize: bool = True
+    five_gate_normalize: bool = POLICY['five_gate_normalize']
     #   ★ 2026-10-14 第 1 道（4.1_self_audit）：AI 自审逻辑错误 → 淘汰；
     #     输出不可解析/LLM 故障一律保留候选（防误杀）。
-    five_gate_self_audit: bool = True
+    five_gate_self_audit: bool = POLICY['five_gate_self_audit']
     #   ★ 2026-10-14 第 2 道（4.2_falsify）：对抗证伪逐候选化 ——
     #     机检证伪（SymPy 反例）+ LLM 对抗生成；证伪即判错淘汰。
-    five_gate_falsify: bool = True
+    five_gate_falsify: bool = POLICY['five_gate_falsify']
     #   ★ 2026-10-14 第 3 道（4.3_lean_check）：Lean 逻辑判断·答案代回题目；
     #     部分淘汰落池、全拒标记不静默清池、不适用题豁免（沿用 3.6 口径）。
-    five_gate_lean_check: bool = True
+    five_gate_lean_check: bool = POLICY['five_gate_lean_check']
     # ★ 2026-10-15（工具①观测通道）：4.3 调 lean_check 工具（默认关）
-    five_gate_lean_check_tool: bool = False
+    five_gate_lean_check_tool: bool = POLICY['five_gate_lean_check_tool']
     #   ★ 2026-10-14 第 4 道（4.4_math_check）：数学工具计算检测 ——
     #     SymPy 精确判定；fail 淘汰 / unknown 放行 / 全拒回退保留。
-    five_gate_math_check: bool = True
+    five_gate_math_check: bool = POLICY['five_gate_math_check']
     # ★ 2026-10-15（工具③观测通道）：4.4 等式逐条复算（默认关）
-    five_gate_math_check_calcverify: bool = False
+    five_gate_math_check_calcverify: bool = POLICY['five_gate_math_check_calcverify']
     #   ★ 2026-10-14 第 5 道（4.5_vote）：先多答案判断（ctx.vote_multi_answer
     #     单一来源）→ 大模型投票（票数锁定 tier_votes 多票口径）。
-    five_gate_vote: bool = True
+    five_gate_vote: bool = POLICY['five_gate_vote']
     #   ★ 2026-10-14（五道链配套·4.6_rewrite）：池空重写通道（错误情况→诊断→
     #     重建蓝图和子目标→重写→重过五道链）。轮数上限（每轮含 1 次诊断 +
     #     1 次子目标主链重跑 + 整链复核）。
-    five_gate_rewrite: bool = True
+    five_gate_rewrite: bool = POLICY['five_gate_rewrite']
     rewrite_max_rounds: int = 2
     lean_gate_all_proofs: bool = True       # 证明题全档 Lean 硬验证（False 回退仅 deep）
     lean_gate_nonproof: bool = True         # 非证明题候选级 Lean（2026-09-10 打开：用户要求全卷过 Lean，按题适用性豁免客观/概念题）
@@ -570,14 +562,14 @@ class AgentConfig(_AgentConfigBase):
     #   注：实际评测入口（deploy/run_112.py:274 / run_research.py:69）本就显式传
     #   `--use_leansearch true` ⇒ 对云端评测无行为变化；本改动让「裸跑 run_eval」
     #   也默认开启，并消除「默认关」的误读。守卫测试已同步更新（决策变更，非放宽判据）。
-    use_leansearch: bool = True             # LeanSearch 总开关（2026-10-12 起默认开）
+    use_leansearch: bool = POLICY['use_leansearch']             # LeanSearch 总开关（2026-10-12 起默认开）
     # ★ 2026-10-12（批次 5，用户 A1：「定理数定为 25」）：
     #   **检索取回 25 条**（池子够大才能覆盖多方向），注入侧再由
     #   `theorem_hint_block_max_chars` 控块长（超限按相关度截断并标注剩余条数）。
     #   ⚠ 分环节条数（前置理解 3–5 / 蓝图 10–15 / 主求解 10–25）尚未实现 ——
     #     需把「渲染」从检索期后移到各注入点，属下一批（见 CHANGES 未完成项）。
     leansearch_top_k: int = 25              # 每次检索返回条数（2026-10-12: 5 → 25）
-    theorem_hint_block_max_chars: int = 2500   # 注入块字符上限（2026-10-12 批次 5）
+    theorem_hint_block_max_chars: int = POLICY['theorem_hint_block_max_chars']   # 注入块字符上限（2026-10-12 批次 5）
     # ★ 2026-10-12（用户 §5.2「不同环节的定理量可能不同」）：分环节注入条数。
     #   前置理解少（读题对标不该被定理淹没）、主求解/修订多（要拿全量线索）。
     #   ⚠ 注册表只支持 bool/int/num/str ⇒ 这里用 **JSON 字符串**承载；
@@ -586,8 +578,7 @@ class AgentConfig(_AgentConfigBase):
     #     （门禁 `test_60_registry_default_matches_config_default` 强制比对 87 个字段）。
     # ★ 2026-10-14（任务列表 #2）：检索下移到 2.7 子目标求解后，`subgoal` 成为
     #   主消费者，按任务原文「这个环节的产出就是 25 个定理」把 8 → 25。
-    theorem_hint_top_k_by_stage: str = (
-        '{"pre_audit": 4, "blueprint": 12, "subgoal": 25, "solve": 25, "revise": 25}')
+    theorem_hint_top_k_by_stage: str = POLICY['theorem_hint_top_k_by_stage']
     leansearch_max_calls_per_q: int = 2     # 单题检索次数上限（护栏：防时间膨胀）
     # ⚠ 原 `leansearch_timeout` 已**删除**（2026-09-15 上线审计）：
     #   检索器把官方 API 超时**硬编码为 10 秒**（`lean_search.py` 的
@@ -615,7 +606,7 @@ class AgentConfig(_AgentConfigBase):
     # 退化为 AND 的单分支 ⇒ 蓝图路径**结构性不存在"独立求解分支"**，这正是
     # "子目标链锁定错值"的上游结构原因（比提示词层规则更根本）。
     # True = 展开每个 children，子目标规模会明显变大 ⇒ 须 A/B 后再决定默认值。
-    blueprint_or_expand_all: bool = True
+    blueprint_or_expand_all: bool = POLICY['blueprint_or_expand_all']
     # ★ 2026-10-15（用户要求「子目标承接 + 每个子目标设定工具，证明就用 lean」）：
     #   ① `blueprint_node_contract`：**节点契约** —— 蓝图每个节点声明 `tool`
     #      （lean/sympy/numeric/llm），并用 `inputs[i].use` 声明「把上游的哪个
@@ -623,38 +614,35 @@ class AgentConfig(_AgentConfigBase):
     #      求解侧据此追加工具指令与承接前提。关 ⇒ 只落盘不兑现（A/B 对照组）。
     #   ② `blueprint_tool_exec`：把声明**兑现成机器核验**（lean 实编译 / sympy
     #      判等式 / numeric 跑 norm_num），未过带反馈重解一次。关 ⇒ 零机器开销。
-    blueprint_node_contract: bool = True
+    blueprint_node_contract: bool = POLICY['blueprint_node_contract']
     # ★ 2026-10-27（2.7 归并不带值）：`blueprint_merge_value_mask`
     #   `merge_strategy` 与收尾节点 `statement` 的赋值形态答案值在**下传投影**里
     #   换成占位符（原文保留在 `ctx.blueprint`）。治的是 prompt 硬性禁令无代码执行的
     #   缺口 —— 实测 89 份蓝图 36 份 `merge_strategy` 内嵌值（002 写 (√5-1)/2 而
     #   gold=1/2、001 写 T(m)=-4 而 gold=2-2m），全部泄漏成最终答案。
     #   关 ⇒ 逐字透传（A/B 对照组）。
-    blueprint_merge_value_mask: bool = True
+    blueprint_merge_value_mask: bool = POLICY['blueprint_merge_value_mask']
     # ★ 2026-10-28（2.7 拆法约束）：`blueprint_goal_kind_guidance`
     #   系统提示词追加「陈述纪律」（无条件）+「本题拆法」（目标只是给一个具体
     #   对象/具体值时）。治的是倒推机制把存在性题拆成分类证明题，导致三轮都造
     #   假引理（omni-3556 实测）。最值/计数题刻意排除。关 ⇒ 提示词逐字不变。
-    blueprint_goal_kind_guidance: bool = True
     # ★ 2026-10-29（题意理解下发接线）：`problem_goal_emit_answer_slot`
     #   `answer_slot`（所求对象的纯符号形式）随 `problem_goal` 一并渲染进
     #   蓝图/子目标/主求解 prompt。改动前只下发 `terminal_state`。
     #   关 ⇒ 渲染结果逐字回到改动前。
-    problem_goal_emit_answer_slot: bool = True
+    problem_goal_emit_answer_slot: bool = POLICY['problem_goal_emit_answer_slot']
     # ★ 2026-10-29：有界存在性命题的机械搜索（穷举 + 证书 + 排除记录）。
     #   见 `agent/bounded_search.py`。关 ⇒ 不识别也不穷举。
-    bounded_search: bool = True
     # ★ 2026-10-29：推导审计（0-LLM）——算术复核 / 结论自相矛盾 / 跨轮冲突。
     #   见 `agent/verification_audit.py`。关 ⇒ 审计全不跑。
-    step_verification_audit: bool = True
-    blueprint_tool_exec: bool = True
+    blueprint_tool_exec: bool = POLICY['blueprint_tool_exec']
     # ★ 2026-10-15（用户：「把 lean 内化到蓝图构建里面」）：
     #   `blueprint_lean_sig` = **叶子级形式化下传**。`tool=lean` 的节点由蓝图
     #   直接给出 Lean 4 形式化签名（`formal_sig`），求解侧只补证明体 ——
     #   即「蓝图出证什么、求解出怎么证」，把 Lean 的能力用在**给定命题**这一层。
     #   关 ⇒ 签名不下传，求解侧自行形式化（历史行为；A/B 对照组）。
     #   ⚠ 形式化失败（签名为空）时下游**静默回落**，绝不阻断。
-    blueprint_lean_sig: bool = True
+    blueprint_lean_sig: bool = POLICY['blueprint_lean_sig']
     # 每题子目标级 Lean 实编译次数上限（防证明类子目标密集时把预算烧在编译器上；
     # 与既有 `lean_numeric_max_per_q` 同口径，但计的是**子目标级**编译）
     blueprint_lean_max_per_q: int = 2
@@ -736,8 +724,3 @@ class AgentConfig(_AgentConfigBase):
         # ★ import 与调用**双重 try/except**：桥失败绝不使 AgentConfig 构造失败。
         #   import 方向：`contracts/` 是最底层（零依赖），根层向下 import 合法；
         #   已核 `contracts/switch_registry.py` 不反向 import user_agent。
-        try:
-            from contracts.switch_registry import apply_env_to_config
-            apply_env_to_config(self)
-        except Exception:  # noqa: BLE001  桥失败不得影响配置构造
-            pass

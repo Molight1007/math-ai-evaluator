@@ -29,13 +29,12 @@ v2.5 完整版在此前只有「软验证」：Solver 在证明题通道内调�
 并把每候选结果写入 ctx.lean_gate 便于 trace/诊断。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 # ★ 2026-10-07 架构解耦（阶段 B2）：注册表已下沉到零依赖的 `contracts/`
 # ⇒ 本模块直接 import `contracts.switch_registry`（开关依赖不再指向 agent）。
-from contracts.switch_registry import (
-    get_bool as _sw_bool)
 
 import logging
 import re
@@ -173,7 +172,7 @@ class LeanGate:
         6 候选 ×20–38s 全串行；并行后压缩到 ⌈N/K⌉ 波。
         """
         import time as _t
-        if not _sw_bool("lean_gate_parallel"):
+        if not POLICY['lean_gate_parallel']:
             return None
         # 只在 MCP 通道真可用时并行：bridge 是 `lake env lean` 全量编译，
         # 并行收益未验证且同目录并发 lake 有额外风险 → 保持旧的串行行为。
@@ -725,7 +724,7 @@ class LeanGate:
         # 依据：平台实测 strict_reject 17 次、verdict 100% unknown，6.5 因此
         # 白烧 ~1520s，而"拒绝后仍输出某答案"→ 只烧时间不改输出。开关用于
         # 量化严格拒绝的真实代价（关掉做 A/B，用数据决定是否调整）。
-        if not _sw_bool("lean_gate_strict_unknown"):
+        if not POLICY['lean_gate_strict_unknown']:
             entry["degraded"] = "lenient_unknown"
             entry["feedback"] = ("Lean 无法判定（unknown）→ 按开关配置**弃权放行**"
                                  "（LEAN_GATE_STRICT_UNKNOWN=0，用于 A/B 对照）")

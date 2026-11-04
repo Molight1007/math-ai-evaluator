@@ -45,7 +45,7 @@ LAYER_RULES = [
     #     故由 L1 工具降为 L0 基础。
     ("L3 契约", ["contracts/"]),
     ("L3 契约", ["agent/base.py"]),
-    ("L3 契约", ["agent/switch_registry.py"]),
+    ("L3 契约", ["contracts/policy.py"]),
     ("L2 业务", ["agent/"]),
     ("L2 业务", ["prompts/"]),
     ("L1 工具", ["tools/"]),

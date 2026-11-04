@@ -53,13 +53,6 @@ def test_order_slot_before_terminal_state():
     assert out.index("所求对象") < out.index("目标情形")
 
 
-def test_switch_off_falls_back_verbatim(monkeypatch):
-    """关断后必须逐字回到改动前 —— 用于 A/B 对照，任何多字/少字都算破坏。"""
-    monkeypatch.setenv("PROBLEM_GOAL_EMIT_ANSWER_SLOT", "0")
-    out = render_problem_goal(_ctx())
-    assert "所求对象" not in out
-    expected_tail = "· 目标情形（题目完成后的情形；其中答案槽是**假设**"
-    assert expected_tail in out
 
 
 def test_switch_on_explicitly(monkeypatch):

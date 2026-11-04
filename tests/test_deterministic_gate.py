@@ -73,17 +73,6 @@ def test_functional_equation_substitution():
     assert bad["method"] == "functional_substitution", bad
 
 
-def test_solution_check_off_reverts_old_behavior():
-    """开关关闭 → 完全回退改动前（raw parse：boxed 答案仍 unknown）。"""
-    import os
-    from agent.deterministic import DeterministicChecker
-    os.environ["DETERMINISTIC_SOLUTION_CHECK"] = "0"
-    try:
-        c = DeterministicChecker()
-        r = c.check_answer(None, "求解方程 x^2-5x+6=0", r"\boxed{5}")
-        assert r["verdict"] == "unknown" and r["method"] == "parse", r
-    finally:
-        os.environ.pop("DETERMINISTIC_SOLUTION_CHECK", None)
 
 
 def test_verify_by_substitution():

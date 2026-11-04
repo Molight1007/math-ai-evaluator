@@ -267,20 +267,6 @@ class UnderstandingRoundsRetiredTest(unittest.TestCase):
                 "understanding_no_gain_stop",
                 "understanding_chain_lean_check")
 
-    def test_switches_removed_everywhere(self):
-        places = {
-            "① 注册表": _read("contracts/switch_registry.py"),
-            "② 配置字段": _read("user_agent__config.py"),
-            "③ 覆盖白名单": _read("user_agent.py"),
-            "④ 参数用量表": _read("agent/param_usage.py"),
-        }
-        for name in self._RETIRED:
-            for place, src in places.items():
-                for pat in ('"%s"' % name, "%s:" % name):
-                    self.assertNotIn(
-                        pat, src,
-                        "开关 %s 仍以活引用形态留在 %s（应四处同步撤除）"
-                        % (name, place))
 
     def test_no_refine_machinery_in_pre_verifier(self):
         # ★ 只看代码正文（docstring 里刻意保留的"已删 X"留痕不算活引用）

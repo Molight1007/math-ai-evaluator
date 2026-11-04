@@ -133,14 +133,6 @@ def test_premise_sg_fields_complete():
     assert item["id"] == p["id"]
 
 
-# ---------------------------------------------------------------- 主流程
-def test_disabled_returns_unchanged():
-    agent = _FakeAgent(premise_json=_OK_JSON,
-                       cfg={"subgoal_dynamic_backward": False})
-    out = sg_dynamic_backward(agent, _FakeCtx(), _sg(),
-                              "<need_premise>x</need_premise>", None, {})
-    assert out == "<need_premise>x</need_premise>"
-    assert not agent.llm_calls          # 关了就一次 LLM 都不该发
 
 
 def test_depth_cap_stops_recursion():

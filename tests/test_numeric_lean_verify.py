@@ -104,11 +104,6 @@ class FixLeanMulTest(unittest.TestCase):
 
 
 class NumericLeanVerifyGuardTest(unittest.TestCase):
-    def test_switch_off_returns_empty(self):
-        ag = _agent(enable_numeric_lean_verify=False)
-        ctx = TaskContext(problem="p", metadata={})
-        ctx.deadline = time.time() + 1000
-        self.assertEqual(ag._numeric_lean_verify(ctx, "2^10 = 1025"), "")
 
     def test_no_assert_no_compile_call(self):
         ag = _agent()

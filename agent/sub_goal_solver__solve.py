@@ -9,6 +9,7 @@
 `SubGoalSolverAgent._x(...)` 契约逐字不变（同 verifier__review.py 批6）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import re
@@ -196,7 +197,7 @@ def _solve_subgoal(self, ctx: TaskContext, sg: dict,
     # 注意：这里**不是强制结束**——失败重试（_solve_subgoal 的上下文重试）
     # 仍保留，子目标一定会尽力做完（老师："强制结束就等于错误"）。
     sg_type = sg.get("type", "compute")
-    if (getattr(self.config, "sub_goal_oracle_check", False)
+    if (POLICY['sub_goal_oracle_check']
             and sg_type in ("compute", "derive")
             and step_result
             and not step_result.startswith("[子目标")):
@@ -215,12 +216,11 @@ def _solve_subgoal(self, ctx: TaskContext, sg: dict,
 def _node_contract_on() -> bool:
     """蓝图**节点契约**开关是否生效（2026-10-15）：tool 指派 + 承接前提。
 
-    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    默认 True。读只读 `contracts.policy.POLICY`（无来源分层，运行期不可覆盖）；
     与全项目开关口径一致；注册表不可用时退回 True（研究期默认启用新契约）。
     """
     try:
-        from contracts.switch_registry import get_bool
-        return bool(get_bool("blueprint_node_contract"))
+        return bool(POLICY['blueprint_node_contract'])
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 
@@ -394,8 +394,7 @@ def _prepare_step_prompt(self, ctx: TaskContext, sg: dict,
         pass
     # ★ 2026-10-18：关键注意点（子目标步同款，不 record 防噪）
     try:
-        from contracts.switch_registry import get_bool as _gb
-        _on = _gb("attention_focus_enabled")
+        _on = POLICY['attention_focus_enabled']
         _focus = list(getattr(ctx, "attention_focus", None) or [])
         if _on and _focus:
             user_msg = user_msg + (
@@ -421,9 +420,9 @@ def _use_lemma(self, ctx: TaskContext) -> bool:
 
         A/B 实测 lemma 全开净 0.0pp、数论 +23pp → 数论域开、其他关。
         """
-    if not getattr(self.config, 'use_lemma_accumulation', False):
+    if not POLICY['use_lemma_accumulation']:
         return False
-    domains = list(getattr(self.config, 'lemma_domains', []) or [])
+    domains = list(POLICY['lemma_domains'] or [])
     if not domains:
         return True
     d = str(getattr(ctx, 'domain', '') or '')
@@ -608,7 +607,7 @@ def _multi_agent_n(self, ctx: TaskContext) -> int:
         （3.6+4_verify+4.5+4.6+5+5.5+6+6.5）要吃掉 ~45%。生成侧一旦吃光，
         验证全跳、错解裸奔 —— 本项目已有多次实测教训。
         """
-    if not bool(getattr(self.config, "enable_subgoal_multi_agent", False)):
+    if not bool(POLICY['enable_subgoal_multi_agent']):
         return 1
     # ⚠ 2026-09-30：**只兜 None / 缺键**，绝不用 `or 3`。
     #   原因：0 与负数在 Python 里是 falsy，`0 or 3` 会**静默变成 3** ——

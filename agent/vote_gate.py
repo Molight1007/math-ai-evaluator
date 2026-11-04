@@ -24,8 +24,8 @@ Step7 收编进本链出口（③客观验证/④模型对比按用户决策删�
 4.4 计算检测 → **4.5 投票**。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from .switch_registry import get_bool as _sw_get_bool
 
 _PROBLEM_MAX = 4000
 _ANSWERS_MAX = 20   # 判多答时列给模型的最大候选数（与 final_selector 同量级）
@@ -34,7 +34,7 @@ _ANSWERS_MAX = 20   # 判多答时列给模型的最大候选数（与 final_sel
 def _switch_enabled() -> bool:
     """读「五道链·第 5 道投票」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_vote")
+        return POLICY['five_gate_vote']
     except Exception:  # noqa: BLE001
         return True
 

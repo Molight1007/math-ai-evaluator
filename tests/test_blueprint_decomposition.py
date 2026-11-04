@@ -132,12 +132,6 @@ def test_switch_off_returns_base(monkeypatch):
     assert _system_for(_ctx(_P3556)) == BLUEPRINT_DAG_SYSTEM
 
 
-def test_switch_on_injects(monkeypatch):
-    from agent.blueprint_planner import _system_for
-    monkeypatch.setenv("BLUEPRINT_GOAL_KIND_GUIDANCE", "1")
-    out = _system_for(_ctx(_P3556))
-    assert out != BLUEPRINT_DAG_SYSTEM
-    assert "本题拆法" in out
 
 
 # ---------------------------------------------------------------- 观测

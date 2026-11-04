@@ -228,23 +228,6 @@ def test_lean_tool_schemas_registered():
     assert names == {"lean_search", "calc_verify", "to_lean", "lean_check"}
 
 
-def test_tool_schemas_respect_switch():
-    from types import SimpleNamespace
-    from agent.base import BaseAgent
-
-    class _A(BaseAgent):
-        def __init__(self):
-            self.config = SimpleNamespace(enable_web_search=False,
-                                          enable_lean_tools=True)
-
-        def run(self):                    # 抽象方法实现（本测试不用）
-            return None
-
-    a = _A()
-    names = {t["function"]["name"] for t in a._tool_schemas()}
-    assert "lean_search" in names and "calc_verify" in names
-    a.config.enable_lean_tools = False
-    assert a._tool_schemas() == []
 
 
 def test_lean_tool_exec_dispatch():

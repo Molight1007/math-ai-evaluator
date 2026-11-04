@@ -5,8 +5,8 @@
 pick_best_candidates`` 仍可用（re-export）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from agent.switch_registry import get_bool as _sw_bool
 # ============================================================
 # 候选入池门槛 v2 开关（跨模块**单一来源**）
 # ============================================================
@@ -53,7 +53,7 @@ def _pool_gate_v2_on() -> bool:
     引用；任何口径调整只改这里，不允许再在调用方另起一份。
     """
     try:
-        return bool(_sw_bool("pool_gate_v2"))
+        return bool(POLICY['pool_gate_v2'])
     except Exception:  # noqa: BLE001  注册表不可用时取默认（=开）
         return True
 

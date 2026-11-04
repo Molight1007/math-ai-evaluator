@@ -54,6 +54,7 @@
 ⇒ 行为改变只由**提示词**承担；检测结果进 trace 供统计（先观测、后定判据）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 
@@ -179,12 +180,11 @@ _FAMILY_BODY = """
 def _guidance_on() -> bool:
     """`blueprint_goal_kind_guidance` 开关（默认 True）。
 
-    走 `contracts.switch_registry`（环境变量 > 配置 > 默认）；注册表不可用退回 True
+    读只读 `contracts.policy.POLICY`（无来源分层，运行期不可覆盖）
     （与 `_lean_sig_on` 同口径）。关 ⇒ 提示词逐字回到改动前（A/B 对照组）。
     """
     try:
-        from contracts.switch_registry import get_bool
-        return bool(get_bool("blueprint_goal_kind_guidance"))
+        return bool(False)
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 

@@ -15,6 +15,7 @@
 「证不出」≠「命题假」，本工具不臆断（未找到反例时不下"假"结论）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 import time
@@ -195,8 +196,7 @@ def _normalize_switch_on() -> bool:
     读取失败按默认开处理（与注册表默认一致）。
     """
     try:
-        from contracts.switch_registry import get_bool as _g
-        return bool(_g("lean_check_normalize_imports"))
+        return bool(POLICY['lean_check_normalize_imports'])
     except Exception:  # noqa: BLE001
         return True
 

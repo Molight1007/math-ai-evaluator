@@ -141,15 +141,14 @@ class TestNamedParams:
         2026-10-01 研究期默认已放开为 -1（见 orchestrator.py:2503），故同步更正。
         """
         ctx = _ctx(tier="deep", _gate_tried=["a", "b"])
-        # 未设 ⇒ 无上限，cap 必须为 None，不得再冒充 3
+        # ★ 2026-11-05：`deep_max_rework` 是已删历史开关，读取代码已清除。
+        #   deep 档恒无上限；standard 档恒 2。保留「不得冒充旧默认 3」的断言。
         e0 = collect_param_usage(ctx, _cfg())["items"]["gate_max_rework"]
-        assert e0["cap"] is None, "DEEP_MAX_REWORK 默认 -1 = 无上限，不得硬编码 3"
+        assert e0["cap"] is None, "deep 档无上限，不得硬编码 3"
         assert e0["used"] == 2
-        # 显式设 N ⇒ 报告必须显示 N，且能正确判撞顶
-        e = collect_param_usage(ctx, _cfg(deep_max_rework=3))["items"]["gate_max_rework"]
-        assert (e["cap"], e["used"], e["capped"]) == (3, 2, False)
-        e2 = collect_param_usage(ctx, _cfg(deep_max_rework=2))["items"]["gate_max_rework"]
-        assert (e2["cap"], e2["capped"]) == (2, True)
+        std = collect_param_usage(_ctx(tier="standard", _gate_tried=["a", "b"]),
+                                  _cfg())["items"]["gate_max_rework"]
+        assert std["cap"] == 2
 
     def test_gate_rework_counts_one_note(self):
         """`_gate_tried` 为空时回退到 final_gate 事件数（注释里写明是下界口径）。"""

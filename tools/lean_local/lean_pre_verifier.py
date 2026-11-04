@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
 """
 Lean 前置形式化验证智能体（LeanPreVerifier）
@@ -184,7 +185,7 @@ class LeanPreVerifier(BaseAgent):
         # 消费者 → 默认关闭（enable_preverify_sketch_audit=True 可追溯重开）。
         # Lean 证据链不受损：DAG 级整树审核由 enable_sketch_audit（默认 True）
         # 驱动，完整保留。省下 ~150-200s/题给 3.5/3.6/6.5 候选 Lean 验证。
-        if getattr(cfg, "enable_preverify_sketch_audit", False):
+        if POLICY['enable_preverify_sketch_audit']:
             if not ctx.is_time_critical():  # 预算已无限制（9/3）
                 self.generate_and_audit_sketch(ctx)
 
@@ -303,7 +304,7 @@ class LeanPreVerifier(BaseAgent):
         """
         cfg = self.config
         # ⚠ 兜底值须与 AgentConfig 声明（True）一致 —— 见 orchestrator__prep.py 同名说明。
-        if not getattr(cfg, "enable_understanding_chain", True):
+        if not POLICY['enable_understanding_chain']:
             ctx.understanding_chain = {"enabled": False}
             return
         if not str(getattr(ctx, "problem", "") or "").strip():

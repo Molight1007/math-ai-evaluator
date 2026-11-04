@@ -17,12 +17,12 @@ _ask_for_form / _looks_like_answer / _value_attack_blueprint
     （本仓既定模式，单一来源仍在 orchestrator，非复制）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import os
 import re as _re
 
-from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -45,18 +45,18 @@ def _final_answer_postprocess(self, ctx, ans: str = "") -> str:
     # 便于用评测数据判断是否需要把后处理**前移到闸门之前**（那属主链顺序
     # 调整，定型前不动）。
     _before_pp = ans
-    if _sw_bool("numericize_final"):
+    if POLICY['numericize_final']:
         try:
             ans = self._maybe_numericize(ctx, ans)
         except Exception as _e:  # noqa: BLE001
             logger.debug("[P2] 数值化异常跳过: %s", _e)
-    if _sw_bool("objective_selfcheck"):
+    if POLICY['objective_selfcheck']:
         try:
             ans = self._objective_selfcheck(ctx, ans)
         except Exception as _e:  # noqa: BLE001
             logger.debug("[P5] 客观题自检异常跳过: %s", _e)
     # B0（2026-09-13）：答案形态闸门——条件式→具体值 / 求所有→枚举
-    if _sw_bool("answer_form_gate"):
+    if POLICY['answer_form_gate']:
         try:
             ans = self._answer_form_gate(ctx, ans)
         except Exception as _e:  # noqa: BLE001
@@ -197,7 +197,7 @@ def _answer_form_gate(self, ctx, ans: str) -> str:
         （差分检测曾因此永久失效，见 formatter._objective_diff_probe 的教训）。
         """
     try:
-        if not _sw_bool("answer_form_gate"):
+        if not POLICY['answer_form_gate']:
             return ans
         _q = ctx.problem or ""
         _m = _re.search(r"\\boxed\{([^{}]*)\}", ans or "")
@@ -305,7 +305,7 @@ def _lean_crosscheck_number(self, ctx, latex_expr: str, value: str) -> "bool | N
         - 返回 False 表示"Lean 认为该等式不成立" → 由调用方记录（可作硬信号）。
         价值：Lean 的 ℕ/ℤ/ℚ 语义精确，可捕捉 SymPy 在语义/精度上的偏差。
         """
-    if not _sw_bool("lean_xcheck_numeric"):
+    if not POLICY['lean_xcheck_numeric']:
         return None                      # 开关关 = 未校验（≠ 通过）
     try:
         from tools.lean_local.lean_bridge import mcp_run_code

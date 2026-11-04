@@ -14,16 +14,15 @@
   3. 结论合并 (merge)   →  组装最终答案并输出 Candidate
 """
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-from agent.switch_registry import (
-    get_bool as _sw_bool)
 # 2026-10-02 中间结果存储层（老师：「每个中间结果都要存」）：子目标结果**即时落盘**。
 # 只加不改：写盘失败静默（append_ctx 永不抛异常），不影响求解与合并。
 # ⚠ 2026-10-08 批1-B增：`_artifact_append` 的直接消费方已迁到
 #   `agent/sub_goal_solver__loop.py`（函数内 `from .sub_goal_solver import
 #   _artifact_append` 惰性引用）⇒ **本导入须保留**（单一来源，勿按"未使用"清理）。
 from agent.artifact_store import append_ctx as _artifact_append  # noqa: F401  跳板 re-export（subgoal_collab/loop 惰性引用）
+from contracts.policy import POLICY
 import logging
 import re
 import time
@@ -164,7 +163,7 @@ def _conclusion_contract_on() -> bool:
     主求解警示（C）消费。=0 回退旧行为（只给自由文本结论）。
     """
     try:
-        return bool(_sw_bool("subgoal_conclusion_contract"))
+        return bool(POLICY['subgoal_conclusion_contract'])
     except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
         return True
 
@@ -181,7 +180,7 @@ def _final_answer_anchor_on() -> bool:
     =0 回退旧行为（无锚点要求），供 A/B。
     """
     try:
-        return bool(_sw_bool("subgoal_final_answer_anchor"))
+        return bool(POLICY['subgoal_final_answer_anchor'])
     except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
         return True
 
@@ -197,7 +196,7 @@ def _objective_judge_on() -> bool:
     =0 回退旧行为（只在多 agent 路径判定、判不出不给原因）。
     """
     try:
-        return bool(_sw_bool("subgoal_objective_judge"))
+        return bool(POLICY['subgoal_objective_judge'])
     except Exception:  # noqa: BLE001
         return True
 
@@ -211,8 +210,7 @@ def _k11_mask_on() -> bool:
     本函数必须在**注册完成前后都能跑**，且默认行为一致（都 = 守卫生效）。
     """
     try:
-        from .switch_registry import get_bool as _swb
-        return bool(_swb("k11_mask_statement"))
+        return bool(POLICY['k11_mask_statement'])
     except Exception:  # noqa: BLE001  开关未注册/读取异常 ⇒ 保持守卫生效（研究期安全侧）
         return True
 
@@ -222,12 +220,12 @@ def _itemwise_plan_on() -> bool:
 
     ★ 2026-10-07（fix-tail-gaps）：原实现为裸读 `OBJECTIVE_ITEMWISE_PLAN` 并**取反**
     （`os.environ.get(..., "1") == "0"` 才回退 LLM 规划）。改走注册制后语义为
-    `not _sw_bool("objective_itemwise_plan")` —— 未设/`"1"` ⇒ 启用逐项规划（同旧默认），
+    `not POLICY['objective_itemwise_plan']` —— 未设/`"1"` ⇒ 启用逐项规划（同旧默认），
     `"0"` ⇒ 关（同旧行为）。三态与原 `== "0"` 逐条一致；仅 `""`/`"false"` 等非标准值
     由 registry 统一口径判为「关」，属已文档化的修正。=0 一键回退到 LLM 规划。
     """
     try:
-        return bool(_sw_bool("objective_itemwise_plan"))
+        return bool(POLICY['objective_itemwise_plan'])
     except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为（默认启用）
         return True
 
@@ -244,7 +242,7 @@ def _check_protocol_guard_on() -> bool:
     =0 回退旧行为（只静默跳过、不留痕、不重问）做 A/B。
     """
     try:
-        return bool(_sw_bool("check_protocol_guard"))
+        return bool(POLICY['check_protocol_guard'])
     except Exception:  # noqa: BLE001  未注册/读取异常 ⇒ 保持修好后的行为
         return True
 
@@ -497,7 +495,7 @@ class SubGoalSolverAgent(BaseAgent):
             origin=(
                 "itemwise"
                 if (getattr(ctx, "question_type", "") == "选择题"
-                    and _sw_bool("objective_itemwise_priority"))
+                    and POLICY['objective_itemwise_priority'])
                 else ""
             ),
         )

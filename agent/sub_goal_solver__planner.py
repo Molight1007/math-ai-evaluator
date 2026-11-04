@@ -8,6 +8,7 @@
 `SubGoalSolverAgent._x(...)` 契约逐字不变（同 verifier__review.py 批6）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import re
@@ -114,7 +115,7 @@ def _plan_choice_by_options(self, ctx: TaskContext) -> dict | None:
         # 默认启用（用户 2026-09-13 明确要求：选择题每个选项都判断）；
         # 置 OBJECTIVE_ITEMWISE_PLAN=0 可一键回退到 LLM 规划。
         # ★ 2026-10-07（fix-tail-gaps）：原裸读 env `== "0"` 已改走注册制
-        #   （`_itemwise_plan_on()` → `_sw_bool("objective_itemwise_plan")`，实时读）。
+        #   （`_itemwise_plan_on()` → `POLICY['objective_itemwise_plan']`，实时读）。
         if not _itemwise_plan_on():
             # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
             self.record(ctx, "subgoal",
@@ -406,11 +407,11 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
     planner = BlueprintPlannerAgent(self.client, self.config)
     # ★ 2026-10-12（批次 2，用户 Q11–Q13）：迭代式多次生成 + 第 4 次自审。
     #   轮数=1 时等价于原行为（零差异），故可由开关精确回退。
-    if int(getattr(self.config, "blueprint_multi_gen_rounds", 3) or 3) > 1:
+    if int(POLICY['blueprint_multi_gen_rounds'] or 3) > 1:
         dag = planner.generate_blueprint_iterative(ctx)
     else:
         dag = planner.generate_blueprint(ctx)
-    if dag is not None and getattr(self.config, "blueprint_self_review", True):
+    if dag is not None and POLICY['blueprint_self_review']:
         dag = planner.self_review_blueprint(ctx, dag)
     if dag is None:
         # ★ 2026-10-07（fix-tail-gaps · 静默跳过埋点）：原**静默** return None。
@@ -432,7 +433,7 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
     plan = dag.to_subgoal_plan(
         self._subgoal_cap(ctx),
         with_deps=getattr(self.config, "blueprint_deps_enabled", True),
-        or_expand_all=getattr(self.config, "blueprint_or_expand_all", False))
+        or_expand_all=POLICY['blueprint_or_expand_all'])
     # ★ 2026-10-15（审核修复 F3）：生产路径补写 ctx.blueprint_plan（此前仅
     #   BlueprintPlannerAgent.run 写，而生产走本函数直接生成 ⇒ 03_subgoals.plan
     #   恒空、rewrite 复位亦空）。直接复用同一 plan 对象，零额外成本。
@@ -467,7 +468,7 @@ def _plan_from_blueprint(self, ctx: TaskContext) -> dict | None:
     #     · 缺的量**在题面出现过** ⇒ kind=B（题面给了但没读到）⇒ 就地补子目标；
     #     · 否则 ⇒ kind=A（题面确实没给）⇒ 回退蓝图作风险项。
     #   ⚠ 本轮只做**可观测 + 分类**（不自动改蓝图，遵循「先可观测→后改逻辑」）。
-    if getattr(self.config, "subgoal_inputs_validation", True):
+    if POLICY['subgoal_inputs_validation']:
         try:
             _vres = dag.validate_inputs()
             _prob = str(getattr(ctx, "problem", "") or "")
@@ -525,7 +526,7 @@ def _inject_mathlib_theorems(self, ctx: TaskContext) -> int:
                         "解题前 Mathlib 注入已跳过：开关 "
                         "inject_mathlib_to_solver=0")
             return 0
-        if not getattr(self.config, "use_leansearch", False):
+        if not POLICY['use_leansearch']:
             self.record(ctx, "leansearch",
                         "解题前 Mathlib 注入已跳过：LeanSearch 总开关 "
                         "use_leansearch 未开启（默认关）")

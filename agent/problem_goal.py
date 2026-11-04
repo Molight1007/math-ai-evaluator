@@ -32,6 +32,7 @@
 ⇒ 接线后不增加任何一次 LLM 往返，也不改变既有行为口径（未识别时退化为空字段）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 
@@ -164,13 +165,12 @@ def build_problem_goal(ctx) -> dict:
 def _emit_answer_slot() -> bool:
     """`problem_goal_emit_answer_slot` 开关（默认 True，2026-10-29）。
 
-    走 `contracts.switch_registry`（环境变量 > 配置 > 默认）；注册表不可用退回 True
+    读只读 `contracts.policy.POLICY`（无来源分层，运行期不可覆盖）
     （与 `blueprint_decomposition._guidance_on` 同口径）。关 ⇒ 渲染结果逐字回到
     改动前（A/B 对照组）。
     """
     try:
-        from contracts.switch_registry import get_bool
-        return bool(get_bool("problem_goal_emit_answer_slot"))
+        return bool(POLICY['problem_goal_emit_answer_slot'])
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 

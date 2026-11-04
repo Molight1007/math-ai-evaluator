@@ -124,17 +124,6 @@ def test_gate_swap_syncs_pick_diag_to_final(monkeypatch):
     assert "gate_next" in ctx._pick_diag["final_submit_source"]
 
 
-def test_single_source_off_keeps_legacy(monkeypatch):
-    """开关 OFF ⇒ picked 不被同步（完全回退改动前）。"""
-    monkeypatch.setenv("FINAL_ANSWER_SINGLE_SOURCE", "0")
-    from agent.orchestrator import Orchestrator
-    ctx = TaskContext(problem="p", metadata={})
-    ctx.final_response = "plan"
-    ctx._pick_diag = {"branch": "b", "picked": "plan"}
-    ctx.candidates = [Candidate(id=9, answer="\\boxed{X}", reasoning="r")]
-    assert Orchestrator._set_final_response(ctx, "\\boxed{X}", "gate_next") is True
-    assert ctx._pick_diag["picked"] == "plan"
-    assert "picked_decision" not in ctx._pick_diag
 
 
 def test_public_sync_helper_for_postprocess_path(monkeypatch):
@@ -146,14 +135,8 @@ def test_public_sync_helper_for_postprocess_path(monkeypatch):
     fs.sync_pick_diag_to_final(ctx, "postprocess")
     assert ctx._pick_diag["picked"] == "\\boxed{1012}"
     assert ctx._pick_diag["final_submit_source"] == "postprocess"
-
-    # OFF ⇒ 什么都不做
-    monkeypatch.setenv("FINAL_ANSWER_SINGLE_SOURCE", "0")
-    ctx2 = TaskContext(problem="p", metadata={})
-    ctx2._pick_diag = {"branch": "b", "picked": "旧值"}
-    ctx2.final_response = "\\boxed{1012}"
-    fs.sync_pick_diag_to_final(ctx2, "postprocess")
-    assert ctx2._pick_diag["picked"] == "旧值"
+    # ★ 2026-11-05：`final_answer_single_source` 已固化为 True，
+    #   原「OFF ⇒ 什么都不做」分支不可达，env 覆盖也不再生效 ⇒ 退役该分支。
 
 
 # ================= cluster 可追溯 =================

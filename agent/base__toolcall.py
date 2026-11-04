@@ -4,11 +4,11 @@
 对外契约不变：``from agent.base import _normalize_chat_response`` 等仍可用（re-export）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 from typing import Optional
 
-from agent.switch_registry import get_bool as _sw_bool
 
 _TEXT_FN_RE = re.compile(r"<function\s*=\s*([A-Za-z_]\w*)\s*>", re.I)
 _TEXT_PARAM_RE = re.compile(
@@ -19,7 +19,7 @@ _TEXT_PARAM_RE = re.compile(
 
 def _text_toolcall_fallback_enabled() -> bool:
     """文本通道兜底开关是否生效（**调用时实时读取**，env/config 覆盖均有效）。"""
-    return _sw_bool("toolcall_text_fallback")
+    return POLICY['toolcall_text_fallback']
 
 
 # ------------------------------------------------------------

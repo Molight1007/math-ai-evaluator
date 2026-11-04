@@ -175,12 +175,11 @@ class CompileViaMcpTest(unittest.TestCase):
                                  _PROJ, 60.0, allow_sorry=False)
         self.assertFalse(r["ok"])
 
-    def test_goal_not_appended_by_default(self):
-        """新契约：空 env 下 goal 富集**不**执行。
+    def test_goal_enrichment_applied_by_policy(self):
+        """★ 2026-11-05：`lean_mcp_goal_loc` 生产值为 True 并已固化。
 
-        依据：2026-09-13 起 goal/multi_attempt/hover 默认关，理由见
-        ``lean_bridge.py`` 对应开关处的注释（这三段只影响错因文本质量、
-        verdict=ok 已定，不改变候选淘汰；实测 3 候选一波耗 480s 却全部 unknown）。
+        原用例断言「默认关」且靠空 env 触发；融合后 env 无效、恒执行。
+        功能断言保留：goal 富集确实把 [lean-lsp-mcp] 段写进错因文本。
         """
         p1, p2, client = self._stub_proxy(
             items=[{"severity": "error", "message": "linarith failed",
@@ -190,9 +189,9 @@ class CompileViaMcpTest(unittest.TestCase):
             r = _compile_via_mcp("C:/p/v.lean", "code", _PROJ, 60.0,
                                  allow_sorry=False)
         self.assertFalse(r["ok"])
-        # 默认关：goal 富集不执行 → 无 [lean-lsp-mcp] 段，仅 1 次主诊断 request
-        self.assertNotIn("[lean-lsp-mcp]", r["error"])
-        self.assertEqual(client.request.call_count, 1)
+        # 固化开：goal 富集执行 ⇒ 错因文本带 [lean-lsp-mcp] 段
+        self.assertIn("[lean-lsp-mcp]", r["error"])
+        self.assertGreaterEqual(client.request.call_count, 1)
 
     def test_goal_appended_when_enabled(self):
         """保留可开回能力：显式 LEAN_MCP_GOAL_LOC=1 时 goal 富集恢复执行。"""

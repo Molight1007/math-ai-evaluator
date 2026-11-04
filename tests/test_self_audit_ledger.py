@@ -167,17 +167,6 @@ def test_missing_oid_not_penalized():
     assert ctx.self_audit_rejected[0]["obligation_id"] == ""
 
 
-# --------------------------------------------------- 6) 开关关闭
-def test_ledger_switch_off(monkeypatch):
-    stub = _Stub(['{"logic_error": true, "error_desc": "跳步",'
-                  ' "obligation_id": "none"}'],
-                 blueprint=_bp(), ledger_switch=False)
-    ctx = _Ctx([_c(1)], blueprint=_bp())
-    self_audit_stage(stub, ctx)
-    # 不注入 ⇒ 不含清单；也不设门 ⇒ 照原行为淘汰
-    assert "本题应当建立的义务" not in _user_msg(stub)
-    assert ctx.candidates == []
-    assert ctx.self_audit["ledger_used"] is False
 
 
 # --------------------------------------------------- 7) 提示词口径（读源守卫）

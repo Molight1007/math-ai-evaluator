@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 """候选答案证伪层（AnswerFalsifier，2026-09-23 新建）。
 
 要解决的问题
@@ -211,8 +212,7 @@ class AnswerFalsifier:
         无法形式化 ⇒ 一律 None（放行，不误杀）。
         """
         try:
-            from .switch_registry import get_bool as _g
-            if not _g("smt_falsify"):
+            if not POLICY['smt_falsify']:
                 return None
         except Exception:  # noqa: BLE001
             return None
@@ -247,7 +247,7 @@ class AnswerFalsifier:
         """
         try:
             meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
-            cap = int(getattr(self.config, "falsify_max_per_q", 0) or 0)
+            cap = int(POLICY['falsify_max_per_q'] or 0)
             if cap <= 0:                       # 0/负 = 不限（对齐全项目口径）
                 return True
             cnt = int(meta.get("falsify_count", 0) or 0)

@@ -14,6 +14,7 @@
 **re-export** 保留、其余方法保留同名委托，对外签名与返回值逐字不变。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 from typing import TYPE_CHECKING
 
@@ -46,7 +47,7 @@ def _pool_room(cfg, ctx) -> int:
     """
     _lim = 0
     try:
-        _v = float(getattr(cfg, "candidate_pool_limit", 12.0) or 0.0)
+        _v = float(POLICY['candidate_pool_limit'] or 0.0)
         _lim = int(_v) if _v > 0 else 0
     except (TypeError, ValueError):
         _lim = 0
@@ -105,7 +106,7 @@ def _normalize_and_check_answer(self, ctx: TaskContext, cid,
         开关 `require_answer_in_pool`（默认 True）；置 False 时恒返回 (原值, True) 做 A/B。
         """
     a = str(answer or "").strip()
-    if not bool(getattr(self.config, "require_answer_in_pool", True)):
+    if not bool(POLICY['require_answer_in_pool']):
         return a, True
     try:
         from utils.extract import _looks_like_answer, _salvage_value_from_line

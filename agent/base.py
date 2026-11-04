@@ -1,6 +1,7 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 """
 多智能体基础组件
@@ -428,7 +429,7 @@ class BaseAgent(ABC):
         # ★ 2026-10-15（工具化定稿 · 双通道）：Lean/Math 工具集（默认注册；
         #   enable_lean_tools=False 可关做 A/B）
         try:
-            if getattr(self.config, "enable_lean_tools", True):
+            if POLICY['enable_lean_tools']:
                 _tools.extend(self.LEAN_TOOLS_SCHEMAS)
         except Exception:  # noqa: BLE001
             pass

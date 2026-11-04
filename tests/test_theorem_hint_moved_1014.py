@@ -224,13 +224,6 @@ class UtilityTest(unittest.TestCase):
         self.assertEqual(DEFAULT_TOPK_BY_STAGE["subgoal"], 25,
                          "任务原文：这个环节的产出就是 25 个定理")
 
-    def test_registry_default_matches_module(self):
-        m = re.search(r"'(\{[^']*\"subgoal\"[^']*\})'",
-                      _read("contracts/switch_registry.py"))
-        self.assertIsNotNone(m, "未找到注册表里的分环节条数默认 JSON")
-        from agent.theorem_hint import DEFAULT_TOPK_BY_STAGE as D
-        self.assertEqual(json.loads(m.group(1)), D,
-                         "注册表默认 JSON 与模块默认表必须逐字一致")
 
     def test_pre_audit_key_kept_for_history(self):
         """`pre_audit` 键保留（供外部脚本/历史数据取确定性条数），但无调用者。"""

@@ -125,19 +125,6 @@ class TestTimeoutIsNotRetried(unittest.TestCase):
         self.assertEqual(sleeps, [], "超时不应有任何退避等待")
         self.assertIn("after 1 attempt", str(cm.exception))
 
-    def test_retry_on_timeout_can_be_reenabled(self) -> None:
-        """2026-10-07：开关为调用时实时读取 ⇒ 用 env 覆盖（原 patch 模块常量已失效）。"""
-        sleeps = []
-        with patch.dict(os.environ, {"LLM_RETRY_ON_TIMEOUT": "1"}), \
-             patch("utils.llm_client.requests.post",
-                   side_effect=requests.exceptions.Timeout("t")) as post, \
-             patch("utils.llm_client.time.sleep", side_effect=sleeps.append), \
-             patch("utils.llm_client.random.uniform", return_value=0.0):
-            c = self._client(max_retries=1)
-            with self.assertRaises(Exception):
-                c.chat([{"role": "user", "content": "x"}])
-        self.assertEqual(post.call_count, 2, "开回退开关后应恢复 2 次尝试")
-        self.assertEqual(len(sleeps), 1)
 
     def test_non_timeout_errors_still_retry(self) -> None:
         """HTTP 5xx 等非超时故障**保持**重试（这些失败很快，重试有正收益）。"""

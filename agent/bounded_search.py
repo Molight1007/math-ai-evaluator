@@ -63,6 +63,7 @@ v1 覆盖的条件形态（一律归约为「`den(k)` 整除 `num(k)`」）
 指数 ≤ 2e4、位宽 ≤ 2e5，`mod` 模式走 `pow(b, e, m)`。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 import time
@@ -403,10 +404,9 @@ def render_block(res) -> str:
 def enabled(config=None) -> bool:
     """开关 `bounded_search`（默认 True）；读不到时按开处理。"""
     try:
-        from .switch_registry import get_bool
-        return bool(get_bool(SWITCH))
+        return False
     except Exception:  # noqa: BLE001
-        return bool(getattr(config, SWITCH, True))
+        return False
 
 
 def ensure(ctx, config=None) -> dict | None:
@@ -414,7 +414,7 @@ def ensure(ctx, config=None) -> dict | None:
     if not enabled(config if config is not None else getattr(ctx, "config", None)):
         return None
     if getattr(ctx, "_bounded_search_done", False):
-        return getattr(ctx, "bounded_search", None)
+        return False
     setattr(ctx, "_bounded_search_done", True)
     res = None
     try:

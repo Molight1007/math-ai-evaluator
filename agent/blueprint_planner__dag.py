@@ -13,6 +13,7 @@
 re-export，且为**同一对象** `is`）；本模块**不反向导入**主文件（无环）。
 """
 import logging
+from contracts.policy import POLICY
 import re                     # 2026-10-12 批次 3：`_as_id_list` 归一化模型给的 inputs
 from dataclasses import dataclass, field
 from typing import Optional
@@ -230,13 +231,12 @@ TOOL_ALIASES = {
 def _lean_sig_on() -> bool:
     """`blueprint_lean_sig` 开关是否生效（2026-10-15）。
 
-    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    默认 True。读只读 `contracts.policy.POLICY`（无来源分层，运行期不可覆盖）；
     注册表不可用时退回 True（与 `_node_contract_on` 同口径）。
     关 ⇒ `to_subgoal_plan` 不下传 `formal_sig`，求解侧自行写整段 Lean。
     """
     try:
-        from contracts.switch_registry import get_bool
-        return bool(get_bool("blueprint_lean_sig"))
+        return bool(POLICY['blueprint_lean_sig'])
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 
@@ -244,7 +244,7 @@ def _lean_sig_on() -> bool:
 def _merge_value_mask_on() -> bool:
     """`blueprint_merge_value_mask` 开关是否生效（2026-10-27）。
 
-    默认 True。走 `contracts.switch_registry`（环境变量 > 配置 > 默认），
+    默认 True。读只读 `contracts.policy.POLICY`（无来源分层，运行期不可覆盖）；
     注册表不可用时退回 True（与 `_lean_sig_on` 同口径）。
 
     开 ⇒ `to_subgoal_plan` 对 **`merge_strategy`** 与**收尾节点 statement**
@@ -254,8 +254,7 @@ def _merge_value_mask_on() -> bool:
     关 ⇒ 逐字透传（A/B 对照组）。
     """
     try:
-        from contracts.switch_registry import get_bool
-        return bool(get_bool("blueprint_merge_value_mask"))
+        return bool(POLICY['blueprint_merge_value_mask'])
     except Exception:  # noqa: BLE001  注册表不可用 → 按默认启用
         return True
 

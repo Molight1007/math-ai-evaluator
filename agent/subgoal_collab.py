@@ -16,6 +16,7 @@
 subgoal_trace / artifact）与旧循环**格式兼容**，下游 merge 零改动。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 import time
@@ -48,8 +49,7 @@ _PLANNER_SYS = (
 def _enabled(solver) -> bool:
     """开关 subgoal_collab_mode（默认 False —— 可 A/B，验证后翻默认）。"""
     try:
-        from .switch_registry import get_bool as _g
-        return bool(_g("subgoal_collab_mode"))
+        return bool(POLICY['subgoal_collab_mode'])
     except Exception:  # noqa: BLE001
         return bool(getattr(getattr(solver, "config", None),
                             "subgoal_collab_mode", False))
@@ -367,8 +367,7 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
             _issues = ""
             if _r > 0 and _out:
                 try:
-                    from .switch_registry import get_bool as _gb
-                    if _gb("subgoal_regen_self_review"):
+                    if POLICY['subgoal_regen_self_review']:
                         _issues = quick_self_review(solver, ctx, sg, _out)
                 except Exception:  # noqa: BLE001
                     pass

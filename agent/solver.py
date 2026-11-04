@@ -1,6 +1,7 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 """
 通用求解智能体（SolverAgent）
@@ -547,7 +548,7 @@ class SolverAgent(BaseAgent):
         #   修法：给 revise 设**候选数下限** `revise_min_candidates`（默认 3）。
         #   ⚠ 允许略微超出 `candidate_pool_limit` —— 该上限是**软帽**（池满时
         #     `_generate_revise` 内部本就会自行腾位），而"最后一轮只试 1 个"的代价更大。
-        _revise_floor = int(getattr(self.config, "revise_min_candidates", 3) or 3)
+        _revise_floor = int(POLICY['revise_min_candidates'] or 3)
         count = max(cap if cap is not None else self.config.revise_sample_times,
                     _revise_floor)
         # ⚠ A 修复（2026-09-12）：**候选池满时先腾位，而不是静默 return**。
@@ -670,12 +671,9 @@ class SolverAgent(BaseAgent):
             """
             if not bool(getattr(self.config, "self_improve_conditional", False)):
                 return True                                    # 真无条件
-            # 2026-10-01：**刻意不进 switch_registry** —— 本行是叠加在配置字段之上的
-            # 「环境变量覆盖」分支，其 env 默认 "1" 与 AgentConfig 字段默认 False 语义相反，
-            # 若经 registry 读取会被 bind_config 绑成配置值从而**改变行为**。
-            # 保持原样直读 env（已登记为待厘清项）。
-            if os.environ.get("SELF_IMPROVE_CONDITIONAL", "1") == "0":
-                return True                                    # 环境变量覆盖（兼容旧用法）
+            # ★ 2026-11-04：删掉账外裸 env 分支 `SELF_IMPROVE_CONDITIONAL`。
+            #   它是全仓唯一绕过注册制的行为开关，且默认值语义与配置字段相反；
+            #   收敛后只保留配置字段判断，运行期没有任何环境变量能改行为。
             _ans = str(getattr(c, "answer", "") or "").strip()
             _rs = str(getattr(c, "reasoning", "") or "")
             if not _ans or len(_ans) < 2:                     # ① 答案缺失/过短

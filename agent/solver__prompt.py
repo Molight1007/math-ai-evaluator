@@ -16,6 +16,7 @@ solver.py ↔ 本模块的顶层循环导入）。
 ``agent/solver.py::_generate_initial`` 原段改为两行委托调用。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 from typing import TYPE_CHECKING
@@ -208,8 +209,7 @@ def _inject_initial_context(self, ctx: TaskContext, user_content: str) -> str:
     # ★ 2026-10-18（用户方向一「注意力引导」）：题意理解产出的**关键注意点**
     #   前置注入——放在题目/目标锚之后、其余注入之前，让注意力先锚定陷阱。
     try:
-        from contracts.switch_registry import get_bool as _gb
-        _on = _gb("attention_focus_enabled")
+        _on = POLICY['attention_focus_enabled']
         _focus = list(getattr(ctx, "attention_focus", None) or [])
         if _on and _focus:
             user_content = user_content + (

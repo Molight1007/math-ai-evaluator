@@ -366,28 +366,6 @@ class TestCrossCheckSemantics(unittest.TestCase):
         b._analyze_error = lambda *a, **k: None
         return b
 
-    def test_verdict_helper_default_and_rollback(self):
-        # 读取链：env > config > 默认（经 switch_registry，2026-10-07 补登四件套）
-        from tools.lean_local.lean_bridge import _crosscheck_failure_verdict
-        from agent.switch_registry import bind_field
-        bind_field("lean_crosscheck_as_unknown", True)     # 复位（清跨用例污染）
-        self.assertEqual(_crosscheck_failure_verdict(), "unknown")
-        # config 覆盖（False → 旧语义）
-        bind_field("lean_crosscheck_as_unknown", False)
-        self.assertEqual(_crosscheck_failure_verdict(), "proof_invalid")
-        # env 覆盖 config
-        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "1"
-        try:
-            self.assertEqual(_crosscheck_failure_verdict(), "unknown")
-        finally:
-            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
-        # env=0 → 旧语义
-        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "0"
-        try:
-            self.assertEqual(_crosscheck_failure_verdict(), "proof_invalid")
-        finally:
-            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
-            bind_field("lean_crosscheck_as_unknown", True)  # 还原，避免污染后续用例
 
     def test_ground_self_proof_is_unknown_not_invalid(self):
         # official112-004 样本：题面含参数 + ground 闭式验证代码（编译通过）
@@ -419,19 +397,6 @@ class TestCrossCheckSemantics(unittest.TestCase):
         self.assertEqual(r.verdict_reason, "cross_check_failed")
         self.assertTrue(r.compiled)
 
-    def test_rollback_switch_restores_proof_invalid(self):
-        prob = ("For a real T, no matter how five distinct positive reals are given, "
-                "it is possible to choose four ...")
-        code = ("example : (Real.sqrt 5 - 1) / 2 = (Real.sqrt 5 - 1) / 2 := by\n"
-                "  norm_num")
-        os.environ["LEAN_CROSSCHECK_AS_UNKNOWN"] = "0"
-        try:
-            r = self._patched_bridge(code).verify_answer(prob, "推理", "(sqrt5-1)/2")
-        finally:
-            os.environ.pop("LEAN_CROSSCHECK_AS_UNKNOWN", None)
-        # 回退旧语义：结论码回到 proof_invalid，但**留痕 reason 仍独立**
-        self.assertEqual(r.verdict, "proof_invalid")
-        self.assertEqual(r.verdict_reason, "identity_self_proof")
 
     def test_lean_gate_records_self_proof_trace(self):
         # lean_gate 对自证成因单独落一条 trace（step=lean_self_proof），

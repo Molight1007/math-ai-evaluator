@@ -1,11 +1,10 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 # ★ 2026-10-07 架构解耦（阶段 B2）：注册表已下沉到零依赖的 `contracts/`
 # ⇒ 本模块直接 import `contracts.switch_registry`，**不再依赖 agent/**。
-from contracts.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num)
 """
 Lean 验证桥接层（agent/lean_bridge.py）
 ========================================
@@ -320,7 +319,7 @@ def _is_ground_statement(lean_code: str) -> bool:
 def _crosscheck_failure_verdict() -> str:
     """cross_check / 自证拦截命中时的**结论码**（语义分离开关）。
 
-    经 ``switch_registry.get_bool("lean_crosscheck_as_unknown")`` 读取，优先级
+    经 ``switch_registry.POLICY['lean_crosscheck_as_unknown']`` 读取，优先级
     **env(`LEAN_CROSSCHECK_AS_UNKNOWN`) > config(`AgentConfig.lean_crosscheck_as_unknown`)
     > 默认 True**（与仓库其它开关一致，不另造口径）。
 
@@ -331,7 +330,7 @@ def _crosscheck_failure_verdict() -> str:
     也不把"代码已编译通过"的候选误判成"证明失败"）。
     """
     try:
-        as_unknown = _sw_bool("lean_crosscheck_as_unknown")
+        as_unknown = POLICY['lean_crosscheck_as_unknown']
     except Exception:  # noqa: BLE001  注册表不可用 → 按新语义（不误伤答案）
         as_unknown = True
     return "unknown" if as_unknown else "proof_invalid"
@@ -818,7 +817,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 赛后无时间限制（用户方针：凡依据是时间的条款一律重新审视）⇒ 地板恢复。
             # 可用 `LEAN_MCP_TIMEOUT_FLOOR` 覆盖（默认 300s，覆盖冷启动 90s 有 3 倍余量）。
             try:
-                _floor = _sw_num("lean_mcp_timeout_floor")
+                _floor = POLICY['lean_mcp_timeout_floor']
             except (TypeError, ValueError):
                 _floor = 300.0
             try:
@@ -852,7 +851,7 @@ def _compile_via_mcp_locked(lean_file: str, code: str, work_dir: str,
             # 用 lean-lsp-mcp 的 lean_verify 查定理依赖的公理集合——可捕捉
             # **间接引入**的 sorry（如经宏/别名），这是源码扫描 _scan_untrusted
             # 覆盖不到的盲区。检出 sorryAx 即判不可信（与档1 语义一致）。
-            if _sw_bool("lean_mcp_verify_axioms"):
+            if POLICY['lean_mcp_verify_axioms']:
                 try:
                     # ★★ 2026-09-21 修复（覆盖盲区）：原正则**只匹配 `theorem`**，
                     #   对 `example : ... := by ...` 整体跳过 ⇒ 而 MathPilot 生成的
@@ -924,7 +923,7 @@ def _mcp_build_error_text(_px, lean_file: str, errors: list) -> str:
     # 仅用于 :1570-1571 的 {"ok":False,...} 返回；本段位于 if errors:
     # （:1502）内部 ⇒ ok=False 已定，它只影响 _analyze_error 的错因
     # 文本质量，**不改变候选是否被淘汰**。省一次 goal 调用（timeout=45s）。
-    if gl and _sw_bool("lean_mcp_goal_loc"):
+    if gl and POLICY['lean_mcp_goal_loc']:
         try:
             gresp = _px.request(
                 lean_file, timeout=45.0, goal_line=int(gl),
@@ -942,7 +941,7 @@ def _mcp_build_error_text(_px, lean_file: str, errors: list) -> str:
     # 依据：本段结果只 append 到 err_text（:1540-1541），同 :1502 内
     # 部 ⇒ ok=False 已定，只影响错因文本质量，**不改变候选淘汰**。
     # 省一次 multi_attempt（timeout=90s，是三者中最贵的一项）。
-    if _sw_bool("lean_mcp_multi_attempt"):
+    if POLICY['lean_mcp_multi_attempt']:
         try:
             _ln0 = int(errors[0].get("line") or 1)
             _col0 = int(errors[0].get("column") or 1)
@@ -968,7 +967,7 @@ def _mcp_build_error_text(_px, lean_file: str, errors: list) -> str:
     # 依据：本段结果只 append 到 err_text（:1562-1565），同 :1502 内
     # 部 ⇒ ok=False 已定，只影响 _analyze_error 的错因文本质量，
     # **不改变候选淘汰**。省一次 hover（timeout=45s）。
-    if _sw_bool("lean_mcp_hover_check"):
+    if POLICY['lean_mcp_hover_check']:
         try:
             _hln = int(errors[0].get("line") or 1)
             _hcol = int(errors[0].get("column") or 1)

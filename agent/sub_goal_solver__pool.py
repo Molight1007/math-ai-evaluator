@@ -15,6 +15,7 @@ None）改写为 `return final_answer, True`，并新增末尾 `return final_ans
 参数 `self` 即 `SubGoalSolverAgent` 实例。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 
 def apply_pool_gate(self, ctx, final_answer) -> tuple:
@@ -28,7 +29,7 @@ def apply_pool_gate(self, ctx, final_answer) -> tuple:
     #   （`return` 直接出函数）。现统一读 `candidate_pool_limit`（0 = 不限）。
     _pool_lim = 0
     try:
-        _pv = float(getattr(self.config, "candidate_pool_limit", 0.0) or 0.0)
+        _pv = float(POLICY['candidate_pool_limit'] or 0.0)
         _pool_lim = int(_pv) if _pv > 0 else 0
     except (TypeError, ValueError):
         _pool_lim = 0

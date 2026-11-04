@@ -18,6 +18,7 @@ _mathlib_adoption
     ⇒ 函数内**加 1 行惰性 import**（本仓既定模式，单一来源仍在 orchestrator，非复制）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 
@@ -28,7 +29,6 @@ from .formatter import (
     _attach_support as _formatter_attach_support,
 )
 
-from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -208,7 +208,7 @@ def _pick_best_from_candidates(self, ctx: TaskContext) -> str:
     # 行为：对归一化后的候选答案做频次统计，取最高频。
     # 设计依据：self-consistency（Wang 2022），对"答案形态稳定"
     # （A–E 字母组合）的客观题有理论支撑。
-    if (_sw_bool("objective_majority_vote")
+    if (POLICY['objective_majority_vote']
             and getattr(ctx, "question_type", "") == "选择题"):
         _mv_count: dict = {}
         for _c in getattr(ctx, "candidates", None) or []:

@@ -214,9 +214,6 @@ class VerifierInjectionTest(unittest.TestCase):
         return mock.patch(
             "tools.lean_local.lean_search.MathlibTheoremSearcher", stub)
 
-    def test_disabled_switch_returns_empty(self):
-        v = make_verifier(use_leansearch=False)
-        self.assertEqual(v._prepare_theorem_context(make_ctx(), "p"), "")
 
     def test_inject_switch_off_returns_empty(self):
         v = make_verifier(leansearch_inject_verifier=False)

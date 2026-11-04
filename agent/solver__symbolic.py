@@ -22,6 +22,7 @@
 ``to_exact_number``、``extract_final_answer`` —— 本模块顶部同口径导入。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 from typing import TYPE_CHECKING
@@ -29,7 +30,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:                      # 仅类型标注用，避免运行期导入
     from .base import TaskContext
 
-from agent.switch_registry import get_bool as _sw_bool
 from prompts.symbolic_model import (
     SYMBOLIC_MODEL_SYSTEM, SYMBOLIC_MODEL_USER, SYMBOLIC_JSON_SEED,
     SYMBOLIC_SOLVE_SYSTEM, SYMBOLIC_SOLVE_USER, SYMBOLIC_SOLVE_SEED,
@@ -119,7 +119,7 @@ def _maybe_expression_eval(self, ctx: TaskContext, resp: str,
         # → 代入求值不可能产出答案 → 弃权，保留模型原答案，交下游既有把关。
         # 开关 EXPR_EVAL_GROUNDING_GUARD=0 可恢复旧行为（A/B 对照用）。
         # ============================================================
-        if (_sw_bool("expr_eval_grounding_guard")
+        if (POLICY['expr_eval_grounding_guard']
                 and answer and to_exact_number is not None
                 and to_exact_number(str(answer)) is None):
             self.record(

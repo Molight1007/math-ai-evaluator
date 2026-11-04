@@ -14,10 +14,10 @@ _retrieve_theorem_hints
     `agent.orchestrator._LEAN_MODULES_OK` 的 monkeypatch）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 
-from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -64,7 +64,7 @@ def _lean_active(self) -> bool:
         （单测经 tests/conftest.py 统一置 0；评测 A/B 对照也可用它）。
         """
     self._ensure_lean_modules()          # 2026-09-10：治循环导入静默禁用
-    _env_off = "0" if not _sw_bool("lean_verify") else "1"
+    _env_off = "0" if not POLICY['lean_verify'] else "1"
     if _env_off in ("0", "false", "no", "off"):
         return False
     if not getattr(self.config, "enable_lean_verify", True):

@@ -1,0 +1,3360 @@
+{
+ "date": "2026-11-05",
+ "title": "118 个历史开关的全量论证、融合与留出集等价性验证台账",
+ "evidence": {
+  "server_snapshot_rows": 103,
+  "server_snapshot_fields": 133,
+  "server_snapshot_distinct_values": 10,
+  "source": "~/mathpilot/results/*.jsonl :: diag.switch_snapshot 全量回放",
+  "production_env": "~/mathpilot/deploy/cloud_run.env；覆盖不是无条件照抄：FIVE_GATE_REWRITE=0 在 103 题次里 0 次生效 ⇒ 判为临时版本并回退",
+  "ab_protocol": "E14：历史 A/B 对错结论全部作废（8 题一致率 38%、p=1.000、power 0.54）",
+  "lifecycle_note": "E19：118 现存 / 101 恒定 / 真做过布尔 A/B 仅 4 个",
+  "server_snapshot_distinct_values_scope": "10 个字段出现过多种字面值：7 个现存字段真变过值、1 个是 revise_min_candidates 的 '3' vs 3 类型脏值、2 个是已删机制 diversity_resample_count / dag_lean_max_nodes",
+  "production_authority_sources": [
+   "run_eval__engine.py::DEFAULT_AGENT_OVERRIDES（评测实际生效覆盖）",
+   "user_agent__config.py::AgentConfig（字段实际形态）",
+   "deploy/cloud_run.env（服务器显式覆盖，逐条给去向）"
+  ],
+  "correction_note": "第一轮取值只用了「注册表 default + env」，漏掉 DEFAULT_AGENT_OVERRIDES 与 AgentConfig 的实际形态，导致 enable_numeric_lean_verify / lemma_domains 固化错误；本轮由 replay_policy_equivalence.py 的留出集复核揪出并修正"
+ },
+ "decisions": {
+  "FIX": "固化为只读策略常量（contracts.policy.POLICY）",
+  "DELETE": "零消费者 / 分类错误，删除四表登记与字段",
+  "REMOVE_FEATURE": "负结果实验，删除功能分支（融合为不启用）"
+ },
+ "items": [
+  {
+   "field": "accept_gate_enforce",
+   "env_key": "ACCEPT_GATE_ENFORCE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "accept_gate_pass_threshold",
+   "env_key": "ACCEPT_GATE_PASS_THRESHOLD",
+   "val_kind": "num",
+   "default": 1.0,
+   "effective": 1.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "1.0": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "accept_gate_reject_defect_threshold",
+   "env_key": "ACCEPT_GATE_REJECT_DEFECT_THRESHOLD",
+   "val_kind": "num",
+   "default": 2.0,
+   "effective": 2.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "2.0": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "answer_form_gate",
+   "env_key": "ANSWER_FORM_GATE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__numeric.py:59",
+    "agent/orchestrator__numeric.py:200"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "answer_shape_strict",
+   "env_key": "ANSWER_SHAPE_STRICT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/answer_normalizer.py:100"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "artifact_store_enabled",
+   "env_key": "ARTIFACT_STORE_ENABLED",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/artifact_store.py:34",
+    "agent/artifact_store.py:55",
+    "agent/artifact_store.py:66",
+    "agent/artifact_store.py:67"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "attention_focus_enabled",
+   "env_key": "ATTENTION_FOCUS_ENABLED",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__prompt.py:212",
+    "agent/sub_goal_solver__solve.py:398"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "audit_gate_rubric_nonproof",
+   "env_key": "AUDIT_GATE_RUBRIC_NONPROOF",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/audit_gate.py:156"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "audit_obligation_ledger",
+   "env_key": "AUDIT_OBLIGATION_LEDGER",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 33
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/adversarial_verifier.py:242",
+    "agent/self_auditor.py:123"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "blueprint_goal_kind_guidance",
+   "env_key": "BLUEPRINT_GOAL_KIND_GUIDANCE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": true,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 4
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_decomposition.py:187",
+    "agent/blueprint_planner.py:160"
+   ],
+   "dead": false,
+   "decision": "REMOVE_FEATURE",
+   "rationale": "E09：命中 Omni8 4 题 / IMO112 0 题，3 题实测与 10-27 一致，边际贡献 0 ⇒ 删除该实验分支，融合为「不启用」"
+  },
+  {
+   "field": "blueprint_lean_sig",
+   "env_key": "BLUEPRINT_LEAN_SIG",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_planner__dag.py:239"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "blueprint_merge_value_mask",
+   "env_key": "BLUEPRINT_MERGE_VALUE_MASK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": true,
+   "history_distinct": 2,
+   "history_values": {
+    "True": 12,
+    "False": 8
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "agent/blueprint_planner__dag.py:258"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "E08：从未比对开关前后同一批蓝图的断言率，无有效性证据 ⇒ 无结论即无实验身份，按生产现值固化，不再可切"
+  },
+  {
+   "field": "blueprint_multi_gen_rounds",
+   "env_key": "BLUEPRINT_MULTI_GEN_ROUNDS",
+   "val_kind": "num",
+   "default": 3,
+   "effective": 3,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "3.0": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_planner.py:710",
+    "agent/blueprint_planner.py:713",
+    "agent/sub_goal_solver__planner.py:409"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "blueprint_node_contract",
+   "env_key": "BLUEPRINT_NODE_CONTRACT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__solve.py:223"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "blueprint_or_expand_all",
+   "env_key": "BLUEPRINT_OR_EXPAND_ALL",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "False": 54,
+    "True": 49
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "agent/blueprint_planner.py:320",
+    "agent/sub_goal_solver__planner.py:435"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "blueprint_self_review",
+   "env_key": "BLUEPRINT_SELF_REVIEW",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_planner.py:766",
+    "agent/blueprint_planner.py:781",
+    "agent/blueprint_planner.py:785",
+    "agent/blueprint_planner.py:788",
+    "agent/sub_goal_solver__planner.py:413"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "blueprint_self_review_reject_ratio",
+   "env_key": "BLUEPRINT_SELF_REVIEW_REJECT_RATIO",
+   "val_kind": "num",
+   "default": 0.4,
+   "effective": 0.4,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "0.4": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_planner.py:769"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "blueprint_tool_exec",
+   "env_key": "BLUEPRINT_TOOL_EXEC",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__lean.py:681",
+    "agent/sub_goal_solver__lean.py:704"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "bounded_search",
+   "env_key": "BOUNDED_SEARCH",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": true,
+   "history_distinct": 0,
+   "history_values": {},
+   "real_variants": 0,
+   "varied": false,
+   "read_sites": [
+    "agent/blueprint_planner.py:380",
+    "agent/blueprint_planner.py:387",
+    "agent/blueprint_planner.py:388",
+    "agent/bounded_search.py:73",
+    "agent/bounded_search.py:417",
+    "agent/bounded_search.py:430",
+    "agent/bounded_search.py:437",
+    "agent/bounded_search.py:439",
+    "agent/bounded_search.py:440",
+    "agent/verification_audit.py:108",
+    "agent/bounded_search.py:407",
+    "agent/bounded_search.py:409"
+   ],
+   "dead": false,
+   "decision": "REMOVE_FEATURE",
+   "rationale": "E13：detect 命中 1/4428=0.02%，语义域 46/4428=1.0%，已冻结降级 ⇒ 删除该实验分支，融合为「不启用」"
+  },
+  {
+   "field": "candidate_pool_limit",
+   "env_key": "CANDIDATE_POOL_LIMIT",
+   "val_kind": "num",
+   "default": 12.0,
+   "effective": 12.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "12.0": 81,
+    "6.0": 22
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "agent/answer_falsifier.py:241",
+    "agent/solver__pool.py:4",
+    "agent/solver__pool.py:37",
+    "agent/solver__pool.py:49",
+    "agent/sub_goal_solver__pool.py:5",
+    "agent/sub_goal_solver__pool.py:31"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "check_protocol_guard",
+   "env_key": "CHECK_PROTOCOL_GUARD",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:247"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "cross_model_falsify",
+   "env_key": "CROSS_MODEL_FALSIFY",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 49
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/adversarial_gate.py:130"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "cross_model_timeout",
+   "env_key": "CROSS_MODEL_TIMEOUT",
+   "val_kind": "num",
+   "default": 90,
+   "effective": 90,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "90.0": 49
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/adversarial_gate.py:144"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "deep_max_rework",
+   "env_key": "DEEP_MAX_REWORK",
+   "val_kind": "num",
+   "default": -1,
+   "effective": -1,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "-1.0": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "deterministic_solution_check",
+   "env_key": "DETERMINISTIC_SOLUTION_CHECK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/audit_gate.py:110",
+    "agent/audit_gate.py:118",
+    "agent/audit_gate.py:158",
+    "agent/audit_gate.py:353",
+    "agent/deterministic.py:413"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "deterministic_timeout_sec",
+   "env_key": "DETERMINISTIC_TIMEOUT_SEC",
+   "val_kind": "num",
+   "default": 5.0,
+   "effective": 5.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "5.0": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/deterministic.py:367"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "diversity_resample_count",
+   "env_key": "DIVERSITY_RESAMPLE_COUNT",
+   "val_kind": "int",
+   "default": 3,
+   "effective": 3,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "3": 61,
+    "'3'": 10
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "diversity_resample_enabled",
+   "env_key": "DIVERSITY_RESAMPLE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "enable_final_answer_selection",
+   "env_key": "ENABLE_FINAL_ANSWER_SELECTION",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/final_selector.py:431",
+    "agent/final_selector.py:635",
+    "agent/formatter__select.py:148"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_lean_before_vote",
+   "env_key": "ENABLE_LEAN_BEFORE_VOTE",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 47
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "enable_lean_tools",
+   "env_key": "ENABLE_LEAN_TOOLS",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/base.py:431"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_numeric_lean_verify",
+   "env_key": "ENABLE_NUMERIC_LEAN_VERIFY",
+   "val_kind": "bool",
+   "default": false,
+   "effective": true,
+   "effective_source": "生产权威读取点（DEFAULT_AGENT_OVERRIDES / AgentConfig / 快照 / 10-31 配置决策）",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__lean.py:75",
+    "agent/sub_goal_solver__lean.py:413",
+    "agent/sub_goal_solver__lean.py:722"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "★ 2026-11-05 留出集复核订正：注册表 default 不是生产实际生效值；详见 validation.corrections 与 replay_policy_equivalence.py。应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力",
+   "effective_before_review": false
+  },
+  {
+   "field": "enable_preverify_sketch_audit",
+   "env_key": "ENABLE_PREVERIFY_SKETCH_AUDIT",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_pre_verifier.py:187"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_question_type",
+   "env_key": "ENABLE_QUESTION_TYPE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/classifier.py:216",
+    "agent/orchestrator.py:413"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_subgoal_findings",
+   "env_key": "ENABLE_SUBGOAL_FINDINGS",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__subgoal.py:36",
+    "agent/solver__subgoal.py:39"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_subgoal_multi_agent",
+   "env_key": "ENABLE_SUBGOAL_MULTI_AGENT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__solve.py:604",
+    "agent/sub_goal_solver__solve.py:611"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_theorem_query_llm",
+   "env_key": "ENABLE_THEOREM_QUERY_LLM",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 67
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/theorem_hint.py:815"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_type_llm",
+   "env_key": "ENABLE_TYPE_LLM",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 67
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__prep.py:61",
+    "agent/orchestrator__prep.py:65"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_understanding_chain",
+   "env_key": "ENABLE_UNDERSTANDING_CHAIN",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__prep.py:173",
+    "tools/lean_local/lean_pre_verifier.py:306"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "enable_verify_chain_reorder",
+   "env_key": "ENABLE_VERIFY_CHAIN_REORDER",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 51
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "eval_alpha_equiv",
+   "env_key": "EVAL_ALPHA_EQUIV",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "run_eval__scoring.py:412"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "eval_split_cn",
+   "env_key": "EVAL_SPLIT_CN",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "run_eval__scoring.py:569"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "expr_eval_grounding_guard",
+   "env_key": "EXPR_EVAL_GROUNDING_GUARD",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__symbolic.py:122"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "falsify_max_per_q",
+   "env_key": "FALSIFY_MAX_PER_Q",
+   "val_kind": "num",
+   "default": 0.0,
+   "effective": 0.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "0.0": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/answer_falsifier.py:243",
+    "agent/answer_falsifier.py:250"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "feedback_review_append",
+   "env_key": "FEEDBACK_REVIEW_APPEND",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "feedback_review_clip",
+   "env_key": "FEEDBACK_REVIEW_CLIP",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "feedback_review_max_chars",
+   "env_key": "FEEDBACK_REVIEW_MAX_CHARS",
+   "val_kind": "num",
+   "default": 8000,
+   "effective": 8000,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "8000.0": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "final_answer_single_source",
+   "env_key": "FINAL_ANSWER_SINGLE_SOURCE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/final_selector.py:45",
+    "agent/final_selector.py:443",
+    "agent/final_selector.py:517"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "final_select_verify_aware",
+   "env_key": "FINAL_SELECT_VERIFY_AWARE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/final_selector.py:58",
+    "agent/final_selector.py:455"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "five_gate_falsify",
+   "env_key": "FIVE_GATE_FALSIFY",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/adversarial_gate.py:34",
+    "agent/adversarial_gate.py:49"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_lean_check",
+   "env_key": "FIVE_GATE_LEAN_CHECK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/lean_backcheck.py:33",
+    "agent/lean_backcheck.py:61"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_lean_check_tool",
+   "env_key": "FIVE_GATE_LEAN_CHECK_TOOL",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/lean_backcheck.py:47"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_math_check",
+   "env_key": "FIVE_GATE_MATH_CHECK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/math_check_gate.py:32",
+    "agent/math_check_gate.py:584"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_math_check_calcverify",
+   "env_key": "FIVE_GATE_MATH_CHECK_CALCVERIFY",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/math_check_gate.py:46"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_normalize",
+   "env_key": "FIVE_GATE_NORMALIZE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/answer_normalizer.py:118",
+    "agent/answer_normalizer.py:134"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_rewrite",
+   "env_key": "FIVE_GATE_REWRITE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": false,
+   "effective_source": "生产权威读取点（DEFAULT_AGENT_OVERRIDES / AgentConfig / 快照 / 10-31 配置决策）",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/rewrite_gate.py:65",
+    "agent/rewrite_gate.py:179"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "★ 2026-11-05 留出集复核订正：注册表 default 不是生产实际生效值；详见 validation.corrections 与 replay_policy_equivalence.py。应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力",
+   "effective_before_review": false
+  },
+  {
+   "field": "five_gate_self_audit",
+   "env_key": "FIVE_GATE_SELF_AUDIT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/self_auditor.py:111",
+    "agent/self_auditor.py:137"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "five_gate_vote",
+   "env_key": "FIVE_GATE_VOTE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/vote_gate.py:37",
+    "agent/vote_gate.py:84"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "k11_mask_statement",
+   "env_key": "K11_MASK_STATEMENT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:215"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_check_normalize_imports",
+   "env_key": "LEAN_CHECK_NORMALIZE_IMPORTS",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 0,
+   "history_values": {},
+   "real_variants": 0,
+   "varied": false,
+   "read_sites": [
+    "tools/agent_toolkit/lean_check.py:199"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_crosscheck_as_unknown",
+   "env_key": "LEAN_CROSSCHECK_AS_UNKNOWN",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:323",
+    "tools/lean_local/lean_bridge.py:324",
+    "tools/lean_local/lean_bridge.py:334"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_gate_parallel",
+   "env_key": "LEAN_GATE_PARALLEL",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_gate.py:176"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_gate_strict_unknown",
+   "env_key": "LEAN_GATE_STRICT_UNKNOWN",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_gate.py:728"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_hammer",
+   "env_key": "LEAN_HAMMER",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/agent_toolkit/to_lean.py:45"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_mcp_autolake",
+   "env_key": "LEAN_MCP_AUTOLAKE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge__mcp.py:147"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_mcp_goal_loc",
+   "env_key": "LEAN_MCP_GOAL_LOC",
+   "val_kind": "bool",
+   "default": false,
+   "effective": true,
+   "effective_source": "env:LEAN_MCP_GOAL_LOC",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:927"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_mcp_hover_check",
+   "env_key": "LEAN_MCP_HOVER_CHECK",
+   "val_kind": "bool",
+   "default": false,
+   "effective": true,
+   "effective_source": "env:LEAN_MCP_HOVER_CHECK",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:971"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_mcp_multi_attempt",
+   "env_key": "LEAN_MCP_MULTI_ATTEMPT",
+   "val_kind": "bool",
+   "default": false,
+   "effective": true,
+   "effective_source": "env:LEAN_MCP_MULTI_ATTEMPT",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:945"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_mcp_timeout_floor",
+   "env_key": "LEAN_MCP_TIMEOUT_FLOOR",
+   "val_kind": "num",
+   "default": 300.0,
+   "effective": 300.0,
+   "effective_source": "env:LEAN_MCP_TIMEOUT_FLOOR",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "300.0": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:821"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "lean_mcp_verify_axioms",
+   "env_key": "LEAN_MCP_VERIFY_AXIOMS",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "tools/lean_local/lean_bridge.py:855"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_verify",
+   "env_key": "LEAN_VERIFY",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__lean.py:67",
+    "agent/verifier__report.py:37",
+    "tools/agent_toolkit/lean_check.py:12",
+    "tools/lean_local/lean_bridge__llm.py:276",
+    "tools/lean_local/lean_mcp_proxy.py:198"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lean_xcheck_numeric",
+   "env_key": "LEAN_XCHECK_NUMERIC",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__numeric.py:308"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "lemma_domains",
+   "env_key": "LEMMA_DOMAINS",
+   "val_kind": "str",
+   "default": "Number theory,数论",
+   "effective": [
+    "Number theory",
+    "数论"
+   ],
+   "effective_source": "生产权威读取点（DEFAULT_AGENT_OVERRIDES / AgentConfig / 快照 / 10-31 配置决策）",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "\"['Number theory', '数论']\"": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__lemma.py:22",
+    "agent/solver__lemma.py:27",
+    "agent/sub_goal_solver__solve.py:426"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "★ 2026-11-05 留出集复核订正：注册表 default 不是生产实际生效值；详见 validation.corrections 与 replay_policy_equivalence.py。doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化",
+   "effective_before_review": "Number theory,数论"
+  },
+  {
+   "field": "llm_retry_on_timeout",
+   "env_key": "LLM_RETRY_ON_TIMEOUT",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "env:LLM_RETRY_ON_TIMEOUT",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "True": 80,
+    "False": 23
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "utils/llm_client.py:268"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "llm_timeout",
+   "env_key": "LLM_TIMEOUT",
+   "val_kind": "num",
+   "default": 120,
+   "effective": 900.0,
+   "effective_source": "env:LLM_TIMEOUT",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "3330.0": 58,
+    "900.0": 23
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "utils/llm_client.py:226"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "minimal_mode",
+   "env_key": "MINIMAL_MODE",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "user_agent.py:389",
+    "user_agent.py:390"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "mp_arm",
+   "env_key": "MP_ARM",
+   "val_kind": "str",
+   "default": "baseline",
+   "effective": "baseline",
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "'baseline'": 83
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": false,
+   "decision": "DELETE",
+   "rationale": "评测分组标签而非运行时行为开关；但它背后的 ARMS 覆盖表是开关系统最后一个入口。E14 已作废全部历史 A/B 结论、0 配额下无法设计有效 A/B ⇒ 删除整张臂表，固定单臂（回退路径留在 git 历史）；★ deploy/run_112.py:123 有目录外读取，见单独处置"
+  },
+  {
+   "field": "numericize_final",
+   "env_key": "NUMERICIZE_FINAL",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__numeric.py:48"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "objective_itemwise_plan",
+   "env_key": "OBJECTIVE_ITEMWISE_PLAN",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:225",
+    "agent/sub_goal_solver.py:230"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "objective_itemwise_priority",
+   "env_key": "OBJECTIVE_ITEMWISE_PRIORITY",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/formatter.py:416",
+    "agent/sub_goal_solver.py:500"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "objective_majority_vote",
+   "env_key": "OBJECTIVE_MAJORITY_VOTE",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/final_selector.py:13",
+    "agent/formatter.py:446",
+    "agent/formatter__select.py:151",
+    "agent/orchestrator__select.py:211"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "objective_selfcheck",
+   "env_key": "OBJECTIVE_SELFCHECK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__numeric.py:53"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "phase_budget_enabled",
+   "env_key": "PHASE_BUDGET_ENABLED",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__budget.py:65",
+    "agent/orchestrator__budget.py:73",
+    "agent/orchestrator__budget.py:74",
+    "agent/orchestrator__budget.py:82",
+    "agent/orchestrator__budget.py:88"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "pool_empty_clear",
+   "env_key": "POOL_EMPTY_CLEAR",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/answer_normalizer.py:189",
+    "agent/answer_normalizer.py:193",
+    "agent/answer_normalizer.py:208"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "pool_gate_v2",
+   "env_key": "POOL_GATE_V2",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/base__candidates.py:56"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "problem_goal_emit_answer_slot",
+   "env_key": "PROBLEM_GOAL_EMIT_ANSWER_SLOT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 0,
+   "history_values": {},
+   "real_variants": 0,
+   "varied": false,
+   "read_sites": [
+    "agent/problem_goal.py:173"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "require_answer_in_pool",
+   "env_key": "REQUIRE_ANSWER_IN_POOL",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 94
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__pool.py:105",
+    "agent/solver__pool.py:108"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "revise_min_candidates",
+   "env_key": "REVISE_MIN_CANDIDATES",
+   "val_kind": "int",
+   "default": 3,
+   "effective": 3,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "3": 81,
+    "'3'": 10
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver.py:550"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "rework_reserve_sec",
+   "env_key": "REWORK_RESERVE_SEC",
+   "val_kind": "num",
+   "default": 300.0,
+   "effective": 300.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "300.0": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "rewrite_conf_threshold",
+   "env_key": "REWRITE_CONF_THRESHOLD",
+   "val_kind": "num",
+   "default": 0.0,
+   "effective": 0.0,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "0.0": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/rewrite_gate.py:165"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "rewrite_on_low_conf",
+   "env_key": "REWRITE_ON_LOW_CONF",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/rewrite_gate.py:161"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "self_improve_keep_original",
+   "env_key": "SELF_IMPROVE_KEEP_ORIGINAL",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__improve.py:150"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "self_improve_objective_skip",
+   "env_key": "SELF_IMPROVE_OBJECTIVE_SKIP",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__budget.py:30"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "self_improve_stage",
+   "env_key": "SELF_IMPROVE_STAGE",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 49
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator.py:575"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "smt_falsify",
+   "env_key": "SMT_FALSIFY",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/answer_falsifier.py:215"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "stage_timer_reassign_revise",
+   "env_key": "STAGE_TIMER_REASSIGN_REVISE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 61
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [],
+   "dead": true,
+   "decision": "DELETE",
+   "rationale": "生产代码无任何读取点（四表/登记除外）⇒ 注册即负债，直接删"
+  },
+  {
+   "field": "step_verification_audit",
+   "env_key": "STEP_VERIFICATION_AUDIT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": true,
+   "history_distinct": 0,
+   "history_values": {},
+   "real_variants": 0,
+   "varied": false,
+   "read_sites": [
+    "agent/verification_audit.py:60",
+    "agent/verification_audit.py:67",
+    "agent/verification_audit.py:69"
+   ],
+   "dead": false,
+   "decision": "REMOVE_FEATURE",
+   "rationale": "E10：1081 步历史回放仅 3 次干预（0.28%），低于可观测门槛 ⇒ 删除该实验分支，融合为「不启用」"
+  },
+  {
+   "field": "strict_all_rejected",
+   "env_key": "STRICT_ALL_REJECTED",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 94
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/lean_backcheck.py:16",
+    "agent/lean_backcheck.py:157",
+    "agent/lean_backcheck.py:160"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "sub_goal_oracle_check",
+   "env_key": "SUB_GOAL_ORACLE_CHECK",
+   "val_kind": "bool",
+   "default": false,
+   "effective": false,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "False": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__solve.py:199"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "subgoal_backward_max_depth",
+   "env_key": "SUBGOAL_BACKWARD_MAX_DEPTH",
+   "val_kind": "num",
+   "default": 2,
+   "effective": 2,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "2.0": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__backward.py:30",
+    "agent/sub_goal_solver__backward.py:233"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "subgoal_collab_mode",
+   "env_key": "SUBGOAL_COLLAB_MODE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/subgoal_collab.py:15",
+    "agent/subgoal_collab.py:52",
+    "agent/subgoal_collab.py:55",
+    "agent/sub_goal_solver.py:445"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "subgoal_collab_regen_rounds",
+   "env_key": "SUBGOAL_COLLAB_REGEN_ROUNDS",
+   "val_kind": "num",
+   "default": 3,
+   "effective": 3,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "3.0": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/subgoal_collab.py:62"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "subgoal_conclusion_contract",
+   "env_key": "SUBGOAL_CONCLUSION_CONTRACT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:167"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "subgoal_dynamic_backward",
+   "env_key": "SUBGOAL_DYNAMIC_BACKWARD",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__backward.py:231"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "subgoal_final_answer_anchor",
+   "env_key": "SUBGOAL_FINAL_ANSWER_ANCHOR",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "experiment",
+   "registered": false,
+   "history_distinct": 0,
+   "history_values": {},
+   "real_variants": 0,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:184"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "doc 套话自称可做 A/B，但 103 题次取值从未变过、实际 0 次实验（E19：承诺 26、兑现 4）⇒ 注销实验身份，按生产值固化"
+  },
+  {
+   "field": "subgoal_inputs_validation",
+   "env_key": "SUBGOAL_INPUTS_VALIDATION",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__planner.py:470"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "subgoal_objective_judge",
+   "env_key": "SUBGOAL_OBJECTIVE_JUDGE",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 81
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver.py:200"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "subgoal_regen_self_review",
+   "env_key": "SUBGOAL_REGEN_SELF_REVIEW",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 49
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/subgoal_collab.py:371"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "subgoal_self_improve_rounds",
+   "env_key": "SUBGOAL_SELF_IMPROVE_ROUNDS",
+   "val_kind": "num",
+   "default": 3,
+   "effective": 3,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "3.0": 67
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__loop.py:253"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "subgoal_theorem_search",
+   "env_key": "SUBGOAL_THEOREM_SEARCH",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 40
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/theorem_hint.py:752"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "theorem_hint",
+   "env_key": "THEOREM_HINT",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/orchestrator__lean.py:107",
+    "agent/orchestrator__lean.py:116",
+    "agent/orchestrator__prep.py:14",
+    "agent/orchestrator__prep.py:62",
+    "agent/solver__prompt.py:109",
+    "agent/sub_goal_solver.py:398",
+    "agent/sub_goal_solver.py:403",
+    "agent/sub_goal_solver__planner.py:331",
+    "agent/sub_goal_solver__solve.py:493",
+    "agent/theorem_hint.py:488",
+    "agent/theorem_hint.py:611",
+    "agent/theorem_hint.py:661",
+    "agent/theorem_hint.py:681",
+    "agent/theorem_hint.py:706",
+    "agent/theorem_hint.py:739",
+    "agent/theorem_hint.py:783",
+    "agent/theorem_hint.py:830",
+    "agent/theorem_hint.py:833",
+    "agent/theorem_hint.py:848",
+    "agent/theorem_hint.py:894",
+    "agent/theorem_hint.py:898"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "应急闸刀/策略分支；103 题次取值从未变过 ⇒ 固化为生产值，删掉可关能力"
+  },
+  {
+   "field": "theorem_hint_backend",
+   "env_key": "THEOREM_HINT_BACKEND",
+   "val_kind": "str",
+   "default": "leanexplore",
+   "effective": "leanexplore",
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "'leanexplore'": 57
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/theorem_hint.py:648"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "theorem_hint_block_max_chars",
+   "env_key": "THEOREM_HINT_BLOCK_MAX_CHARS",
+   "val_kind": "num",
+   "default": 2500,
+   "effective": 2500,
+   "effective_source": "default",
+   "lifecycle_kind": "config",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "2500.0": 71
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/theorem_hint.py:892"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "数值/口径参数，不是策略分支 ⇒ 固化为常量参数"
+  },
+  {
+   "field": "theorem_hint_top_k_by_stage",
+   "env_key": "THEOREM_HINT_TOP_K_BY_STAGE",
+   "val_kind": "str",
+   "default": "{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}",
+   "effective": "{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}",
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "'{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 25, \"solve\": 25, \"revise\": 25}'": 57,
+    "'{\"pre_audit\": 4, \"blueprint\": 12, \"subgoal\": 8, \"solve\": 25, \"revise\": 25}'": 14
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "agent/theorem_hint.py:427",
+    "agent/theorem_hint.py:876"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "toolcall_text_fallback",
+   "env_key": "TOOLCALL_TEXT_FALLBACK",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "gate",
+   "registered": false,
+   "history_distinct": 2,
+   "history_values": {
+    "True": 81,
+    "False": 22
+   },
+   "real_variants": 2,
+   "varied": true,
+   "read_sites": [
+    "agent/base__toolcall.py:22"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "历史变过值（False,True）；按当前生产值固化，A/B 结论按 E14 全部作废"
+  },
+  {
+   "field": "use_leansearch",
+   "env_key": "USE_LEANSEARCH",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/sub_goal_solver__planner.py:528",
+    "agent/sub_goal_solver__planner.py:531",
+    "agent/verifier__lemma.py:22",
+    "tools/lean_local/lean_refiner.py:192",
+    "tools/lean_local/lean_refiner.py:345"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "use_lemma_accumulation",
+   "env_key": "USE_LEMMA_ACCUMULATION",
+   "val_kind": "bool",
+   "default": true,
+   "effective": true,
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "True": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/solver__lemma.py:25",
+    "agent/sub_goal_solver__solve.py:100",
+    "agent/sub_goal_solver__solve.py:424",
+    "tools/stage_audit.py:156"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  },
+  {
+   "field": "verifier_vote_reasoning",
+   "env_key": "VERIFIER_VOTE_REASONING",
+   "val_kind": "str",
+   "default": "disagree",
+   "effective": "disagree",
+   "effective_source": "default",
+   "lifecycle_kind": "unclassified",
+   "registered": false,
+   "history_distinct": 1,
+   "history_values": {
+    "'disagree'": 103
+   },
+   "real_variants": 1,
+   "varied": false,
+   "read_sites": [
+    "agent/verifier.py:304",
+    "agent/verifier__vote.py:52"
+   ],
+   "dead": false,
+   "decision": "FIX",
+   "rationale": "无 A/B 结论、103 题次取值恒定 ⇒ 按生产现值固化为策略常量"
+  }
+ ],
+ "temporary_versions": [
+  {
+   "name": "E30 三道门影子接线（sig_gate_shape / sig_gate_proof）",
+   "introduced": "1e9727e",
+   "disposition": "applied",
+   "evidence": "d8fff9d",
+   "detail": "影子打标改为真判闭环；sig_gate_proof 删除，sig_gate_shape 降级为规划期预检；未新增开关"
+  },
+  {
+   "name": "ARMS / MP_ARM 实验臂覆盖表",
+   "introduced": "历史评测脚本 deploy/run_112.py",
+   "disposition": "removed",
+   "evidence": "本轮融合提交（git log --grep=\"feat(policy)\"）；工树零残留由 tests/test_no_runtime_switches.py 长期锁死",
+   "detail": "覆盖注入的是 config 字段，收敛后策略只读 POLICY ⇒ 覆盖根本不生效；整块删除，固定单臂"
+  },
+  {
+   "name": "switch_lifecycle 存量宽限（LEGACY_DEADLINE=2026-11-15）",
+   "introduced": "2026-10-31",
+   "disposition": "removed",
+   "evidence": "本轮融合提交（git log --grep=\"feat(policy)\"）；工树零残留由 tests/test_no_runtime_switches.py 长期锁死",
+   "detail": "出口制随注册表一并删除；4 个 experiment 已逐条给结论，不再有待决项"
+  },
+  {
+   "name": "账外裸 env SELF_IMPROVE_CONDITIONAL",
+   "introduced": "2026-10-01",
+   "disposition": "removed",
+   "evidence": "本轮融合提交（git log --grep=\"feat(policy)\"）；工树零残留由 tests/test_no_runtime_switches.py 长期锁死",
+   "detail": "全仓唯一绕过注册制的行为分支，默认值语义与配置字段相反 ⇒ 删除，只留配置字段判断"
+  },
+  {
+   "name": "fuse_step*.py 融合脚本",
+   "introduced": "本轮",
+   "disposition": "out_of_tree",
+   "evidence": "D:/mp_tmp（仓库外，不入库）",
+   "detail": "一次性施工工具，不进仓库；施工结果由 tests/test_no_runtime_switches.py 长期锁死"
+  },
+  {
+   "name": "FIVE_GATE_REWRITE=0（deploy/cloud_run.env，2026-10-31）",
+   "introduced": "服务器生产配置，注释写明依据与回滚方法",
+   "disposition": "applied",
+   "evidence": "434 题次全量回放（cloud_run.env 注释）：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时；4.6 只在池空/低置信触发 ⇒ 移除后判对集合严格不变。contracts/policy.py 固化 False；4.6 相关测试随功能移除一并退役（见 test_migration）。",
+   "detail": "★ 本轮曾按「103 题次 0 次生效」误判为回退，二次复核发现快照数据止于 10-30、配置变更在 10-31 ⇒ 是时间截断点造成的假象，已纠正为 applied。教训写入 validation.principle。融合后 env 覆盖行删除，值只存在于 POLICY。"
+  }
+ ],
+ "invariants": [
+  "生产代码不得出现 get_bool/get_num/get_str/bind_config/bind_field/apply_env_to_config",
+  "生产代码不得 import switch_registry / switch_lifecycle / 引用 SWITCHES / LIFECYCLE",
+  "不得用 os.environ 读取任何历史开关 env_key 来改变行为",
+  "contracts.policy.POLICY 必须是 MappingProxyType（运行期不可写）",
+  "POLICY 的键集合必须恰好等于本台账 decision=FIX 的字段集合",
+  "decision!=FIX 的字段不得出现在 config 字段 / 白名单 / param_usage 条目里",
+  "每个临时版本必须同时有 disposition 与 evidence，否则门禁红",
+  "不得以全量回归通过数作为「融合等价」的证据；等价性只由 replay_policy_equivalence.py 在服务器真实题次上的留出集报告支撑",
+  "每个真取值差字段必须在 validation.value_dispositions 里同时有 disposition(applied|reverted) 与 evidence，缺一即门禁红",
+  "validation.historical_retired_fields 里的名字不得再被生产代码引用",
+  "取值只能来自生产权威读取点，禁止按留出集结果反向调值",
+  "不得以全量回归通过数作为「融合等价」的证据；等价性只由 replay_policy_equivalence.py 在服务器真实题次上的留出集报告支撑",
+  "每个真取值差字段必须在 validation.value_dispositions 里同时有 disposition(applied|reverted) 与 evidence，缺一即门禁红",
+  "validation.historical_retired_fields 里的名字不得再被生产代码引用",
+  "取值只能来自生产权威读取点，禁止按留出集结果反向调值",
+  "不得以全量回归通过数作为「融合等价」的证据；等价性只由 replay_policy_equivalence.py 在服务器真实题次上的留出集报告支撑",
+  "每个真取值差字段必须在 validation.value_dispositions 里同时有 disposition(applied|reverted) 与 evidence，缺一即门禁红",
+  "validation.historical_retired_fields 里的名字不得再被生产代码引用",
+  "取值只能来自生产权威读取点，禁止按留出集结果反向调值",
+  "不得以全量回归通过数作为「融合等价」的证据；等价性只由 replay_policy_equivalence.py 在服务器真实题次上的留出集报告支撑",
+  "每个真取值差字段必须在 validation.value_dispositions 里同时有 disposition(applied|reverted) 与 evidence，缺一即门禁红",
+  "validation.historical_retired_fields 里的名字不得再被生产代码引用",
+  "取值只能来自生产权威读取点，禁止按留出集结果反向调值",
+  "服务器侧必须能用服务器真实数据跑出 NO_UNEXPLAINED_DIFF，且 validation.server_verification 记录不得缺失"
+ ],
+ "validation": {
+  "principle": [
+   "回归通过数不是效果量：删掉测「开关可关」的旧用例就能刷绿，必须用独立于测试集的真实题次快照做等价性核对。",
+   "留出集不参与取值决策：前 70% 只用于发现分歧，后 30% 只报一致率；取值修正的依据必须是生产权威读取点（结构证据），不是留出集拟合。",
+   "按 10-15 分层分别报，禁止把 0% 与 90% 平均成一个数字。",
+   "单变量对照：修正只翻 3 个值（PRE_FIX），同一留出集报修正前/后。",
+   "人工抽验：判据/取值改动必须输出逐条可读样本；统计数字不单独构成结论（E27：8 条抽验 7 错，数字照样漂亮）。",
+   "声明只写「在 N 题次 / M 字段对上未发现无解释差异」，不写「已证明等价 / 正确率 100%」。",
+   "历史数据有**时间截断点**：见到「某配置 0 次生效」必须先查配置变更日期与数据截止日期，再判回退/应用。本轮 five_gate_rewrite 曾据此误判回退，二次复核改为 applied（配置 10-31 / 数据止于 10-30）。",
+   "结构性论证（移除一个从不产出判对的分支 ⇒ 判对集合严格不变）与 A/B 显著性结论分开记账；E14 作废的是后者，不是前者。"
+  ],
+  "holdout_protocol": {
+   "source": "~/mathpilot/results/*.jsonl :: diag.switch_snapshot（103 题次）",
+   "order": "按文件 mtime 升序 + (file,line) 稳定排序",
+   "split": "前 70% 开发集 / 后 30% 留出集",
+   "strata": "10-15 前后分别统计",
+   "tool": "replay_policy_equivalence.py（只读；任一无解释差异 exit 1）"
+  },
+  "corrections": [
+   {
+    "field": "enable_numeric_lean_verify",
+    "before": false,
+    "after": true,
+    "structural_evidence": "run_eval__engine.py::DEFAULT_AGENT_OVERRIDES 显式置 True；103 题次中 57 次带字段者全为 True（source=config）。注册表 default=False 是误导。"
+   },
+   {
+    "field": "lemma_domains",
+    "before": "Number theory,数论",
+    "after": [
+     "Number theory",
+     "数论"
+    ],
+    "structural_evidence": "AgentConfig 是 list，读取点用 list(POLICY[...]) 展开；固化成字符串会被逐字符拆成 17 个元素，领域路由整体失效。103 题次快照全为二元素序列。"
+   }
+  ],
+  "value_dispositions": {
+   "llm_retry_on_timeout": {
+    "disposition": "applied",
+    "evidence": "10-05~10-22 True(80) → 10-23 起 False(23)；与 cloud_run.env LLM_RETRY_ON_TIMEOUT=0 一致，留出集(10-28~10-30)全 False。这是配置切换，不是同题 A/B ⇒ 不引用任何正确率结论。"
+   },
+   "llm_timeout": {
+    "disposition": "applied",
+    "evidence": "10-11~10-22 3330(58) → 10-23 起 900(23)；3330 会死等 55min 属错误配置，900 有服务器显式覆盖。留出集全 900。"
+   },
+   "toolcall_text_fallback": {
+    "disposition": "applied",
+    "evidence": "10-05~10-07 False(22) → 10-11 起 True(81)；留出集全 True。"
+   },
+   "candidate_pool_limit": {
+    "disposition": "applied",
+    "evidence": "10-05~10-07 6.0(22) → 10-11 起 12.0(81)；留出集全 12.0。"
+   },
+   "blueprint_or_expand_all": {
+    "disposition": "applied",
+    "evidence": "10-05~10-16 False(54) → 10-18 起 True(49)。arm2 曾把该键作关闭对照，10-17 默认值已翻 True；按 E14 历史 A/B 结论全部作废 ⇒ 只按后期生产值固化，不宣称该切换带来增益。"
+   },
+   "theorem_hint_top_k_by_stage": {
+    "disposition": "applied",
+    "evidence": "10-13/10-14 subgoal=8(14) → 10-16 起 subgoal=25(57)；留出集全 25。无同题对照 ⇒ 只记版本切换。"
+   },
+   "blueprint_merge_value_mask": {
+    "disposition": "reverted",
+    "evidence": "10-28 同日 8 次 False(实验臂) / 8 次 True，10-29~10-30 全 True。E08：从未比对开关前后同一批蓝图的断言率 ⇒ 无有效性证据，回退到 True；不引用任何 A/B 数字。"
+   },
+   "five_gate_rewrite": {
+    "disposition": "applied",
+    "evidence": "deploy/cloud_run.env 注释（2026-10-31，434 题次全量回放、非抽样）：跑过 4.6 的 23 题次判对 0/23，占这些题 49.4% 耗时；4.6 只在池空/低置信触发 ⇒ 移除后判对集合严格不变，属结构性论证而非 A/B 分数推断。103 题次快照止于 10-30、57 次为 True，是**数据早于配置变更**，不是该值未生效。融合后值烘进 POLICY=False，env 覆盖行删除。"
+   }
+  },
+  "type_only_diffs": {
+   "revise_min_candidates": "10-07 的 10 次是字符串 '3'（早期类型脏值），之后 81 次全是整数 3；语义相同，不计入真取值差。"
+  },
+  "historical_retired_fields": [
+   "mp_arm",
+   "deep_max_rework",
+   "diversity_resample_enabled",
+   "diversity_resample_count",
+   "accept_gate_enforce",
+   "accept_gate_pass_threshold",
+   "accept_gate_reject_defect_threshold",
+   "stage_timer_reassign_revise",
+   "feedback_review_append",
+   "feedback_review_max_chars",
+   "feedback_review_clip",
+   "rework_reserve_sec",
+   "enable_verify_chain_reorder",
+   "enable_lean_before_vote",
+   "dag_replan_gate",
+   "enable_skeleton_review",
+   "enable_dag_replan",
+   "emergency_direct_max_tokens",
+   "emergency_answer_max_tokens",
+   "final_answer_min_sec",
+   "five_gate_audit_retry",
+   "lean_failure_kind_split",
+   "blueprint_subtree_regen",
+   "subgoal_failed_retry_rounds",
+   "five_gate_falsify_votes",
+   "five_gate_self_audit_votes",
+   "five_gate_verify_tiebreak",
+   "five_gate_grounding",
+   "five_gate_subgoal_lean",
+   "dag_replan_lean_check",
+   "dag_lean_max_nodes",
+   "understanding_refine_rounds",
+   "understanding_chain_lean_check",
+   "understanding_no_gain_stop",
+   "blueprint_goal_kind_guidance"
+  ],
+  "historical_retired_note": "35 个字段只在历史快照里出现、不在 POLICY：均为已删机制或评测臂标签。回放台会静态扫描生产代码，若其中任一名字仍被引用（含报告工具展示项）即判 UNEXPLAINED_DIFF。",
+  "claim": "在 103 题次 / 逐字段配对上未发现无解释差异；不宣称等价或正确率。",
+  "report": {
+   "tool": "replay_policy_equivalence.py",
+   "rows": 103,
+   "dev_rows": 72,
+   "holdout_rows": 31,
+   "dev_match_rate": 0.9275,
+   "holdout_match_rate": 0.9716,
+   "holdout_match_rate_before_fix": 0.9613,
+   "strata_10_15": {
+    "<=10-15": 0.9029,
+    ">10-15": 0.9632
+   },
+   "value_diff_fields": [
+    "blueprint_merge_value_mask",
+    "blueprint_or_expand_all",
+    "candidate_pool_limit",
+    "five_gate_rewrite",
+    "llm_retry_on_timeout",
+    "llm_timeout",
+    "theorem_hint_top_k_by_stage",
+    "toolcall_text_fallback"
+   ],
+   "unexplained_value_diffs": [],
+   "unexplained_legacy_fields": [],
+   "manual_spot_check_count": 10,
+   "verdict": "NO_UNEXPLAINED_DIFF"
+  },
+  "tail_cleanup": [
+   {
+    "path": "agent/param_usage__extract.py::_cap_gate_rework",
+    "action": "删除对已删字段 deep_max_rework 的字符串读取，按实际行为固化为 deep 档无上限"
+   },
+   {
+    "path": "cli/smoke_dag_replan.py",
+    "action": "整文件删除；287 行只冒烟已撤除的 dag_replan 机制，且给不存在的 config 字段赋值"
+   }
+  ],
+  "server_verification": {
+   "verified_at": "2026-11-05",
+   "host": "ubuntu@211.159.188.206:~/mathpilot",
+   "python": ".venv/bin/python",
+   "import_smoke": "11 个生产模块导入 OK",
+   "policy": {
+    "count": 101,
+    "five_gate_rewrite": false,
+    "enable_numeric_lean_verify": true,
+    "lemma_domains": [
+     "Number theory",
+     "数论"
+    ]
+   },
+   "deleted_modules_not_importable": true,
+   "cloud_run_env_rewrite_export_removed": true,
+   "cloud_run_env_note": "保留 434 题次证据注释，只删除 export FIVE_GATE_REWRITE=0 行",
+   "replay_on_server_data": {
+    "command": "replay_policy_equivalence.py --from-server",
+    "rc": 0,
+    "verdict": "NO_UNEXPLAINED_DIFF",
+    "rows": 103,
+    "dev_rows": 72,
+    "holdout_rows": 31,
+    "dev_match_rate": 0.9275,
+    "holdout_match_rate": 0.9716,
+    "holdout_match_rate_before_fix": 0.9613,
+    "strata_10_15": {
+     "<=10-15": 0.9029,
+     ">10-15": 0.9632
+    },
+    "unexplained_value_diffs": [],
+    "unexplained_legacy_fields": []
+   },
+   "deployment": {
+    "method": "按全量 hash 差异的增量覆盖（只传差异文件、先全量备份、统一 LF）",
+    "changed_files_first_pass": 117,
+    "aligned_files_second_pass": 111,
+    "server_only_retired_files": 14,
+    "backups": [
+     ".bak_fusion_20261105",
+     ".bak_align_20261105",
+     ".bak_retired_20261105"
+    ],
+    "untouched": "results/、.env、题库/、data/、lean 工具链、全部备份目录",
+    "why_second_pass": "只传本轮变更文件会漏掉「本地没改但服务器仍是旧版」的文件；首次 import 冒烟由 prompts/sub_goal.py 缺常量抓出，改为全量 hash 差异对齐后通过"
+   },
+   "claim": "在服务器 103 题次真实数据上未发现无解释差异；不宣称等价、不宣称正确率，也不以回归通过数作效果量。"
+  },
+  "local_regression": {
+   "command": "python -m pytest tests tools -q --junitxml=...",
+   "result": {
+    "failed": 1,
+    "passed": 2450,
+    "skipped": 6,
+    "xfailed": 1,
+    "subtests_passed": 56
+   },
+   "only_failure": "tests/test_numeric_lean_verify.py::NumericLeanVerifyGuardTest::test_compile_fail_returns_feedback",
+   "only_failure_note": "本轮融合前的基线即恒定失败（环境性），与开关融合无关；原样保留，不删、不标记跳过",
+   "gates": {
+    "tests/test_no_runtime_switches.py + test_policy_decoupling.py + test_formal_sig_gate.py": "65 passed",
+    "tools/check_layering.py": "PASS",
+    "tools/harness_lint.py": "PASS（新增 466 行，受检 399，无 benchmark-specific 泄漏）"
+   },
+   "claim": "回归数字只用于证明「无新增失败」，不作为融合等价性或质量的效果量"
+  }
+ },
+ "test_migration": {
+  "retired": [
+   {
+    "file": "tests/test_adversarial_gate.py",
+    "name": "test_switch_off",
+    "reason": "断言「关掉跨模型证伪」分支；该分支随 POLICY 固化消失"
+   },
+   {
+    "file": "tests/test_agent_toolkit.py",
+    "name": "test_tool_schemas_respect_switch",
+    "reason": "断言工具 schema 随开关变化；开关已删除，schema 恒为唯一集合"
+   },
+   {
+    "file": "tests/test_answer_always_emitted.py",
+    "name": "test_retry_on_timeout_can_be_reenabled",
+    "reason": "断言「开回退开关可恢复重试」；llm_retry_on_timeout 已按生产值固化 False"
+   },
+   {
+    "file": "tests/test_answer_normalizer.py",
+    "name": "test_normalize_stage_switch_off",
+    "reason": "断言归一化阶段可关闭；five_gate_normalize 已固化为 True"
+   },
+   {
+    "file": "tests/test_answer_normalizer.py",
+    "name": "test_all_unparseable_kept_when_switch_off",
+    "reason": "断言归一化阶段可关闭；five_gate_normalize 已固化为 True"
+   },
+   {
+    "file": "tests/test_anticipatory_lemmas.py",
+    "name": "test_disabled_when_accumulation_off",
+    "reason": "断言可关闭引理累积；use_lemma_accumulation 已固化为 True（领域路由用例保留）"
+   },
+   {
+    "file": "tests/test_audit_gate.py",
+    "name": "test_nonproof_early_exit_when_solution_check_off",
+    "reason": "断言可关闭解答检查；deterministic_solution_check 已固化为 True"
+   },
+   {
+    "file": "tests/test_axcheck_example_0921.py",
+    "name": "test_axiom_check_switch_registered_default_true",
+    "reason": "源码字符串断言 + 注册表默认一致性；注册表已整块删除"
+   },
+   {
+    "file": "tests/test_axcheck_example_0921.py",
+    "name": "test_axiom_check_runs_when_env_not_zero",
+    "reason": "源码字符串断言 + 注册表默认一致性；注册表已整块删除"
+   },
+   {
+    "file": "tests/test_blueprint_decomposition.py",
+    "name": "test_switch_on_injects",
+    "reason": "断言可开关的提示词注入分支；注入已固化"
+   },
+   {
+    "file": "tests/test_blueprint_lean_sig.py",
+    "name": "test_switch_off_drops_formal_sig",
+    "reason": "断言形式签名可关闭；blueprint_lean_sig 已固化为 True"
+   },
+   {
+    "file": "tests/test_blueprint_merge_value_mask.py",
+    "name": "test_switch_off_passes_through",
+    "reason": "断言掩码可关闭；该项实验臂已按 E08 回退并固化 True"
+   },
+   {
+    "file": "tests/test_bounded_search.py",
+    "name": "test_ensure_caches_and_records_on_ctx",
+    "reason": "E13 负结果实验，bounded_search 功能分支已整块删除（REMOVE_FEATURE）"
+   },
+   {
+    "file": "tests/test_deterministic_gate.py",
+    "name": "test_solution_check_off_reverts_old_behavior",
+    "reason": "断言可回退到关闭态的旧行为；该态已不存在"
+   },
+   {
+    "file": "tests/test_f1_text_toolcall_and_scorer_0918.py",
+    "name": "test_s3_default_off",
+    "reason": "整组断言 env 实时读取 / 注册表 / 开与关两态；机制已收敛为固定策略"
+   },
+   {
+    "file": "tests/test_f1_text_toolcall_and_scorer_0918.py",
+    "name": "test_s2_default_on_and_safe",
+    "reason": "整组断言 env 实时读取 / 注册表 / 开与关两态；机制已收敛为固定策略"
+   },
+   {
+    "file": "tests/test_f1_text_toolcall_and_scorer_0918.py",
+    "name": "test_f1_switch_off_keeps_legacy_detect_only",
+    "reason": "整组断言 env 实时读取 / 注册表 / 开与关两态；机制已收敛为固定策略"
+   },
+   {
+    "file": "tests/test_f1_text_toolcall_and_scorer_0918.py",
+    "name": "test_f1_default_registered_consistently",
+    "reason": "整组断言 env 实时读取 / 注册表 / 开与关两态；机制已收敛为固定策略"
+   },
+   {
+    "file": "tests/test_f1_text_toolcall_and_scorer_0918.py",
+    "name": "test_f1_switch_reads_live_env",
+    "reason": "整组断言 env 实时读取 / 注册表 / 开与关两态；机制已收敛为固定策略"
+   },
+   {
+    "file": "tests/test_final_select_consistency_1007.py",
+    "name": "test_single_source_off_keeps_legacy",
+    "reason": "断言可回退到旧终选路径；final_answer_single_source 已固化 True"
+   },
+   {
+    "file": "tests/test_lean_backcheck.py",
+    "name": "test_switch_off",
+    "reason": "断言 Lean 回检可关闭；five_gate_lean_check 已固化 True"
+   },
+   {
+    "file": "tests/test_lean_channel.py",
+    "name": "test_normalize_switch_registered_default_on",
+    "reason": "env 关闭通道 + 注册表默认一致性；env 桥与注册表均已删除"
+   },
+   {
+    "file": "tests/test_lean_channel.py",
+    "name": "test_env_off_keeps_audit_gate",
+    "reason": "env 关闭通道 + 注册表默认一致性；env 桥与注册表均已删除"
+   },
+   {
+    "file": "tests/test_lean_channel.py",
+    "name": "test_lean_active_env_off",
+    "reason": "env 关闭通道 + 注册表默认一致性；env 桥与注册表均已删除"
+   },
+   {
+    "file": "tests/test_lean_search_offline.py",
+    "name": "test_disabled_switch_returns_empty",
+    "reason": "断言检索器可关闭；use_leansearch 已固化 True"
+   },
+   {
+    "file": "tests/test_math_check_gate.py",
+    "name": "test_switch_off",
+    "reason": "断言数学检查门可关闭；five_gate_math_check 已固化 True"
+   },
+   {
+    "file": "tests/test_mcp_gate.py",
+    "name": "test_autolake_can_be_disabled",
+    "reason": "断言 autolake 可关闭；lean_mcp_autolake 已固化 True"
+   },
+   {
+    "file": "tests/test_numeric_lean_verify.py",
+    "name": "test_switch_off_returns_empty",
+    "reason": "断言数值核验可关闭；该项按生产实证值固化 True"
+   },
+   {
+    "file": "tests/test_problem_goal_converged_1014.py",
+    "name": "test_switches_removed_everywhere",
+    "reason": "读取已删除的 switch_registry.py 做源码扫描；由零开关门禁替代"
+   },
+   {
+    "file": "tests/test_problem_goal_emit_answer_slot.py",
+    "name": "test_switch_off_falls_back_verbatim",
+    "reason": "断言答案槽可关闭；problem_goal_emit_answer_slot 已固化 True"
+   },
+   {
+    "file": "tests/test_research_runner_0918.py",
+    "name": "test_web_search_default_on_and_leansearch_default_on",
+    "reason": "源码字符串断言 config 默认值；配置字段已由只读 POLICY 取代"
+   },
+   {
+    "file": "tests/test_self_audit_ledger.py",
+    "name": "test_ledger_switch_off",
+    "reason": "断言义务账本可关闭；audit_obligation_ledger 已固化 True"
+   },
+   {
+    "file": "tests/test_self_auditor.py",
+    "name": "test_switch_off",
+    "reason": "断言自审门可关闭；five_gate_self_audit 已固化 True"
+   },
+   {
+    "file": "tests/test_sub_goal_solver__part2.py",
+    "name": "test_default_config_is_off",
+    "reason": "断言多智能体默认关 + 可关闭；enable_subgoal_multi_agent 按生产值固化 True"
+   },
+   {
+    "file": "tests/test_sub_goal_solver__part2.py",
+    "name": "test_switch_off_returns_one",
+    "reason": "断言多智能体默认关 + 可关闭；enable_subgoal_multi_agent 按生产值固化 True"
+   },
+   {
+    "file": "tests/test_subgoal_dynamic_backward.py",
+    "name": "test_disabled_returns_unchanged",
+    "reason": "断言动态倒推可关闭；subgoal_dynamic_backward 已固化 True"
+   },
+   {
+    "file": "tests/test_subgoal_final_answer_anchor.py",
+    "name": "test_anchor_switch_registered_default_on",
+    "reason": "注册表默认一致性；注册表已删除"
+   },
+   {
+    "file": "tests/test_theorem_hint.py",
+    "name": "test_search_exception_degrades_gracefully",
+    "reason": "三条走 legacy 后端（靠 env 切换）；theorem_hint_backend 已固化 leanexplore，legacy 分支不可达。当前唯一通道的降级由 test_default_tool_channel_never_raises 覆盖"
+   },
+   {
+    "file": "tests/test_theorem_hint.py",
+    "name": "test_import_failure_degrades_gracefully",
+    "reason": "三条走 legacy 后端（靠 env 切换）；theorem_hint_backend 已固化 leanexplore，legacy 分支不可达。当前唯一通道的降级由 test_default_tool_channel_never_raises 覆盖"
+   },
+   {
+    "file": "tests/test_theorem_hint.py",
+    "name": "test_backend_unavailable_degrades_gracefully",
+    "reason": "三条走 legacy 后端（靠 env 切换）；theorem_hint_backend 已固化 leanexplore，legacy 分支不可达。当前唯一通道的降级由 test_default_tool_channel_never_raises 覆盖"
+   },
+   {
+    "file": "tests/test_theorem_hint_moved_1014.py",
+    "name": "test_registry_default_matches_module",
+    "reason": "读取已删除的 switch_registry.py；由零开关门禁替代"
+   },
+   {
+    "file": "tests/test_understanding_chain.py",
+    "name": "test_disabled_short_circuit_does_not_call_llm",
+    "reason": "断言理解链可关闭；enable_understanding_chain 已固化 True"
+   },
+   {
+    "file": "tests/test_verification_audit.py",
+    "name": "test_switch_off_short_circuits",
+    "reason": "断言验证审计可关闭；该项为 E10 负结果实验已删除功能分支"
+   },
+   {
+    "file": "tests/test_vote_gate.py",
+    "name": "test_switch_off",
+    "reason": "断言投票门可关闭；five_gate_vote 已固化 True"
+   },
+   {
+    "file": "tools/lean_local/tests/test_lean_bridge.py",
+    "name": "test_rollback_switch_restores_proof_invalid",
+    "reason": "断言回滚开关与注册表读取器；两者均已删除"
+   },
+   {
+    "file": "tools/lean_local/tests/test_lean_bridge.py",
+    "name": "test_verdict_helper_default_and_rollback",
+    "reason": "断言回滚开关与注册表读取器；两者均已删除"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_rewrite_success_first_round",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_rewrite_retries_until_success",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_rewrite_all_rounds_fail",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_noop_when_pool_nonempty",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_diag_llm_failure_still_rewrites",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_exception_does_not_raise",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   },
+   {
+    "file": "tests/test_rewrite_gate.py",
+    "name": "test_switch_off",
+    "reason": "4.6 重写通道已按 2026-10-31 的 434 题次全量回放证据移除：跑过 4.6 的 23 题次判对 0/23、占 49.4% 耗时，且只在池空/低置信触发 ⇒ 移除后判对集合严格不变。功能分支不可达，测试随之退役；证据见 deploy/cloud_run.env 注释与 validation.value_dispositions。"
+   }
+  ],
+  "adapted": [
+   {
+    "file": "tests/test_subgoal_collab.py",
+    "name": "test_solve_subgoals_collab_end_to_end"
+   },
+   {
+    "file": "tests/test_adversarial_gate.py",
+    "name": "test_cross_model_rejections_counted"
+   },
+   {
+    "file": "tests/test_adversarial_gate.py",
+    "name": "test_mixed_sources_sum_to_total"
+   },
+   {
+    "file": "tests/test_audit_gate.py",
+    "name": "test_rubric_nonproof_is_off_by_policy"
+   },
+   {
+    "file": "tests/test_final_select_consistency_1007.py",
+    "name": "test_public_sync_helper_for_postprocess_path"
+   },
+   {
+    "file": "tests/test_final_postprocess.py",
+    "name": "test_postprocess_numericizes_by_policy"
+   },
+   {
+    "file": "tests/test_revise_chain_fixes_0917.py",
+    "name": "test_M1_full_pool_revise_still_generates"
+   },
+   {
+    "file": "tests/test_revise_chain_fixes_0917.py",
+    "name": "test_M1_full_pool_non_revise_still_early_returns"
+   },
+   {
+    "file": "tests/test_revise_chain_fixes_0917.py",
+    "name": "test_M1_partial_pool_revise_passes_positive_cap"
+   },
+   {
+    "file": "tests/test_blueprint_subgoal_design.py",
+    "name": "test_config_cap_is_applied"
+   },
+   {
+    "file": "tests/test_blueprint_subgoal_design.py",
+    "name": "test_config_zero_means_all"
+   },
+   {
+    "file": "tests/test_blueprint_subgoal_design.py",
+    "name": "test_config_cap_differs_from_default"
+   },
+   {
+    "file": "tests/test_param_usage_0921.py",
+    "name": "test_gate_rework_reads_deep_max_rework"
+   },
+   {
+    "file": "tests/test_lean_backcheck.py",
+    "name": "test_all_rejected_does_not_clear_pool_by_policy"
+   },
+   {
+    "file": "tools/lean_local/tests/test_lean_mcp_backend.py",
+    "name": "test_goal_enrichment_applied_by_policy"
+   }
+  ],
+  "known_environment_fail": [
+   {
+    "file": "tests/test_numeric_lean_verify.py",
+    "name": "test_compile_fail_returns_feedback",
+    "note": "本轮融合前的基线就恒定失败（环境性），与开关融合无关，原样保留"
+   }
+  ],
+  "principle": [
+   "退役的是「断言可切换性」的旧契约，不是功能覆盖：每条都注明被删机制与替代覆盖。",
+   "功能断言能保留的一律改写适配固化后的唯一路径，断言强度不降低。",
+   "若整条功能分支已按独立证据移除（如 4.6：434 题次中 23 题次判对 0/23），其测试随之退役并注明证据与覆盖替代，不为了保数字硬留死用例。",
+   "回归失败数下降不作为本轮效果量；等价性证据只来自留出集回放报告。"
+  ],
+  "removed_feature_tests": {
+   "feature": "4.6 池空重写通道",
+   "evidence": "434 题次全量回放：23 题次判对 0/23、49.4% 耗时；移除后判对集合严格不变",
+   "retired": 7,
+   "kept": [
+    "__init__",
+    "_f",
+    "_mk",
+    "_patch_gates",
+    "llm",
+    "record",
+    "run",
+    "test_blueprint_injection_guard",
+    "test_parse_diag_json",
+    "test_stage_wired_in_orchestrator"
+   ]
+  }
+ }
+}

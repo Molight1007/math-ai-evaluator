@@ -135,20 +135,22 @@ def test_planning_agent_prefetch_and_blueprint():
     assert ctx.subgoal_blueprint_updates[0]["update"].startswith("补充")
 
 
-def test_solve_subgoals_collab_end_to_end(monkeypatch):
+def test_solve_subgoals_collab_end_to_end():
     """端到端（stub）：2 个子目标 → 每个 3 遍求解 + 预取规划 + 结果写入。
 
-    ★ 2026-10-17：本用例关闭「生成前自审」（自审有独立单测）——否则每次
-    迭代会多消耗一次 LLM 回复、打乱 replies 序列。
+    ★ 2026-11-05 开关融合：生成前自审已固化为恒开，**不再能用 env 关掉**。
+      旧写法用 `monkeypatch.setenv("SUBGOAL_REGEN_SELF_REVIEW", "0")` 把它
+      关掉以对齐 replies 序列；融合后该注入无效，序列错位导致断言失败。
+      这里把自审会消耗的 2 次/子目标回复显式排进序列，让「3 遍迭代取
+      最后一版」这一**功能断言**继续被覆盖 —— 功能测试不因融合而退役。
     """
-    monkeypatch.setenv("SUBGOAL_REGEN_SELF_REVIEW", "0")
-    # llm 调用序列：规划(预取) → sg1 求解×3 → [审核 LLM] → 规划 → sg2 求解×3 → 审核 …
+    # 调用序列：规划(预取) → sg1 [求解, 自审, 求解, 自审, 求解] → 审核 → 规划 → sg2 …
     replies = [
         "## 下一个子目标计划\n计划0\n## 蓝图补充\n无",   # 预取
-        _OUT1, _OUT2, _OUT2,                              # sg1 ×3
+        _OUT1, "无", _OUT2, "无", _OUT2,                  # sg1：3 遍 + 2 次自审
         '{"pass": true, "issues": []}',                   # sg1 审核 LLM
         "## 下一个子目标计划\n计划1\n## 蓝图补充\n无",     # sg1 后规划
-        _OUT1, _OUT2, _OUT2,                              # sg2 ×3
+        _OUT1, "无", _OUT2, "无", _OUT2,                  # sg2：3 遍 + 2 次自审
         '{"pass": true, "issues": []}',                   # sg2 审核 LLM
         "",                                               # sg2 后规划（无下一个）
     ]

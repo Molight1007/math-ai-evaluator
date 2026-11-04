@@ -104,13 +104,6 @@ def test_answer_norm_preferred():
     assert det.calls == ["48"]
 
 
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_MATH_CHECK", "0")
-    stub = _Stub()
-    ctx = _Ctx([_c(1)])
-    math_check_stage(stub, ctx)
-    assert stub.math_check_det.calls == []
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_empty_pool_skips():

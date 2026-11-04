@@ -9,6 +9,7 @@ S3（2026-10-09）：``verifier.py`` 顶部已 `from . import verifier__lemma as
 """
 
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import time
@@ -19,7 +20,7 @@ logger = logging.getLogger("MathPilot.Verifier")
 def _prepare_theorem_context(owner, ctx, problem: str) -> str:
     """检索与本题相关的 Mathlib 定理原文；结果缓存在 ctx 上（一题一次）。"""
     cfg = owner.config
-    if not getattr(cfg, "use_leansearch", False):
+    if not POLICY['use_leansearch']:
         return ""
     if not getattr(cfg, "leansearch_inject_verifier", True):
         return ""

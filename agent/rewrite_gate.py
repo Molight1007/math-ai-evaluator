@@ -25,8 +25,8 @@
 五道链位置：4.0 → 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → **4.6_rewrite（池空修复）** → 6_format。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from .switch_registry import get_bool as _sw_get_bool
 
 _PROBLEM_MAX = 4000
 _ERRORS_MAX = 3000
@@ -62,7 +62,7 @@ def _parse_diag_json(raw) -> dict:
 def _switch_enabled() -> bool:
     """读「五道链·重写通道」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_rewrite")
+        return POLICY['five_gate_rewrite']
     except Exception:  # noqa: BLE001
         return True
 
@@ -157,12 +157,11 @@ def _should_rewrite(self, ctx) -> bool:
     if not getattr(ctx, "candidates", None):
         return True
     try:
-        from .switch_registry import get_bool as _g
-        if not _g("rewrite_on_low_conf"):
+        if not POLICY['rewrite_on_low_conf']:
             return False
     except Exception:  # noqa: BLE001
         pass
-    _thr = float(getattr(self.config, "rewrite_conf_threshold", 0.0) or 0.0)
+    _thr = float(POLICY['rewrite_conf_threshold'] or 0.0)
     _conf = _best_confidence(ctx)
     if _conf is None or _conf > _thr:
         return False

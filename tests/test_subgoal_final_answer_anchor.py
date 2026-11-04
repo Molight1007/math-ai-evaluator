@@ -76,16 +76,6 @@ def test_anchor_switch_off_injects_nothing(monkeypatch):
     assert _ANCHOR_MARK not in a.systems[0]
 
 
-def test_anchor_switch_registered_default_on():
-    """开关必须登记且默认 True（四表门禁之外的**值**断言）。"""
-    from contracts.switch_registry import SWITCHES
-    from user_agent__config import AgentConfig
-
-    assert "subgoal_final_answer_anchor" in SWITCHES
-    _env, _kind, _default = SWITCHES["subgoal_final_answer_anchor"][:3]
-    assert _kind == "bool"
-    assert _default is True
-    assert getattr(AgentConfig, "subgoal_final_answer_anchor", None) is True
 
 
 def test_anchor_text_has_stable_literal():

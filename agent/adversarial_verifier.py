@@ -32,6 +32,7 @@
 """
 
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import json
 import logging
@@ -239,7 +240,7 @@ class AdversarialVerifier(BaseAgent):
         # ★ 2026-10-20：是否把蓝图倒推链反演成「义务账本」注入审查（见
         #   `agent/obligation_ledger.py`）。=0 退回「只喂题目/解答/答案」的老口径。
         self._use_ledger = bool(
-            getattr(config, "audit_obligation_ledger", True))
+            POLICY['audit_obligation_ledger'])
 
     # ------------------------------------------------------------------
     # BaseAgent 接口（pipeline 形态入口）

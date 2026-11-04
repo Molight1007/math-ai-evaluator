@@ -5,6 +5,7 @@
 `AgentConfig.__dataclass_fields__` = 基类字段(前) + 派生字段(后) = 原顺序。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 from dataclasses import dataclass
 
@@ -53,7 +54,7 @@ class _AgentConfigBase:
     #   **`disagree` = 默认**：仅当**候选答案分歧**时放开完整推理；
     #   `always` = 每票都放开（最准，约 70s/票 ⇒ 18 票 ≈ 21 分钟/题）。
     #   用户决策：「先试 B（折中），效果不理想就切 A；**正确率第一位**」。
-    verifier_vote_reasoning: str = "disagree"
+    verifier_vote_reasoning: str = POLICY['verifier_vote_reasoning']
     verifier_deep_final_min_remaining: float = 150.0  # 剩余时间低于此值则跳过复核
     verifier_deep_review_max_tokens: int = 16384      # 复核输出上限（需容纳推理链）
     # ★ 2026-09-15 实测教训：用投票模板做复核时，模型只吐 **12 个字**
@@ -68,7 +69,7 @@ class _AgentConfigBase:
 
     # 题型分类（可选）
     enable_domain_hint: bool = True    # 是否启用领域提示增强
-    enable_question_type: bool = True  # 是否启用题型识别（证明/选择/判断/填空/解答）+ 差异化策略
+    enable_question_type: bool = POLICY['enable_question_type']  # 是否启用题型识别（证明/选择/判断/填空/解答）+ 差异化策略
     # 2026-09-12 客观题特化解法（用户要求"保证检测到题型并采取特化技巧"）：
     # 选择/判断/填空三类客观题强制注入特化纪律（逐项判真+反例否证+清点选项 /
     # 绝对化措辞找反例+回定义核对 / 按空序逗号分隔），与"证明题不分流"的既有
@@ -164,8 +165,7 @@ class _AgentConfigBase:
     #   （全项目口径；见 `answer_falsifier._spend_cap`）；② 默认 2 → **0（不限）**。
     #   依据：证伪是当前**唯一能客观淘汰错误答案**的信号（LLM 证书 → SymPy 精确
     #   → Lean 背书），在「不限调用」口径下没有理由按"省一次短 LLM 调用"设 2 次/题。
-    falsify_max_per_q: int = 0               # 单题最多证伪次数（0 = 不限）
-
+    falsify_max_per_q: int = POLICY['falsify_max_per_q']               # 单题最多证伪次数（0 = 不限）
     # ★ 2026-09-23 新增：把 LeanSearch 检索到的 Mathlib 定理注入**解题侧**引理记忆。
     #   实测（0923 效能审计）460 条检索结果里只有 4 条（1%）进了 Lean 代码；
     #   根因是检索结果此前**只注入验证器**（`leansearch_inject_verifier`），
@@ -188,15 +188,13 @@ class _AgentConfigBase:
     #       全是竞赛题（计数 / 函数方程 / 极值 / 集合完备性）⇒ 无此结构 ⇒ 全 unknown。
     #   置 True（默认，修好后的行为）：解析前归一 + 全量等式回代 + 函数方程回代。
     #   置 False：完全回退改动前行为做 A/B。
-    deterministic_solution_check: bool = True
-
+    deterministic_solution_check: bool = POLICY['deterministic_solution_check']
     # ★ 2026-10-07 新增：是否允许 AuditGate 的 Level2 rubric 对**解答题**运行。
     #   旧行为 rubric 仅对证明题运行（解答题结构性不适用）；经查 rubric 提示词为通用
     #   「数学解答评审」、无证明专用假设 ⇒ 原限制缺少依据。默认 False（保守）：
     #   rubric 系 LLM 同源自评（价值低、耗时高），且候选级投票链本已可选跑 rubric。
     #   置 True 则解答题也走 Level2（仍沿用高置信 B 才否决的阈值）。
-    audit_gate_rubric_nonproof: bool = False
-
+    audit_gate_rubric_nonproof: bool = POLICY['audit_gate_rubric_nonproof']
     # ★ 2026-09-16 删除死字段 `extraction_mode`：AgentConfig 声明了、
     #   override 白名单里也列了，但**全仓 0 个读取点**（实测确认）⇒
     #   CLI/kwargs 传它会被静默丢弃，只给人"可调"的假象。
@@ -214,7 +212,7 @@ class _AgentConfigBase:
     #   被检错（检错器在验垃圾）、被拿去修正 ⇒ 污染整条下游链。
     #   置 True：不含答案的候选**不入池**并留痕（宁可池子少一个，不放"假候选"）。
     #   置 False：回退旧行为（全部入池）做 A/B。
-    require_answer_in_pool: bool = True
+    require_answer_in_pool: bool = POLICY['require_answer_in_pool']
     # ★ 2026-10-07 新增（问题 2.4 第二轮）：候选**入池门槛 v2** —— 上一轮门槛只覆盖
     #   `_generate_initial`/`_generate_revise` 主路径，实测仍有漏网（题 002
     #   `'证明这个最小值就是所求的 $T$，并验证其最优性'` 入池且成唯一幸存候选、被
@@ -222,34 +220,28 @@ class _AgentConfigBase:
     #   （题 087 `BD`/题 088 `AB` 各被拒 4/5 次）。置 True（默认，修好后行为）：
     #   ①判据升级为 `looks_like_pool_answer`（补漏网 / 修误杀）；②穷举全部 6 处写入
     #   `ctx.candidates` 的入口。置 False 完全回退上一轮口径做 A/B（详见注册表）。
-    pool_gate_v2: bool = True
+    pool_gate_v2: bool = POLICY['pool_gate_v2']
     # ★ 2026-10-07 新增（问题 2.9）：`<check>` **协议守卫** —— 实测题 000 大量把中文
     #   句子塞进 `<check>`（`<check>图 G 是弱连通的</check>`）⇒ 不可解析 ⇒ 子目标客观
     #   判定一条都出不来（`n_judged = 0/73` 直接原因之一）。置 True（默认，修好后行为）：
     #   违规定性 + 留痕（可见）+ 一次定向重问。置 False 回退旧行为（静默跳过）做 A/B。
-    check_protocol_guard: bool = True
+    check_protocol_guard: bool = POLICY['check_protocol_guard']
     # ★ 2026-10-06 新增：Lean/Audit 门把候选**全部拒掉**时的处置。
     #   默认 False = 只显式留痕（不静默保留，但也不清空）；
     #   置 True = 清空候选池，触发下游兜底/重生成链。
-    strict_all_rejected: bool = False
+    strict_all_rejected: bool = POLICY['strict_all_rejected']
     # ★ 2026-10-06 新增：候选**零多样性**（全题仅 1 种答案）时是否触发高温度补充采样。
     #   实测题 000 的 5 个候选答案全同 ⇒ 置信度被刷到 1.00 ⇒ 直接放行（答案是错的）。
     #   「答案一致」在采样无多样性时是**采样失败信号**，不是可靠性证据。
-    diversity_resample_enabled: bool = True
-    diversity_resample_count: int = 3
     # ★ 2026-10-07 新增（fix-gate-timing-diag 问题 2.3）：AcceptGate 真实生效。
     #   背景：`base.RoundState` 契约阈值 ACCEPT_PASS=5 / REJECT_DEFECT=10 按"无上限
     #   连续回环"标定，而 `_update_accept_gate` 唯一调用点受 `max_revise_rounds`(=5)
     #   约束 ⇒ 单题最多调用 ≤5 次（smoke10 实测 ≤2）⇒ 阈值结构性不可达、
     #   decision 恒为 HOLD（10/10 题）⇒ 空闸门。置 True（默认，修好后行为）：
     #   阈值改可达口径、ACCEPT/REJECT 均改变 revise 行为；置 False 回退旧行为。
-    accept_gate_enforce: bool = True
-    accept_gate_pass_threshold: float = 1.0
-    accept_gate_reject_defect_threshold: float = 2.0
     # ★ 2026-10-07 新增（问题 2.8）：revise 回环墙钟归属修正（纯可观测性）。
     #   实测题 001 revise_round=4 却记 `4_verify=5546s`、`5_revise_or_fallback=7.4e-06s`；
     #   题 000 同机制却记 3683s ⇒ 归属不一致。置 True（默认）统一归到 5 段；=0 回退。
-    stage_timer_reassign_revise: bool = True
     max_revise_rounds: int = 5
     max_total_calls: int = 150         # LLM 调用预算硬上限（v2.6.1：15→60；v2.7：60→150，
                                         # 覆盖 5 题 batch + 限流重试 + deep 档完整流程

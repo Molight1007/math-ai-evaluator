@@ -163,7 +163,13 @@ class TestBlueprintPathHonoursConfig(unittest.TestCase):
             total_start_time=0.0, total_deadline=9999.0,
         )
         with patch("agent.blueprint_planner.BlueprintPlannerAgent") as m_cls:
-            m_cls.return_value.generate_blueprint.return_value = dag
+            m = m_cls.return_value
+            m.generate_blueprint.return_value = dag
+            # ★ 2026-11-05：迭代轮数=3、自审=True 已固化，主流程走的是
+            #   generate_blueprint_iterative + self_review_blueprint；
+            #   旧桩只钉 generate_blueprint ⇒ 拿到 MagicMock，规划恒空。
+            m.generate_blueprint_iterative.return_value = dag
+            m.self_review_blueprint.side_effect = lambda _ctx, _dag: _dag
             return agent._plan_from_blueprint(ctx)
 
     def test_config_cap_is_applied(self):

@@ -324,14 +324,6 @@ class TestInjectAnticipatoryLemmas(unittest.TestCase):
         self.assertEqual(solver._inject_anticipatory_lemmas(ctx_alg, items), 0)
         self.assertEqual(ctx_alg.lemma_repo, [])
 
-    def test_disabled_when_accumulation_off(self):
-        solver = make_solver()
-        solver.config.use_lemma_accumulation = False
-        ctx = make_ctx()
-        self.assertEqual(
-            solver._inject_anticipatory_lemmas(
-                ctx, [{"id": "a", "statement": "辅助引理"}]), 0)
-        self.assertEqual(ctx.lemma_repo, [])
 
     def test_plain_string_item_tolerated(self):
         """容错：非 dict 条目（裸字符串）也能注入。"""

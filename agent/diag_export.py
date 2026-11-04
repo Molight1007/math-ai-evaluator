@@ -17,7 +17,7 @@ from utils.extract import is_truncated_answer as _is_truncated_answer
 from .param_usage import collect_param_usage
 from .diag_metrics import (
     _merge_error_types, _sum_reject_votes, _compute_subgoal_gaps,
-    _switch_snapshot, _tool_gateway_summary,
+    _policy_snapshot, _tool_gateway_summary,
     _parse_exhaust_result, _diag_completeness, _summarize_deep_review,
     _summarize_leansearch,
 )
@@ -635,9 +635,9 @@ def _diag_verdicts_metrics(ctx, config, _md, _counts_recon) -> dict:
         #   ⚠ 若本字段为全零，**只说明"没有代码走门面"**，
         #     绝不可读成"本轮没调用工具"（既有调用点尚未迁移）。
         "tool_gateway": (_tool_gateway_summary(ctx)),
-        # 2026-10-01 开关注册制：26 个开关的生效值快照（含来源 env/config/default）
-        # ⇒「生效查不到」问题根治：任何一轮评测都能从 diag 还原开关状态。
-        "switch_snapshot": _switch_snapshot(),
+        # 2026-11-04：固定策略快照（无来源分层）。历史数据字段 switch_snapshot
+        # 只读保留在归档里，新数据一律用 policy_snapshot。
+        "policy_snapshot": _policy_snapshot(),
         # ★ 2026-09-21（可调参数实测记录）：把「配置上限 / 实际用了多少 / 有没有撞顶」放进同一张表，随 diag 落盘。
         #   用户诉求：「cleansearch 到底要找多少定理、检测打回要搞多少次、无条件重做多少次、子目标要设多少……我们要测出最合理的数据」（不止这几个）。
         #   明细与拓展方法见 agent/param_usage.py 的模块文档。

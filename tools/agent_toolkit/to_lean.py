@@ -9,6 +9,7 @@ lean 的东西翻译为 lean 语言来给 lean 工具使用。」
 证明留给审核环节（工具①）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 
@@ -41,8 +42,7 @@ def _choose_sys() -> str:
     （零成本，实测可解决过半目标），关=旧行为（`by sorry` 只验陈述）。
     读取失败按默认开处理（与注册表默认一致）。"""
     try:
-        from contracts.switch_registry import get_bool as _g
-        return _SYS_HAMMER if _g("lean_hammer") else _SYS_LEGACY
+        return _SYS_HAMMER if POLICY['lean_hammer'] else _SYS_LEGACY
     except Exception:  # noqa: BLE001
         return _SYS_HAMMER
 

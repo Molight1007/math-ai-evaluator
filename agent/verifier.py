@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 """
 过程校验智能体（VerifierAgent）
 ================================
@@ -300,8 +301,7 @@ class VerifierAgent(BaseAgent):
         用户口径：先试 B；效果不理想即切 A。
         """
         try:
-            from .switch_registry import get_str as _sws
-            return str(_sws("verifier_vote_reasoning") or "disagree").strip().lower()
+            return str(POLICY['verifier_vote_reasoning'] or "disagree").strip().lower()
         except Exception:  # noqa: BLE001
             return "disagree"
 

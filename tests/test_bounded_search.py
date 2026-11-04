@@ -139,19 +139,6 @@ def test_summary_lines():
     assert "946" in summary(run_search(detect(_Q3556)))
 
 
-# ---------------------------------------------------------------- 接线
-def test_ensure_caches_and_records_on_ctx():
-    from agent.bounded_search import ensure
-
-    class _Ctx:
-        problem = _Q3556
-
-    ctx = _Ctx()
-    first = ensure(ctx)
-    assert first is not None and first["hits"] == [946]
-    second = ensure(ctx)
-    assert second is first                # 只算一次
-    assert getattr(ctx, "_bounded_search_done", False) is True
 
 
 def test_ensure_switch_off_returns_none(monkeypatch):

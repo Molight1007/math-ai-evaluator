@@ -27,37 +27,9 @@ _collect_tool_findings
 """
 from __future__ import annotations
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
-# 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
-from agent.switch_registry import (
-    get_bool as _sw_bool, get_num as _sw_num)
 import logging
 
 logger = logging.getLogger("MathPilot")
-
-
-def _sw_bool_or(field: str, default: bool) -> bool:
-    """开关读取的**容错**版：注册表缺该字段时回退 `default`（不抛）。
-
-    为什么需要（2026-10-07 fix-gate-timing-diag）：新开关的登记落在
-    `switch_registry.py` / `user_agent.py` / `param_usage.py` 三个**共享文件**，
-    可能与本施工员的 `orchestrator.py` 改动**分批落盘**。若裸调 `_sw_bool(field)`
-    而此时注册未落，`SWITCHES[field]` 会 KeyError → 被调用点 except 吞掉 →
-    功能**静默失效**（且日志无迹）。本函数保证"注册未落也用修好后的默认值"，
-    注册落盘后自动获得 env/config 覆盖能力。
-    """
-    try:
-        return bool(_sw_bool(field))
-    except Exception:  # noqa: BLE001
-        return bool(default)
-
-
-def _sw_num_or(field: str, default: float) -> float:
-    """`get_num` 的容错版（口径同上）。"""
-    try:
-        return float(_sw_num(field))
-    except Exception:  # noqa: BLE001
-        return float(default)
 
 
 # 2026-09-13 晚：紧急直答的输出上限（token）。旧值直接用 `max_answer_tokens`

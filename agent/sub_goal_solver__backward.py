@@ -35,6 +35,7 @@
   · 本模块 = **拆图**的恢复（现场补前提），贵，放在 recover **之后**兜底。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 import re
@@ -228,9 +229,9 @@ def sg_dynamic_backward(self, ctx, sg: dict, step_result: str,
     于流程完美。
     """
     # ① 开关与上限
-    if not getattr(self.config, "subgoal_dynamic_backward", True):
+    if not POLICY['subgoal_dynamic_backward']:
         return step_result
-    _max = int(getattr(self.config, "subgoal_backward_max_depth", 2) or 0)
+    _max = int(POLICY['subgoal_backward_max_depth'] or 0)
     if _max <= 0 or depth > _max:
         return step_result
     if ctx.is_time_critical():

@@ -25,13 +25,13 @@
 → ⑤投票。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from .switch_registry import get_bool as _sw_get_bool
 
 def _switch_enabled() -> bool:
     """读「五道链·第 2 道对抗证伪」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_falsify")
+        return POLICY['five_gate_falsify']
     except Exception:  # noqa: BLE001
         return True
 
@@ -127,7 +127,7 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
             #   都是同一模型 ⇒ 盲区相同。对**前两道都放行**的候选，调第二模型
             #   （DeepSeek）独立检错（附带题面约束/歧义点）；wrong ⇒ 淘汰；
             #   失败/超时 ⇒ 放行并记 trace（不降级判错）。
-            if _rej is None and _sw_get_bool("cross_model_falsify"):
+            if _rej is None and POLICY['cross_model_falsify']:
                 try:
                     from .cross_model_check import cross_check as _cross_check
                     _cons = list(getattr(ctx, "problem_ambiguities", None) or [])
@@ -140,8 +140,7 @@ def adversarial_gate_stage(self, ctx, tier: str) -> None:
                                    or getattr(c, "answer", "") or ""),
                         reasoning=str(getattr(c, "reasoning", "") or ""),
                         constraints=_cons,
-                        timeout=float(getattr(self.config,
-                                              "cross_model_timeout", 90) or 90))
+                        timeout=float(POLICY['cross_model_timeout'] or 90))
                     _st = getattr(ctx, "cross_model_stats", None)
                     if not isinstance(_st, dict):
                         _st = {}

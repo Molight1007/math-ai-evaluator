@@ -49,11 +49,6 @@ def test_autolake_idempotent(tmp_path, monkeypatch):
     assert (d / "lean-toolchain").read_text(encoding="utf-8") == before
 
 
-def test_autolake_can_be_disabled(tmp_path, monkeypatch):
-    monkeypatch.setenv("LEAN_MCP_AUTOLAKE", "0")
-    d = _mk_closure(tmp_path)
-    assert _mcp_gate_ok(str(d)) is False
-    assert not (d / "lakefile.toml").exists()           # 严格模式零写入
 
 
 def test_no_write_when_not_closure(tmp_path, monkeypatch):

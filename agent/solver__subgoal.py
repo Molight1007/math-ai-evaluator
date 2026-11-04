@@ -14,6 +14,7 @@
 外部符号依赖（原在 solver.py 模块级）：``_sw_bool`` —— 本模块顶部同口径导入。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import logging
 from typing import TYPE_CHECKING
@@ -21,7 +22,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:                      # 仅类型标注用，避免运行期导入
     from .base import TaskContext
 
-from agent.switch_registry import get_bool as _sw_bool
 
 logger = logging.getLogger("MathPilot")
 
@@ -36,7 +36,7 @@ def _render_subgoal_findings(self, ctx: TaskContext) -> str:
         开关：`enable_subgoal_findings`（已登记 switch_registry，默认 True）为
         False → 返回 ""。
         """
-    if not _sw_bool("enable_subgoal_findings"):
+    if not POLICY['enable_subgoal_findings']:
         return ""
     trace = getattr(ctx, "subgoal_trace", None) or []
     if not isinstance(trace, list) or not trace:

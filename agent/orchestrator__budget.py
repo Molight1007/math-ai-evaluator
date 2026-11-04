@@ -14,8 +14,8 @@ _phase_deadline_restore(@staticmethod)
   · C5 四方法不引用任何 orchestrator 模块级函数/常量 ⇒ 无需惰性 import。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
-from agent.switch_registry import get_bool as _sw_bool
 
 def _self_improve_applicable(self, ctx) -> bool:
     """3.3 自改进的**题型门控**（2026-09-11）。
@@ -27,7 +27,7 @@ def _self_improve_applicable(self, ctx) -> bool:
         判据复用 Lean 适用性（客观题本就 lean_applicable=False）。
         开关：SELF_IMPROVE_OBJECTIVE_SKIP（默认 1，设 0 恢复旧行为）。
         """
-    if not _sw_bool("self_improve_objective_skip"):
+    if not POLICY['self_improve_objective_skip']:
         return True
     try:
         m = ctx.metadata if isinstance(ctx.metadata, dict) else {}
@@ -85,7 +85,7 @@ def _phase_budget(self, ctx, ratio: float = 0.0, floor: float = 180.0,
           CLI flag 或把读取改走注册表（后者属行为改动，本次按"唯一行为改动仅 C/E"
           的约束**未改**，仅留此标注）。
         """
-    if not getattr(self.config, "phase_budget_enabled", False):
+    if not POLICY['phase_budget_enabled']:
         return float("inf")
     if stage:
         # 依据：`results/*.jsonl` 的 `stage_timers`，最近三代代码 195 题实测 max。

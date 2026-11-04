@@ -73,16 +73,6 @@ def _mk_ctx(**kw):
     return SimpleNamespace(**d)
 
 
-def test_disabled_short_circuit_does_not_call_llm():
-    calls = []
-    v = LeanPreVerifier.__new__(LeanPreVerifier)
-    v.config = SimpleNamespace(enable_understanding_chain=False)
-    v.llm = lambda *a, **k: calls.append(1)
-    v.record = lambda *a, **k: None
-    ctx = _mk_ctx()
-    v.run_understanding_chain(ctx)
-    assert ctx.understanding_chain == {"enabled": False}
-    assert calls == [], "开关关闭时不得调用 LLM"
 
 
 def test_empty_problem_short_circuit():

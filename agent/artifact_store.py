@@ -31,13 +31,10 @@
 · **永不抛异常**：落盘失败只记一条 `ctx.trace`，绝不阻断主链（研究期产物不该拖垮求解）。
 · **文件名不含中文**：run_id / qid / stage 一律经 `_safe_name` 净化。
 · 写盘统一 `ensure_ascii=False` + `newline="\\n"`。
-· 总开关 `artifact_store_enabled`（默认 True）走注册制（env `ARTIFACT_STORE_ENABLED`）。
-
-读取优先级（沿用 `agent/switch_registry.py` 口径）
-================================================
-    环境变量  >  AgentConfig 覆盖（CLI / kwargs）  >  默认值
+· 是否启用由固定策略 `POLICY["artifact_store_enabled"]` 决定，运行期不可覆盖。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import json
 import logging
@@ -46,13 +43,10 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-from agent.switch_registry import bind_field as _bind_field
-from agent.switch_registry import get_bool as _get_bool
 
 logger = logging.getLogger("MathPilot")
 
 DEFAULT_BASE_DIR = "results"
-SWITCH_FIELD = "artifact_store_enabled"
 
 # 净化用：只允许 ASCII 字母数字与 . _ -（⇒ 天然不含中文、无路径分隔符）
 _UNSAFE_RE = re.compile(r"[^0-9A-Za-z._-]")
@@ -60,13 +54,8 @@ _UNSAFE_RE = re.compile(r"[^0-9A-Za-z._-]")
 
 # ============================================================ 开关
 def enabled(config=None) -> bool:
-    """存储层总开关（注册制读取，禁止裸 os.environ）。默认 **True**。"""
-    try:
-        if config is not None:
-            _bind_field(SWITCH_FIELD, getattr(config, SWITCH_FIELD, None))
-        return bool(_get_bool(SWITCH_FIELD))
-    except Exception:  # noqa: BLE001
-        return True
+    """是否启用 —— 固定策略，运行期无开关、无 fallback。"""
+    return bool(POLICY["artifact_store_enabled"])
 
 
 # ============================================================ 工具

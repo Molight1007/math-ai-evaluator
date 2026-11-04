@@ -1,17 +1,11 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-# 2026-10-01 开关注册制（审查 A 级第 2 条）：开关统一走 switch_registry，
+# 2026-11-04 收敛：策略值统一读只读 contracts.policy.POLICY（原开关注册制已删除）。
 # 不再裸读 os.environ —— 既保持 env 优先级（行为不变），又能被 diag/报告还原。
 # 2026-10-08 拆分：判分族搬到 run_eval__scoring.py 后，本文件已不再直接读开关
 #   （判分族的 `_sw_bool` 在 scoring 模块就地 import）；此行保留作**契约面**
 #   （`run_eval._sw_bool` 仍可解析），故标 noqa。
-try:
-    from agent.switch_registry import (  # noqa: F401
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
-except ImportError:
-    from switch_registry import (  # noqa: F401
-        get_bool as _sw_bool, get_num as _sw_num, get_str as _sw_str)
 # -*- coding: utf-8 -*-
 """
 MathPilot 本地评测脚本 —— 仅用于本地开发调试，非平台正式评测调用入口。

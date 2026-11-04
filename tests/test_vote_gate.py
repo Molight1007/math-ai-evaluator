@@ -127,13 +127,6 @@ def test_empty_pool_skips():
     assert any("候选池为空" in m for _, m in stub.events)
 
 
-def test_switch_off(monkeypatch):
-    monkeypatch.setenv("FIVE_GATE_VOTE", "0")
-    stub = _Stub()
-    ctx = _Ctx([_c(1)])
-    vote_stage(stub, ctx, "deep")
-    assert stub.verifier.calls == []
-    assert any("开关关闭" in m for _, m in stub.events)
 
 
 def test_verifier_exception_does_not_raise():

@@ -17,6 +17,7 @@ import**（单一来源不复制）。参数 `self` 即 `SubGoalSolverAgent` 实
 `solve_subgoals` 返回累计前序注入字符数 `_ctx_inject_chars`（run 后续 record 使用）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import time
 
@@ -249,8 +250,7 @@ def solve_subgoals(self, ctx, subgoals, subgoal_plan_summary, results_map) -> in
         # ★ 2026-10-13（用户 E24「让大模型反复写一道题」）：**子目标级无条件自改进**。
         #   「无条件」= 不看有无增益信号，固定跑 N 轮（与 3.3 主求解自改进同语义）；
         #   若某轮产出与上一轮相同/为空 ⇒ 提前停（省下无谓轮次，但**不因单轮失败放弃**）。
-        _si_rounds = int(getattr(
-            self.config, "subgoal_self_improve_rounds", 3) or 0)
+        _si_rounds = int(POLICY['subgoal_self_improve_rounds'] or 0)
         _si_done = 0
         if _si_rounds > 0 and step_result and not ctx.is_time_critical():
             for _si_r in range(_si_rounds):

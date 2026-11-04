@@ -27,12 +27,12 @@ answer_kind 六类（下游五道的分流依据）：
 「一步到位直接删」（删除在 Step7，本模块先落地为纯增量）。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 
 # ---- 开关读取（注册制：env > config > 默认；与 AgentConfig.five_gate_normalize
 #      的默认值 True 逐字一致，详见 contracts/switch_registry.py）----
-from .switch_registry import get_bool as _sw_get_bool
 # 纯数值：整数 / 小数 / 分数 / 百分数 / 科学计数（LaTeX 壳已由归一化剥掉）
 _NUMERIC_RE = re.compile(
     r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)"
@@ -97,7 +97,7 @@ def classify_answer_kind(norm: str, is_proof: bool = False) -> str:
     # 条件式/命题式（如 `n >= 2 且 n 为正整数`）不是答案 ⇒ 不参与三/四道
     # 开关 answer_shape_strict（默认 True；关=恢复旧行为）
     try:
-        _strict = _sw_get_bool("answer_shape_strict")
+        _strict = POLICY['answer_shape_strict']
     except Exception:  # noqa: BLE001
         _strict = True
     if _strict and _COND_SHAPE_RE.search(s):
@@ -115,7 +115,7 @@ def classify_answer_kind(norm: str, is_proof: bool = False) -> str:
 def _switch_enabled() -> bool:
     """读「五道链·第 0 道规范化」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_normalize")
+        return POLICY['five_gate_normalize']
     except Exception:  # noqa: BLE001  注册表异常 ⇒ 走默认（与注册表默认一致）
         return True
 
@@ -186,7 +186,7 @@ def normalize_stage(self, ctx) -> None:
                             "剔除不可判形态候选 %d → %d（Markdown/过程叙述/空答案）"
                             % (len(cands), len(_kept_c)))
             elif not _kept_c:
-                if bool(getattr(self.config, "pool_empty_clear", True)):
+                if bool(POLICY['pool_empty_clear']):
                     ctx.candidates = []
                     self.record(ctx, "answer_normalize",
                                 "候选池 %d 个全部呈不可判形态 ⇒ **已清空**"

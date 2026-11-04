@@ -125,8 +125,3 @@ def test_plan_keys_unchanged():
         "subgoals", "merge_strategy", "anticipatory_lemmas"}
 
 
-def test_switch_off_passes_through(monkeypatch):
-    monkeypatch.setenv("BLUEPRINT_MERGE_VALUE_MASK", "0")
-    plan = parse_blueprint(_raw()).to_subgoal_plan(0)
-    assert "(√5-1)/2" in plan["merge_strategy"]
-    assert "(√5-1)/2" in {s["id"]: s for s in plan["subgoals"]}[3]["description"]

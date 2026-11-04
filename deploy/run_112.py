@@ -36,97 +36,12 @@ os.chdir(ROOT)
 DEFAULT_TEST = "题库/official112_本地测试题库/official112_full.jsonl"
 
 # ============================================================================
-# 实验臂（AB arms）
-# ----------------------------------------------------------------------------
-# 2026-09-21 研究口径：**以"最大化解题能力"为目标**，不再以"省时间"为由削减机制。
-# 选臂方式：环境变量 `MP_ARM`（也写进 `.env` 或用 `MP_ARM=arm2 ...` 前缀）。
-#   ⇒ **同一条启动方式，只多一个环境变量**，不引入新的运行流程。
-#
-# 为什么走 `DEFAULT_AGENT_OVERRIDES` 注入而不是 CLI：
-#   以下键**没有 argparse**（`run_eval.py` 里 grep 不到；`enable_skeleton_review`
-#   的注释曾承诺 `--enable_skeleton_review`，但该参数实际不存在）：
-#     max_subgoals_by_tier / tier_sample_times / tier_voting_times /
-#     tier_max_completions / enable_skeleton_review
-#   启动器对 `max_answer_tokens` 已用同一手法绕开（见本文件下方），此处沿用。
-#   ⚠ 注入点必须在 `import run_eval` **之后**、`run_eval.main()` **之前**
-#     —— EvalEngine 在 __init__ 里 `dict(DEFAULT_AGENT_OVERRIDES)` 做快照。
-#   ⚠ 键必须同时满足：①在 AgentConfig 声明 ②在覆盖白名单内（四层检查）。
-#     本字典所有键均已核对通过。
+# ★ 2026-11-04：实验臂（AB arms）与 MP_ARM 已整块删除。
+#   理由：覆盖表注入的是 config 字段，而收敛后所有策略值只读自 contracts.policy，
+#   覆盖**根本不生效** —— 留着就是「看起来能改、其实改不了」的假机制（项目最忌）。
+#   E14 已作废全部历史 A/B 结论，0 配额下也无法设计 δ>0 的 A/B。
+#   回退路径：git 历史里可恢复 ARMS / resolve_arm / --arm。
 # ============================================================================
-ARMS: dict = {
-    # 臂 0：基线 = 现状配置（24 项机制关闭），不做任何改动
-    "baseline": {},
-
-    # ★ 臂 2：OR 全展开（**本臂现在只剩这一个键**）
-    # ★ 2026-10-15（用户决策「把没有用和关掉开关的部分全删了」）：本臂原有的
-    #   `dag_replan_gate` / `enable_dag_replan` / `enable_skeleton_review` 三键
-    #   已随对应机制整块撤除（三者默认关闭、从未在生产启用），故 arm2 现在**只**
-    #   保留 `blueprint_or_expand_all` —— 即原 §⑥ 的可改项 B：验证「OR 节点展开
-    #   全部备选分支」是否修复「子目标链锁定错值」的上游结构原因。
-    #   （旧注释里「蓝图结构修复 + 评审链恢复」的评审链部分已不复存在。）
-    # ★ 2026-10-17（用户决策「展开看看效果」）：`blueprint_or_expand_all`
-    #   默认值已翻 True ⇒ 本臂反转为**关闭对照**（arm2 = 单分支回归基线）。
-    "arm2": {
-        "blueprint_or_expand_all": False,
-    },
-
-    # 臂 1：standard 档升配（standard 覆盖 89/112 题却只有 **1 票**验证）
-    # ⚠ 未验证；且与「deep 18.8% < standard 31.8%」的档位倒挂数据**方向相反**
-    "arm1": {
-        "tier_voting_times": {"fast": 1, "standard": 3, "deep": 3},
-        "tier_sample_times": {"fast": 1, "standard": 3, "deep": 3},
-        "tier_max_completions": {"fast": 0, "standard": 2, "deep": 2},
-        "max_subgoals_by_tier": {"standard": 16, "deep": 16},
-    },
-
-    # 臂 3：符号求解与交叉校验（正面打 55.4% 的推理/计算错误）
-    # ⚠ 未验证；`symbolic_solve_enabled` 开启前需先做剥离正确性核验（既有遗留项）
-    # 2026-10-01：原 `calc_mandatory` / `calc_hard_only` / `tool_calc_enabled`
-    #   三键随 `<calc>` 计算工具板块整体删除，已移除。
-    "arm3": {
-        "symbolic_crosscheck_enabled": True,
-        "symbolic_solve_enabled": True,
-    },
-
-    # ★ 臂 4（2026-10-04 新增）：引理记忆的**领域路由放开**（仅代数+数论）
-    # 依据冲突（必须由本臂裁决）：
-    #   · LEAP Table 6 消融：DAG/前瞻引理的增益集中在 **Advanced 代数（75→100）
-    #     与数论（66.6→100）** ⇒ 论文认为**代数也该受益**；
-    #   · 本项目 A/B（`user_agent.py:388` 注释）：**数论 +23pp、代数/组合被拖累**
-    #     ⇒ 本项目实测**只有数论**受益。
-    # 两个来源方向相反 ⇒ **不能靠翻默认值决定**，必须新增臂做对照。
-    # 本臂 = 在默认（只开数论）之上**加入代数**，验证论文结论在本代码库是否成立。
-    # ⚠ 不改 `use_lemma_accumulation`（默认已 True）；只放开领域集合。
-    # ★ 臂 5（2026-10-05 新增）：**结构化判分路径替换二元投票**
-    # 依据（用户判定"方法有问题，要找到真正高效的方法替换"）：
-    #   · 现路径 `_vote` = 每候选 3 张**只出票数**的 A/B 票（无定位）；
-    #   · `_vote_rubric` 已实现**结构化判分**：输出
-    #     `{verdict, confidence, error_type, step_index, reason}`
-    #     —— 即"哪一步、哪类错、为什么"，直接就是可注入 revise 的定位。
-    #   · 它**从未在生产跑过**（`use_rubric=False`），有 21 处测试覆盖。
-    # ⚠ 代价：`_vote_one_rubric` 走 JSON prefill（秒级），
-    #   比 3 张完整推理票**浅** ⇒ 属"换方法"，必须 A/B，不得默认翻。
-    # 本臂 = 打开结构化判分，与 baseline 对照"定位质量 vs 检错深度"。
-    "arm5": {
-        "use_rubric": True,
-    },
-}
-
-
-def resolve_arm(cli: str | None = None):
-    """选臂 → (臂名, 覆盖字典)。未知臂名直接 FATAL，不静默兜底。
-
-    优先级：``--arm`` 参数 > ``MP_ARM`` 环境变量 > ``baseline``。
-    为什么要 CLI：``tools/cloud.py run`` 只支持 ``--launcher_args "<参数>"``，
-    **无法给远端进程设置环境变量**，故臂名必须能从命令行传。
-    """
-    name = str(cli or os.environ.get("MP_ARM") or "baseline").strip()
-    if name not in ARMS:
-        print("FATAL: 未知 MP_ARM=%r。可选：%s"
-              % (name, ", ".join(sorted(ARMS))), flush=True)
-        raise SystemExit(2)
-    return name, dict(ARMS[name])
-
 
 
 def load_env_file(path: Path) -> None:
@@ -284,7 +199,7 @@ def _set_run_eval_argv(args, out) -> None:
     ]
 
 
-def _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_overrides) -> None:
+def _print_startup_banner(args, out, log, env_snap, n_questions) -> None:
     """启动 banner（2026-10-08 从 main L363-415 逐字搬出；本地 argval 一并搬入）。"""
     def argval(flag, default="-"):
         try:
@@ -303,10 +218,7 @@ def _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_o
     print(f"       max_total_time_seconds={argval('--max_total_time_seconds')}"
           f"（单档统一：无全卷时间池，单题只受硬顶约束）", flush=True)
     print(f"并发   {argval('--concurrency')}", flush=True)
-    print(f"实验臂 MP_ARM={arm_name}  覆盖 {len(arm_overrides)} 项"
-          + ("" if arm_overrides else "（baseline：不改任何机制）"), flush=True)
-    for _ak in sorted(arm_overrides):
-        print(f"       {_ak} = {arm_overrides[_ak]!r}", flush=True)
+    print("策略   固定单臂（contracts.policy，运行期不可覆盖）", flush=True)
     print(f"开关   deep_final={argval('--verifier_deep_final_enabled')}  "
           f"diversify={argval('--verifier_diversify_enabled')}  "
           f"leansearch={argval('--use_leansearch')}  "
@@ -347,9 +259,6 @@ def main() -> int:
     ap.add_argument("--out", default="")
     ap.add_argument("--tag", default="cloud112")
     ap.add_argument("--concurrency", default="1")
-    ap.add_argument("--arm", default=None,
-                    help="实验臂名（优先于 MP_ARM 环境变量）。可选：%s"
-                         % ", ".join(sorted(ARMS)))
     args = ap.parse_args()
 
     # ---- 环境：.env（DEEPSEEK_*）→ lean-env.sh（PATH + LEAN_PATH）→ cloud_run.env ----
@@ -383,9 +292,6 @@ def main() -> int:
         print(f"FATAL: 题单不存在 {args.test_file}", flush=True)
         return 2
 
-    # ---- 实验臂（必须在 banner 之前解析，好把臂名打进日志）----
-    arm_name, arm_overrides = resolve_arm(args.arm)
-
     out = args.out or f"results/{args.tag}_{time.strftime('%m%d_%H%M')}.jsonl"
     log = out[:-6] + ".log" if out.endswith(".jsonl") else out + ".log"
     env_snap = (out[:-6] + ".env") if out.endswith(".jsonl") else out + ".env"
@@ -413,23 +319,9 @@ def main() -> int:
 
     n_questions = sum(1 for _ in io.open(args.test_file, encoding="utf-8"))
 
-    # ---- 实验臂快照：让每份结果**自描述**，便于跨臂对照 ----
-    arm_snap = (out[:-6] if out.endswith(".jsonl") else out) + ".arm.json"
-    with io.open(arm_snap, "w", encoding="utf-8") as _fh:
-        json.dump({
-            "arm": arm_name,
-            "overrides": arm_overrides,
-            "test_file": args.test_file,
-            "n_questions": n_questions,
-            "concurrency": str(args.concurrency),
-            "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "out": out,
-        }, _fh, ensure_ascii=False, indent=2, sort_keys=True)
-    print(f"臂快照 {arm_snap}", flush=True)
-
     _set_run_eval_argv(args, out)
 
-    _print_startup_banner(args, out, log, env_snap, n_questions, arm_name, arm_overrides)
+    _print_startup_banner(args, out, log, env_snap, n_questions)
 
     import run_eval
     # ★★ 2026-09-21 用户指示"放开"：默认档位 8192 → 32768（4x）。
@@ -463,12 +355,6 @@ def main() -> int:
         print(f"⚠️  余量比 {_ratio:.2f} < 1.2：长输出可能读超时 → "
               f"`Candidate empty response`。请同步抬高 LLM_TIMEOUT"
               f"（env 里 export LLM_TIMEOUT=<秒>）。", flush=True)
-
-    # ---- 实验臂注入（必须在 EvalEngine 建实例之前）----
-    for _k, _v in arm_overrides.items():
-        _b = run_eval.DEFAULT_AGENT_OVERRIDES.get(_k, "<未设置>")
-        run_eval.DEFAULT_AGENT_OVERRIDES[_k] = _v
-        print(f"臂     {_k}: {_b!r} → {_v!r}", flush=True)
 
     try:
         run_eval.main()

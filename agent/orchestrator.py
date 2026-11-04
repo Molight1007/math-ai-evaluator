@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.policy import POLICY
 
 
 # 2026-10-02 中间结果存储层（李平老师架构建议 #5，老师点名的「耦合过紧」根因）：
@@ -106,7 +107,7 @@ from .param_usage import collect_param_usage  # noqa: F401
 # 既有 `from agent.orchestrator import _merge_error_types` 等调用点/测试零改动。
 from .diag_metrics import (  # noqa: F401
     _merge_error_types, _sum_reject_votes, _compute_subgoal_gaps,
-    _switch_snapshot, _tool_gateway_summary,
+    _policy_snapshot, _tool_gateway_summary,
     _parse_exhaust_result, _diag_completeness, _summarize_deep_review,
     _summarize_leansearch)
 from .diag_export import collect_diag  # noqa: F401  （供 _collect_diag 委托）
@@ -128,7 +129,6 @@ from .rewrite_gate import rewrite_stage  # noqa: F401
 from .orchestrator__collab import collaborative_deep_improve  # noqa: F401
 # 2026-10-07 阶段C4a：2.7_subgoal_main 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
-from contracts.switch_registry import get_bool as _sw_bool
 from .orchestrator__solve import subgoal_main_path  # noqa: F401
 # 2026-10-07 阶段C4b：3.2_complete 段已抽到 agent/orchestrator__solve.py，
 # 由 run 一行委托调用（阶段打点原位保留，契约不变）。
@@ -168,7 +168,6 @@ from . import orchestrator__lean as _orch_lean
 # `from agent.orchestrator import <名>` 调用点零改动。
 # （2026-10-15：`_emergency_direct_max_tokens` 已随直答兜底删除）
 from .orchestrator__helpers import (  # noqa: F401
-    _sw_bool_or, _sw_num_or,
     _load_lean_modules, _answer_fingerprint, _merge_review_into_feedback,
     _collect_tool_findings)
 # ★ 2026-10-14：5_revise_or_fallback 段已删（用户决策②「全删」）⇒ 不再 import。
@@ -410,7 +409,7 @@ class Orchestrator(BaseAgent):
             total_start_time=_anchor,
             total_deadline=_anchor + getattr(self.config, 'max_total_time_seconds', 21000),
             # 2026-10-02：题型惰性求值开关（`1_classify` 阶段删除后由属性消费）。
-            _enable_question_type=getattr(self.config, "enable_question_type", True),
+            _enable_question_type=POLICY['enable_question_type'],
         )
         # ★ 2026-10-02 hook 0：中间结果存储层挂载（关闭/失败 → 静默 no-op，主链无感）。
         #   run_id 取进程级稳定值（一轮评测一个目录）；qid 由题面哈希生成（文件名不含中文）。
@@ -572,7 +571,7 @@ class Orchestrator(BaseAgent):
         #   **蓝图 3 遍 + 子目标 3 遍**（blueprint_multi_gen_rounds /
         #   subgoal_collab_regen_rounds，默认均 3）⇒ 本阶段默认**跳过**
         #   （阶段名保留于 stage_audit 契约；开关 self_improve_stage 可恢复）。
-        if _sw_bool("self_improve_stage"):
+        if POLICY['self_improve_stage']:
             self._stage_start(ctx, "3.3_improve")
             self_improve_step(self, ctx)
 

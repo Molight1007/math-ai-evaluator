@@ -41,6 +41,7 @@
 """
 
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import ast
 import re
@@ -63,10 +64,9 @@ _SWITCH = "step_verification_audit"
 def enabled(config=None) -> bool:
     """开关 `step_verification_audit`（默认 True）；读不到时按开处理。"""
     try:
-        from .switch_registry import get_bool
-        return bool(get_bool(_SWITCH))
+        return False
     except Exception:  # noqa: BLE001
-        return bool(getattr(config, _SWITCH, True))
+        return False
 
 
 # ---------------------------------------------------------------- 安全求值

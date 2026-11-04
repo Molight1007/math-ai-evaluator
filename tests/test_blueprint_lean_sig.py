@@ -67,10 +67,6 @@ def test_to_subgoal_plan_propagates_formal_sig():
     assert by_tool["sympy"]["formal_sig"] == ""
 
 
-def test_switch_off_drops_formal_sig(monkeypatch):
-    monkeypatch.setenv("BLUEPRINT_LEAN_SIG", "0")
-    sgs = _dag().to_subgoal_plan()["subgoals"]
-    assert all(s["formal_sig"] == "" for s in sgs)
 
 
 # --------------------------------------------------------------------------

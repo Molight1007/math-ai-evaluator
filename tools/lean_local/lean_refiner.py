@@ -21,6 +21,7 @@ LeanRefinerAgent —— LEAP Stage 3：迭代精炼（#29/#32/#33）
 """
 
 import logging
+from contracts.policy import POLICY
 import os
 import re
 import time
@@ -189,7 +190,7 @@ class LeanRefinerAgent(BaseAgent):
         lemma_block = self.memory.format_for_prompt(limit=8)
         # #31 leansearch：检索相关 Mathlib 定理注入补全提示
         theorem_block = ""
-        if getattr(self.config, "use_leansearch", False):
+        if POLICY['use_leansearch']:
             sr = self._search_mathlib(ctx, statement + " " + problem)
             if sr and sr.get("results"):
                 theorem_block = "\n".join(

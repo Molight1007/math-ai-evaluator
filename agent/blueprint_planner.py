@@ -23,6 +23,7 @@ BlueprintPlanner —— LEAP Stage 1：Blueprint DAG 分解（#27）
 """
 
 import json
+from contracts.policy import POLICY
 import logging
 import re
 from typing import Optional
@@ -317,7 +318,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 # 2026-09-15：依赖边开关（默认开＝修复后的正确行为）
                 with_deps=getattr(self.config, "blueprint_deps_enabled", True),
                 # 2026-09-20：OR 节点展开策略（默认 False = 只取 children[0]）
-                or_expand_all=getattr(self.config, "blueprint_or_expand_all", False))
+                or_expand_all=POLICY['blueprint_or_expand_all'])
             _anti = len(ctx.blueprint_plan.get("anticipatory_lemmas") or [])
             self.record(ctx, "blueprint",
                         f"Blueprint DAG → {len(ctx.blueprint_plan['subgoals'])} 个子目标"
@@ -710,7 +711,7 @@ class BlueprintPlannerAgent(BaseAgent):
         轮数由 `blueprint_multi_gen_rounds` 控制（默认 3，=1 时等价于单次生成）。
         任一改进轮未产出 ⇒ **保留上一轮**（不因一次失败丢掉已得蓝图）。
         """
-        rounds = max(1, int(getattr(self.config, "blueprint_multi_gen_rounds", 3) or 3))
+        rounds = max(1, int(POLICY['blueprint_multi_gen_rounds'] or 3))
         dag = self.generate_blueprint(ctx, max_attempts=max_attempts)
         if dag is None:
             return None
@@ -765,8 +766,7 @@ class BlueprintPlannerAgent(BaseAgent):
             ratio = len(rejected) / float(total)
             self.record(ctx, "blueprint_self_review",
                         f"蓝图自审：{len(rejected)}/{total} 节点被拒（{ratio:.0%}）")
-            threshold = float(getattr(self.config,
-                                      "blueprint_self_review_reject_ratio", 0.4) or 0.4)
+            threshold = float(POLICY['blueprint_self_review_reject_ratio'] or 0.4)
             if not rejected or ratio < threshold:
                 return dag
             lines = []

@@ -21,15 +21,15 @@
 **4.4 计算检测** → ⑤投票。
 """
 from __future__ import annotations
+from contracts.policy import POLICY
 
 import re
 
-from .switch_registry import get_bool as _sw_get_bool
 
 def _switch_enabled() -> bool:
     """读「五道链·第 4 道计算检测」开关（默认 True，=0 关闭做 A/B）。"""
     try:
-        return _sw_get_bool("five_gate_math_check")
+        return POLICY['five_gate_math_check']
     except Exception:  # noqa: BLE001
         return True
 
@@ -43,7 +43,7 @@ def _calcverify_enabled() -> bool:
     （``ctx.math_calcverify``）与 trace —— **观测模式：暂不改淘汰**。
     """
     try:
-        return _sw_get_bool("five_gate_math_check_calcverify")
+        return POLICY['five_gate_math_check_calcverify']
     except Exception:  # noqa: BLE001
         return False
 

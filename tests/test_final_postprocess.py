@@ -82,12 +82,14 @@ def test_objective_keeps_letter_answer():
 
 
 # ---------------- 总开关 ----------------
-def test_postprocess_switch_off(monkeypatch):
+def test_postprocess_numericizes_by_policy(monkeypatch):
+    """★ 2026-11-05：数值化与自校验已固化为恒开，env 关不掉。
+
+    保留「后处理确实把 2023^2 算成数值」这一功能断言。
+    """
     o = _orch()
-    monkeypatch.setenv("NUMERICIZE_FINAL", "0")
-    monkeypatch.setenv("OBJECTIVE_SELFCHECK", "0")
     ctx = _Ctx(answer="\\boxed{2023^2}")
-    assert o._final_answer_postprocess(ctx) == "\\boxed{2023^2}"
+    assert o._final_answer_postprocess(ctx) == "\\boxed{4092529}"
 
 
 def test_postprocess_applies_both(monkeypatch):

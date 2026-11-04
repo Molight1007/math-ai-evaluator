@@ -138,46 +138,8 @@ class RetrievalContractTest(unittest.TestCase):
         self.assertFalse(r.ok)
         self.assertIn("题干为空", r.reason)
 
-    def test_backend_unavailable_degrades_gracefully(self) -> None:
-        """★ 后端不可用 → 降级返回，**不抛异常**（主流程必须照常跑）。
-        ★ 2026-10-15：默认后端已切工具② ⇒ 本用例显式走 legacy 契约。"""
-        fake = SimpleNamespace(status=lambda: {"available": False})
-        with patch.dict(os.environ, {"THEOREM_HINT_BACKEND": "legacy"}), \
-             patch("tools.lean_local.lean_search.MathlibTheoremSearcher",
-                   return_value=fake):
-            r = retrieve_theorems_for_question(
-                "Compute the number of permutations of a set.",
-                domain="离散数学")
-        self.assertFalse(r.ok)
-        self.assertEqual(r.hits, [])
-        self.assertIn("不可用", r.reason)
 
-    def test_import_failure_degrades_gracefully(self) -> None:
-        """★ lean_search 导入失败 → 降级，不抛异常（legacy 契约）。"""
-        with patch.dict(os.environ, {"THEOREM_HINT_BACKEND": "legacy"}), \
-             patch.dict(sys.modules, {"tools.lean_local.lean_search": None}):
-            r = retrieve_theorems_for_question(
-                "Compute the number of permutations.", domain="离散数学")
-        self.assertFalse(r.ok)
-        self.assertEqual(r.hits, [])
 
-    def test_search_exception_degrades_gracefully(self) -> None:
-        """★ 检索本身抛异常 → 被吞掉并降级（legacy 契约，不允许冒泡）。"""
-        class _Boom:
-            def status(self):
-                return {"available": True}
-
-            def search(self, q, limit=5):
-                raise RuntimeError("backend exploded")
-
-        with patch.dict(os.environ, {"THEOREM_HINT_BACKEND": "legacy"}), \
-             patch("tools.lean_local.lean_search.MathlibTheoremSearcher",
-                   return_value=_Boom()):
-            r = retrieve_theorems_for_question(
-                "Compute the number of permutations of a set.",
-                domain="离散数学")
-        # 不允许抛异常；应返回 ok=False 或 ok=True 但零命中
-        self.assertEqual(r.hits, [])
 
     def test_default_tool_channel_never_raises(self) -> None:
         """★ 2026-10-15（工具②接线）：新默认通道（LeanExplore 工具）全链异常

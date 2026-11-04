@@ -78,19 +78,17 @@ def _cap_by_tier(cfg, flat, table, tier):
 def _cap_gate_rework(cfg, tier):
     """6.5 审核重做的候选数上限，口径与 `orchestrator.py:2513` 消费处**逐字对齐**：
 
-      · standard 档恒为 **2**（该档无 env 开关，orchestrator 亦硬编码 2）；
-      · deep 档读开关 `deep_max_rework`（env `DEEP_MAX_REWORK`），
-        **<0 = 无上限 ⇒ None**（默认 -1；比赛期曾为 3）。
+      · standard 档恒为 **2**（orchestrator 硬编码 2）；
+      · deep 档 **无上限（None）**。
 
-    此前本项**硬编码返回 3、从不读该开关** ⇒ 设 `DEEP_MAX_REWORK=N` 时报告仍显示 3、
-    「是否撞顶」判断失真（问题总账 §2.6 / 原审查技术债）。
+    ★ 2026-11-05 开关融合：`deep_max_rework` 是早已删除的历史开关，
+      本函数却仍以字符串读取它（字段不存在 ⇒ 默认 -1 ⇒ 恒返回 None）。
+      保留这段「读了也不生效」的代码等于留尾巴，已按实际行为直接固化：
+      deep 档无上限。取证见 contracts/policy_ledger.json::validation。
     """
     if tier == "standard":
         return 2
-    cap = _int(_cfg_get(cfg, "deep_max_rework", -1))
-    if cap is None or cap < 0:
-        return None
-    return cap
+    return None
 
 
 # ======================================================================
