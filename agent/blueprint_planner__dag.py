@@ -188,16 +188,15 @@ def _flatten_formal_sig(value) -> str:
 
 
 def _sig_gate_shape(sig: str) -> dict:
-    """形式签名**影子门禁**：只做零成本形态判定，不编译、不阻断、不改签名。
+    """形式签名的**规划期预检**：只做零成本形态判定 + 门 B，不编译、不改签名。
 
-    ★ 2026-11-04（E30）：`contracts/formal_sig_gate.py` 的三道门里，
-      规划期只能跑门 B（命题非平凡）与形态检查；门 A 需要 Lean 编译、
-      门 C 需要求解侧证明体，两者都不在规划期可得。
-      ⇒ `evaluate()` 在 `compile_result=None` 时返回 `UNVERIFIED`，
-        **不放行**（E27 教训：静默放行会让分母塌掉）。
-    ★ 本字段只供离线回放统计「若生效会砍谁」。**不得**据此丢弃签名、
-      不得据此改变 tool 指派 —— 闸门后有效硬闭合当前为 0（E29），
-      此刻真接门等于把产出一次性砍光。
+    ★ 2026-11-04（E31）：规划期只跑得起门 B（命题非平凡）与形态检查；
+      门 A 需要 Lean 编译、门 C 需要求解侧证明体，都在求解侧由
+      `_lean_block_verify` → `_commit_sig_gate` 补齐，并**真接到闭合准入**。
+      ⇒ 这里 `compile_result=None` 时恒 `UNVERIFIED`（不放行），
+        不是最终结论，只是「规划期尚未验」的留痕（E27：静默放行会让分母塌掉）。
+    ★ 本字段供离线回放交叉核对；**不得**据此丢弃签名或改 tool 指派 ——
+      真判砍的是「带 sorry 的假凭证」，不是模型产出。
     """
     try:
         from contracts.formal_sig_gate import evaluate
@@ -730,10 +729,11 @@ class BlueprintDAG:
                     if (_sig_on
                         and str(getattr(node, "tool", "") or "").strip().lower()
                         == "lean") else ""),
-                # ★ 2026-11-04（E30）影子门禁：与上方 `formal_sig` **同一个条件**，
+                # ★ 2026-11-04（E31）规划期预检：与上方 `formal_sig` **同一个条件**，
                 #   不得单独改这里的过滤逻辑（两份口径漂移是本项目反复踩的坑）。
-                #   只打标、不丢签名、不改 tool；门 A/C 需要编译与证明体，
-                #   规划期不可得 ⇒ 恒为 UNVERIFIED / NONTRIVIAL / ABSENT。
+                #   不丢签名、不改 tool；门 A/C 需要编译与证明体，规划期不可得
+                #   ⇒ 恒为 UNVERIFIED / NONTRIVIAL / ABSENT。最终 verdict 由求解侧
+                #   三道门合成后写进 `sig_gate_allowed`，这里只是可核对的起点。
                 "sig_gate_shape": _sig_gate_shape(
                     str(getattr(node, "formal_sig", "") or "").strip()
                     if (_sig_on

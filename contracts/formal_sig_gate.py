@@ -34,17 +34,24 @@ S3     最终拼接代码的编译            `_lean_block_verify` 用 `allow_so
 E29 里那 37% 编造记号（`Φ` / `rotate_cw` / `path_length`）的办法。
 两者**不得混用**，也不得共用一个分类函数。
 
-## ★★ 影子模式（默认）
+## ★★ 真判接线（2026-11-04，E31）
 
-`evaluate()` 只产出 verdict，**不执行编译、不丢弃签名、不阻断任何流程**。
-理由：
-  1. E29 实测闸门后有效硬闭合 = 0（151 条形式签名，PASS 0）。此刻真接门，
-     等于把所有产出一次性砍光，得不到任何可比较的信号。
-  2. E27（符号表）/ E29（四分类）两次证明：**未经抽验的判据直接接进生产，
-     必然被下一轮抽验打回并回滚**。
-调用方当前只把 verdict 写进诊断字段。真正启用前必须：
-  - 在留出集上跑「若生效会砍谁」，逐条人工抽验；
-  - 显式登记开关（四表同步 + LIFECYCLE），不得靠默认开启。
+`evaluate()` 本身仍是**纯函数**（不编译、不丢弃签名、不阻断模型产出）；
+但调用方必须把它的 verdict **接到闭合准入**上，不再只当诊断字段：
+
+  · 三道门未全过 ⇒ 子目标的 `sig_gate_allowed=False`，
+    `tool_verdict` 写 `verdict_text()` 给出的**不可闭合**文本，
+    `contracts.closure.closure_of()` 显式判 OPEN（不依赖失败词巧合）；
+  · 三道门全过 ⇒ 才允许把工具结果写成 pass。
+
+★ **不设开关**：影子/真判之间没有切换项，也没有总闸刀。理由不是"这次敢了"，
+  而是 E29 已量清分母——真判砍掉的是「带 sorry 的假凭证」，不是模型产出；
+  历史 `tool_ran` 全 False、`tool_verdict` 全空，本来就没有一条真硬闭合可砍。
+  留一个开关只会让「到底有没有在判」永远说不清，正是出口制要清掉的那类尾巴。
+
+★ 判据能力边界不变：`is_trivial_prop()` 只是保守下界；门 A 的编译结果
+  必须由调用方注入（Lean 不可用 ⇒ `compile_result=None` ⇒ UNVERIFIED ⇒ 不认），
+  「没验」绝不等价于「验过」。
 
 ## ★ compile_result 缺失 ≠ 放行
 
@@ -66,7 +73,7 @@ import re
 __all__ = [
     "SORRY_RE", "TAIL_RE", "TRIVIAL_RULES", "UNTRUSTED_RE",
     "split_sig", "is_trivial_prop", "illegal_kind", "classify_stated",
-    "proof_credential", "evaluate",
+    "proof_credential", "evaluate", "verdict_text", "gate_fields",
 ]
 
 # 占位证明（sorry / admit）。★ 与 contracts.closure.FAIL_WORDS 同口径：
@@ -231,3 +238,34 @@ def evaluate(sig, compile_result=None, proof_code=None):
     if cred != "OK":
         return _v("PROOF", ["证明凭证不成立：%s / %s" % (cred, why2)], prop)
     return _v("READY", [], prop)
+
+
+def verdict_text(v):
+    """verdict → `tool_verdict` 文本（**唯一写出口径**）。
+
+    READY 才写 ``pass``；其余一律写不可闭合文本。★ 文本里的 ``unknown``
+    只是让人类/旧口径一眼看出「没验成」，**闭合判定不靠这个子串**，
+    靠 `gate_fields()` 写下的 `sig_gate_allowed` 显式字段
+    （见 `contracts.closure.closure_of`）。
+    """
+    if not isinstance(v, dict):
+        v = None
+    if v and v.get("allowed") is True:
+        return "pass"
+    stage = str((v or {}).get("stage") or "UNAVAILABLE")
+    reasons = "; ".join(str(x).strip() for x in ((v or {}).get("reasons") or [])
+                        if str(x).strip())
+    return ("unknown: sig_gate=%s %s" % (stage, reasons)).strip()[:300]
+
+
+def gate_fields(v):
+    """verdict → 子目标上应落盘的诊断字段（形状由契约层定，避免各处自拼）。"""
+    if not isinstance(v, dict):
+        v = {"stage": "UNAVAILABLE", "allowed": False,
+             "reasons": ["契约层门禁不可用"], "prop": ""}
+    return {
+        "sig_gate_allowed": bool(v.get("allowed")),
+        "sig_gate_stage": str(v.get("stage") or "UNAVAILABLE"),
+        "sig_gate_reasons": list(v.get("reasons") or []),
+        "sig_gate_prop": str(v.get("prop") or ""),
+    }

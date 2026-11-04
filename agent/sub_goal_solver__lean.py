@@ -588,6 +588,92 @@ def _compose_formal_sig(formal_sig: str, code: str) -> str:
         return code
 
 
+# ---------------------------------------------------------------------------
+# 形式签名三道门的生产接线（2026-11-04 E31）
+# 契约层只给判定，不给放行；这里是把判定接到「能不能写 pass」的唯一写点。
+# ★ 不设开关：没有影子/真判的切换项，判定结果直接进闭合准入。
+# ---------------------------------------------------------------------------
+def _sig_of(sg) -> str:
+    return str((sg or {}).get("formal_sig") or "").strip()
+
+
+def _init_sig_gate(sg) -> None:
+    """tool=lean 且有签名 ⇒ 先落「形态 + 门 B」判定；未过者不准写 pass。
+
+    ★ 无签名时闸门**不适用**：该子目标走「求解侧自写整段 Lean」的旧路径，
+      不写 `sig_gate_allowed`，保持原有工具级闭合口径 —— 闸门只管「蓝图
+      声称已形式化」的那批，不把别处真跑过的工具也一起否掉。
+    """
+    sig = _sig_of(sg)
+    if not sig or not isinstance(sg, dict):
+        return
+    try:
+        from contracts.formal_sig_gate import evaluate, gate_fields
+        sg.update(gate_fields(evaluate(sig)))
+    except Exception:  # noqa: BLE001  契约层不可用 ⇒ 显式否决，绝不静默放行
+        sg["sig_gate_allowed"] = False
+        sg["sig_gate_stage"] = "UNAVAILABLE"
+        sg["sig_gate_reasons"] = ["契约层门禁不可用"]
+
+
+def _verdict_text_of(sg) -> str:
+    """从已落盘字段重建 `tool_verdict` 文本（不重算判定，避免口径漂移）。"""
+    try:
+        from contracts.formal_sig_gate import verdict_text
+        return verdict_text({
+            "stage": sg.get("sig_gate_stage", "UNAVAILABLE"),
+            "allowed": sg.get("sig_gate_allowed", False),
+            "reasons": sg.get("sig_gate_reasons", []),
+            "prop": sg.get("sig_gate_prop", ""),
+        })
+    except Exception:  # noqa: BLE001
+        return "unknown: sig_gate=UNAVAILABLE"
+
+
+def _commit_sig_gate(sg, sig, compile_result, proof_code) -> None:
+    """门 A + 门 C 有结果后，三道门合成并落盘（唯一写点）。"""
+    if not isinstance(sg, dict) or not sig:
+        return
+    try:
+        from contracts.formal_sig_gate import evaluate, gate_fields
+        sg.update(gate_fields(evaluate(sig, compile_result, proof_code)))
+    except Exception:  # noqa: BLE001
+        sg["sig_gate_allowed"] = False
+        sg["sig_gate_stage"] = "UNAVAILABLE"
+        sg["sig_gate_reasons"] = ["契约层门禁不可用"]
+
+
+def _compile_stated(bridge, work_dir, sig, fname):
+    """门 A：保留 `:= by sorry` 原样编译，只判命题能否被 elaborate。
+
+    返回 ``(returncode, full_err)``；编译器不可用 ⇒ None ⇒ `evaluate()` 记
+    UNVERIFIED（没验 ≠ 验过）。★ 与 `classify_stated` 的输入口径一致，
+    不复用「把 sorry 换成自动策略」那张床的分类函数。
+    """
+    if not sig:
+        return None
+    try:
+        from tools.lean_local.lean_bridge import (
+            _prepend_mathlib_import, _trash_lean_file)
+        code = sig
+        try:
+            if bridge._mathlib_ready():
+                code = _prepend_mathlib_import(sig)
+        except Exception:  # noqa: BLE001
+            pass
+        r = bridge._compile(code, work_dir, lean_filename=fname,
+                            allow_sorry=True)
+        try:
+            _trash_lean_file(work_dir, fname)
+        except Exception:  # noqa: BLE001
+            pass
+        if not isinstance(r, dict):
+            return None
+        return (0 if r.get("ok") else 1, str(r.get("error") or ""))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
     """按蓝图声明的 `tool` 跑一次机器核验，返回反馈文本（空=通过/未执行/放行）。
 
@@ -604,7 +690,12 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
     def _mark(ran: bool, failed: bool) -> None:
         try:
             sg["tool_ran"] = bool(ran)
-            sg["tool_verdict"] = "fail" if failed else ("pass" if ran else "")
+            # ★ E31 真判：三道门否决优先于「工具说通过」。带 sorry 的证明
+            #   编译能通过、工具也会报成功，只有这里能把它挡在 pass 之外。
+            if sg.get("sig_gate_allowed") is False:
+                sg["tool_verdict"] = _verdict_text_of(sg)
+            else:
+                sg["tool_verdict"] = "fail" if failed else ("pass" if ran else "")
         except Exception:  # noqa: BLE001  可观测字段写失败不影响主流程
             pass
 
@@ -653,6 +744,9 @@ def _tool_declared_verify(self, ctx: TaskContext, sg: dict, result: str) -> str:
         _mark(True, bool(_fb))
         return _fb
     if tool == "lean":
+        # ★ E31：先落「形态 + 门 B」判定，后续由 _lean_block_verify 用
+        #   门 A（可陈述编译）与门 C（证明凭证）覆盖成最终 verdict。
+        _init_sig_gate(sg)
         if not _LEAN_FENCE_RE.search(str(result or "")):
             _mark(False, False)
             return ""
@@ -732,23 +826,13 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
     if not blocks:
         return ""
     code = "\n".join(blocks).strip()
+    _sig = _sig_of(sg)
     # ★ 2026-10-15：与蓝图签名拼接（求解侧只回证明体时也能成完整声明）
-    code = _compose_formal_sig(str((sg or {}).get("formal_sig") or ""), code)
-    # ★ 2026-11-04（E30）门 C **影子打标**：最终拼接代码里若仍带 sorry/axiom，
-    #   说明求解侧根本没给出证明，只把签名占位原样交回来了。
-    #   当前 `_compile(..., allow_sorry=True)` 会把它算成 ok ⇒ 「工具说通过」的
-    #   假凭证。本轮**只记录、不改放行**（闸门后有效硬闭合为 0，E29；直接接门
-    #   会把产出一次砍光）。下一次真接门时，把外层 `_mark` 的 verdict 与
-    #   `sig_gate_proof` 关联即可，无需再动判定逻辑。
-    if isinstance(sg, dict):
-        try:
-            from contracts.formal_sig_gate import proof_credential
-            _cred, _why = proof_credential(code)
-            sg["sig_gate_proof"] = _cred
-            sg["sig_gate_proof_reason"] = _why
-        except Exception:  # noqa: BLE001  门禁不可用 ⇒ 显式留痕
-            sg["sig_gate_proof"] = "UNAVAILABLE"
-            sg["sig_gate_proof_reason"] = "契约层门禁不可用"
+    code = _compose_formal_sig(_sig, code)
+    # ★ 2026-11-04（E31）门 C 改为**真判**：`_compose_formal_sig` 已剥掉
+    #   签名尾部的 `:= by sorry`，最终 code 里再出现 sorry 只可能来自求解侧
+    #   证明体 ⇒ 由 `_commit_sig_gate` 里的 `proof_credential` 判掉，
+    #   再由外层 `_mark` 拒绝写 pass。这里不再单独留影子字段。
     if not code or len(code) > 8000:
         return ""
     meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
@@ -782,9 +866,13 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
         if isinstance(sg, dict):
             sg["tool_not_run_reason"] = "lean-no-workdir"
         return ""
-    meta["sg_lean_count"] = cnt + 1
+    # 带签名时本步要跑两次编译（门 A 判命题、主编译判证明）⇒ 计数同步 +2，
+    # 让 `blueprint_lean_max_per_q` 的上限仍然管得住真实开销。
+    meta["sg_lean_count"] = cnt + (2 if _sig else 1)
     fname = "sglean_%d_%d.lean" % (os.getpid(),
                                    int(time.time() * 1000) % 1000000)
+    fname_sig = "sgstated_%d_%d.lean" % (os.getpid(),
+                                         int(time.time() * 1000) % 1000000)
     # ★ 2026-10-15：Mathlib import 归一化 —— 模型惯写 `import Mathlib.Tactic`，
     #   而本机/部分编译布局下**没有**聚合入口 olean ⇒ 必须改写为可用的具体模块
     #   导入集（`CORE_MATHLIB_IMPORTS`），否则本步必然编译失败。
@@ -795,16 +883,23 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
             code = _prepend_mathlib_import(code)
     except Exception:  # noqa: BLE001  归一化不可用 → 用原代码（不阻断）
         pass
+    # ★ E31 门 A：签名**原样**编译（保留 := by sorry），只判命题可陈述。
+    #   与主编译分开跑，绝不把「策略不够」和「命题写不出」混成一类。
+    _stated = _compile_stated(bridge, work_dir, _sig, fname_sig)
     try:
         r = bridge._compile(code, work_dir, lean_filename=fname,
                             allow_sorry=True)
     except Exception:  # noqa: BLE001  编译器异常 ≠ 本步出错 → 放行
+        _commit_sig_gate(sg, _sig, _stated, code)
         return ""
     finally:
         try:
             _trash_lean_file(work_dir, fname)
         except Exception:  # noqa: BLE001
             pass
+    # ★ E31 三道门合成：门 A 的编译结果 + 门 C 的最终代码，一次写进闭合准入。
+    #   compile_result 为 None（Lean 不可用）⇒ UNVERIFIED ⇒ 不认，绝不静默放行。
+    _commit_sig_gate(sg, _sig, _stated, code)
     if not r or r.get("ok"):
         return ""
     err_text = str(r.get("error", "") or "")

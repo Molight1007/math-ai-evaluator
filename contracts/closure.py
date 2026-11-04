@@ -60,6 +60,12 @@ def closure_of(item) -> tuple:
     """
     if not item:
         return CLOSURE_UNMAPPED, "no_subgoal"
+    # ★ 2026-11-04（E31）：形式签名三道门的否决是**显式字段**，不是靠
+    #   FAIL_WORDS 里的子串巧合。带 sorry 的证明能编译通过、工具也会写 pass，
+    #   只有这道否决能把「没证出来」从硬闭合里剔掉。
+    #   缺省（历史产物没有该字段）⇒ 完全沿用旧判定，归档回放结论不变。
+    if item.get("sig_gate_allowed") is False:
+        return CLOSURE_OPEN, "sig_gate_rejected"
     tool_ran = item.get("tool_ran")
     tv = ("%s" % (item.get("tool_verdict") or "")).lower()
     if tool_ran is True and not any(w in tv for w in FAIL_WORDS):

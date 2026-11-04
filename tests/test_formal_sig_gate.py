@@ -184,3 +184,108 @@ def test_all_three_gates_pass():
 def test_allowed_true_only_on_ready():
     assert not any(G.evaluate(SIG, compile_result=(rc, err))["allowed"]
                    for rc, err in [(0, ""), (1, "error: x"), (None, "")])
+
+
+# ---------------------------------------------------------------------------
+# E31 真判接线：判定 → 落盘字段 → tool_verdict → 闭合准入
+# ★ 全部零配额、不需要 Lean：编译结果以 (rc, err) 注入。
+# ---------------------------------------------------------------------------
+PROOF_OK = "example (n : ℕ) (h : n = 3) : n + 1 = 4 := by omega"
+
+
+def test_verdict_text_pass_only_on_ready():
+    assert G.verdict_text(G.evaluate(SIG, (0, ""), PROOF_OK)) == "pass"
+    txt = G.verdict_text(G.evaluate(SIG))
+    assert txt != "pass" and "unknown" in txt and "UNVERIFIED" in txt
+
+
+def test_gate_fields_shape_is_stable():
+    f = G.gate_fields(G.evaluate(SIG))
+    assert set(f) == {"sig_gate_allowed", "sig_gate_stage",
+                      "sig_gate_reasons", "sig_gate_prop"}
+    assert f["sig_gate_allowed"] is False and f["sig_gate_stage"] == "UNVERIFIED"
+
+
+def test_closure_explicitly_rejects_gate_veto():
+    """★ 工具说 pass 也不行：带 sorry 的证明能编译通过，必须靠显式字段挡住。"""
+    from contracts.closure import CLOSURE_HARD, CLOSURE_OPEN, closure_of
+    item = {"tool_ran": True, "tool_verdict": "pass",
+            "sig_gate_allowed": False}
+    assert closure_of(item)[0] == CLOSURE_OPEN
+    assert closure_of(item)[1] == "sig_gate_rejected"
+
+
+def test_closure_legacy_rows_unchanged():
+    """历史产物没有 sig_gate_allowed ⇒ 旧判定逐字不变（归档回放结论不受影响）。"""
+    from contracts.closure import CLOSURE_HARD, closure_of
+    assert closure_of({"tool_ran": True, "tool_verdict": "pass"})[0] == CLOSURE_HARD
+    assert closure_of({"tool_ran": True, "tool_verdict": "fail"})[0] != CLOSURE_HARD
+
+
+def test_project_closed_drops_vetoed_items():
+    from contracts.closure import project_closed
+    rows = [
+        {"id": 1, "tool_ran": True, "tool_verdict": "pass"},
+        {"id": 2, "tool_ran": True, "tool_verdict": "pass",
+         "sig_gate_allowed": False},
+    ]
+    assert [r["id"] for r in project_closed(rows)] == [1]
+
+
+def test_live_wiring_end_to_end():
+    """规划期预检 → 求解侧门 A/C 合成 → verdict 文本，一条完整链路。"""
+    from agent.sub_goal_solver__lean import (
+        _init_sig_gate, _commit_sig_gate, _verdict_text_of)
+    sg = {"formal_sig": SIG, "tool": "lean"}
+    _init_sig_gate(sg)
+    assert sg["sig_gate_allowed"] is False           # 规划期尚未验
+    assert _verdict_text_of(sg) != "pass"
+
+    _commit_sig_gate(sg, SIG, (0, ""), PROOF_OK)     # 门 A 过 + 门 C 过
+    assert sg["sig_gate_allowed"] is True
+    assert sg["sig_gate_stage"] == "READY"
+    assert _verdict_text_of(sg) == "pass"
+
+
+def test_live_wiring_sorry_never_becomes_pass():
+    from agent.sub_goal_solver__lean import (
+        _init_sig_gate, _commit_sig_gate, _verdict_text_of)
+    sg = {"formal_sig": SIG, "tool": "lean"}
+    _init_sig_gate(sg)
+    _commit_sig_gate(sg, SIG, (0, ""), "example : True := by sorry")
+    assert sg["sig_gate_allowed"] is False
+    assert sg["sig_gate_stage"] == "PROOF"
+    assert _verdict_text_of(sg) != "pass"
+
+
+def test_live_wiring_missing_compile_never_becomes_pass():
+    """Lean 不可用 ⇒ compile_result=None ⇒ 没验 ≠ 验过。"""
+    from agent.sub_goal_solver__lean import (
+        _init_sig_gate, _commit_sig_gate, _verdict_text_of)
+    sg = {"formal_sig": SIG, "tool": "lean"}
+    _init_sig_gate(sg)
+    _commit_sig_gate(sg, SIG, None, PROOF_OK)
+    assert sg["sig_gate_allowed"] is False
+    assert sg["sig_gate_stage"] == "UNVERIFIED"
+
+
+def test_no_formal_sig_does_not_arm_the_gate():
+    """无签名走「求解侧自写整段 Lean」旧路径 ⇒ 不误杀原有工具级闭合。"""
+    from agent.sub_goal_solver__lean import _init_sig_gate
+    sg = {"formal_sig": "", "tool": "lean"}
+    _init_sig_gate(sg)
+    assert "sig_gate_allowed" not in sg
+
+
+def test_compile_stated_unavailable_returns_none():
+    """编译器不可用必须返回 None（→ UNVERIFIED），不得伪造成功。"""
+    from agent.sub_goal_solver__lean import _compile_stated
+
+    class _BrokenBridge:
+        def _mathlib_ready(self):
+            raise RuntimeError("no lean")
+
+        def _compile(self, *a, **kw):
+            raise RuntimeError("no lean")
+
+    assert _compile_stated(_BrokenBridge(), "/tmp", SIG, "x.lean") is None
