@@ -302,6 +302,49 @@ def planning_agent(solver, ctx, sg_next: dict, solved_digest: str,
     return plan
 
 
+# ---------------------------------------------------------------- 工具核验
+def verify_and_mark(solver, ctx, sg, text) -> None:
+    """协作路径的**唯一**工具核验 + 三道门真判落盘点（2026-11-05 E33）。
+
+    ★ 为什么必须有这一层：E31 把三道门真判接在
+      `sub_goal_solver__loop.sg_tool_exec → _tool_declared_verify`，但生产
+      固定策略让逐步求解恒走本模块的三角色协作路径 ⇒ 旧循环是死分支，
+      真判接线从未被调用。2026-11-05 首轮真实运行实测：5 个子目标中
+      tool=lean 4 条、formal_sig 4 条、规划期 sig_gate_shape 5 条，而归档
+      04 里 tool_ran / tool_verdict / sig_gate_allowed **全为 0**。
+
+    ★ 单一权威源：判定逻辑**不在这里重写**，只调用求解器上同一个
+      `_tool_declared_verify`（它落 tool_ran / tool_verdict /
+      sig_gate_allowed / stage / reasons / prop），再由 E32 修好的
+      `_build_trace_item` 统一抄进归档。异常时按契约层口径**显式否决**，
+      绝不静默放行 —— 「没验 ≠ 验过」。
+
+    ★ 不加开关、不改策略值、不额外重解：协作路径已有「审核未过 → 带反馈
+      重解」，再叠一层旧循环的重解会多出 LLM 调用变量，破坏单变量对照。
+      这里只做核验与留痕；反馈文本记进 record 供事后复核，不改求解结果。
+    """
+    def _rec(msg: str) -> None:
+        try:
+            solver.record(ctx, "subgoal_collab", msg)
+        except Exception:  # noqa: BLE001  留痕失败不覆盖字段落盘
+            pass
+
+    try:
+        fb = solver._tool_declared_verify(ctx, sg, text)
+        if fb:
+            _rec("工具核验未过（已留痕，不改求解结果）：%s" % str(fb)[:120])
+    except Exception as e:  # noqa: BLE001
+        sg["sig_gate_allowed"] = False
+        sg["sig_gate_stage"] = "UNAVAILABLE"
+        sg["sig_gate_reasons"] = ["协作路径工具核验入口异常：%s" % type(e).__name__]
+        sg["sig_gate_prop"] = ""
+        sg["tool_ran"] = False
+        sg["tool_verdict"] = ("unknown: sig_gate=UNAVAILABLE "
+                              "协作路径工具核验入口异常")
+        _rec("工具核验异常（显式否决留痕）：%s: %s"
+             % (type(e).__name__, str(e)[:100]))
+
+
 # ---------------------------------------------------------------- 主循环
 def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
                           results_map) -> int:
@@ -348,6 +391,11 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
                 pass
             # 复用同样走唯一写入口（两容器同值），否则「复用」又造一次空壳
             write_step(sg, results_map, step_result)
+            # ★ E33：复用结果同样要过工具核验与三道门，否则归档里会出现
+            #   「同一路径、有的行有闸门字段有的没有」的口径分裂。
+            #   缓存文本已剥 <check> ⇒ sympy/numeric 判不了是**诚实**结果，
+            #   但 lean 的形态门仍会落字段（未验 ≠ 验过）。
+            verify_and_mark(solver, ctx, sg, step_result)
             try:
                 ctx.subgoal_trace.append(
                     solver._build_trace_item(sg, step_result, reused=True))
@@ -401,6 +449,14 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
                 _out = _out2
                 solver.record(ctx, "subgoal_collab",
                               "②审核未过 → 带反馈重解：%s" % _title[:40])
+
+        # ★ 2026-11-05（E33）：工具核验与三道门真判接到协作路径的唯一落点。
+        #   位置必须在 `_strip_check_tags` **之前** —— sympy/numeric 的判据
+        #   就是 `<check>` 断言，剥掉标签后无从核验（与旧循环同口径）；
+        #   且在 ②审核重解之后 ⇒ 核验的是本步最终交付文本。
+        #   `_tool_declared_verify` 把字段写在 sg 上，稍后 `_build_trace_item`
+        #   与归档 04 自然带上，不需要在这里碰存储层。
+        verify_and_mark(solver, ctx, sg, _out)
 
         # 剥 <check> 协议标签（防污染下游提示词 / 终答；与旧循环同口径）
         try:
