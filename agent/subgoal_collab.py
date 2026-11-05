@@ -303,7 +303,7 @@ def planning_agent(solver, ctx, sg_next: dict, solved_digest: str,
 
 
 # ---------------------------------------------------------------- 工具核验
-def verify_and_mark(solver, ctx, sg, text) -> None:
+def verify_and_mark(solver, ctx, sg, text) -> str:
     """协作路径的**唯一**工具核验 + 三道门真判落盘点（2026-11-05 E33）。
 
     ★ 为什么必须有这一层：E31 把三道门真判接在
@@ -319,9 +319,11 @@ def verify_and_mark(solver, ctx, sg, text) -> None:
       `_build_trace_item` 统一抄进归档。异常时按契约层口径**显式否决**，
       绝不静默放行 —— 「没验 ≠ 验过」。
 
-    ★ 不加开关、不改策略值、不额外重解：协作路径已有「审核未过 → 带反馈
-      重解」，再叠一层旧循环的重解会多出 LLM 调用变量，破坏单变量对照。
-      这里只做核验与留痕；反馈文本记进 record 供事后复核，不改求解结果。
+    ★ 返回反馈文本（空=通过/未执行/放行），交给主循环驱动 Lean 闭环
+      （E34）：仅在 `tool=lean` 且真编译失败（无 `tool_not_run_reason`）时
+      带该反馈重解 1 次，实现「编译失败 → 改证 → 再核验」。本函数保持单一
+      职责——只核验、留痕、返回反馈，**不在内部重解**（避免与 ②审核重解
+      叠加、破坏单变量对照）。
     """
     def _rec(msg: str) -> None:
         try:
@@ -329,10 +331,11 @@ def verify_and_mark(solver, ctx, sg, text) -> None:
         except Exception:  # noqa: BLE001  留痕失败不覆盖字段落盘
             pass
 
+    fb = ""
     try:
         fb = solver._tool_declared_verify(ctx, sg, text)
         if fb:
-            _rec("工具核验未过（已留痕，不改求解结果）：%s" % str(fb)[:120])
+            _rec("工具核验未过（已留痕）：%s" % str(fb)[:160])
     except Exception as e:  # noqa: BLE001
         sg["sig_gate_allowed"] = False
         sg["sig_gate_stage"] = "UNAVAILABLE"
@@ -343,6 +346,45 @@ def verify_and_mark(solver, ctx, sg, text) -> None:
                               "协作路径工具核验入口异常")
         _rec("工具核验异常（显式否决留痕）：%s: %s"
              % (type(e).__name__, str(e)[:100]))
+    # ★ 2026-11-05（E34）：把编译器/工具硬错误反馈交给主循环驱动改证，
+    #   本函数不改求解结果，只核验+留痕+返回反馈（单一职责）。
+    return fb
+
+
+# ---------------------------------------------------------------- Lean 闭环
+def _maybe_lean_reclose(solver, ctx, sg, fb, next_plan, done_digest, title) -> str:
+    """E34：Lean 闭环——编译器硬错误驱动一次带反馈重证，返回重证文本。
+
+    触发条件（三者同时）：① `fb` 非空（工具核验给了失败反馈）；② 本步
+    `tool == "lean"`（闭环只针对形式化证明，不让 sympy/numeric 的失败也去
+    重解——它们的 fail 通常是等式不成立，重解意义小）；③ 无 `tool_not_run_reason`
+    （＝编译器确实跑了且判失败，不是环境不可用/超额被拦的「未真跑」）。
+
+    行为：带 `fb`（含编译器逐行错误）调 `_solve_subgoal` 重解 1 次，重解后再
+    过一次 `verify_and_mark` 复核；重解文本过短（≤40 字）视为无效，返回 ""。
+    轮数固定 1（与 ②审核重解对称），不递归、不死循环；不破坏单变量对照。
+
+    ★ 决定性反例（构造用例锁死）：`fb` 非空但 `tool == "sympy"` ⇒ 返回 ""；
+    `fb` 非空但 `tool_not_run_reason` 存在（环境未真跑）⇒ 返回 ""。
+    """
+    if not fb:
+        return ""
+    if str(sg.get("tool", "") or "").strip().lower() != "lean":
+        return ""
+    if sg.get("tool_not_run_reason"):
+        return ""
+    try:
+        _out2 = solver._solve_subgoal(
+            ctx, sg, next_plan, done_digest, fb) or ""
+    except Exception:  # noqa: BLE001  重解异常 ≠ 本步出错 → 不闭环
+        return ""
+    if not _out2 or len(_out2) <= 40:
+        return ""
+    # 重证后再过一次工具核验（含三道门），让闭合层级反映「改证后」的真实状态
+    verify_and_mark(solver, ctx, sg, _out2)
+    solver.record(ctx, "subgoal_collab",
+                  "②Lean编译未过 → 带编译反馈重证：%s" % str(title)[:40])
+    return _out2
 
 
 # ---------------------------------------------------------------- 主循环
@@ -456,7 +498,16 @@ def solve_subgoals_collab(solver, ctx, subgoals, subgoal_plan_summary,
         #   且在 ②审核重解之后 ⇒ 核验的是本步最终交付文本。
         #   `_tool_declared_verify` 把字段写在 sg 上，稍后 `_build_trace_item`
         #   与归档 04 自然带上，不需要在这里碰存储层。
-        verify_and_mark(solver, ctx, sg, _out)
+        # ★ 2026-11-05（E34）：Lean 闭环——编译器硬错误驱动一次带反馈重证。
+        #   `_lean_block_verify` 已把 Lean 编译失败整理成「请修正后重新给出」
+        #   的反馈；此前这里只留痕 ⇒ lean 子目标永远停在 fail，诚实闭合恒 0。
+        #   逻辑抽成 `_maybe_lean_reclose`（单一职责、可测）：仅对 `tool=lean`
+        #   且真编译失败（无 `tool_not_run_reason`=环境未真跑）触发，轮数固定 1。
+        _fb = verify_and_mark(solver, ctx, sg, _out)
+        _out2 = _maybe_lean_reclose(solver, ctx, sg, _fb, _next_plan,
+                                    _done_digest, _title)
+        if _out2:
+            _out = _out2
 
         # 剥 <check> 协议标签（防污染下游提示词 / 终答；与旧循环同口径）
         try:

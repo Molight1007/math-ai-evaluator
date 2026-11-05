@@ -430,7 +430,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ),
                 # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
                 #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
-                0.2, 8192,
+                0.0, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)
@@ -540,7 +540,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ),
                 # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
                 #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
-                0.2, 8192,
+                0.0, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)
@@ -653,7 +653,7 @@ class BlueprintPlannerAgent(BaseAgent):
                 ),
                 # ★ 2026-10-02：6144→8192。实测该处曾撞 finish_reason=length（DAG JSON 被腰斩）；
                 #   与其余 13 处统一抬到 8192（DeepSeek 适配方案 A）。本文件共 3 处 6144 同改。
-                0.2, 8192,
+                0.0, 8192,
             )
             if resp:
                 resp = stitch(_PREFILL, resp)

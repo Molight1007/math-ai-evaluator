@@ -816,8 +816,8 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
     三重静默放行（缺任一即返回 ""，绝不误伤正常结果）：
       · 本机无 Lean（`bridge.lean_available` 为假，平台侧常见）；
       · 本步没产出 `lean` 代码块（模型判定为"无法形式化"，见工具指令第 3 条）；
-      · 每题编译次数达上限（`blueprint_lean_max_per_q`，默认 2）—— 防止证明类
-        子目标密集时把单题预算烧在编译器上。
+      · 每题编译次数达上限（`blueprint_lean_max_per_q`，默认 4）—— 防止证明类
+        子目标密集时把单题预算烧在编译器上；E34 放宽到 4 以容纳「改证复核」额度。
     ⚠ `allow_sorry=True`（与既有 `_numeric_lean_verify` 同口径）：`sorry` 只作
       警告、不当错误，避免因模型写了 `by sorry` 就把本步整段否掉 —— 真正要拦的
       是**语法/类型/战术失败**这类硬错误。
@@ -837,7 +837,10 @@ def _lean_block_verify(self, ctx: TaskContext, result: str,
         return ""
     meta = ctx.metadata if isinstance(ctx.metadata, dict) else {}
     cnt = int(meta.get("sg_lean_count", 0) or 0)
-    cap = max(1, int(getattr(self.config, "blueprint_lean_max_per_q", 2) or 2))
+    # ★ 2026-11-05（E34）：默认 2→4。带签名 lean 子目标首次编译即 +2
+    #   （门A+主编译），留 1 次「编译失败→改证→再核验」的复核额度；
+    #   额度仍按题累计，防止证明类子目标密集时烧预算。
+    cap = max(1, int(getattr(self.config, "blueprint_lean_max_per_q", 4) or 4))
     if cnt >= cap:
         if isinstance(sg, dict):
             sg["tool_not_run_reason"] = "lean-cap"
