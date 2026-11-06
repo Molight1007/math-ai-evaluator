@@ -112,6 +112,17 @@ def _build_trace_item(sg: dict, step_result: str, reused: bool = False) -> dict:
         item["sig_gate_stage"] = str(sg.get("sig_gate_stage") or "UNAVAILABLE")
         item["sig_gate_reasons"] = list(sg.get("sig_gate_reasons") or [])
         item["sig_gate_prop"] = str(sg.get("sig_gate_prop") or "")
+    # ★ 2026-11-06（E36）：把「为什么没真跑」也落盘，消除归因盲区。
+    #   E34 真实运行里 3 条 lean 子目标停在 UNVERIFIED / tool_ran=False，
+    #   但归档只剩这一个结果，无法区分「模型没写 Lean 块」「Lean 环境不可用」
+    #   「编译额度超限」—— 而 sg 上本来已有 tool_not_run_reason 区分这几种。
+    #   04 归档写的就是本函数的输出（`_artifact_append(..., ctx.subgoal_trace[-1])`），
+    #   此处是唯一需要补的投影点。
+    # ★ 与 E32 同口径：只在字段确实存在时条件写入，绝不补默认值；历史产物
+    #   无该字段 ⇒ 判定逐字不变（投影显式、存储不降级）。
+    # ★ 纯观测字段：不参与 closure_of / formal_sig_gate 的任何判据。
+    if "tool_not_run_reason" in sg:
+        item["tool_not_run_reason"] = str(sg["tool_not_run_reason"] or "")
     if reused:
         item["reused"] = True
     return item

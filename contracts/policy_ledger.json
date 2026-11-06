@@ -3477,5 +3477,63 @@
     "test_stage_wired_in_orchestrator"
    ]
   }
+ },
+ "gate_line_closure": {
+  "date": "2026-11-06",
+  "scope": "E31–E36 出口闸门主线封口结论（判据口径与史料；不新增 POLICY 项、不引入开关）",
+  "production_shape": [
+   "E31：门A 可陈述 / 门B 命题非平凡 / 门C 证明凭证无 sorry，从影子改真判；formal_sig 的 := by sorry 是分工设计，禁掉等于禁掉分工",
+   "E32：_build_trace_item 白名单条件抄写四字段，绝不补 False 默认值",
+   "E33：真判接到生产协作路径（旧循环是恒不可达死分支）",
+   "E34：蓝图温度 0.2→0.0、Lean 编译反馈驱动改证闭环、额度 2→4",
+   "E35：固定蓝图单变量回放台 + 统一审计口径入仓",
+   "E36：tool_not_run_reason 条件落盘（纯观测字段，不参与任何判据）"
+  ],
+  "real_runs": {
+   "period": "2026-11-05 → 11-06，三轮同题单",
+   "run_dirs": [
+    "results/20261105-071955",
+    "results/20261105-091212",
+    "results/20261105-220521"
+   ],
+   "llm_chat_ok": 1243,
+   "tokens_sum_approx": 8898897,
+   "endpoint": "chat.intern-ai.org.cn / Intern-S2-Preview-397B",
+   "e34_duration": "7h14m，约 610 次调用",
+   "evidence": "results/real3_*.log、results/e34_final_audit.txt、各 q*/04_subgoal_results.jsonl"
+  },
+  "headline_numbers": {
+   "gate_allowed": 0,
+   "gate_rejected": 4,
+   "rejected_breakdown": "3 × UNVERIFIED（compile_result=None）+ 1 × PROOF（证明体含 sorry）",
+   "question_level_honest_closed": 0,
+   "hard_closed_rows": 6,
+   "hard_closed_note": "全是 sympy/numeric 工具级闭合，不是题级诚实闭合",
+   "reclose_records": 0
+  },
+  "verified_failure_shapes": [
+   "q03d3e039#5：模型写约 5 万字符散文后自认推不出，未产 lean 块 ⇒ 闸门 UNVERIFIED 行为正确",
+   "q03d3e039#6、q2a6f8743#4：产了 lean 块（含 sorry）但 tool_ran=False / UNVERIFIED ⇒ 原因未落盘，归因盲区（E36 补）",
+   "qdecd0474#2：编译通过但证明体带 sorry，被门C 否 ⇒ 闸门行为正确，且模型从未被告知 sorry 不算数"
+  ],
+  "conclusions": [
+   "E26「唯一让 honest 非零的路径 = 形式检查接到出口闸门」已证伪：E31 真判 + E33 协作接线 + E34 编译反馈闭环全接上并真跑，honest 仍 0",
+   "瓶颈在上游「模型产不出可编译、无 sorry 的 Lean 证明」，不是判定链接线；继续在闸门层加层边际收益为 0",
+   "闭环 0 触发不是坏了：四种失败形态里没有一条落入「真编译失败且无 tool_not_run_reason」触发分支",
+   "温度 0.0 后工具指派三轮仍漂移，但跨版本对比不干净，需同配置两轮真实运行才可判",
+   "系统里没有真值：判据修好 ⇒ 不再判错，改成判不出；误杀清零不等于验证能力变强"
+  ],
+  "non_claims": [
+   "不宣称真判有效 / 等价 / 效果量 / 评测通过",
+   "回归数字与 144/144 只作「无新增失败 / 逐条复现」证据，不作效果量",
+   "三轮真实运行只作存在性结论，不作统计推断"
+  ],
+  "open_items": [
+   "F-SOFT：closure_of 把闸门否决放最前 ⇒ 判对+有推导的软闭合无条件降 OPEN；改它属判据语义变更，须用户拍板 + 留出集/人工抽验。现有 1 条真实样例 q03d3e039#6",
+   "门C 的 sorry 拒绝目前没有改证回路；是否接线待用户拍板，按上述结论预期收益低",
+   "观测性：下一次真实运行须核对 E36 落盘，把 #6/#4 的 UNVERIFIED 归因到具体原因",
+   "温度 0.0 是否收敛需同配置两轮对照"
+  ],
+  "regression": "E36 全量回归 2579 tests / 1 failure（唯一失败恒为环境性 test_compile_fail_returns_feedback，不删不跳过）；E36 新增 14 条构造用例"
  }
 }
