@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>形式签名命题保真度 · 人工抽验台</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--line:#e3e7ee;--ink:#1f2430;--mut:#5c667a;--acc:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+.sub-t{color:var(--mut);margin:0 0 20px;font-size:13px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;
+ padding:18px 20px;margin-bottom:18px}
+.facts{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.fact{background:#f1f4f9;border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:12px}
+.fact b{font-size:16px;color:var(--acc);margin-right:5px}
+.why{font-size:13px;color:var(--mut);margin:0}
+h2{font-size:15px;margin:0 0 12px}
+.rubs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rub{border-left:3px solid;background:#fafbfd;border-radius:0 6px 6px 0;padding:8px 12px;font-size:12.5px}
+.rub b{display:inline-block;width:18px;font-size:13px}
+.rub span{color:var(--mut)}
+.rules{margin:12px 0 0;padding-left:20px;color:var(--mut);font-size:12.5px}
+.bar{position:sticky;top:0;z-index:9;background:rgba(247,248,250,.96);
+ backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;
+ padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.prog{flex:1;min-width:150px;height:8px;background:#e6eaf1;border-radius:5px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .25s}
+#cnt{font-size:13px;font-weight:600;white-space:nowrap}
+button{font:inherit;font-size:12.5px;padding:7px 14px;border-radius:7px;cursor:pointer;
+ border:1px solid var(--line);background:#fff;color:var(--ink)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button:hover{filter:brightness(.96)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+ padding:18px 20px;margin-bottom:16px;scroll-margin-top:80px}
+.card.done{border-color:#bcd3f7}
+.chead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+ padding-bottom:12px;border-bottom:1px solid var(--line)}
+.num{font-size:18px;font-weight:700;color:var(--acc);font-variant-numeric:tabular-nums}
+.layer{font-size:11px;background:#eef3fd;color:#2b4d8f;border-radius:4px;padding:2px 8px}
+.qmeta{font-size:12px;color:var(--mut);flex:1;min-width:180px}
+.state{font-size:11px;color:#94a0b3}
+.card.done .state{color:var(--acc);font-weight:600}
+.block{margin-bottom:14px}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin-bottom:5px}
+.question,.goal,.sub{background:#fafbfd;border:1px solid #edf0f5;border-radius:6px;
+ padding:10px 12px;font-size:13px;max-height:170px;overflow:auto}
+.sub{margin-top:6px;color:var(--mut);font-size:12.5px}
+pre.lean{margin:0;background:#f6f8fb;border:1px solid #e6ebf2;border-radius:6px;
+ padding:12px 14px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+ font:12.5px/1.6 "Cascadia Code",Consolas,"Courier New",monospace;color:#22304a}
+.opts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:8px}
+.opt{display:flex;align-items:center;gap:7px;border:1px solid var(--line);
+ border-radius:7px;padding:8px 10px;cursor:pointer;font-size:12.5px;background:#fff}
+.opt:hover{background:#f7f9fd}
+.opt input{accent-color:var(--acc);margin:0}
+.opt .key{font-weight:700}
+.opt.sel{border-color:var(--acc);background:#eff5ff}
+.opt-A.sel{border-color:#0f8a5f;background:#edfaf4}
+.opt-B.sel{border-color:#c2410c;background:#fff4ed}
+.opt-C.sel{border-color:#7c3aed;background:#f6f1ff}
+.opt-D.sel{border-color:#64748b;background:#f3f5f8}
+textarea.note{width:100%;border:1px solid var(--line);border-radius:7px;
+ padding:8px 10px;font:inherit;font-size:12.5px;resize:vertical;background:#fff;color:var(--ink)}
+textarea.note:focus,button:focus{outline:2px solid #bcd3f7;outline-offset:1px}
+code{background:#eef2f7;padding:1px 5px;border-radius:4px;font-size:12px}
+@media(max-width:680px){.rubs,.opts{grid-template-columns:1fr 1fr}}
+</style></head><body><div class="wrap">
+<h1>形式签名命题保真度 · 人工抽验台</h1>
+<p class="sub-t">零配额 · 只读历史真实数据 · 判「命题是不是原题的意思」，不判「能不能证出来」</p>
+
+<div class="panel">
+ <div class="facts">
+  <div class="fact"><b>160</b>条去重签名（抽样框）</div>
+  <div class="fact"><b>23</b>题</div>
+  <div class="fact"><b>26</b>条待判 / 覆盖 16 题</div>
+  <div class="fact"><b>20261106</b>固定种子</div>
+  <div class="fact"><b>26</b>/26 题目原文命中</div>
+ </div>
+ <p class="why"><b>为什么做</b>：门A 只判「能不能编译」，不判「是不是原题的意思」。
+ Goedel-Prover-V2 在同一个 Omni-MATH 题库上报告：未解问题里超过 80% 是形式化写错；
+ 项目内 E29 也发现编译通过挡不住语义空洞（PASS 全是 <code>True</code> / <code>A=A</code>）。
+ 本单用来把「命题从一开始就写歪」和「模型证不出」分开。</p>
+ <p class="why" style="margin-top:8px"><b>盲审纪律</b>：清单不含 stage / tool_verdict / correct / run / 来源文件；答案表单独存放，抽验完成后方可对照，防锚定。 对照表文件为
+ （<code>答案表_抽验完成后再打开.json</code>），全部判完再打开。</p>
+ <p class="why" style="margin-top:8px"><b>分层</b>：L1 当前生产形态（11 月三轮）全量 10 条；
+ L2 历史按时间前/后各 8 条、同题最多 2 条。不做「挑好看的抽」。</p>
+</div>
+
+<div class="panel"><h2>判定标准</h2><div class="rubs"><div class="rub" style="border-left-color:#0f8a5f"><b>A</b><span>忠实 — 签名准确表达该子目标，量词/类型/常数/定义域与原题一致</span></div><div class="rub" style="border-left-color:#c2410c"><b>B</b><span>命题写歪 — 改了题意：量词方向、变量域、常数、把待证结论写成假设、求解题改证明/反证、拆成分类证明</span></div><div class="rub" style="border-left-color:#7c3aed"><b>C</b><span>空洞/平凡 — 恒真或前提矛盾：True、A=A、假设直接蕴含结论、ℕ 减法/除法造成的假等式</span></div><div class="rub" style="border-left-color:#64748b"><b>D</b><span>信息不足 — 题目或签名残缺，无法判定</span></div></div>
+<ul class="rules"><li>:= by sorry 是分工设计（E30），不因出现 sorry 判 B/C</li><li>只判「这条签名是否忠于这个子目标 + 原题」，不判能不能证出来</li><li>B/C 必须在备注里写出具体错在哪一处</li><li>未抽验完毕不得下结论；不作统计推断、不作效果量</li></ul></div>
+
+<div class="bar">
+ <span id="cnt">已判 0 / 26</span>
+ <div class="prog"><i id="pbar"></i></div>
+ <button class="primary" onclick="exp()">导出判定 JSON</button>
+ <button onclick="jump()">跳到未判</button>
+ <button onclick="clr()">清空</button>
+</div>
+
+
+<section class="card" id="c1" data-no="1">
+  <div class="chead">
+    <span class="num">01</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">q03d3e039 · official112-017 · 子目标 5</span>
+    <span class="state" id="s1">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find number of triples $(x,y,z)$ of real numbers satisfying<br>\[<br>x^2 + y^2 + z^2 = xy^3 + yz^3 + zx^3 = 3.<br>\]<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">分析三变量互不相等时方程组是否有解：利用对称性与不等式估计，证明不存在三互异实数满足条件</div>
+    <div class="sub">期望输出：证明三变量互不相等时无解</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example : ¬ ∃ (x y z : ℝ), x ≠ y ∧ y ≠ z ∧ z ≠ x ∧ x^2 + y^2 + z^2 = 3 ∧ x*y^3 + y*z^3 + z*x^3 = 3 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j1" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j1" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j1" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j1" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="1" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c2" data-no="2">
+  <div class="chead">
+    <span class="num">02</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">q03d3e039 · official112-017 · 子目标 5</span>
+    <span class="state" id="s2">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find number of triples $(x,y,z)$ of real numbers satisfying<br>\[<br>x^2 + y^2 + z^2 = xy^3 + yz^3 + zx^3 = 3.<br>\]<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">处理全正的一般解：设 x≥y≥z&gt;0，记 f(t)=t−t³，由两方程相减推出 f(x)+f(y)+f(z)=0</div>
+    <div class="sub">期望输出：等式 f(x)+f(y)+f(z)=0 成立</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (x y z : ℝ) (hx : 0 &lt; x) (hy : 0 &lt; y) (hz : 0 &lt; z) (hxy : y ≤ x) (hyz : z ≤ y) (h1 : x^2 + y^2 + z^2 = 3) (h2 : x*y^3 + y*z^3 + z*x^3 = 3) : (x - x^3) + (y - y^3) + (z - z^3) = 0 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j2" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j2" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j2" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j2" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="2" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c3" data-no="3">
+  <div class="chead">
+    <span class="num">03</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">q03d3e039 · official112-017 · 子目标 6</span>
+    <span class="state" id="s3">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find number of triples $(x,y,z)$ of real numbers satisfying<br>\[<br>x^2 + y^2 + z^2 = xy^3 + yz^3 + zx^3 = 3.<br>\]<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n5 的等式与 x≥y≥z&gt;0 推出 x=1 且 z=1，进而 x=y=z=1，说明全正一般解不会产生新解</div>
+    <div class="sub">期望输出：全正唯一解为 (1,1,1)，该解已在 n1 的平凡解中出现</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (x y z : ℝ) (hx : 0 &lt; x) (hy : 0 &lt; y) (hz : 0 &lt; z) (hxy : y ≤ x) (hyz : z ≤ y) (h1 : x^2 + y^2 + z^2 = 3) (h2 : x*y^3 + y*z^3 + z*x^3 = 3) : x = 1 ∧ y = 1 ∧ z = 1 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j3" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j3" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j3" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j3" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="3" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c4" data-no="4">
+  <div class="chead">
+    <span class="num">04</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">q2a6f8743 · official112-073 · 子目标 3</span>
+    <span class="state" id="s4">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find all pairs of positive integers $(a,b)$ that satisfy the following condition:<br>$\sqrt[3]{7a^2 +ab+b^2}=a+1$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">Prove that for integer b to exist, Δ must be a perfect square; equivalently (a-1)(24-a) must be a perfect square, and set t²=(a-1)(24-a)</div>
+    <div class="sub">期望输出：Diophantine equation t²=(a-1)(24-a) with 1 ≤ a ≤ 24</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (a t : ℕ) : (a * (a - 1) * (24 - a) = t ^ 2) ↔ ((a - 1) * (24 - a) = (t / a) ^ 2) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j4" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j4" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j4" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j4" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="4" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c5" data-no="5">
+  <div class="chead">
+    <span class="num">05</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">q2a6f8743 · official112-073 · 子目标 4</span>
+    <span class="state" id="s5">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find all pairs of positive integers $(a,b)$ that satisfy the following condition:<br>$\sqrt[3]{7a^2 +ab+b^2}=a+1$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">证明当 a≥7 时 D 严格介于两个相邻整数的平方之间，从而不可能是完全平方</div>
+    <div class="sub">期望输出：a≥7 时无解的证明</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (a : ℕ) (h : a ≥ 7) : ¬ (∃ k : ℕ, k^2 = 4*a^3 - a^2 - 12*a - 4) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j5" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j5" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j5" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j5" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="5" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c6" data-no="6">
+  <div class="chead">
+    <span class="num">06</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 1</span>
+    <span class="state" id="s6">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">假设 D&gt;0 且存在满足条件的无限序列，证明 x_1 必须为 0</div>
+    <div class="sub">期望输出：x_1 = 0</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (D : ℝ) (x : ℕ → ℝ) (hD : 0 &lt; D) (hx : ∀ m n, m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hbound : ∀ n, 0 ≤ x n ∧ x n ≤ 777) : x 1 = 0 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j6" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j6" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j6" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j6" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="6" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c7" data-no="7">
+  <div class="chead">
+    <span class="num">07</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 2</span>
+    <span class="state" id="s7">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1 得 x_1=0，证明对所有 n≥2 有 x_n² ≤ D/(n+1)</div>
+    <div class="sub">期望输出：∀ n ≥ 2, x_n ^ 2 ≤ D / (n + 1)</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (D : ℝ) (x : ℕ → ℝ) (hD : 0 &lt; D) (hx : ∀ m n, m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (h1 : x 1 = 0) : ∀ n, 2 ≤ n → x n ^ 2 ≤ D / (n + 1) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j7" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j7" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j7" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j7" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="7" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c8" data-no="8">
+  <div class="chead">
+    <span class="num">08</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 2</span>
+    <span class="state" id="s8">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1a 的 S，利用 |x_n² - x_m²| = (x_n - x_m)(x_n + x_m) ≤ S·(x_n - x_m) 及条件 (m+n)|x_n² - x_m²| ≥ D，推出 x_n - x_m ≥ D/(S(m+n))，进而通过固定 m 令 n→∞ 得 D ≤ S·lim_{n→∞}(x_n - x_m)/ (m+n) ≤ 777²</div>
+    <div class="sub">期望输出：上界 D ≤ 777² 的严格证明</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (D : ℝ) (x : ℕ → ℝ) (hD : ∀ m n, 0 &lt; m → m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) : D ≤ 777 ^ 2 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j8" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j8" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j8" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j8" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="8" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c9" data-no="9">
+  <div class="chead">
+    <span class="num">09</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 3</span>
+    <span class="state" id="s9">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n2 的衰减上界，证明对所有 k≥2 必有 x_k=0</div>
+    <div class="sub">期望输出：∀ k ≥ 2, x k = 0</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (D : ℝ) (x : ℕ → ℝ) (hD : 0 &lt; D) (hx : ∀ m n, m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (h2 : ∀ n, 2 ≤ n → x n ^ 2 ≤ D / (n + 1)) : ∀ k, 2 ≤ k → x k = 0 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j9" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j9" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j9" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j9" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="9" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c10" data-no="10">
+  <div class="chead">
+    <span class="num">10</span>
+    <span class="layer">L1/PRODUCTION</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 4</span>
+    <span class="state" id="s10">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n3 得所有项为 0，导出 D&gt;0 的矛盾，从而 D&gt;0 不可能</div>
+    <div class="sub">期望输出：D &gt; 0 不可能，即 D ≤ 0</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (D : ℝ) (x : ℕ → ℝ) (hD : 0 &lt; D) (hx : ∀ m n, m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hzero : ∀ n, x n = 0) : False := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j10" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j10" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j10" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j10" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="10" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c11" data-no="11">
+  <div class="chead">
+    <span class="num">11</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">q10a65b3d · omni-3876 · 子目标 1</span>
+    <span class="state" id="s11">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Let $ f(n)$ be a function defined on the set of all positive integers and having its values in the same set. Suppose that $ f(f(n) \plus{} f(m)) \equal{} m \plus{} n$ for all positive integers $ n,m.$ Find the possible value for $ f(1988).$</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">证明 f 是单射函数</div>
+    <div class="sub">描述：证明 f 是单射函数</div><div class="sub">期望输出：f 为单射的命题</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) : Function.Injective f := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j11" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j11" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j11" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j11" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="11" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c12" data-no="12">
+  <div class="chead">
+    <span class="num">12</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">q54a64e25 · official112-089 · 子目标 2</span>
+    <span class="state" id="s12">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">六、(10 分) 某城市有10000 名市民与两个剧院, 每个剧院有 \(x\) 个座位, 每个市民独立等可能地选取一个剧院看戏. 若希望“某个市民来到剧院后因为没有座位不得不放弃看戏”的概率不超过0.01, 计算 \(x\) 的最小值. (参考数据: \(\Phi(2.05)=0.98\) , \(\Phi(2.17)=0.985\) , \(\Phi(2.33)=0.99\) ,\(\Phi(2.58)=0.995\) , \(\Phi\) 是标准正态函数.)<br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1 的模型，用中心极限定理将 P(Y&gt;x) 近似为标准正态概率</div>
+    <div class="sub">描述：由 n1 的模型，用中心极限定理将 P(Y&gt;x) 近似为标准正态概率</div><div class="sub">期望输出：P(Y&gt;x)≈1-Φ((x-5000)/50)</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (x : ℝ) : (1 - Φ ((x - 5000) / 50)) ≤ 0.01 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j12" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j12" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j12" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j12" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="12" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c13" data-no="13">
+  <div class="chead">
+    <span class="num">13</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">q59f1afe4 · official112-003 · 子目标 4</span>
+    <span class="state" id="s13">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Let $a_0, a_1, \ldots$ be a sequence of non-negative integers. Suppose that for all non-negative integers $p$,<br>$$a_{a_{a_p}} = a_{p+1} + 1.$$<br>Find all possible value of $a_{2025}$.<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">By n3&#x27;s a_1 = 1 and n1&#x27;s monotonicity, use induction with p=1,2,... to prove a_n = n+1 for all n ≥ 1.</div>
+    <div class="sub">描述：By n3&#x27;s a_1 = 1 and n1&#x27;s monotonicity, use induction with p=1,2,... to prove a_n = n+1 for all n ≥ 1.</div><div class="sub">期望输出：Proof that a_n = n+1 for all n ≥ 1.</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a1 : a 1 = 1) (h_mono : ∀ n, a n &lt; a (n + 1)) : ∀ n, 1 ≤ n → a n = n + 1 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j13" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j13" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j13" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j13" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="13" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c14" data-no="14">
+  <div class="chead">
+    <span class="num">14</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">q5a0b7995 · official112-013 · 子目标 3</span>
+    <span class="state" id="s14">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the minimal $d$ satisfying the following property:<br><br>For any sequence of integers $x_1, x_2, \ldots, x_n$ satisfying<br>\[<br>    0 \le x_i \le 100, \quad \sum_{i=1}^n x_i \ge 1810<br>\]<br>for all $i = 1, 2, \ldots, n$, there exists a subset $I$ of $\{1,2, \ldots, n\}$ such that<br>\[<br>    \left| \sum_{i \in I} x_i - 1810 \right| \le d.<br>\]<br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1b 得到的候选 d=50，证明对任意满足条件的序列都存在子集 I 使得 |sum_I - 1810| ≤ 50</div>
+    <div class="sub">描述：由 n1b 得到的候选 d=50，证明对任意满足条件的序列都存在子集 I 使得 |sum_I - 1810| ≤ 50</div><div class="sub">期望输出：d=50 可行的完整证明</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example : ∀ (n : ℕ) (x : ℕ → ℕ), (∀ i, x i ≤ 100) → (∑ i in Finset.range n, x i) ≥ 1810 → ∃ (I : Finset ℕ), |(∑ i in I, x i) - 1810| ≤ 50 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j14" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j14" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j14" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j14" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="14" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c15" data-no="15">
+  <div class="chead">
+    <span class="num">15</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">q5db89772 · official112-071 · 子目标 3</span>
+    <span class="state" id="s15">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">A subset $X$ of $\mathbb{Z}$ is called rich if for any positive integer $n$ and $n$ numbers $x_0, x_1, \dots, x_n$ belonging to $X$, all integer roots of $x_0 + x_1 \cdot x + \dots + x_n \cdot x^n = 0$ belong to $X$. Find all rich sets that contain $2^k - 2^l$ for any positive integers $k$ and $l$.<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">Prove every integer r belongs to X using linear polynomial r + (-1)·x</div>
+    <div class="sub">描述：Prove every integer r belongs to X using linear polynomial r + (-1)·x</div><div class="sub">期望输出：∀ r : ℤ, r ∈ X</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (X : Set ℤ) (hNeg1 : -1 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : ∀ r : ℤ, r ∈ X := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j15" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j15" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j15" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j15" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="15" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c16" data-no="16">
+  <div class="chead">
+    <span class="num">16</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">q65482ff3 · official112-097 · 子目标 2</span>
+    <span class="state" id="s16">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">(10 分) 设 $\Omega$ 为开区域. 算子 $Lu := \sum_{i,j=1}^n \partial_i (a_{ij} \partial_j u) + \sum_{j=1}^n b_j \partial_j u + cu$, 定义域为 $C_0^\infty(\Omega)$. 其中 $a_{ij}, b_j, c$ 为实有界光滑函数.<br><br>求 $L$ 在 $L^2(\Omega)$ 上的伴随算子 $L^*$.<br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">对二阶项 $\int_\Omega \partial_i(a_{ij}\partial_j u) v \,dx$ 应用分部积分，把两个导数从 $u$ 转移到 $v$</div>
+    <div class="sub">描述：对二阶项 $\int_\Omega \partial_i(a_{ij}\partial_j u) v \,dx$ 应用分部积分，把两个导数从 $u$ 转移到 $v$</div><div class="sub">期望输出：二阶项转移后的积分表达式 $\int_\Omega u \left(-\sum_{i,j} \partial_i(a_{ij} \partial_j v)\right) dx$（边界项已因 $u,v \in C_0^\infty$ 消失）</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (u v : C₀^∞(Ω)) (a : ℝ) : ∫ x in Ω, (∂ i (a * ∂ j u)) * v = -∫ x in Ω, (a * ∂ j u) * (∂ i v) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j16" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j16" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j16" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j16" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="16" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c17" data-no="17">
+  <div class="chead">
+    <span class="num">17</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">q6e682526 · official112-034 · 子目标 2</span>
+    <span class="state" id="s17">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Consider a checkerboard consisting of $38$ by $38$ unit squares. At the midpoints of some of these unit squares, there is an ant. At time 0, each ant starts moving with speed 1 parallel to some edge of the checkerboard. When two ants moving in opposite directions meet, they both turn $90^{\circ}$ clockwise and continue moving with speed 1. When more than two ants meet, or when two ants moving in perpendicular directions meet, the ants continue moving in the same direction as before they met. When an ant reaches one of the edges of the checkerboard, it falls off and will not re-appear.  Also, there are some spiders on the checkerboard that do not move at all.<br><br>Considering all possible starting positions, determine the latest possible moment at which the last ant falls off the checkerboard or prove that such a moment does not necessarily exist.<br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1 的最大距离，分析两只蚂蚁相向相遇转向90度后的路径变化</div>
+    <div class="sub">描述：由 n1 的最大距离，分析两只蚂蚁相向相遇转向90度后的路径变化</div><div class="sub">期望输出：转向操作不会使蚂蚁总路径长度超过 n1 上界的证明</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (d : ℝ) (h : d ≤ 38) : d + 90_turn_extension ≤ 38 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j17" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j17" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j17" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j17" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="17" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c18" data-no="18">
+  <div class="chead">
+    <span class="num">18</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">qa658f533 · official112-010 · 子目标 3</span>
+    <span class="state" id="s18">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Let $p, q, r, s$ be constants such that the equation $py^3 + qy^2 + ry + s = 0$ has three distinct real roots. Find all possible values for the number of distinct real roots of the equation<br>$$\left(pz^{3}+qz^{2}+rz+s\right)(6pz+2q)=\left(3pz^{2}+2qz+r\right)^{2}.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">设 f 的三个不同实根为 α&lt;β&lt;γ，将 f&#x27;/f 表示为部分分式 g(z)=1/(z-α)+1/(z-β)+1/(z-γ)</div>
+    <div class="sub">描述：设 f 的三个不同实根为 α&lt;β&lt;γ，将 f&#x27;/f 表示为部分分式 g(z)=1/(z-α)+1/(z-β)+1/(z-γ)</div><div class="sub">期望输出：g(z)=1/(z-α)+1/(z-β)+1/(z-γ)，且原方程的非根解对应 g(z)=C 的解</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (α β γ : ℝ) (h : α &lt; β ∧ β &lt; γ) (z : ℝ) (hz : z ≠ α ∧ z ≠ β ∧ z ≠ γ) : (deriv (fun x =&gt; (x-α)*(x-β)*(x-γ)) z) / ((z-α)*(z-β)*(z-γ)) = 1/(z-α) + 1/(z-β) + 1/(z-γ) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j18" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j18" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j18" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j18" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="18" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c19" data-no="19">
+  <div class="chead">
+    <span class="num">19</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qadbc6d05 · imo-bench-number_theory-075 · 子目标 5</span>
+    <span class="state" id="s19">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find all monic polynomials $P(x)$ with integer coefficients for which<br>\[<br>    \frac{6(|P(q)|!) - 1}{q}<br>\]<br>is an integer for every prime $q$ greater than 3.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">Verify that each candidate b from n4 indeed makes (6(|q+b|!)-1)/q an integer for all primes q&gt;3 by direct computation and Wilson&#x27;s theorem</div>
+    <div class="sub">描述：Verify that each candidate b from n4 indeed makes (6(|q+b|!)-1)/q an integer for all primes q&gt;3 by direct computation and Wilson&#x27;s theorem</div><div class="sub">期望输出：Confirmation of which b values work for all primes q&gt;3</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (b : ℤ) (hb : b ∈ {candidate set from n4}) : ∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 &lt; q), q ∣ 6 * (Nat.abs (q + b)).factorial - 1 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j19" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j19" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j19" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j19" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="19" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c20" data-no="20">
+  <div class="chead">
+    <span class="num">20</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">qadbc6d05 · imo-bench-number_theory-075 · 子目标 7</span>
+    <span class="state" id="s20">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find all monic polynomials $P(x)$ with integer coefficients for which<br>\[<br>    \frac{6(|P(q)|!) - 1}{q}<br>\]<br>is an integer for every prime $q$ greater than 3.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">Verify P(x)=x satisfies the condition for all primes q&gt;3 using Wilson&#x27;s theorem</div>
+    <div class="sub">描述：Verify P(x)=x satisfies the condition for all primes q&gt;3 using Wilson&#x27;s theorem</div><div class="sub">期望输出：Verification that P(x)=x works</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (q : ℕ) (hq : Nat.Prime q) (h3 : q &gt; 3) : q ∣ 6 * Nat.factorial q - 1 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j20" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j20" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j20" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j20" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="20" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c21" data-no="21">
+  <div class="chead">
+    <span class="num">21</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qb0b108ee · omni-2163 · 子目标 1</span>
+    <span class="state" id="s21">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Will stands at a point \(P\) on the edge of a circular room with perfectly reflective walls. He shines two laser pointers into the room, forming angles of \(n^{\circ}\) and \((n+1)^{\circ}\) with the tangent at \(P\), where \(n\) is a positive integer less than 90. The lasers reflect off of the walls, illuminating the points they hit on the walls, until they reach \(P\) again. (\(P\) is also illuminated at the end.) What is the minimum possible number of illuminated points on the walls of the room?</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">建立单束激光与切线成 θ° 角时反射点数的计数公式</div>
+    <div class="sub">描述：建立单束激光与切线成 θ° 角时反射点数的计数公式</div><div class="sub">期望输出：单束激光反射点数的通用公式（用 θ 表示）</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (θ : ℕ) (hθ : 0 &lt; θ ∧ θ &lt; 90) : ∃ (k : ℕ), k = 360 / Nat.gcd 360 (2 * θ) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j21" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j21" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j21" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j21" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="21" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c22" data-no="22">
+  <div class="chead">
+    <span class="num">22</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qc60e2b25 · official112-072 · 子目标 4</span>
+    <span class="state" id="s22">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">For a positive integer $n \geq 2$, let the set $C_n$ be the set of integers $2^n - 2^i$ for integers $i$ such that $0 \leq i &lt; n$. Find the smallest positive integer that cannot be expressed as a sum of numbers in $C_n$ (where the same number can be used multiple times).<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n1 的 C_n 元素模 2^n 的余数，建立和为 2^n 时的模约束</div>
+    <div class="sub">描述：由 n1 的 C_n 元素模 2^n 的余数，建立和为 2^n 时的模约束</div><div class="sub">期望输出：若若干 C_n 元素之和等于 2^n，则这些元素的 -2^i 部分之和必须 ≡ 0 (mod 2^n)</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (n : ℕ) (is : List ℕ) (h : ∀ i ∈ is, i &lt; n) : (List.sum (is.map (fun i =&gt; 2^n - 2^i)) = 2^n) → (List.sum (is.map (fun i =&gt; -2^i)) ≡ 0 [MOD 2^n]) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j22" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j22" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j22" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j22" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="22" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c23" data-no="23">
+  <div class="chead">
+    <span class="num">23</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qd6f08f68 · official112-019 · 子目标 3</span>
+    <span class="state" id="s23">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Two players, Boris and Natasha, play the following game on an infinite grid of unit squares, all initially colored white. The players take turns starting with Boris. On Boris&#x27;s turn, Boris selects one white unit square and colors it blue. On Natasha&#x27;s turn, Natasha selects two white unit squares and colors them red. The players alternate until Boris decides to end the game. At this point, Boris gets a score, given by the number of unit squares in the largest simple polygon containing only blue unit squares and some yellow unit squares. What is the largest score Boris can guarantee?<br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">上界分析：证明任意由蓝格构成的简单多边形若面积 ≥ 5，则其内部必含一个 2×2 区域至少有 3 个蓝格（结构引理）</div>
+    <div class="sub">描述：上界分析：证明任意由蓝格构成的简单多边形若面积 ≥ 5，则其内部必含一个 2×2 区域至少有 3 个蓝格（结构引理）</div><div class="sub">期望输出：面积 ≥ 5 的蓝格单连通多边形必含密集 2×2 子结构的引理</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (S : Finset (ℤ × ℤ)) (hS : S.card ≥ 5) (hconn : IsSimplePolygon S) : ∃ (i j : ℤ), (S ∩ {(i,j), (i+1,j), (i,j+1), (i+1,j+1)}).card ≥ 3 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j23" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j23" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j23" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j23" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="23" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c24" data-no="24">
+  <div class="chead">
+    <span class="num">24</span>
+    <span class="layer">L2/EARLY</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 2</span>
+    <span class="state" id="s24">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">将区间 [0, 777^2] 分成两个子区间 [0, 777^2/2] 和 (777^2/2, 777^2]，应用无限抽屉原理</div>
+    <div class="sub">描述：将区间 [0, 777^2] 分成两个子区间 [0, 777^2/2] 和 (777^2/2, 777^2]，应用无限抽屉原理</div><div class="sub">期望输出：存在无限子序列落在同一半区间内</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (y : ℕ → ℝ) (h : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) : ∃ (s : Set ℕ), Infinite s ∧ (∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777^2/2) ∨ (∀ i ∈ s, 777^2/2 &lt; y i ∧ y i ≤ 777^2) := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j24" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j24" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j24" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j24" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="24" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c25" data-no="25">
+  <div class="chead">
+    <span class="num">25</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qdecd0474 · official112-008 · 子目标 3</span>
+    <span class="state" id="s25">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find the maximum value of $D$ satisfying the following condition: There exists an infinite sequence $x_1, x_2, \ldots$ where each term belongs to $[0, 777]$ such that for all positive integers $m &lt; n$, we have $$(m+n)|x_n^2 - x_m^2| \ge D.$$<br><br>Remember to put your final answer within \boxed{}.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n2a 的存在性推出 D ≤ 777^2/2</div>
+    <div class="sub">描述：由 n2a 的存在性推出 D ≤ 777^2/2</div><div class="sub">期望输出：D ≤ 777^2/2</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (D : ℝ) (hcond : ∀ m n, m &lt; n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : D ≤ 777 ^ 2 / 2 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j25" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j25" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j25" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j25" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="25" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<section class="card" id="c26" data-no="26">
+  <div class="chead">
+    <span class="num">26</span>
+    <span class="layer">L2/LATE</span>
+    <span class="qmeta">qfaed7d35 · omni-3556 · 子目标 3</span>
+    <span class="state" id="s26">未判</span>
+  </div>
+  <div class="block"><div class="lbl">题目原文</div><div class="question">Find an integer $n$, where $100 \leq n \leq 1997$, such that <br>\[ \frac{2^n+2}{n}  \] <br>is also an integer.</div></div>
+  <div class="block"><div class="lbl">子目标（自然语言）</div><div class="goal">由 n2 得 m 为奇数且 m | 2^{2m-1}+1，证明 3 整除 m</div>
+    <div class="sub">描述：由 n2 得 m 为奇数且 m | 2^{2m-1}+1，证明 3 整除 m</div><div class="sub">期望输出：3 | m</div>
+  </div>
+  <div class="block"><div class="lbl">形式签名 <code>formal_sig</code></div>
+    <pre class="lean">example (m : ℕ) (ho : Odd m) (hd : (2^(2*m - 1) + 1) % m = 0) : m % 3 = 0 := by sorry</pre></div>
+  <div class="block"><div class="lbl">判定</div><div class="opts"><label class="opt opt-A" data-k="A"><input type="radio" name="j26" value="A"><span class="key">A</span><span class="otxt">忠实</span></label><label class="opt opt-B" data-k="B"><input type="radio" name="j26" value="B"><span class="key">B</span><span class="otxt">命题写歪</span></label><label class="opt opt-C" data-k="C"><input type="radio" name="j26" value="C"><span class="key">C</span><span class="otxt">空洞/平凡</span></label><label class="opt opt-D" data-k="D"><input type="radio" name="j26" value="D"><span class="key">D</span><span class="otxt">信息不足</span></label></div>
+    <textarea class="note" data-no="26" rows="2" placeholder="备注：B / C 必须写清具体错在哪一处"></textarea>
+  </div>
+</section>
+
+<div class="panel" style="margin-top:22px">
+ <h2>判完之后</h2>
+ <p class="why">点「导出判定 JSON」把结果下载下来，交给我对答案表做交叉统计。
+ 统计只报各档条数与逐条理由，<b>不作统计推断、不作效果量、不宣称等价</b>。
+ 若 B/C 占比高 ⇒ 后续方向应转向命题形式化与语义保真，而不是继续加证明层或闸门层；
+ 若绝大多数是 A ⇒ 「模型证不出」的归因才站得住。</p>
+</div>
+</div>
+<script>
+const KEY='fidelity_20261106', N=26;
+let st={};
+try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){st={}}
+function save(){localStorage.setItem(KEY,JSON.stringify(st))}
+function paint(){
+ let n=0;
+ for(let i=1;i<=N;i++){
+  const v=st[i]||{}, c=document.getElementById('c'+i), s=document.getElementById('s'+i);
+  const has=!!v.k; if(has)n++;
+  c.classList.toggle('done',has); s.textContent=has?('已判 '+v.k):'未判';
+  document.querySelectorAll('.opt').forEach(o=>{
+   if(o.closest('.card').id==='c'+i) o.classList.toggle('sel',o.dataset.k===v.k);
+  });
+  const t=c.querySelector('textarea.note'); if(t.value!==(v.n||''))t.value=v.n||'';
+ }
+ document.getElementById('cnt').textContent='已判 '+n+' / '+N;
+ document.getElementById('pbar').style.width=(100*n/N)+'%';
+}
+document.addEventListener('change',e=>{
+ if(e.target.type!=='radio')return;
+ const no=e.target.name.slice(1);
+ st[no]=st[no]||{}; st[no].k=e.target.value; save(); paint();
+});
+document.addEventListener('input',e=>{
+ if(!e.target.classList.contains('note'))return;
+ const no=e.target.dataset.no; st[no]=st[no]||{}; st[no].n=e.target.value; save();
+});
+function exp(){
+ const out={key:KEY,exported:new Date().toISOString(),total:N,
+  judged:Object.values(st).filter(v=>v.k).length,items:[]};
+ for(let i=1;i<=N;i++){const v=st[i]||{};out.items.push({no:i,k:v.k||null,note:v.n||''})}
+ const b=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(b);
+ a.download='fidelity_judgements_20261106.json';a.click();URL.revokeObjectURL(a.href);
+}
+function jump(){
+ for(let i=1;i<=N;i++)if(!(st[i]||{}).k){document.getElementById('c'+i).scrollIntoView({behavior:'smooth'});return}
+ alert('全部判完了');
+}
+function clr(){if(!confirm('清空本机已填判定？'))return;st={};save();
+ document.querySelectorAll('input[type=radio]').forEach(r=>r.checked=false);paint()}
+// 恢复单选勾选
+for(let i=1;i<=N;i++){const k=(st[i]||{}).k;if(k){const r=document.querySelector('input[name="j'+i+'"][value="'+k+'"]');if(r)r.checked=true}}
+paint();
+</script></body></html>

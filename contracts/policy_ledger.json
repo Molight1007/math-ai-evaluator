@@ -3535,5 +3535,78 @@
    "温度 0.0 是否收敛需同配置两轮对照"
   ],
   "regression": "E36 全量回归 2579 tests / 1 failure（唯一失败恒为环境性 test_compile_fail_returns_feedback，不删不跳过）；E36 新增 14 条构造用例"
+ },
+ "formal_sig_fidelity": {
+  "date": "2026-11-07",
+  "scope": "形式签名命题保真度抽验 + 编译级平凡性探针（零配额评估床；不新增 POLICY 项、不引入开关、不改任何判据）",
+  "motivation": [
+   "Goedel-Prover-V2 (arXiv:2508.03613) 在同为 Omni-MATH 的题库上人工抽验报「未解问题里 >80% 是形式化写错」；DeepSeek-Prover-V1 报自动命题即使过质量过滤仍至少 20% 有错",
+   "门A 只判「命题可陈述/能编译」，不判「是不是原题的意思」；E26/E31-E35 的瓶颈归因「模型证不出可编译证明」可能有一大块其实是命题从一开始就写歪",
+   "文献另印证：sorry 是分工接口不该禁（DeepSeek-Prover-V2 / PFR）；LLM judge 不可靠（miniF2F-Lean Revisited 判 97.5% 对、人工仅 62.7%）；未训练模型 self-correction 几乎无效（Goedel 消融 75.8%→76.2%），APOLLO 靠确定性修复 + 把剩余 sorry 当子目标清单派发"
+  ],
+  "sampling": {
+   "frame": "全库 results/2*/q*/03_subgoals.json 中 formal_sig 非空 160 条，按 (qid, 签名文本 md5) 去重，覆盖 23 题",
+   "question_text": "从 results/*.jsonl 按 md5 前 8 位反查，26/26 命中",
+   "picks": "26 条 / 16 题；L1/PRODUCTION（11 月三轮）全量 10 条，L2/EARLY 8 条 + L2/LATE 8 条，同题≤2，固定种子 20261106",
+   "blind": "清单不含 stage / tool_verdict / correct / run / 来源；答案表分离；模型预标注封存且明确标注非证据"
+  },
+  "probe_26": {
+   "environment": "服务器 ~/mathpilot，source deploy/lean-env.sh，.venv/bin/python，真实 Lean 4.31 串行编译",
+   "stated": "STATABLE 18 条 / 不可陈述 8 条",
+   "unstated_ids": [
+    "#12",
+    "#14",
+    "#16",
+    "#17",
+    "#18",
+    "#19",
+    "#22",
+    "#23"
+   ],
+   "unstated_note": "含自造符号/未定义标识符/英文占位符；#14 是该 Mathlib 闭包缺 ∑ i in s 记法（三种 import 全失败），属环境不可陈述，不得算语义空洞",
+   "general_tactic": "G（E28 口径）PASS 1 条（#21）",
+   "zero_math_probe": "Z（12 个构造性模板）PASS 2 条（#21/#24），每条 PASS 均经逐策略单独编译复核",
+   "directed_witness": "#21 / #24 独立定向见证均 PASS",
+   "no_conclusion": "其余 16 条可陈述但零数学策略证不出，一律记「无结论」，不判定",
+   "model_prelabel": "A12/B6/C7/D1，仅第二意见非证据；#18 预标注判「忠实」但编译器判不可陈述 ⇒ 模型判定当场出错的实例，印证 E25/E26 同源偏差"
+  },
+  "single_variable_compare_90": {
+   "sample": "E28 151 条中门A STATABLE 的 90 条（历史 LEGAL 81 / CONTRADICTION 8 / ILLEGAL 1），全部来自 2026-10-15～10-30",
+   "excluded": "ILLEGAL 54 条（命题不能陈述，换任何策略必然失败）、SKIPPED 7 条（门A 未判）",
+   "design": "两臂共用完全相同 PRELUDE（E28 原式）、相同签名、相同编译顺序；唯一变量 = 替换 sorry 的策略串",
+   "arms": "G = replay_lean_close.TACTIC 逐字复刻；Z = 11 个零数学模板（比 26 条版少 aesop：该策略从未是唯一命中且是主要耗时源，去掉更保守）",
+   "result": "G PASS 1 条 / Z PASS 3 条 / Z 相对 G 新增 2 条",
+   "new_hits": [
+    "qdecd0474/20261019#2（即抽验 #24，历史 LEGAL）",
+    "q5a7e5ee2/20261027#1（历史 LEGAL）"
+   ],
+   "counterexample_control": "正常命题 q10a65b3d#6 在两版 Z 下均 FAIL ⇒ 探针不是见谁都判空洞"
+  },
+  "self_corrections": [
+   "第一次 90 条对照跑出「新增 0 条」，是探针假阴性而非真结论：合并 first | 的前序分支（如 refine ⟨∅, ?_⟩ <;> simp）留下未解目标却不算 tactic 失败，first 提前终止，后续分支未被尝试。修法：每个分支包 `(t; done)`，有未解目标即失败并继续试下一分支；修复后 #24 PASS、正常命题仍 FAIL。两臂已按修复口径重跑。",
+   "更早的原型把替换串多写了一个 by（SORRY_RE 只匹配 sorry 单词 ⇒ by by）导致 4 条全 FAIL，已修正并写入脚本注释。",
+   "两处同属一类教训：探针自身没验过之前，它给出的数字不能当结论；与 E24（d==0 判零失效）、E27（散文抽符号污染）同类"
+  ],
+  "conclusions": [
+   "探针强度确实是「空洞多不多」结论里一个没被控制的混淆变量：历史 LEGAL 里至少 2 条实为可零数学证出的平凡命题",
+   "但新增仅 2 条，不足以推翻 E28「TRIVIAL 6 条」的整体量级，更不得外推当前生产",
+   "26 条抽样与 90 条对照是两批不同样本（时间窗、PRELUDE 各自对齐对应历史口径），数字不可相加、不可互相外推、不可直接比大小",
+   "命题形式化质量是比证明能力更靠上游的问题：8/26 连合法 Lean 都写不成；继续在闸门/编排层加层边际收益为 0",
+   "封口：这条线只作存在性结论与观测方法留痕，不改任何判据、不动 POLICY 101 项"
+  ],
+  "non_claims": [
+   "不报比例结论、不作统计推断、不宣称效果量 / 等价 / 真判有效 / 评测通过",
+   "Z=FAIL 不作判定；探针只给存在性证据，不宣称完备",
+   "不把「不可陈述」等同于命题写歪或空洞；不把模型预标注当证据",
+   "不把文献里的 >80% 直接套到本项目数据上"
+  ],
+  "open_items": [
+   "是否修门B 平凡性探针（补构造性步骤）属判据口径变更，须用户拍板 + 留出集 + 人工抽验",
+   "F-SOFT 语义、门C 的 sorry 改证回路、温度 0.0 同配置两轮对照，均仍待拍板",
+   "下一次真实运行须核对 E36 的 tool_not_run_reason 是否真落盘",
+   "gold 待核 4 题；观测性 4 项；regen_rounds 3→1 需先补埋点"
+  ],
+  "artifacts": "测试结果/形式签名保真度抽验_20261106/（抽验台.html、抽验台_中文判断题版.html、抽验清单_留档版.md、抽验明细_无系统判定.json、答案表_抽验完成后再打开.json、模型预标注_人工判定前勿看.json、生成脚本_fidelity_extract.py、统计脚本_fidelity_tally.py、平凡性探针_原型.py、平凡性探针_全量.py、平凡性探针_151条对照.py、结论速览_中文.md、全量探针报告_中文.md）",
+  "regression": "本次未改生产代码；全量回归口径沿用 E36 的 2579 tests / 1 failure（唯一失败恒为环境性 test_compile_fail_returns_feedback）"
  }
 }
