@@ -3608,5 +3608,61 @@
   ],
   "artifacts": "测试结果/形式签名保真度抽验_20261106/（抽验台.html、抽验台_中文判断题版.html、抽验清单_留档版.md、抽验明细_无系统判定.json、答案表_抽验完成后再打开.json、模型预标注_人工判定前勿看.json、生成脚本_fidelity_extract.py、统计脚本_fidelity_tally.py、平凡性探针_原型.py、平凡性探针_全量.py、平凡性探针_151条对照.py、结论速览_中文.md、全量探针报告_中文.md）",
   "regression": "本次未改生产代码；全量回归口径沿用 E36 的 2579 tests / 1 failure（唯一失败恒为环境性 test_compile_fail_returns_feedback）"
+ },
+ "probe_2x2_correction": {
+  "date": "2026-11-07",
+  "scope": "E38 订正：E37 90 条对照并非严格单变量；补 2x2 后收窄「探针强度」结论、关闭门B 待拍板项。纯留痕，不新增 POLICY 项、不引入开关、不改任何判据",
+  "trigger": [
+   "复核 E37 的 90 条对照时发现：Z 臂除换策略集合外，还把合并 first | 的每个分支包了 (t; done)（E37 自修假阴性），而 G 臂仍是旧串无 done ⇒ 两臂同时改变「分支结构」与「策略集合」两个变量，不可把新增命中归因给策略集合",
+   "决定性反例 q5a7e5ee2/20261027#1：结论与前提 h 逐字相同、assumption 可一行证出；G 无 done ⇒ FAIL(unsolved goals)，G+ 旧策略仅加 done ⇒ PASS，Z ⇒ PASS",
+   "另一条新增命中 qdecd0474/20261019#2 恰是抽验 #24，Z 的 ⟨∅, Or.inr ?_⟩ 模板就是照它试出来的 ⇒ 设计泄漏，不是独立证据"
+  ],
+  "design_2x2": {
+   "sample": "逐条复用 E37 /tmp/fidelity_probe_compare.json 的 90 行 STATABLE 签名，不重新抽样；PRELUDE 逐字相同；编译顺序相同",
+   "arms": "G = replay_lean_close.TACTIC 原串（无 done）｜G+ = 同一旧策略集合，仅每分支包 (t; done)｜Z = E37 新策略集合（有 done）",
+   "single_variable": "G vs G+ 唯一变量 = 分支结构；G+ vs Z 唯一变量 = 策略集合"
+  },
+  "result": {
+   "counts": "G PASS 1 / G+ PASS 2 / Z PASS 3（全 90 条仅 3 条 PASS，历史分类均 LEGAL）",
+   "three_hits": [
+    "q10a65b3d/20261027#6：G/G+/Z 全 PASS，三臂一致基线",
+    "q5a7e5ee2/20261027#1：G FAIL → G+ PASS，纯分支结构修复；不在抽验 16 题内、不在抽验签名内、落在纯留出后 30% ⇒ 唯一干净独立证据",
+    "qdecd0474/20261019#2：G/G+ FAIL → Z PASS，纯新模板，但即抽验 #24 ⇒ 设计泄漏"
+   ],
+   "holdout_and_strata": {
+    "全量90": "结构新增 1 / 策略新增 1",
+    "排除签名泄漏10条_n80": "结构新增 1 / 策略新增 0",
+    "排除抽验涉及整16题_n16": "结构新增 1 / 策略新增 0",
+    "dev前70pct_n62": "结构新增 0 / 策略新增 1（即泄漏那条）",
+    "纯留出后30pct_n28": "结构新增 1 / 策略新增 0",
+    "le_10_15_n11": "三臂全 0",
+    "gt_10_15_n79": "结构新增 1 / 策略新增 1",
+    "zero_unexplained_diff": "3 条 PASS 全部逐条可解释，零无解释差异"
+   }
+  },
+  "corrections_to_e37": [
+   "台账 formal_sig_fidelity.single_variable_compare_90 自称「严格单变量」不成立；其 design 字段同时变了两个变量，须以本条 2x2 为准",
+   "「Z 相对 G 新增 2 条 ⇒ 探针强度是混淆变量」收窄为：1 条来自 first | 分支结构缺陷，1 条来自新模板但属设计泄漏；干净证据只剩 1 条，且证明的是写法 bug 而非策略集合不全",
+   "E28「TRIVIAL 只有 6 条」低估的主因，现有证据指向同一个 first | 缺陷（E28 原串无 ; done），不是「策略不够多」",
+   "E37 原有文字按史料原样保留，不回改；本条为显式订正"
+  ],
+  "production_boundary": {
+   "fact": "contracts/formal_sig_gate.py::is_trivial_prop() 是纯正则规则，只认 5 种最明确退化形态，完全不调用 Lean 策略串",
+   "consequence": "first | 缺陷只存在于历史回放床 replay_lean_close.py::TACTIC 与评估床脚本，生产门B 行为未受影响、不需要修、不借本次结果改",
+   "decision": "「是否给门B 平凡性探针补构造性步骤」待拍板项：在干净留出集上新增 0 条，无证据支持改动 ⇒ 建议关闭，保持原样（仍属用户最终拍板）"
+  },
+  "self_correction_series": [
+   "第一次：原型替换串多写 by（SORRY_RE 只匹配 sorry 单词）⇒ 4 条全 FAIL",
+   "第二次：合并 first | 分支留下未解目标不算 tactic 失败 ⇒ first 提前终止 ⇒ 假阴性（加 ; done 修复）",
+   "第三次（本条）：只在 Z 臂加 done、G 臂不加 ⇒ 对照不单变量 ⇒ 错误归因",
+   "共同教训：探针自身没验过之前，它给的数字不能当结论；与 E24（d==0 判零失效）、E27（散文抽符号污染）同类"
+  ],
+  "non_claims": [
+   "不报比例结论、不作统计推断、不宣称效果量 / 等价 / 真判有效 / 评测通过",
+   "Z=FAIL 一律记无结论；Z=PASS 只说明存在编译级零数学证明，不穷尽",
+   "26 条抽样与 90 条对照时间窗、PRELUDE 各自对齐不同历史口径，数字不可相加、不可互推、不得外推当前生产"
+  ],
+  "artifacts": "测试结果/形式签名保真度抽验_20261106/{平凡性探针_2x2对照.py, 2x2对照结论_中文.md}；服务器 /tmp/fidelity_2x2.json、/tmp/fidelity_cmp_gp.jsonl",
+  "regression": "未改生产代码；沿用 E37 全量回归口径 2579 tests / 1 failure（唯一失败恒为环境性 test_compile_fail_returns_feedback）"
  }
 }
