@@ -1,0 +1,306 @@
+[
+ {
+  "tag": "s01",
+  "formal_sig": "example : (2:Nat) + 2 = 4 := by sorry",
+  "goal_state": "⊢ (2:Nat) + 2 = 4",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 + 2 = 4",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 自动计算并验证数值等式",
+    "llm_sec": 1.05,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat) + 2 = 4 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.41
+ },
+ {
+  "tag": "s02",
+  "formal_sig": "example : ∀ n : Nat, n + 0 = n := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n + 0 = n",
+  "goal_nl": "(自检样本)",
+  "pass": false,
+  "steps": 4,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n + 0 = n",
+    "tactic": "intro n",
+    "reason": "引入任意自然数 n，将目标从全称命题转化为具体等式 n + 0 = n。",
+    "llm_sec": 1.27,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n + 0 = n",
+    "tactic": "refl",
+    "reason": "使用 refl 直接证明自然数 n + 0 = n 的等式成立。",
+    "llm_sec": 1.37,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 3,
+    "goal": "n : ℕ\n⊢ n + 0 = n",
+    "tactic": "refl",
+    "reason": "提示用户当前的目标可以用refl直接解决，因为等式左边和右边在n后加上0的结果是等价的。",
+    "llm_sec": 1.72,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 4,
+    "goal": "n : ℕ\n⊢ n + 0 = n",
+    "tactic": "",
+    "reason": "目标已被闭合。",
+    "llm_sec": 0.93,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n + 0 = n := by\n  intro n\n  refl\n  refl\n",
+  "stop": "EMPTY",
+  "brief": "EMPTY",
+  "total_sec": 13.9
+ },
+ {
+  "tag": "s03",
+  "formal_sig": "example : (3:Nat) * 4 = 12 := by sorry",
+  "goal_state": "⊢ (3:Nat) * 4 = 12",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 3 * 4 = 12",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式，可以验证 3 * 4 = 12 这一算术命题。",
+    "llm_sec": 2.22,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (3:Nat) * 4 = 12 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 6.6
+ },
+ {
+  "tag": "s04",
+  "formal_sig": "example : ∀ a b : Nat, a + b = b + a := by sorry",
+  "goal_state": "⊢ ∀ a b : Nat, a + b = b + a",
+  "goal_nl": "(自检样本)",
+  "pass": false,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (a b : ℕ), a + b = b + a",
+    "tactic": "induction a with a' ih",
+    "reason": "对 a 进行数学归纳法证明，这是证明自然数加法交换律的标准方法，将目标转化为基础情形和归纳步骤。",
+    "llm_sec": 1.57,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ a b : Nat, a + b = b + a := by\n  induction a with a' ih\n",
+  "stop": "COMPILE_ERROR",
+  "brief": "/tmp/l2probe/step/s04_s02.lean:4:20: error: unknown tactic",
+  "error": "/tmp/l2probe/step/s04_s02.lean:4:20: error: unknown tactic\n/tmp/l2probe/step/s04_s02.lean:4:12: error(lean.unknownIdentifier): Unknown identifier `a`\n",
+  "total_sec": 5.86
+ },
+ {
+  "tag": "s05",
+  "formal_sig": "example : (5:Int) - 3 = 2 := by sorry",
+  "goal_state": "⊢ (5:Int) - 3 = 2",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 5 - 3 = 2",
+    "tactic": "norm_num",
+    "reason": "这是一个简单的算术等式，使用 norm_nb 可以直接计算并验证等式成立。",
+    "llm_sec": 1.26,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (5:Int) - 3 = 2 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.66
+ },
+ {
+  "tag": "s06",
+  "formal_sig": "example : ∀ x : ℝ, x + 0 = x := by sorry",
+  "goal_state": "⊢ ∀ x : ℝ, x + 0 = x",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (x : ℝ), x + 0 = x",
+    "tactic": "intro x",
+    "reason": "引入任意实数 x，将全称量词转化为具体目标 x + 0 = x。",
+    "llm_sec": 2.03,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 2,
+    "goal": "x : ℝ\n⊢ x + 0 = x",
+    "tactic": "simp",
+    "reason": "使用 `simp` 简化目标，利用实数加法的单位元零（`zero_add`）性质，即 x + 0 = x。",
+    "llm_sec": 2.6,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ x : ℝ, x + 0 = x := by\n  intro x\n  simp\n",
+  "stop": "CLOSED",
+  "total_sec": 11.06
+ },
+ {
+  "tag": "s07",
+  "formal_sig": "example : ∃ n : Nat, n = 7 := by sorry",
+  "goal_state": "⊢ ∃ n : Nat, n = 7",
+  "goal_nl": "(自检样本)",
+  "pass": false,
+  "steps": 3,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∃ n, n = 7",
+    "tactic": "existsi 7",
+    "reason": "用 existsi 提供存在量词的见证值 7，目标将变为 7 = 7，随后用 rfl 即可闭合。",
+    "llm_sec": 1.91,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 2,
+    "goal": "⊢ 7 = 7",
+    "tactic": "refl",
+    "reason": "使用refl可以自动验证等式7=7成立",
+    "llm_sec": 1.27,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 3,
+    "goal": "⊢ 7 = 7",
+    "tactic": "",
+    "reason": "目标已被 refl 闭合。",
+    "llm_sec": 0.84,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∃ n : Nat, n = 7 := by\n  existsi 7\n  refl\n",
+  "stop": "EMPTY",
+  "brief": "EMPTY",
+  "total_sec": 10.54
+ },
+ {
+  "tag": "s08",
+  "formal_sig": "example : (2:Nat)^10 = 1024 := by sorry",
+  "goal_state": "⊢ (2:Nat)^10 = 1024",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 ^ 10 = 1024",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算幂运算和数值相等性，此 tactic 可以自动验证 2 的 10 次方等于 1024。",
+    "llm_sec": 1.76,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat)^10 = 1024 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 6.11
+ },
+ {
+  "tag": "s09",
+  "formal_sig": "example : ∀ n : Nat, n ≤ n + 1 := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n ≤ n + 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n ≤ n + 1",
+    "tactic": "intro n",
+    "reason": "引入自然数变量 n，将全称量级目标转化为 n ≤ n + 1 的不等式证明。\n\nTACTIC:\nexact Nat.le_succ n\nREASON:\n直接应用数学库中的 Nat.le_succ 引理，该引理证明对任意自然数 n，都有 n ≤ n + 1，从而完成证明。",
+    "llm_sec": 2.06,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n ≤ n + 1",
+    "tactic": "apply Nat.le_succ",
+    "reason": "使用 Nat.le_succ 引理直接证明 n ≤ n + 1",
+    "llm_sec": 0.96,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n ≤ n + 1 := by\n  intro n\n  apply Nat.le_succ\n",
+  "stop": "CLOSED",
+  "total_sec": 9.44
+ },
+ {
+  "tag": "s10",
+  "formal_sig": "example : (1:ℝ)/2 + 1/2 = 1 := by sorry",
+  "goal_state": "⊢ (1:ℝ)/2 + 1/2 = 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 1 / 2 + 1 / 2 = 1",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式，验证 1/2 + 1/2 等于 1。",
+    "llm_sec": 0.94,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": ""
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (1:ℝ)/2 + 1/2 = 1 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.32
+ }
+]

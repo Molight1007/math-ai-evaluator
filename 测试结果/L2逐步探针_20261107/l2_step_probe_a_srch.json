@@ -1,0 +1,367 @@
+[
+ {
+  "tag": "s01",
+  "formal_sig": "example : (2:Nat) + 2 = 4 := by sorry",
+  "goal_state": "⊢ (2:Nat) + 2 = 4",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 + 2 = 4",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式并验证等式。",
+    "llm_sec": 1.06,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat) + 2 = 4 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.45
+ },
+ {
+  "tag": "s02",
+  "formal_sig": "example : ∀ n : Nat, n + 0 = n := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n + 0 = n",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n + 0 = n",
+    "tactic": "intro n",
+    "reason": "引入自然数 n，将目标转化为 n + 0 = n 的具体等式。",
+    "llm_sec": 1.01,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n + 0 = n",
+    "tactic": "rfl",
+    "reason": "目标 n + 0 = n 是自然数加法的定义等式（add_zero），直接用 rfl 即可闭合。",
+    "llm_sec": 1.08,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n + 0 = n := by\n  intro n\n  rfl\n",
+  "stop": "CLOSED",
+  "total_sec": 10.73
+ },
+ {
+  "tag": "s03",
+  "formal_sig": "example : (3:Nat) * 4 = 12 := by sorry",
+  "goal_state": "⊢ (3:Nat) * 4 = 12",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 3 * 4 = 12",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式 3 * 4 并验证等于 12。",
+    "llm_sec": 1.03,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (3:Nat) * 4 = 12 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.38
+ },
+ {
+  "tag": "s04",
+  "formal_sig": "example : ∀ a b : Nat, a + b = b + a := by sorry",
+  "goal_state": "⊢ ∀ a b : Nat, a + b = b + a",
+  "goal_nl": "(自检样本)",
+  "pass": false,
+  "steps": 5,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (a b : ℕ), a + b = b + a",
+    "tactic": "intro a",
+    "reason": "引入第一个自然数变量 a，将全称量体转化为关于 a 的蕴含式。",
+    "llm_sec": 1.21,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "a : ℕ\n⊢ ∀ (b : ℕ), a + b = b + a",
+    "tactic": "intro b; induction b with | zero => rfl | succ b ih => rw [Nat.add_succ, ih, Nat.add_succ]",
+    "reason": "对 b 做数学归纳法：base case b=0 时 a+0=0+a 由 rfl 证明；归纳步骤利用 Nat.add_succ 和归纳假设 ih 完成等式推导。",
+    "llm_sec": 2.12,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [
+     {
+      "round": 1,
+      "tactic": "intro b; induction b with | zero => rfl | succ b ih => rw [Nat.add_succ, ih, Nat.add_succ]",
+      "error_before": "/tmp/l2probe/step/s04_s02_v0.lean:5:2: error: Tactic `induction` failed: major premise type is not an inductive type",
+      "finish_reason": "stop"
+     }
+    ],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 3,
+    "goal": "case succ\na b : ℕ\nih : a + b = b + a\n⊢ (b + a).succ = (b + 0).succ + a",
+    "tactic": "rw [Nat.add_zero]",
+    "reason": "化简 `b + 0` 为 `b`，使等式两边变为相同形式以便完成证明。",
+    "llm_sec": 1.18,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 4,
+    "goal": "case succ\na b : ℕ\nih : a + b = b + a\n⊢ (b + a).succ = (b + 0).succ + a",
+    "tactic": "rfl",
+    "reason": "目标左边为 (b + a).succ，右边经 Nat.add_zero 化简后为 b.succ + a，而根据 Nat.add_succ 的定义 b.succ + a = (b + a).succ，两边相等，故用 rfl 闭合。",
+    "llm_sec": 3.03,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 5,
+    "goal": "case succ\na b : ℕ\nih : a + b = b + a\n⊢ (b + a).succ = (b + 0).succ + a",
+    "tactic": "",
+    "reason": "目标已经在之前的步骤中被闭合。",
+    "llm_sec": 0.99,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": []
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ a b : Nat, a + b = b + a := by\n  intro a\n  intro b; induction b with | zero => rfl | succ b ih => rw [Nat.add_succ, ih, Nat.add_succ]\n  rw [Nat.add_zero]\n  rfl\n",
+  "stop": "EMPTY",
+  "brief": "EMPTY",
+  "total_sec": 31.41
+ },
+ {
+  "tag": "s05",
+  "formal_sig": "example : (5:Int) - 3 = 2 := by sorry",
+  "goal_state": "⊢ (5:Int) - 3 = 2",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 5 - 3 = 2",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式 5 - 3 = 2。",
+    "llm_sec": 1.0,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (5:Int) - 3 = 2 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.31
+ },
+ {
+  "tag": "s06",
+  "formal_sig": "example : ∀ x : ℝ, x + 0 = x := by sorry",
+  "goal_state": "⊢ ∀ x : ℝ, x + 0 = x",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (x : ℝ), x + 0 = x",
+    "tactic": "intro x",
+    "reason": "引入变量 x 到上下文，将全称量级目标转化为具体等式。\n\nSEARCH:\nzero_add",
+    "llm_sec": 1.56,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "x : ℝ\n⊢ x + 0 = x",
+    "tactic": "simp",
+    "reason": "实数加法中 0 是单位元，x + 0 = x 是定义等式，可直接用 rfl 闭合。",
+    "llm_sec": 1.09,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [
+     {
+      "round": 1,
+      "tactic": "simp",
+      "error_before": "/tmp/l2probe/step/s06_s02_v0.lean:5:2: error: Tactic `rfl` failed: The left-hand side",
+      "finish_reason": "stop"
+     }
+    ],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ x : ℝ, x + 0 = x := by\n  intro x\n  simp\n",
+  "stop": "CLOSED",
+  "total_sec": 15.11
+ },
+ {
+  "tag": "s07",
+  "formal_sig": "example : ∃ n : Nat, n = 7 := by sorry",
+  "goal_state": "⊢ ∃ n : Nat, n = 7",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∃ n, n = 7",
+    "tactic": "use 7",
+    "reason": "使用 `use` 提供存在量词的实例 7，目标将变为 `7 = 7`，随后可用 `rfl` 闭合。",
+    "llm_sec": 1.16,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∃ n : Nat, n = 7 := by\n  use 7\n",
+  "stop": "CLOSED",
+  "total_sec": 5.48
+ },
+ {
+  "tag": "s08",
+  "formal_sig": "example : (2:Nat)^10 = 1024 := by sorry",
+  "goal_state": "⊢ (2:Nat)^10 = 1024",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 ^ 10 = 1024",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 可以直接计算数值表达式 2 ^ 10 并验证其等于 1024。",
+    "llm_sec": 1.14,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat)^10 = 1024 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.53
+ },
+ {
+  "tag": "s09",
+  "formal_sig": "example : ∀ n : Nat, n ≤ n + 1 := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n ≤ n + 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n ≤ n + 1",
+    "tactic": "intro n",
+    "reason": "引入自然数 n，将目标转化为 n ≤ n + 1。",
+    "llm_sec": 0.95,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n ≤ n + 1",
+    "tactic": "linarith",
+    "reason": "目标 n ≤ n + 1 是一个线性不等式，linarith 可以直接证明。",
+    "llm_sec": 1.16,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n ≤ n + 1 := by\n  intro n\n  linarith\n",
+  "stop": "CLOSED",
+  "total_sec": 10.81
+ },
+ {
+  "tag": "s10",
+  "formal_sig": "example : (1:ℝ)/2 + 1/2 = 1 := by sorry",
+  "goal_state": "⊢ (1:ℝ)/2 + 1/2 = 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 1 / 2 + 1 / 2 = 1",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式，可以自动证明 1/2 + 1/2 = 1。",
+    "llm_sec": 1.24,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "searches": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (1:ℝ)/2 + 1/2 = 1 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.61
+ }
+]

@@ -1,0 +1,336 @@
+[
+ {
+  "tag": "s01",
+  "formal_sig": "example : (2:Nat) + 2 = 4 := by sorry",
+  "goal_state": "⊢ (2:Nat) + 2 = 4",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 + 2 = 4",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式并验证等式。",
+    "llm_sec": 7.39,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat) + 2 = 4 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 11.76
+ },
+ {
+  "tag": "s02",
+  "formal_sig": "example : ∀ n : Nat, n + 0 = n := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n + 0 = n",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n + 0 = n",
+    "tactic": "intro n",
+    "reason": "引入自然数 n，将目标转化为 n + 0 = n",
+    "llm_sec": 1.02,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n + 0 = n",
+    "tactic": "exact Nat.add_zero n",
+    "reason": "直接应用自然数加零等于自身的引理 Nat.add_zero",
+    "llm_sec": 1.22,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n + 0 = n := by\n  intro n\n  exact Nat.add_zero n\n",
+  "stop": "CLOSED",
+  "total_sec": 10.86
+ },
+ {
+  "tag": "s03",
+  "formal_sig": "example : (3:Nat) * 4 = 12 := by sorry",
+  "goal_state": "⊢ (3:Nat) * 4 = 12",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 3 * 4 = 12",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式并验证等式。",
+    "llm_sec": 1.06,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (3:Nat) * 4 = 12 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.4
+ },
+ {
+  "tag": "s04",
+  "formal_sig": "example : ∀ a b : Nat, a + b = b + a := by sorry",
+  "goal_state": "⊢ ∀ a b : Nat, a + b = b + a",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 3,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (a b : ℕ), a + b = b + a",
+    "tactic": "intro a",
+    "reason": "引入第一个自然数变量 a，将目标从全称命题转化为条件命题。\n\nTACTIC:\nintro b\nREASON:\n引入第二个自然数变量 b，将目标转化为具体的等式 a + b = b + a。\n\nTACTIC:\ninduction a with\n| zero => rfl\n| succ a' ih => \n  rw [Nat.add_succ, ih, Nat.succ_add]\nREASON:\n对 a 进行数学归纳法证明。基础情况 a = 0 时，0 + b = b + 0 由 rfl 直接证明。归纳步骤中，利用 Nat.add_succ 和 Nat.succ_add 重写，并应用归纳假设 ih 完成证明。",
+    "llm_sec": 4.98,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "a : ℕ\n⊢ ∀ (b : ℕ), a + b = b + a",
+    "tactic": "intro b",
+    "reason": "引入全称量词中的变量 b，将目标转化为具体的等式 a + b = b + a。",
+    "llm_sec": 4.83,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 3,
+    "goal": "a b : ℕ\n⊢ a + b = b + a",
+    "tactic": "simp [Nat.add_comm]",
+    "reason": "使用 Nat.add_comm 直接证明自然数加法交换律。",
+    "llm_sec": 1.47,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ a b : Nat, a + b = b + a := by\n  intro a\n  intro b\n  simp [Nat.add_comm]\n",
+  "stop": "CLOSED",
+  "total_sec": 24.22
+ },
+ {
+  "tag": "s05",
+  "formal_sig": "example : (5:Int) - 3 = 2 := by sorry",
+  "goal_state": "⊢ (5:Int) - 3 = 2",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 5 - 3 = 2",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式 5 - 3 = 2。",
+    "llm_sec": 1.91,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (5:Int) - 3 = 2 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 6.21
+ },
+ {
+  "tag": "s06",
+  "formal_sig": "example : ∀ x : ℝ, x + 0 = x := by sorry",
+  "goal_state": "⊢ ∀ x : ℝ, x + 0 = x",
+  "goal_nl": "(自检样本)",
+  "pass": false,
+  "steps": 4,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (x : ℝ), x + 0 = x",
+    "tactic": "intro x",
+    "reason": "引入变量 x，将全称量词目标转化为具体等式目标 x + 0 = x。",
+    "llm_sec": 1.18,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "x : ℝ\n⊢ x + 0 = x",
+    "tactic": "rw add_zero",
+    "reason": "使用 add_zero 引理将 x + 0 重写为 x，直接闭合目标。",
+    "llm_sec": 1.25,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 3,
+    "goal": "x : ℝ\n⊢ x + 0 = x",
+    "tactic": "rfl",
+    "reason": "使用 rfl 处理等式两边是相同项的情况",
+    "llm_sec": 1.04,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 4,
+    "goal": "x : ℝ\n⊢ x + 0 = x",
+    "tactic": "",
+    "reason": "目标已经被 `rw add_zero` 和 `rfl` 闭合。",
+    "llm_sec": 1.77,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": []
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ x : ℝ, x + 0 = x := by\n  intro x\n  rw add_zero\n  rfl\n",
+  "stop": "EMPTY",
+  "brief": "EMPTY",
+  "total_sec": 20.44
+ },
+ {
+  "tag": "s07",
+  "formal_sig": "example : ∃ n : Nat, n = 7 := by sorry",
+  "goal_state": "⊢ ∃ n : Nat, n = 7",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∃ n, n = 7",
+    "tactic": "use 7",
+    "reason": "使用 `use` 提供存在量词的实例 7，将目标转化为证明 `7 = 7`。\n\nREASON:\n使用 `use` 提供存在量词的实例 7，将目标转化为证明 `7 = 7`。",
+    "llm_sec": 2.01,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∃ n : Nat, n = 7 := by\n  use 7\n",
+  "stop": "CLOSED",
+  "total_sec": 6.37
+ },
+ {
+  "tag": "s08",
+  "formal_sig": "example : (2:Nat)^10 = 1024 := by sorry",
+  "goal_state": "⊢ (2:Nat)^10 = 1024",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 2 ^ 10 = 1024",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式",
+    "llm_sec": 0.87,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (2:Nat)^10 = 1024 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.18
+ },
+ {
+  "tag": "s09",
+  "formal_sig": "example : ∀ n : Nat, n ≤ n + 1 := by sorry",
+  "goal_state": "⊢ ∀ n : Nat, n ≤ n + 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 2,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ ∀ (n : ℕ), n ≤ n + 1",
+    "tactic": "intro n",
+    "reason": "引入自然数 n，将全称量级转化为假设 n : ℕ，目标变为 n ≤ n + 1。",
+    "llm_sec": 4.6,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "UNSOLVED"
+   },
+   {
+    "step": 2,
+    "goal": "n : ℕ\n⊢ n ≤ n + 1",
+    "tactic": "exact n.le_succ",
+    "reason": "n ≤ n + 1 是自然数的标准不等式，mathlib 中 `n.le_succ` 直接证明此式。",
+    "llm_sec": 2.68,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : ∀ n : Nat, n ≤ n + 1 := by\n  intro n\n  exact n.le_succ\n",
+  "stop": "CLOSED",
+  "total_sec": 15.9
+ },
+ {
+  "tag": "s10",
+  "formal_sig": "example : (1:ℝ)/2 + 1/2 = 1 := by sorry",
+  "goal_state": "⊢ (1:ℝ)/2 + 1/2 = 1",
+  "goal_nl": "(自检样本)",
+  "pass": true,
+  "steps": 1,
+  "trace": [
+   {
+    "step": 1,
+    "goal": "⊢ 1 / 2 + 1 / 2 = 1",
+    "tactic": "norm_num",
+    "reason": "使用 norm_num 直接计算数值表达式，验证 1/2 + 1/2 = 1 成立。",
+    "llm_sec": 1.15,
+    "finish_reason": "stop",
+    "banned": false,
+    "llm_error": "",
+    "fixes": [],
+    "verify": "CLOSED"
+   }
+  ],
+  "final_code": "import Mathlib.Tactic\n\nexample : (1:ℝ)/2 + 1/2 = 1 := by\n  norm_num\n",
+  "stop": "CLOSED",
+  "total_sec": 5.44
+ }
+]
