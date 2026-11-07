@@ -109,8 +109,8 @@ def prepare_env() -> None:
             os.environ.setdefault(src, raw[src])
     for k, v in raw.items():
         os.environ.setdefault(k, v)
-    # Lean 相关：研究阶段允许 MCP 联网检索；Mathlib 冷启动需抬高超时地板
-    os.environ.setdefault("LEAN_MCP_ALLOW_NET", "1")
+    # Lean 相关：Mathlib 冷启动需抬高超时地板
+    # （2026-11-07：LEAN_MCP_ALLOW_NET 已随代理侧禁网逻辑一并删除，不再注入）
     # ★ 2026-11-04：LLM_TIMEOUT / LLM_RETRY_ON_TIMEOUT / LEAN_MCP_TIMEOUT_FLOOR
     #   不再由 env 注入 —— 这三个策略值只读 contracts.policy.POLICY，
     #   注入环境变量也**不生效**，留着只会让人误判「改了就能调」。

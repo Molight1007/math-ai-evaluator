@@ -14,7 +14,6 @@ LEAN = os.path.join(REPO, "deploy", "lean-4.31.0-linux", "bin", "lean")
 
 # ---- 关键：本进程内设置（不影响正在跑的评测）----
 os.environ["LEAN_PROJECT_PATH"] = CLOSURE
-os.environ.setdefault("LEAN_MCP_ALLOW_NET", "1")
 os.environ.setdefault("LEAN_MCP_TIMEOUT_FLOOR", "300")
 
 sys.path.insert(0, REPO)

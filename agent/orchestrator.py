@@ -215,8 +215,12 @@ class Orchestrator(BaseAgent):
         # deep 档难题三Agent协作求解器（v2.6：解题→审查→整合→反复验证）
         self.collab = CollaborativeSolver(client, config)
         # AuditGate 答案审核闸门（2026-09-06 去 Lean 化：取代 lean_gate /
-        # lean_pre_verifier 在检测链中的全部作用——平台无 Lean，硬核验/反例/
-        # rubric 程序与 LLM 混合瀑布，只审不答）
+        # lean_pre_verifier 在检测链中的全部作用，硬核验/反例/rubric 程序与
+        # LLM 混合瀑布，只审不答）。
+        # ★ 2026-11-07 订正：当时的理由「平台无 Lean」已失效 —— 比赛不再是验收
+        #   标准，服务器有 Lean 4.31 + Mathlib 闭包。但**本次不动接线**：把
+        #   AuditGate 换回 LeanGate 属判据语义变更，须单独立项（留出集 + 分层 +
+        #   单变量 + 人工抽验）后才能改，不在这里顺手做。
         self.audit_gate = AuditGate(client, config)
         # Lean 双通道（2026-09-06 晚恢复）：lean 可用即 LeanGate 硬验证；
         # ★ 2026-10-14：LeanPreVerifier 在 2.6 的**前置形式化调用点已撤除**

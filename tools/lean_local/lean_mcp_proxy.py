@@ -43,36 +43,41 @@ _SERVER_CANDIDATES = (
 )
 
 # =====================================================================
-# 联网工具禁用（2026-09-06 比赛禁网对齐）
+# 远程检索工具（2026-11-07 解除禁网）
 # ---------------------------------------------------------------------
-# lean-lsp-mcp 默认注册 5 个「远程检索」工具，一旦被调用就会出网访问
-# 共享公共服务：
+# lean-lsp-mcp 默认注册 5 个「远程检索」工具，调用即出网访问共享公共服务：
 #   lean_leansearch     → https://leansearch.net/search
 #   lean_loogle         → https://loogle.lean-lang.org（远程形态）
 #   lean_leanfinder     → huggingface 托管端点
 #   lean_state_search   → https://premise-search.com
 #   lean_hammer_premise → http://leanpremise.net
-# 赛事平台无外网，本地评测若悄悄用这些工具成绩会虚高。本代理作为
-# lean-lsp-mcp 的唯一启动入口，一律禁用上述工具（官方 LEAN_MCP_DISABLED_TOOLS
-# 机制：直接从工具注册表移除，客户端根本拿不到、无法调用）；
-# 再注入「黑洞代理」（死端口）做纵深防御——即使未来某条代码路径漏网发起
-# urllib/httpx 请求也会立即 connection refused 快速失败，绝不静默出网。
+#
+# 2026-09-06 起因「赛事平台无外网、本地悄悄用这些工具会让成绩虚高」，本代理
+# 作为 lean-lsp-mcp 的唯一启动入口，默认禁用上述工具（官方
+# LEAN_MCP_DISABLED_TOOLS 机制，直接从工具注册表移除），并注入「黑洞代理」
+# （死端口）做纵深防御。
+#
+# ★ 2026-11-07 用户决策：比赛不再是验收标准，只专注智能体本身 ⇒ 禁用理由
+#   消失，**删除禁用逻辑本身**，而不是留一个开关去放行（开关会变成第二权威源）。
+#   现在的行为：
+#     · 不再写入 LEAN_MCP_DISABLED_TOOLS，也不再注入黑洞代理；
+#     · 外部若在自己的环境里显式设了 LEAN_MCP_DISABLED_TOOLS，仍原样透传并由
+#       amain() 转成 --disable-tools —— 尊重显式收敛，代理不解释、不增删。
 # 本地 LSP 诊断（lean_diagnostic_messages / lean_goal / lean_build /
-# lean_local_search 等）走 stdio/文件，不经代理，不受影响。
-# 调参需要临时放行远程检索时：设环境变量 LEAN_MCP_ALLOW_NET=1。
+# lean_local_search 等）走 stdio/文件，与网络无关，不受此改动影响。
 # =====================================================================
-_NET_TOOLS = ("lean_leansearch,lean_loogle,lean_leanfinder,"
-              "lean_state_search,lean_hammer_premise")
-_ALLOW_NET_ENV = "LEAN_MCP_ALLOW_NET"
-_BLACKHOLE_PROXY = "http://127.0.0.1:9"   # 死端口：连接立即被拒（快速失败）
 
 
 def _server_env() -> dict:
-    """构造传给 lean-lsp-mcp server 的环境（默认禁网；ALLOW_NET=1 放行）。
+    """构造传给 lean-lsp-mcp server 的环境。
 
     2026-09-11 追加：若仓库内置 ripgrep（`<proxy 同目录>/bin/rg` 或
     `<仓库>/lean-lsp-mcp/bin/rg`），自动加入 PATH —— 供 `lean_local_search`
     （**本地**检索，不联网）使用。找不到也不影响其他能力（优雅降级）。
+
+    ★ 2026-11-07：删除了原先的「默认禁网」分支（工具禁用 + 黑洞代理）。
+    现在直接继承父进程环境；联网与否由父进程的代理/网络状况决定，
+    代理不再单方面改写。
     """
     env = dict(os.environ)
     try:
@@ -94,19 +99,6 @@ def _server_env() -> dict:
                 break
     except Exception:  # noqa: BLE001
         pass
-    allow = (os.environ.get(_ALLOW_NET_ENV, "") or "").strip().lower()
-    if allow in ("1", "true", "yes"):
-        return env
-    # 1) 官方禁用机制：合并用户已有的 LEAN_MCP_DISABLED_TOOLS，不覆盖丢失
-    existing = (env.get("LEAN_MCP_DISABLED_TOOLS", "") or "").strip()
-    merged = _NET_TOOLS if not existing else existing + "," + _NET_TOOLS
-    env["LEAN_MCP_DISABLED_TOOLS"] = merged
-    # 2) 黑洞代理兜底（覆盖父进程可能带出的任何代理设置）
-    env["HTTP_PROXY"] = _BLACKHOLE_PROXY
-    env["HTTPS_PROXY"] = _BLACKHOLE_PROXY
-    env["ALL_PROXY"] = _BLACKHOLE_PROXY
-    env.pop("NO_PROXY", None)
-    env.pop("no_proxy", None)
     return env
 
 
@@ -161,8 +153,9 @@ async def _handle(session, req) -> None:
     #   op=run_code     本地执行 Lean 代码片段（计算）—— 不联网
     #   op=local_search 本地 Mathlib 声明检索（找引理）—— 不联网
     #   op=verify       定理公理/源码可疑构造检查（检测）—— 不联网
-    # 全部为本地 LSP 能力；远程检索类工具（leansearch/loogle/...）仍由
-    # LEAN_MCP_DISABLED_TOOLS 禁用，保证比赛环境（无外网）可运行。
+    # 全部为本地 LSP 能力；远程检索类工具（leansearch/loogle/...）自
+    # 2026-11-07 起不再默认禁用（比赛不再是验收标准），仅在外部显式设置
+    # LEAN_MCP_DISABLED_TOOLS 时才被收敛。
     op = str(req.get("op") or "diagnostics").strip().lower()
     try:
         if op == "run_code":

@@ -237,8 +237,9 @@ def _print_startup_banner(args, out, log, env_snap, n_questions) -> None:
           f"retry={os.environ.get('LLM_RETRY_ON_TIMEOUT')}", flush=True)
     print(f"语料   {os.environ.get('LEANSEARCH_CORPUS_PATH')}  "
           f"存在={os.path.isfile(os.environ.get('LEANSEARCH_CORPUS_PATH', ''))}", flush=True)
-    print(f"LEAN   PATH={'有' if os.environ.get('LEAN_PATH') else '无'}  "
-          f"ALLOW_NET={os.environ.get('LEAN_MCP_ALLOW_NET')}", flush=True)
+    # ★ 2026-11-07：不再有 LEAN_MCP_ALLOW_NET 开关（代理侧禁网逻辑已删除，
+    #   联网与否由环境本身决定），这里只核验 Lean 闭包是否就位。
+    print(f"LEAN   PATH={'有' if os.environ.get('LEAN_PATH') else '无'}", flush=True)
     # MCP 通道是否真能生效（决定性：找不到执行器就会静默回落 bridge）
     try:
         sys.path.insert(0, str(ROOT))

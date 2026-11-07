@@ -33,8 +33,13 @@ python run_research.py --test_file <题单.jsonl> --output <结果.jsonl>
 该脚本把"无时间限制 + 联网可用"这组配置**固化**下来（`--max_time_per_question 86400`、
 `--tier_budget 86400,86400,86400`、`--paper_target_time/--max_total_time_seconds 86400000`、
 `--enable_web_search true`、`--use_leansearch true`、`--verifier_deep_final_enabled true`、`--verbose`），
-并自动：① 从仓库根 `.env` / 环境变量准备密钥；② 设置 `LEAN_MCP_ALLOW_NET=1`、
-`LEAN_MCP_TIMEOUT_FLOOR=300`、`LLM_TIMEOUT=300`；③ 打印实际生效配置的横幅。
+并自动：① 从仓库根 `.env` / 环境变量准备密钥；② 设置 `LEAN_MCP_TIMEOUT_FLOOR=300`、
+`LLM_TIMEOUT=300`；③ 打印实际生效配置的横幅。
+
+> 2026-11-07：`LEAN_MCP_ALLOW_NET` 已删除 —— 代理侧的「默认禁网」逻辑本身被移除
+> （比赛不再是验收标准），联网与否由环境本身决定，不再需要开关放行。同理，
+> `LEAN_MCP_TIMEOUT_FLOOR` / `LLM_TIMEOUT` / `LLM_RETRY_ON_TIMEOUT` 自 2026-11-04 起
+> 只读 `contracts/policy.py::POLICY`，注入环境变量**不生效**，上面第 ② 项仅为历史说明。
 
 **为什么不在代码里直接把默认值改成"不限"**：`user_agent.py` 是**统一求解入口**，
 其默认值必须与 1200s 单题硬限对齐；把研究档写进默认值会污染基线语义。
@@ -93,7 +98,10 @@ LLM_MODEL=your-model-name
 
 ### 其他可调环境变量（均有默认值，可不设）
 
-`LLM_TIMEOUT`(300) · `LLM_RETRY_ON_TIMEOUT`(1) · `LEAN_EXE` · `LEAN_PROJECT_PATH` · `LEAN_MCP_TIMEOUT_FLOOR`(300) · `LEAN_MCP_ALLOW_NET` · `LEAN_MCP_WORKERS` · `LEAN_GATE_PARALLEL` · `LEAN_GATE_STRICT_UNKNOWN` · `LEANSEARCH_CORPUS_PATH` · `LOCAL_MAX_CONCURRENCY`
+`LEAN_EXE` · `LEAN_PROJECT_PATH` · `LEAN_MCP_WORKERS` · `LEAN_GATE_PARALLEL` · `LEAN_GATE_STRICT_UNKNOWN` · `LEANSEARCH_CORPUS_PATH` · `LOCAL_MAX_CONCURRENCY`
+
+（`LEAN_MCP_ALLOW_NET` 已于 2026-11-07 删除；`LEAN_MCP_TIMEOUT_FLOOR` / `LLM_TIMEOUT` /
+`LLM_RETRY_ON_TIMEOUT` 改由 `POLICY` 只读提供，设 env 不生效。）
 
 ---
 
@@ -174,7 +182,6 @@ git submodule update --init --recursive
 
 # 5) 环境变量
 export OPENAI_API_KEY=...  OPENAI_BASE_URL=.../v1  LLM_MODEL=...
-export LEAN_MCP_ALLOW_NET=1          # 放行 Lean MCP 的远程检索工具
 export LEAN_MCP_TIMEOUT_FLOOR=300    # Mathlib 冷启动需 60–90s，超时地板须抬高
 
 # 6) 运行本地评测
