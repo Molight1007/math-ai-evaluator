@@ -1,0 +1,2569 @@
+[
+ {
+  "qid": "q03d3e039",
+  "run": "20261015",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (a b : ℝ) : 2 * a * b ^ 3 ≤ a ^ 2 + b ^ 4 ∧ (2 * a * b ^ 3 = a ^ 2 + b ^ 4 ↔ a = b ^ 2) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "2 * a * b ^ 3 ≤ a ^ 2 + b ^ 4 ∧ (2 * a * b ^ 3 = a ^ 2 + b ^ 4 ↔ a = b ^ 2)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q03d3e039",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (x y z : ℝ) : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 ≤ (x ^ 2 + y ^ 2 + z ^ 2 + x ^ 4 + y ^ 4 + z ^ 4) / 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "x * y ^ 3 + y * z ^ 3 + z * x ^ 3 ≤ (x ^ 2 + y ^ 2 + z ^ 2 + x ^ 4 + y ^ 4 + z ^ 4) / 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q03d3e039",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (x y z : ℝ) (h : x ^ 2 + y ^ 2 + z ^ 2 = 3) : x ^ 4 + y ^ 4 + z ^ 4 ≥ 3 ∧ (x ^ 4 + y ^ 4 + z ^ 4 = 3 ↔ x ^ 2 = 1 ∧ y ^ 2 = 1 ∧ z ^ 2 = 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "x ^ 4 + y ^ 4 + z ^ 4 ≥ 3 ∧ (x ^ 4 + y ^ 4 + z ^ 4 = 3 ↔ x ^ 2 = 1 ∧ y ^ 2 = 1 ∧ z ^ 2 = 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q3b5dc802",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example : ¬(∀ (d : ℕ) (hd : 0 < d ∧ d ≤ 1) (Q : ℤ → ℤ), ∃ (k : ℕ) (hk : 0 < k ∧ k ≤ 1) (a : Fin (k+1) → ℤ), Function.Injective a ∧ Q (a (Fin.last k)) - ∑ i : Fin k, Q (a i) = (a (Fin.last k))^1 - ∑ i : Fin k, (a i)^1) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "¬(∀ (d : ℕ) (hd : 0 < d ∧ d ≤ 1) (Q : ℤ → ℤ), ∃ (k : ℕ) (hk : 0 < k ∧ k ≤ 1) (a : Fin (k+1) → ℤ), Function.Injective a ∧ Q (a (Fin.last k)) - ∑ i : Fin k, Q (a i) = (a (Fin.last k))^1 - ∑ i : Fin k, (a i)^1)",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00003.lean:5:170: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q3b5dc802",
+  "run": "20261015",
+  "sg_id": 5,
+  "type": "compute",
+  "sig": "example (d : ℕ) (Q : ℤ → ℤ) (hQ : Q.polynomial.natDegree < d) : Q (d + 1) - ∑ i in Finset.range d, Q i = (d + 1)^d - ∑ i in Finset.range d, i^d := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "Q (d + 1) - ∑ i in Finset.range d, Q i = (d + 1)^d - ∑ i in Finset.range d, i^d",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00004.lean:5:79: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q54a64e25",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (x : ℝ) : (1 - Φ ((x - 5000) / 50)) ≤ 0.01 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(1 - Φ ((x - 5000) / 50)) ≤ 0.01",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00005.lean:5:23: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261015",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (M T : ℕ) (x : List ℕ) (h1 : ∀ i, x[i] ≤ M) (h2 : x.sum ≥ T) : ∀ k ∈ Set.Icc (T - M) x.sum), k ∈ x.subsetSums := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∀ k ∈ Set.Icc (T - M) x.sum), k ∈ x.subsetSums",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00006.lean:5:98: error: unexpected token ')'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261015",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example : ∀ I : Finset (Fin 19), |(I.sum fun i => if i.1 < 18 then 100 else 10) - 1810| ≥ 10 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "∀ I : Finset (Fin 19), |(I.sum fun i => if i.1 < 18 then 100 else 10) - 1810| ≥ 10",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00007.lean:5:33: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261015",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (hX : ∀ k l : ℕ, 0 < k → 0 < l → (2^k - 2^l) ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : 0 ∈ X := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "0 ∈ X",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (h0 : 0 ∈ X) (h2 : 2 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : -1 ∈ X := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "-1 ∈ X",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (hNeg1 : -1 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : ∀ r : ℤ, r ∈ X := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ r : ℤ, r ∈ X",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261015",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (X : Set ℤ) (h : ∀ r : ℤ, r ∈ X) : X = (Set.univ : Set ℤ) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "X = (Set.univ : Set ℤ)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261015",
+  "sg_id": 5,
+  "type": "verify",
+  "sig": "example : (∀ k l : ℕ, 0 < k → 0 < l → (2^k - 2^l : ℤ) ∈ (Set.univ : Set ℤ)) ∧ (∀ (n : ℕ) (x : Fin (n+1) → ℤ), ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ (Set.univ : Set ℤ)) := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：属于Set.univ"
+  ],
+  "prop": "(∀ k l : ℕ, 0 < k → 0 < l → (2^k - 2^l : ℤ) ∈ (Set.univ : Set ℤ)) ∧ (∀ (n : ℕ) (x : Fin (n+1) → ℤ), ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ (Set.univ : Set ℤ))",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "q65482ff3",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (u v : C₀^∞(Ω)) (a : ℝ) : ∫ x in Ω, (∂ i (a * ∂ j u)) * v = -∫ x in Ω, (a * ∂ j u) * (∂ i v) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∫ x in Ω, (∂ i (a * ∂ j u)) * v = -∫ x in Ω, (a * ∂ j u) * (∂ i v)",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00013.lean:5:18: error: expected token",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q65482ff3",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "compute",
+  "sig": "example (u v : C₀^∞(Ω)) (b : ℝ) : ∫ x in Ω, (b * ∂ j u) * v = -∫ x in Ω, u * (∂ j (b * v)) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∫ x in Ω, (b * ∂ j u) * v = -∫ x in Ω, u * (∂ j (b * v))",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00014.lean:5:18: error: expected token",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (v1 v2 : ℝ × ℝ) : (v1 = (1,0) ∧ v2 = (-1,0)) → ((0,-1), (0,1)) = (rotate_cw v1, rotate_cw v2) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(v1 = (1,0) ∧ v2 = (-1,0)) → ((0,-1), (0,1)) = (rotate_cw v1, rotate_cw v2)",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00015.lean:5:74: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (p : ℝ × ℝ) (v : ℝ × ℝ) : path_length p v ≤ 76 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "path_length p v ≤ 76",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00016.lean:5:34: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "derive",
+  "sig": "example (p q r s : ℝ) (hp : p ≠ 0) : (∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) ↔ (3*p*r-q^2 < 0 ∧ ∃ y1 y2 : ℝ, y1 ≠ y2 ∧ 3*p*y1^2+2*q*y1+r=0 ∧ 3*p*y2^2+2*q*y2+r=0 ∧ (p*y1^3+q*y1^2+r*y1+s)*(p*y2^3+q*y2^2+r*y2+s) < 0) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) ↔ (3*p*r-q^2 < 0 ∧ ∃ y1 y2 : ℝ, y1 ≠ y2 ∧ 3*p*y1^2+2*q*y1+r=0 ∧ 3*p*y2^2+2*q*y2+r=0 ∧ (p*y1^3+q*y1^2+r*y1+s)*(p*y2^3+q*y2^2+r*y2+s) < 0)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261015",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) : 16*p^2*(3*p*r-q^2+9*p*s) > 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "16*p^2*(3*p*r-q^2+9*p*s) > 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261015",
+  "sg_id": 5,
+  "type": "compute",
+  "sig": "example (p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) : ∃ z1 z2 : ℝ, z1 ≠ z2 ∧ (p*z1^3+q*z1^2+r*z1+s)*(6*p*z1+2*q)=(3*p*z1^2+2*q*z1+r)^2 ∧ (p*z2^3+q*z2^2+r*z2+s)*(6*p*z2+2*q)=(3*p*z2^2+2*q*z2+r)^2 ∧ ∀ z : ℝ, (p*z^3+q*z^2+r*z+s)*(6*p*z+2*q)=(3*p*z^2+2*q*z+r)^2 → z=z1 ∨ z=z2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ z1 z2 : ℝ, z1 ≠ z2 ∧ (p*z1^3+q*z1^2+r*z1+s)*(6*p*z1+2*q)=(3*p*z1^2+2*q*z1+r)^2 ∧ (p*z2^3+q*z2^2+r*z2+s)*(6*p*z2+2*q)=(3*p*z2^2+2*q*z2+r)^2 ∧ ∀ z : ℝ, (p*z^3+q*z^2+r*z+s)*(6*p*z+2*q)=(3*p*z^2+2*q*z+r)^2 → z=z1 ∨ z=z2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261015",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (q r s : ℝ) : ¬(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ q*y1^2+r*y1+s=0 ∧ q*y2^2+r*y2+s=0 ∧ q*y3^2+r*y3+s=0) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ q*y1^2+r*y1+s=0 ∧ q*y2^2+r*y2+s=0 ∧ q*y3^2+r*y3+s=0)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261015",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example : ∀ (natasha_moves : List (ℤ × ℤ)), (∃ (boris_moves : List (ℤ × ℤ)), boris_moves.length = 4 ∧ (∀ i < 4, boris_moves[i] ∈ {(0,0),(0,1),(1,0),(1,1)}) ∧ (∀ c ∈ {(0,0),(0,1),(1,0),(1,1)}, c ∈ boris_moves) ∧ is_simple_polygon (boundary_of_block boris_moves)) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (natasha_moves : List (ℤ × ℤ)), (∃ (boris_moves : List (ℤ × ℤ)), boris_moves.length = 4 ∧ (∀ i < 4, boris_moves[i] ∈ {(0,0),(0,1),(1,0),(1,1)}) ∧ (∀ c ∈ {(0,0),(0,1),(1,0),(1,1)}, c ∈ boris_moves) ∧ is_simple_polygon (boundary_of_block boris_moves))",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00021.lean:5:211: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261015",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (boris_cells : Finset (ℤ × ℤ)) (natasha_strategy : (ℤ × ℤ) → List (ℤ × ℤ)) : (∀ b ∈ boris_cells, ∀ r ∈ natasha_strategy b, r ∉ boris_cells) → (∀ poly : Finset (ℤ × ℤ), is_simple_polygon poly ∧ (∀ p ∈ poly, p ∈ boris_cells) → poly.card ≤ 4) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(∀ b ∈ boris_cells, ∀ r ∈ natasha_strategy b, r ∉ boris_cells) → (∀ poly : Finset (ℤ × ℤ), is_simple_polygon poly ∧ (∀ p ∈ poly, p ∈ boris_cells) → poly.card ≤ 4)",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00022.lean:5:176: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261015",
+  "sg_id": 1,
+  "type": "derive",
+  "sig": "example (D : ℕ) (x : ℕ → ℕ) (h : ∀ n, x n ≤ 777) (hD : ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : D ≤ 777 ^ 2 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "D ≤ 777 ^ 2",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00023.lean:5:80: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261015",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (D : ℕ) (hD : D = 777 ^ 2 + 1) : ¬∃ (x : ℕ → ℕ), (∀ n, x n ≤ 777) ∧ ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "¬∃ (x : ℕ → ℕ), (∀ n, x n ≤ 777) ∧ ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00024.lean:5:101: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q03d3e039",
+  "run": "20261017",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (x y z : ℝ) (hx : x ≠ 0) (hy : y ≠ 0) (hz : z ≠ 0) (hxy : x ≠ y) (hyz : y ≠ z) (hxz : x ≠ z) (h1 : x^2 + y^2 + z^2 = 3) (h2 : x*y^3 + y*z^3 + z*x^3 = 3) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "q03d3e039",
+  "run": "20261017",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (x z : ℝ) (hx : x ≠ 0) (hz : z ≠ 0) (hxz : x ≠ z) (h1 : 2*x^2 + z^2 = 3) (h2 : x^4 + x*z^3 + z*x^3 = 3) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "q03d3e039",
+  "run": "20261017",
+  "sg_id": 7,
+  "type": "prove",
+  "sig": "example (x : ℝ) (hx : x ≠ 0) (h1 : 3*x^2 = 3) (h2 : 3*x^4 = 3) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "q3b5dc802",
+  "run": "20261017",
+  "sg_id": 6,
+  "type": "derive",
+  "sig": "example (n : ℕ) (hn : n ≥ 3) (hn_odd : Odd n) : ¬ (∃ (k : ℕ) (a : Fin (k+1) → ℤ), k ≤ n ∧ Function.Injective a ∧ (a (Fin.last k)) ^ n - ∑ i : Fin k, (a i) ^ n = (a (Fin.last k)) ^ (n - 1) - ∑ i : Fin k, (a i) ^ (n - 1)) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "¬ (∃ (k : ℕ) (a : Fin (k+1) → ℤ), k ≤ n ∧ Function.Injective a ∧ (a (Fin.last k)) ^ n - ∑ i : Fin k, (a i) ^ n = (a (Fin.last k)) ^ (n - 1) - ∑ i : Fin k, (a i) ^ (n - 1))",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00028.lean:5:152: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261017",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (S : Finset ℕ) (x : ℕ) (hx : x ≤ 100) : ∀ (a b : ℕ), (∀ (s : ℕ), s ∈ S → a ≤ s ≤ b) → (∀ (s : ℕ), s ∈ S ∪ (S + x) → a ≤ s ≤ b + x) ∧ (∀ (k : ℕ), a ≤ k ≤ b + x → ∃ (s : ℕ), s ∈ S ∪ (S + x) ∧ s = k ∨ s + x = k) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "∀ (a b : ℕ), (∀ (s : ℕ), s ∈ S → a ≤ s ≤ b) → (∀ (s : ℕ), s ∈ S ∪ (S + x) → a ≤ s ≤ b + x) ∧ (∀ (k : ℕ), a ≤ k ≤ b + x → ∃ (s : ℕ), s ∈ S ∪ (S + x) ∧ s = k ∨ s + x = k)",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00029.lean:5:89: error: Type mismatch",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261017",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example : ∀ (n : ℕ) (x : ℕ → ℕ), (∀ i, x i ≤ 100) → (∑ i in Finset.range n, x i) ≥ 1810 → ∃ (I : Finset ℕ), |(∑ i in I, x i) - 1810| ≤ 50 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∀ (n : ℕ) (x : ℕ → ℕ), (∀ i, x i ≤ 100) → (∑ i in Finset.range n, x i) ≥ 1810 → ∃ (I : Finset ℕ), |(∑ i in I, x i) - 1810| ≤ 50",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00030.lean:5:56: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261017",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example : ∃ (n : ℕ) (x : ℕ → ℕ), (∀ i, x i ≤ 100) ∧ (∑ i in Finset.range n, x i) ≥ 1810 ∧ ∀ (I : Finset ℕ), |(∑ i in I, x i) - 1810| > 49 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∃ (n : ℕ) (x : ℕ → ℕ), (∀ i, x i ≤ 100) ∧ (∑ i in Finset.range n, x i) ≥ 1810 ∧ ∀ (I : Finset ℕ), |(∑ i in I, x i) - 1810| > 49",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00031.lean:5:56: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : 2 ∈ X := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "2 ∈ X",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : 0 ∈ X := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "0 ∈ X",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (hX : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i, x i * r^i) = 0 → r ∈ X) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : 1 ∈ X := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "1 ∈ X",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00034.lean:5:95: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (hX : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i, x i * r^i) = 0 → r ∈ X) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : -1 ∈ X := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "-1 ∈ X",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00035.lean:5:95: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (X : Set ℤ) (hX : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i, x i * r^i) = 0 → r ∈ X) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : ∀ m : ℤ, m ∈ X := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "∀ m : ℤ, m ∈ X",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00036.lean:5:95: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5db89772",
+  "run": "20261017",
+  "sg_id": 6,
+  "type": "verify",
+  "sig": "example : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), ∀ r : ℤ, (∑ i, x i * r^i) = 0 → r ∈ (Set.univ : Set ℤ) := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：属于Set.univ"
+  ],
+  "prop": "∀ (n : ℕ) (x : Fin (n+1) → ℤ), ∀ r : ℤ, (∑ i, x i * r^i) = 0 → r ∈ (Set.univ : Set ℤ)",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261017",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (d : ℝ) (h : d ≤ 38) : d + 90_turn_extension ≤ 38 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 其它"
+  ],
+  "prop": "d + 90_turn_extension ≤ 38",
+  "stated": "ILLEGAL",
+  "stated_why": "其它",
+  "first_err": "/tmp/siggate_k3cabam9/s00038.lean:5:38: error: unexpected character; expected decimal number",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261017",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example : spider_presence_does_not_affect_max_path_length := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "spider_presence_does_not_affect_max_path_length",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261017",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (f : ℝ → ℝ) (z : ℝ) (hz : f z ≠ 0) : f z * (deriv (deriv f) z) = (deriv f z)^2 ↔ deriv (fun x => deriv f x / f x) z = 0 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "f z * (deriv (deriv f) z) = (deriv f z)^2 ↔ deriv (fun x => deriv f x / f x) z = 0",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00040.lean:5:52: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261017",
+  "sg_id": 3,
+  "type": "compute",
+  "sig": "example (α β γ : ℝ) (h : α < β ∧ β < γ) (z : ℝ) (hz : z ≠ α ∧ z ≠ β ∧ z ≠ γ) : (deriv (fun x => (x-α)*(x-β)*(x-γ)) z) / ((z-α)*(z-β)*(z-γ)) = 1/(z-α) + 1/(z-β) + 1/(z-γ) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(deriv (fun x => (x-α)*(x-β)*(x-γ)) z) / ((z-α)*(z-β)*(z-γ)) = 1/(z-α) + 1/(z-β) + 1/(z-γ)",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00041.lean:5:80: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qa658f533",
+  "run": "20261017",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (α β γ : ℝ) (h : α < β ∧ β < γ) : ∀ C : ℝ, ∃ (s : Finset ℝ), s.card = 2 ∧ ∀ z ∈ s, (1/(z-α) + 1/(z-β) + 1/(z-γ)) = C := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ C : ℝ, ∃ (s : Finset ℝ), s.card = 2 ∧ ∀ z ∈ s, (1/(z-α) + 1/(z-β) + 1/(z-γ)) = C",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261017",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (boris_targets : Finset (ℕ × ℕ)) (natasha_reds : ℕ → Finset (ℕ × ℕ)) : boris_targets.card = 4 → ∀ k, (natasha_reds k).card ≤ 2 * k → ∃ (blue_sofar : Finset (ℕ × ℕ)), blue_sofar.card ≥ 4 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "boris_targets.card = 4 → ∀ k, (natasha_reds k).card ≤ 2 * k → ∃ (blue_sofar : Finset (ℕ × ℕ)), blue_sofar.card ≥ 4",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261017",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (blue_cells : Finset (ℕ × ℕ)) (h_card : blue_cells.card = 4) (h_shape : blue_cells = {(0,0),(0,1),(1,0),(1,1)}) : is_simply_connected blue_cells ∧ area blue_cells ≥ 4 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "is_simply_connected blue_cells ∧ area blue_cells ≥ 4",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00044.lean:5:122: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261017",
+  "sg_id": 5,
+  "type": "compute",
+  "sig": "example (blue_component : Finset (ℕ × ℕ)) (red_cells : Finset (ℕ × ℕ)) (h_strategy : ∀ b ∈ blue_component, adjacent_red_count b ≥ min 2 (adjacent_white_count b)) : boundary_white_cells blue_component red_cells ≤ 4 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "boundary_white_cells blue_component red_cells ≤ 4",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00045.lean:5:107: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261017",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (blue_final : Finset (ℕ × ℕ)) (h_connected : is_connected blue_final) (h_strategy_invariant : ∀ step, boundary_white_count step ≤ 4) : blue_final.card ≤ 4 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "blue_final.card ≤ 4",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00046.lean:5:53: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261017",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (D : ℝ) (y : ℕ → ℝ) (hD : D > (777:ℝ)^2 / 2) (hy : ∀ k, 0 ≤ y k ∧ y k ≤ (777:ℝ)^2) (h : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261017",
+  "sg_id": 4,
+  "type": "verify",
+  "sig": "example (y : ℕ → ℝ) (h : ∀ k, y k = (777:ℝ)^2 * k / (2 * (k + 1))) : ∀ m n, m < n → (m + n) * |y n - y m| ≥ (777:ℝ)^2 / 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ m n, m < n → (m + n) * |y n - y m| ≥ (777:ℝ)^2 / 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q3b5dc802",
+  "run": "20261019",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example : ¬ ∃ (a b : ℤ), a ≠ b ∧ b^3 = a^3 ∧ ¬ ∃ (a b c : ℤ), a ≠ b ∧ b ≠ c ∧ a ≠ c ∧ c^3 = a^3 + b^3 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬ ∃ (a b : ℤ), a ≠ b ∧ b^3 = a^3 ∧ ¬ ∃ (a b c : ℤ), a ≠ b ∧ b ≠ c ∧ a ≠ c ∧ c^3 = a^3 + b^3",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q3b5dc802",
+  "run": "20261019",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (n : ℕ) (hn : n ≥ 3) (k : ℕ) (hk : k ≤ n) (a : Fin (k+1) → ℤ) (ha : Function.Injective a) : (a (Fin.last k))^3 ≠ ∑ i : Fin k, (a i)^3 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(a (Fin.last k))^3 ≠ ∑ i : Fin k, (a i)^3",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00050.lean:5:137: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261019",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (x : ℕ → ℕ) (n : ℕ) (h : ∀ i, x i ≤ 100) (hsum : (∑ i in Finset.range n, x i) ≥ 1810) : ∀ k, (∑ i in Finset.range k, x i) ≤ (∑ i in Finset.range (k+1), x i) ∧ (∑ i in Finset.range (k+1), x i) - (∑ i in Finset.range k, x i) ≤ 100 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∀ k, (∑ i in Finset.range k, x i) ≤ (∑ i in Finset.range (k+1), x i) ∧ (∑ i in Finset.range (k+1), x i) - (∑ i in Finset.range k, x i) ≤ 100",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00051.lean:5:61: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a0b7995",
+  "run": "20261019",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (S : ℕ → ℕ) (hS : ∀ k, S k ≤ S (k+1) ∧ S (k+1) - S k ≤ 100) (h0 : S 0 = 0) (hn : S n ≥ 1810) : ∃ k, |S k - 1810| ≤ 45 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "∃ k, |S k - 1810| ≤ 45",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00052.lean:5:108: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261019",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (n : ℕ) : ∀ (config : AntConfig n), maxFallTime config ≤ longestStraightDistance n := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (config : AntConfig n), maxFallTime config ≤ longestStraightDistance n",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00053.lean:5:30: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261019",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (n : ℕ) : ∀ (config : AntConfig n), maxFallTime config ≤ longestStraightDistance n ∧ ∃ (config : AntConfig n), maxFallTime config = longestStraightDistance n := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (config : AntConfig n), maxFallTime config ≤ longestStraightDistance n ∧ ∃ (config : AntConfig n), maxFallTime config = longestStraightDistance n",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00054.lean:5:30: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q6e682526",
+  "run": "20261019",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (n : ℕ) : ∀ (config : AntConfig n) (spiders : List Position), maxFallTimeWithSpiders config spiders ≤ maxFallTime config := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (config : AntConfig n) (spiders : List Position), maxFallTimeWithSpiders config spiders ≤ maxFallTime config",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00055.lean:5:30: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261019",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (y : ℕ → ℝ) (h : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) : ∃ (s : Set ℕ), Infinite s ∧ (∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777^2/2) ∨ (∀ i ∈ s, 777^2/2 < y i ∧ y i ≤ 777^2) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ (s : Set ℕ), Infinite s ∧ (∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777^2/2) ∨ (∀ i ∈ s, 777^2/2 < y i ∧ y i ≤ 777^2)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261019",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (D : ℝ) (y : ℕ → ℝ) (h1 : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) (h2 : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D) : D ≤ 2 * 777^2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "D ≤ 2 * 777^2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261019",
+  "sg_id": 4,
+  "type": "verify",
+  "sig": "example (y : ℕ → ℝ) (h : ∀ n, if Odd n then y n = 777^2 else y n = 0) : ∀ m n, m < n → (m + n) * |y n - y m| ≥ 2 * 777^2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ m n, m < n → (m + n) * |y n - y m| ≥ 2 * 777^2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261019",
+  "sg_id": 5,
+  "type": "verify",
+  "sig": "example (x : ℕ → ℝ) (h : ∀ n, if Odd n then x n = 777 else x n = 0) : ∀ n, 0 ≤ x n ∧ x n ≤ 777 ∧ ∀ m n, m < n → (m + n) * |x n^2 - x m^2| ≥ 2 * 777^2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n, 0 ≤ x n ∧ x n ≤ 777 ∧ ∀ m n, m < n → (m + n) * |x n^2 - x m^2| ≥ 2 * 777^2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261020",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (B N : Set (ℤ × ℤ)) (score : ℕ) : True := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：命题就是True"
+  ],
+  "prop": "True",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261020",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (b r : ℕ) (score : ℕ) : score ≤ M + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "score ≤ M + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261020",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (b r : ℕ) (score : ℕ) : score ≤ M + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "score ≤ M + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261020",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example : ∀ (natasha_moves : List (ℕ × ℕ)), natasha_moves.length ≤ 6 → ∃ (poly : SimplePolygon), poly.area ≥ 4 ∧ poly.contains_only_blue_and_yellow := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (natasha_moves : List (ℕ × ℕ)), natasha_moves.length ≤ 6 → ∃ (poly : SimplePolygon), poly.area ≥ 4 ∧ poly.contains_only_blue_and_yellow",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00063.lean:5:97: error(lean.invalidField): Invalid field notation: Field projection operates on types of the form `C ...` where C is a constant. The expression",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261020",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example : ∀ (boris_moves : List (ℕ × ℕ)), ∀ (poly : SimplePolygon), poly.contains_only_blue_and_yellow → poly.area ≤ 4 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ (boris_moves : List (ℕ × ℕ)), ∀ (poly : SimplePolygon), poly.contains_only_blue_and_yellow → poly.area ≤ 4",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00064.lean:5:68: error(lean.invalidField): Invalid field notation: Field projection operates on types of the form `C ...` where C is a constant. The expression",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261020",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (P : Polynomial ℤ) (hP : P.Monic) (h : ∀ q : ℕ, Nat.Prime q → q > 3 → q ∣ 6 * (Int.natAbs (P.eval (q : ℤ)))! - 1) : P.natDegree ≤ 1 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "P.natDegree ≤ 1",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00065.lean:5:115: error: unexpected token '!'; expected ')'",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261020",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (a : ℤ) (h : ∀ q : ℕ, Nat.Prime q → q > 3 → q ∣ 6 * (Int.natAbs ((q : ℤ) + a))! - 1) : a < 0 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "a < 0",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00066.lean:5:86: error: unexpected token '!'; expected ')'",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (q m : ℕ) (hq : Nat.Prime q) (h3 : q > 3) (hmq : m ≥ q) : ¬ (q ∣ 6 * Nat.factorial m - 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬ (q ∣ 6 * Nat.factorial m - 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (P : Polynomial ℤ) (hP : P.Monic) (hdeg : P.natDegree ≥ 2) : ∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ Int.natAbs (P.eval (q : ℤ)) > q := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ Int.natAbs (P.eval (q : ℤ)) > q",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 5,
+  "type": "compute",
+  "sig": "example (a : ℤ) (ha : a ≠ -1 ∧ a ≠ 0) : ∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ ¬ (q ∣ 6 * Nat.factorial (Int.natAbs (q + a)) - 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ ¬ (q ∣ 6 * Nat.factorial (Int.natAbs (q + a)) - 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 6,
+  "type": "prove",
+  "sig": "example (q : ℕ) (hq : Nat.Prime q) (h3 : q > 3) : q ∣ 6 * Nat.factorial (q - 2) - 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "q ∣ 6 * Nat.factorial (q - 2) - 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 7,
+  "type": "prove",
+  "sig": "example (q : ℕ) (hq : Nat.Prime q) (h3 : q > 3) : q ∣ 6 * Nat.factorial q - 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "q ∣ 6 * Nat.factorial q - 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q44dc3110",
+  "run": "20261021",
+  "sg_id": 1,
+  "type": "derive",
+  "sig": "example (n : ℕ) (x : Fin n → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1) : n ≥ 10 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "n ≥ 10",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q44dc3110",
+  "run": "20261021",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (x : Fin 9 → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (P : Polynomial ℤ) (hP : P.Monic) (hdeg : 2 ≤ P.degree) : ∃ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), ¬ (q ∣ 6 * (Nat.abs (P.eval ↑q)).factorial - 1) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 未定义符号"
+  ],
+  "prop": "∃ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), ¬ (q ∣ 6 * (Nat.abs (P.eval ↑q)).factorial - 1)",
+  "stated": "ILLEGAL",
+  "stated_why": "未定义符号",
+  "first_err": "/tmp/siggate_k3cabam9/s00074.lean:5:116: error(lean.unknownIdentifier): Unknown constant `Nat.abs`",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (b : ℤ) : (∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), q ∣ 6 * (Nat.abs (q + b)).factorial - 1) ↔ (∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), (Nat.abs (q + b) : ℤ) ≡ -4 [ZMOD q]) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 未定义符号"
+  ],
+  "prop": "(∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), q ∣ 6 * (Nat.abs (q + b)).factorial - 1) ↔ (∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), (Nat.abs (q + b) : ℤ) ≡ -4 [ZMOD q])",
+  "stated": "ILLEGAL",
+  "stated_why": "未定义符号",
+  "first_err": "/tmp/siggate_k3cabam9/s00075.lean:5:140: error(lean.unknownIdentifier): Unknown constant `Nat.abs`",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qadbc6d05",
+  "run": "20261021",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (b : ℤ) (hb : b ∈ {candidate set from n4}) : ∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), q ∣ 6 * (Nat.abs (q + b)).factorial - 1 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∀ (q : ℕ) (hq : Nat.Prime q ∧ 3 < q), q ∣ 6 * (Nat.abs (q + b)).factorial - 1",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00076.lean:5:40: error: unexpected token 'from'; expected '}' or structInstFieldDecl",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qc60e2b25",
+  "run": "20261021",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (n : ℕ) (is : List ℕ) (h : ∀ i ∈ is, i < n) : (List.sum (is.map (fun i => 2^n - 2^i)) = 2^n) → (List.sum (is.map (fun i => -2^i)) ≡ 0 [MOD 2^n]) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "(List.sum (is.map (fun i => 2^n - 2^i)) = 2^n) → (List.sum (is.map (fun i => -2^i)) ≡ 0 [MOD 2^n])",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00077.lean:5:131: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qc60e2b25",
+  "run": "20261021",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (n : ℕ) (is : List ℕ) (h : ∀ i ∈ is, i < n) (hne : is ≠ []) : ¬ (List.sum (is.map (fun i => -2^i)) ≡ 0 [MOD 2^n]) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 类型实例缺失"
+  ],
+  "prop": "¬ (List.sum (is.map (fun i => -2^i)) ≡ 0 [MOD 2^n])",
+  "stated": "ILLEGAL",
+  "stated_why": "类型实例缺失",
+  "first_err": "/tmp/siggate_k3cabam9/s00078.lean:5:100: error(lean.synthInstanceFailed): failed to synthesize instance of type class",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qd6f08f68",
+  "run": "20261021",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (S : Finset (ℤ × ℤ)) (hS : S.card ≥ 5) (hconn : IsSimplePolygon S) : ∃ (i j : ℤ), (S ∩ {(i,j), (i+1,j), (i,j+1), (i+1,j+1)}).card ≥ 3 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∃ (i j : ℤ), (S ∩ {(i,j), (i+1,j), (i,j+1), (i+1,j+1)}).card ≥ 3",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00079.lean:5:56: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qbce0c265",
+  "run": "20261022",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (a : List ℝ) (h : a.Sorted (· ≤ ·)) : (∑ i in List.range (a.length - 1), a[i] * a[i+1]) ≤ ∑ p < q, a[p] * a[q] := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "(∑ i in List.range (a.length - 1), a[i] * a[i+1]) ≤ ∑ p < q, a[p] * a[q]",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00080.lean:5:50: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qbce0c265",
+  "run": "20261022",
+  "sg_id": 4,
+  "type": "verify",
+  "sig": "example (a : List ℝ) (h : a = [-2, 2, 0, 0, ...]) : ∀ perm, (∑ i, perm[i] * perm[i+1]) ≥ -4 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "∀ perm, (∑ i, perm[i] * perm[i+1]) ≥ -4",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00081.lean:5:43: error: unexpected token '...'; expected ']'",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261022",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ) (hm : 0 < m) (hmn : m < n) : (m + n) * D ≤ 777 ^ 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(m + n) * D ≤ 777 ^ 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261022",
+  "sg_id": 2,
+  "type": "derive",
+  "sig": "example (D : ℝ) (h : ∀ m n, 0 < m → m < n → (m + n) * D ≤ 777 ^ 2) : D ≤ 777 ^ 2 / 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "D ≤ 777 ^ 2 / 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261022",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (m n : ℕ) (hmn : 1 ≤ m ∧ m < n) : (m + n) * (777 ^ 2 * (n - m) / (m * n)) ≥ 777 ^ 2 / 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(m + n) * (777 ^ 2 * (n - m) / (m * n)) ≥ 777 ^ 2 / 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261022",
+  "sg_id": 5,
+  "type": "compute",
+  "sig": "example (ε : ℝ) (hε : 0 < ε) : ¬(∃ x : ℕ → ℝ, (∀ i, 0 ≤ x i ∧ x i ≤ 777) ∧ ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬(∃ x : ℕ → ℝ, (∀ i, 0 ≤ x i ∧ x i ≤ 777) ∧ ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261022",
+  "sg_id": 6,
+  "type": "derive",
+  "sig": "example (ε : ℝ) (hε : 0 < ε) (x : ℕ → ℝ) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (h : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : ∀ n : ℕ, 1 < n → |x n ^ 2 - x (n - 1) ^ 2| ≥ D / (2 * n - 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n : ℕ, 1 < n → |x n ^ 2 - x (n - 1) ^ 2| ≥ D / (2 * n - 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (D : ℝ) (x : ℕ → ℝ) (N : ℕ) (h : ∀ n : ℕ, 1 < n → |x n ^ 2 - x (n - 1) ^ 2| ≥ D / (2 * n - 1)) : |x N ^ 2 - x 1 ^ 2| ≥ D * ∑ k in Finset.range (N - 1), 1 / (2 * (k + 2) - 1) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "|x N ^ 2 - x 1 ^ 2| ≥ D * ∑ k in Finset.range (N - 1), 1 / (2 * (k + 2) - 1)",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00088.lean:5:134: error: unexpected token 'in'; expected ','",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example : ¬ Summable (fun k : ℕ => 1 / (2 * (k + 2) - 1)) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬ Summable (fun k : ℕ => 1 / (2 * (k + 2) - 1))",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hb : ∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 5,
+  "type": "verify",
+  "sig": "example (c : ℝ) (hc : 0 ≤ c ∧ c ≤ 777) : ∃ x : ℕ → ℝ, (∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) ∧ ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ x : ℕ → ℝ, (∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) ∧ ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ) : |x n ^ 2 - x m ^ 2| ≤ 777 ^ 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "|x n ^ 2 - x m ^ 2| ≤ 777 ^ 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (D : ℝ) (hD : 0 < D) : ∃ m n : ℕ, m < n ∧ (m + n : ℝ) > 777 ^ 2 / D := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ m n : ℕ, m < n ∧ (m + n : ℝ) > 777 ^ 2 / D",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 3,
+  "type": "derive",
+  "sig": "example (x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (D : ℝ) (hcond : ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : D ≤ 777 ^ 2 / 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "D ≤ 777 ^ 2 / 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qdecd0474",
+  "run": "20261023",
+  "sg_id": 5,
+  "type": "verify",
+  "sig": "example (x : ℕ → ℝ) (hx : ∀ n, x n = 777 * (n % 2)) (m n : ℕ) (h : m < n) : (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 ∧ (∀ i, 0 ≤ x i ∧ x i ≤ 777) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 ∧ (∀ i, 0 ≤ x i ∧ x i ≤ 777)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q59f1afe4",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) : (∀ n, a n < a (n + 1)) ∧ (∀ n, n ≤ a n) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(∀ n, a n < a (n + 1)) ∧ (∀ n, n ≤ a n)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q59f1afe4",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_mono : ∀ n, a n < a (n + 1)) (h_ge : ∀ n, n ≤ a n) : a 0 = 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "a 0 = 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q59f1afe4",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "compute",
+  "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a0 : a 0 = 0) : a 1 = 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "a 1 = 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q59f1afe4",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a1 : a 1 = 1) (h_mono : ∀ n, a n < a (n + 1)) : ∀ n, 1 ≤ n → a n = n + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n, 1 ≤ n → a n = n + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) : Function.Injective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Injective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) : Function.Surjective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Surjective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "compute",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (surj : Function.Surjective f) : ∃ a, f a = 1 ∧ ∀ n, f (f n + 1) = n + a := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ a, f a = 1 ∧ ∀ n, f (f n + 1) = n + a",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (f : ℕ+ → ℕ+) (a : ℕ+) (ha : ∀ n, f (f n + 1) = n + a) : f 2 = 2 * a ∧ f (f 1 + 1) = 1 + a := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "f 2 = 2 * a ∧ f (f 1 + 1) = 1 + a",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 5,
+  "type": "derive",
+  "sig": "example (f : ℕ+ → ℕ+) (inj : Function.Injective f) (a : ℕ+) (h2 : f 2 = 2 * a) : a = 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "a = 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 6,
+  "type": "derive",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (inj : Function.Injective f) (a1 : f 1 = 1) : ∀ n, f (n + 1) = f n + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n, f (n + 1) = f n + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 7,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (rec : ∀ n, f (n + 1) = f n + 1) (base : f 1 = 1) : ∀ n, f n = n := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n, f n = n",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q30d7c035",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (ζ : ℂ) (n : ℕ) (h : ζ ^ n = 1) : (∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0) ↔ (minpoly ℚ ζ).natDegree = 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0) ↔ (minpoly ℚ ζ).natDegree = 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q30d7c035",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (n : ℕ) (h : n ∈ ({3, 4, 6} : Set ℕ)) (ζ : ℂ) (hprim : IsPrimitiveRoot ζ n) : ∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (c : K_5 → Fin 3) (h1 : ∀ v, (c v).card ≤ 2) (h2 : ∀ t : Finset (K_5), t.card = 3 → ¬(∃ i, ∀ e ⊆ t, c e = i)) : ∀ v, ∃ i j, i ≠ j ∧ (c v).count i = 2 ∧ (c v).count j = 2 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ v, ∃ i j, i ≠ j ∧ (c v).count i = 2 ∧ (c v).count j = 2",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00109.lean:5:43: error(lean.invalidField): Invalid field `card`: The environment does not contain `Fin.card`, so it is not possible to project the field `card` from an expression",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "derive",
+  "sig": "example : ¬(∃ c : K_5 → Fin 3, (∀ v, (c v).card ≤ 2) ∧ (∀ t : Finset (K_5), t.card = 3 → ¬(∃ i, ∀ e ⊆ t, c e = i))) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "¬(∃ c : K_5 → Fin 3, (∀ v, (c v).card ≤ 2) ∧ (∀ t : Finset (K_5), t.card = 3 → ¬(∃ i, ∀ e ⊆ t, c e = i)))",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00110.lean:5:43: error(lean.invalidField): Invalid field `card`: The environment does not contain `Fin.card`, so it is not possible to project the field `card` from an expression",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 5,
+  "type": "verify",
+  "sig": "example (c : K_4 → Fin 3) (h_scheme : c = 具体方案) : (∀ v, (c v).card = 2) ∧ (∀ i, ∃ e, c e = i) ∧ (∀ t : Finset (K_4), t.card = 3 → ¬(∃ i, ∀ e ⊆ t, c e = i)) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "(∀ v, (c v).card = 2) ∧ (∀ i, ∃ e, c e = i) ∧ (∀ t : Finset (K_4), t.card = 3 → ¬(∃ i, ∀ e ⊆ t, c e = i))",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00111.lean:5:42: error: expected token",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) : ∀ i, x i ≥ 3 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ i, x i ≥ 3",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ∃ i, x i = 3) : ∀ i, x i = 3 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ i, x i = 3",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ¬ ∃ i, x i = 3) : ∀ i, Even (x i - 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ i, Even (x i - 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (hodd : ∀ i, Even (x i - 1)) (h5 : ¬ ∃ i, x i = 3) : ∀ i, x i = 5 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ i, x i = 5",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qb0b108ee",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (α : ℕ) (hα : 0 < α ∧ α < 90) : (180 / Nat.gcd α 180) = (180 / Nat.gcd α 180) := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：A=A重言式"
+  ],
+  "prop": "(180 / Nat.gcd α 180) = (180 / Nat.gcd α 180)",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "qb0b108ee",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (n : ℕ) (hn : 0 < n ∧ n < 90) : (Set.inter (illuminated_by_beam n) (illuminated_by_beam (n+1))) = {P} := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(Set.inter (illuminated_by_beam n) (illuminated_by_beam (n+1))) = {P}",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00117.lean:5:52: error: Function expected at",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (n : ℕ) : n ∣ 2 ^ n + 2 → n % 2 = 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "n ∣ 2 ^ n + 2 → n % 2 = 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (m : ℕ) : (2 * m) ∣ 2 ^ (2 * m) + 2 ↔ m ∣ 2 ^ (2 * m - 1) + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(2 * m) ∣ 2 ^ (2 * m) + 2 ↔ m ∣ 2 ^ (2 * m - 1) + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (m : ℕ) (h : m ∣ 2 ^ (2 * m - 1) + 1) : (5 * m) ∣ 2 ^ (10 * m - 1) + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(5 * m) ∣ 2 ^ (10 * m - 1) + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) : Function.Injective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Injective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) : Function.Surjective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Surjective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "compute",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f) : f 1 = 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "f 1 = 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f) (h1 : f 1 = 1) : ∀ n : ℕ+, f (n + 1) = f n + 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n : ℕ+, f (n + 1) = f n + 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (h3 : ∀ n : ℕ+, f (n + 1) = f n + 1) (h1 : f 1 = 1) : ∀ n : ℕ+, f n = n := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ n : ℕ+, f n = n",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261027",
+  "sg_id": 6,
+  "type": "verify",
+  "sig": "example : ∀ n m : ℕ+, (fun x : ℕ+ => x) ((fun x : ℕ+ => x) n + (fun x : ℕ+ => x) m) = n + m := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：恒等函数"
+  ],
+  "prop": "∀ n m : ℕ+, (fun x : ℕ+ => x) ((fun x : ℕ+ => x) n + (fun x : ℕ+ => x) m) = n + m",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "q30d7c035",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example : Set ℕ := {1,2,3,4,6} := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 语法/括号"
+  ],
+  "prop": "Set ℕ := {1,2,3,4,6}",
+  "stated": "ILLEGAL",
+  "stated_why": "语法/括号",
+  "first_err": "/tmp/siggate_k3cabam9/s00127.lean:5:31: error: unexpected token ':='; expected command",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (V : Type) [Fintype V] (c : V → V → Fin 3) (h : ∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) : ∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (n : ℕ) (h : ∀ (c : Fin n → Fin n → Fin 3), ∃ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w ∧ c u v = c v w ∧ c v w = c u w) : n ≤ 5 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "n ≤ 5",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q5a7e5ee2",
+  "run": "20261027",
+  "sg_id": 5,
+  "type": "prove",
+  "sig": "example : ¬ (∃ (c : Fin 6 → Fin 6 → Fin 3), (∀ u v, u ≠ v → c u v = c v u) ∧ (∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) ∧ (∀ v, ¬ (∃ a b d, a ≠ b ∧ b ≠ d ∧ a ≠ d ∧ c v a = c v b ∧ c v b = c v d ∧ c v a = 0 ∧ c v a = 1 ∧ c v a = 2))) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬ (∃ (c : Fin 6 → Fin 6 → Fin 3), (∀ u v, u ≠ v → c u v = c v u) ∧ (∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) ∧ (∀ v, ¬ (∃ a b d, a ≠ b ∧ b ≠ d ∧ a ≠ d ∧ c v a = c v b ∧ c v b = c v d ∧ c v a = 0 ∧ c v a = 1 ∧ c v a = 2)))",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (x : ℕ → ℕ) (i : ℕ) (h : x i = Nat.gcd (x (i-1)) (x (i+1)) + 1) : x i ≥ 2 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "x i ≥ 2",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (x : ℕ → ℕ) (h : ∀ i, x i = Nat.gcd (x (i-1)) (x (i+1)) + 1) (h' : ∀ i, x i ≥ 3) : False := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "False",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "CONTRADICTION"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 3,
+  "type": "derive",
+  "sig": "example (a b c : ℕ) (h : a = Nat.gcd b c + 1) : (a - 1) ∣ b ∧ (a - 1) ∣ c := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(a - 1) ∣ b ∧ (a - 1) ∣ c",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "derive",
+  "sig": "example (x : ℕ → ℕ) (h : ∀ i, (x i - 1) ∣ x (i-1) ∧ (x i - 1) ∣ x (i+1)) (h' : ∃ i, x i = 2) : ∀ i, Even (x i) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ i, Even (x i)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qb0b108ee",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "compute",
+  "sig": "example (θ : ℕ) (hθ : 0 < θ ∧ θ < 90) : ∃ (k : ℕ), k = 360 / Nat.gcd 360 (2 * θ) := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：存在性直接取等"
+  ],
+  "prop": "∃ (k : ℕ), k = 360 / Nat.gcd 360 (2 * θ)",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "qb0b108ee",
+  "run": "20261027",
+  "sg_id": 4,
+  "type": "compute",
+  "sig": "example (n : ℕ) (hn : 0 < n ∧ n < 90) : ∃ (overlap : ℕ), overlap = Nat.gcd (360 / Nat.gcd 360 (2 * n)) (360 / Nat.gcd 360 (2 * (n + 1))) := by sorry",
+  "stage": "NONTRIVIAL",
+  "allowed": false,
+  "reasons": [
+   "退化命题：存在性直接取等"
+  ],
+  "prop": "∃ (overlap : ℕ), overlap = Nat.gcd (360 / Nat.gcd 360 (2 * n)) (360 / Nat.gcd 360 (2 * (n + 1)))",
+  "stated": "SKIPPED",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "TRIVIAL"
+ },
+ {
+  "qid": "qd3b3b4a9",
+  "run": "20261027",
+  "sg_id": 9,
+  "type": "prove",
+  "sig": "example (k : ℕ) (s : Finset (Fin 8)) (hs : s.card = 2 * k) : (s.toFinset).nonCrossingPerfectMatchings.card = catalan k := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "(s.toFinset).nonCrossingPerfectMatchings.card = catalan k",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00137.lean:5:64: error(lean.invalidField): Invalid field `toFinset`: The environment does not contain `Finset.toFinset`, so it is not possible to project the field `toFinset` from an expression",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261027",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (n : ℕ) (h : n ∣ 2 ^ n + 2) (h100 : 100 ≤ n) : Even n := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Even n",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261027",
+  "sg_id": 2,
+  "type": "compute",
+  "sig": "example (n m : ℕ) (hn : n = 2 * m) (hm : Odd m) : (n ∣ 2 ^ n + 2) ↔ (m ∣ 2 ^ (2 * m - 1) + 1) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "(n ∣ 2 ^ n + 2) ↔ (m ∣ 2 ^ (2 * m - 1) + 1)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261028",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : Function.Injective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Injective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261028",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : Function.Surjective f := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Function.Surjective f",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261028",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : f 1 = 1 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "f 1 = 1",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q10a65b3d",
+  "run": "20261028",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) (h1 : f 1 = 1) : ∀ k, f k = k := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "∀ k, f k = k",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261028",
+  "sg_id": 1,
+  "type": "derive",
+  "sig": "example (a : Fin 10 → ℕ) (h : ∀ i, a i = Nat.gcd a (i - 1) a (i + 1) + 1) : ∀ i, a i ≥ 2 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ i, a i ≥ 2",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00144.lean:5:49: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261028",
+  "sg_id": 2,
+  "type": "derive",
+  "sig": "example (a : Fin 10 → ℕ) (h : ∀ i, a i = Nat.gcd a (i - 1) a (i + 1) + 1) : ∀ i, a i = 2 ∨ a i = 3 := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ i, a i = 2 ∨ a i = 3",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00145.lean:5:49: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "q9c2676e2",
+  "run": "20261028",
+  "sg_id": 4,
+  "type": "prove",
+  "sig": "example (a : Fin 10 → ℕ) (h : ∀ i, a i = Nat.gcd a (i - 1) a (i + 1) + 1) : ∀ i, a i ≠ a (i + 1) := by sorry",
+  "stage": "STATED",
+  "allowed": false,
+  "reasons": [
+   "命题不可陈述：ILLEGAL / 字段/应用不存在"
+  ],
+  "prop": "∀ i, a i ≠ a (i + 1)",
+  "stated": "ILLEGAL",
+  "stated_why": "字段/应用不存在",
+  "first_err": "/tmp/siggate_k3cabam9/s00146.lean:5:49: error: Application type mismatch: The argument",
+  "old_cat": "ILLEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261028",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (n : ℕ) (h : (2^n + 2) % n = 0) : Even n := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Even n",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261028",
+  "sg_id": 2,
+  "type": "prove",
+  "sig": "example (m : ℕ) (h : (2^(2*m) + 2) % (2*m) = 0) : Odd m ∧ (2^(2*m - 1) + 1) % m = 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "Odd m ∧ (2^(2*m - 1) + 1) % m = 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261028",
+  "sg_id": 3,
+  "type": "prove",
+  "sig": "example (m : ℕ) (ho : Odd m) (hd : (2^(2*m - 1) + 1) % m = 0) : m % 3 = 0 := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "m % 3 = 0",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ },
+ {
+  "qid": "qfaed7d35",
+  "run": "20261030",
+  "sg_id": 1,
+  "type": "prove",
+  "sig": "example (n : ℕ) (h_odd : Odd n) (h_gt1 : n > 1) : ¬ (n ∣ 2 ^ n + 2) := by sorry",
+  "stage": "NO_PROOF",
+  "allowed": false,
+  "reasons": [
+   "尚未交付证明体"
+  ],
+  "prop": "¬ (n ∣ 2 ^ n + 2)",
+  "stated": "STATABLE",
+  "stated_why": "",
+  "first_err": "",
+  "old_cat": "LEGAL"
+ }
+]
