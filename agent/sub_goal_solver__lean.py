@@ -656,12 +656,20 @@ def _compile_stated(bridge, work_dir, sig, fname):
     try:
         from tools.lean_local.lean_bridge import (
             _prepend_mathlib_import, _trash_lean_file)
+        from contracts.formal_sig_gate import with_strict_implicit
         code = sig
         try:
             if bridge._mathlib_ready():
                 code = _prepend_mathlib_import(sig)
         except Exception:  # noqa: BLE001
             pass
+        # ★ 2026-11-08（E39）：门 A 编译前置必须关 `autoImplicit`。
+        #   否则命题里**未声明**的标识符不报错，被绑成全称量化隐式变量 ⇒
+        #   `example : spider_presence_... := by sorry`、`score ≤ M + 1`（M 自由）
+        #   都能 rc=0，门 A 判 STATABLE，而实际陈述与原命题无关。
+        #   全量体检：144 条历史签名翻案 3 条（3.3%），附带损伤 0（无一条合法
+        #   依赖 autoImplicit）⇒ 纯收紧。权威源见 contracts.formal_sig_gate。
+        code = with_strict_implicit(code)
         r = bridge._compile(code, work_dir, lean_filename=fname,
                             allow_sorry=True)
         try:

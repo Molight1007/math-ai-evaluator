@@ -59,6 +59,31 @@ E29 里那 37% 编造记号（`Φ` / `rotate_cw` / `path_length`）的办法。
 E27 的教训是「静默放行会让分母塌掉、数字好看但没有任何判定」；
 项目硬约束「宁可显式失败留痕」在这里的具体落点就是这一条。
 
+## ★★ `autoImplicit` 必须关（2026-11-08，E39）
+
+Lean 的 `autoImplicit` **默认开启**：命题里出现**未声明**的标识符时，它不报错，
+而是把该名字绑成**全称量化的隐式变量**。于是
+
+```lean
+example : spider_presence_does_not_affect_max_path_length := by sorry   -- rc=0
+example (b r : ℕ) (score : ℕ) : score ≤ M + 1 := by sorry               -- rc=0，M 从未声明
+```
+
+两条都能编译通过。第一条把**一句英文句名**放在命题位置；第二条实际陈述的是
+`∀ (M : ?m), score ≤ M + 1`。这与原命题无关，**门 A 却会判 STATABLE**。
+
+⇒ 门 A 的编译前置必须带 `set_option autoImplicit false`；唯一权威源是
+   `with_strict_implicit()`，生产（`_compile_stated`）与回放床
+   （`replay_sig_gate.compile_stated`）**必须共用它**，否则两份口径漂移。
+
+全量体检（144 条历史签名，单变量）：翻案 **3/90 = 3.3%**，附带损伤 **0/87**
+（无一条合法依赖 `autoImplicit`），STATABLE 62.5% → 60.4%；历史 `allowed`
+全为 False ⇒ **不改变任何历史闭合结论**，改的是度量准确度。
+明细 `测试结果/门A_autoImplicit体检_20261108/`。
+
+★ 它只挡「自由名」这一种。**恒假**（数值验算不等）与**空真**（前件恒假、
+一秒可证）编译照样通过 ⇒ 3.3% 不是门 A 的总漏判率。
+
 ## 判据的能力边界
 
 `is_trivial_prop()` 是**保守下界**：只认 5 种最明确的退化形态，
@@ -71,10 +96,15 @@ from __future__ import annotations
 import re
 
 __all__ = [
-    "SORRY_RE", "TAIL_RE", "TRIVIAL_RULES", "UNTRUSTED_RE",
+    "SORRY_RE", "TAIL_RE", "TRIVIAL_RULES", "UNTRUSTED_RE", "STRICT_IMPLICIT",
     "split_sig", "is_trivial_prop", "illegal_kind", "classify_stated",
-    "proof_credential", "evaluate", "verdict_text", "gate_fields",
+    "with_strict_implicit", "proof_credential", "evaluate", "verdict_text",
+    "gate_fields",
 ]
+
+# ★ 门 A 的编译前置：关掉 autoImplicit（理由见模块 docstring「autoImplicit 必须关」）。
+STRICT_IMPLICIT = "set_option autoImplicit false"
+_IMPORT_LINE = re.compile(r"(?m)^[ \t]*import[ \t]+\S[^\n]*$")
 
 # 占位证明（sorry / admit）。★ 与 contracts.closure.FAIL_WORDS 同口径：
 # 带 sorry 的证明**编译能通过**，不识别就会把骨架当成已闭合。
@@ -129,6 +159,28 @@ def split_sig(sig):
                 return None
             return core[:i].rstrip(), core[i + 1:].strip()
     return None
+
+
+def with_strict_implicit(code):
+    """给待编译代码加 `set_option autoImplicit false`（门 A 的编译前置）。
+
+    **必须插在所有 import 之后**：Lean 4 要求 `import` 先于其它命令，插在前面会
+    变成「set_option 先于 import」⇒ 编译器直接报错，把可陈述的命题误判成 ILLEGAL。
+    没有 import 时插在最前（调用方通常随后补 import 块）。
+
+    ★ 单一权威源：生产 `_compile_stated` 与回放床 `replay_sig_gate.compile_stated`
+      都调这里。两份各写一遍是本项目已吃过亏的「口径漂移」。
+    ★ 幂等：已含该 option 时不重复插入（回放重跑/嵌套调用安全）。
+    """
+    s = code or ""
+    if re.search(r"(?m)^[ \t]*set_option[ \t]+autoImplicit[ \t]+false\b", s):
+        return s
+    hits = list(_IMPORT_LINE.finditer(s))
+    if not hits:
+        return STRICT_IMPLICIT + "\n\n" + s
+    at = hits[-1].end()
+    head, tail = s[:at], s[at:]
+    return head + "\n" + STRICT_IMPLICIT + "\n" + (tail if tail.startswith("\n") else "\n" + tail)
 
 
 def is_trivial_prop(prop):

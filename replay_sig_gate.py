@@ -44,7 +44,8 @@ import sys
 import tempfile
 import time
 
-from contracts.formal_sig_gate import evaluate, classify_stated
+from contracts.formal_sig_gate import (
+    evaluate, classify_stated, with_strict_implicit)
 from replay_lean_close import PRELUDE, collect_sigs, _run
 
 OLD_RES = "/tmp/lean_close_res.json"
@@ -52,8 +53,15 @@ OUT = "/tmp/sig_gate_res.json"
 
 
 def compile_stated(sig, tmp, idx):
-    """保留 `by sorry` 原样编译。返回 (returncode, full_err)。"""
-    ok, _first, full = _run(sig.strip(), os.path.join(tmp, "s%05d.lean" % idx))
+    """保留 `by sorry` 原样编译。返回 (returncode, full_err)。
+
+    ★ 2026-11-08（E39）：与生产 `_compile_stated` 共用 `with_strict_implicit()`
+    —— 必须关 `autoImplicit`，否则未声明标识符被绑成全称量化隐式变量，命题
+    写不成立也 rc=0。两份口径必须同步，本项目已因漂移吃过亏。
+    `_run` 会在前面再补 PRELUDE（内含 import），故该 option 落在 import 之后。
+    """
+    ok, _first, full = _run(with_strict_implicit(sig.strip()),
+                            os.path.join(tmp, "s%05d.lean" % idx))
     return (0 if ok else 1), full
 
 

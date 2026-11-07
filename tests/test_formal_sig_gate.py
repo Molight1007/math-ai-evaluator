@@ -289,3 +289,56 @@ def test_compile_stated_unavailable_returns_none():
             raise RuntimeError("no lean")
 
     assert _compile_stated(_BrokenBridge(), "/tmp", SIG, "x.lean") is None
+
+
+# ------------------------------------------------- with_strict_implicit（E39）
+def test_strict_implicit_lands_after_import():
+    """set_option 必须在 import 之后：Lean 要求 import 先于其它命令。"""
+    out = G.with_strict_implicit("import Mathlib.Tactic\n\n" + SIG)
+    lines = out.splitlines()
+    assert lines[0] == "import Mathlib.Tactic"
+    assert lines[1] == G.STRICT_IMPLICIT
+    assert out.index(G.STRICT_IMPLICIT) < out.index("example")
+
+
+def test_strict_implicit_after_last_of_several_imports():
+    out = G.with_strict_implicit("import A\nimport B\n" + SIG)
+    lines = out.splitlines()
+    assert lines[:3] == ["import A", "import B", G.STRICT_IMPLICIT]
+
+
+def test_strict_implicit_first_when_no_import():
+    out = G.with_strict_implicit(SIG)
+    assert out.startswith(G.STRICT_IMPLICIT + "\n")
+    assert out.index(G.STRICT_IMPLICIT) < out.index("example")
+
+
+def test_strict_implicit_idempotent():
+    once = G.with_strict_implicit("import A\n" + SIG)
+    assert G.with_strict_implicit(once) == once
+
+
+def test_compile_stated_passes_strict_implicit_to_compiler():
+    """接线锁死：门 A 真正送编译的代码里必须带 autoImplicit=false。
+
+    只测字符串拼装是不够的 —— 之前正是「helper 写对了但没接上」这类
+    「修一层露一层」的坑（E28 工具一次没跑）。
+    """
+    from agent.sub_goal_solver__lean import _compile_stated
+
+    seen = {}
+
+    class _Bridge:
+        def _mathlib_ready(self):
+            return False            # 跳过 import 归一化，专测 option 注入
+
+        def _compile(self, code, work_dir, lean_filename=None, allow_sorry=False):
+            seen["code"] = code
+            seen["allow_sorry"] = allow_sorry
+            return {"ok": True, "error": ""}
+
+    rc, err = _compile_stated(_Bridge(), "/tmp", SIG, "x.lean")
+    assert rc == 0 and err == ""
+    assert G.STRICT_IMPLICIT in seen["code"]
+    assert seen["code"].index(G.STRICT_IMPLICIT) < seen["code"].index("example")
+    assert seen["allow_sorry"] is True      # 门 A 仍保留 sorry 原样编译
