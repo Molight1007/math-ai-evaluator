@@ -1,0 +1,47 @@
+[
+  {
+    "name": "mock_closed",
+    "sig": "(mock)",
+    "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_closed : (1:ℝ) + 1 = 2 := by norm_num\n",
+    "precheck": "OK",
+    "reply_len": 148,
+    "tag": "mock_closed",
+    "qid": "(mock)"
+  },
+  {
+    "name": "mock_drift",
+    "sig": "(mock)",
+    "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_drift : (1:ℝ) + 1 = 2 := by exact NoSuchLemma.this_does_not_exist\n",
+    "precheck": "OK",
+    "reply_len": 176,
+    "tag": "mock_drift",
+    "qid": "(mock)"
+  },
+  {
+    "name": "mock_sorry",
+    "sig": "(mock)",
+    "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_sorry : (1:ℝ) + 1 = 2 := by sorry\n",
+    "precheck": "OK",
+    "reply_len": 144,
+    "tag": "mock_sorry",
+    "qid": "(mock)"
+  },
+  {
+    "name": "mock_open",
+    "sig": "(mock)",
+    "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_open (n : ℕ) : n = n := by\n",
+    "precheck": "OK",
+    "reply_len": 137,
+    "tag": "mock_open",
+    "qid": "(mock)"
+  },
+  {
+    "name": "mock_noblock",
+    "sig": "(mock)",
+    "code": "",
+    "precheck": "NO_LEAN_BLOCK",
+    "reply_len": 0,
+    "tag": "mock_noblock",
+    "qid": "(mock)"
+  }
+]

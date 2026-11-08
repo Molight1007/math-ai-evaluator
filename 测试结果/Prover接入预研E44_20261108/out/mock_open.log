@@ -1,0 +1,3 @@
+lean/mock_open.lean:7:37: error: unsolved goals
+n : ℕ
+⊢ n = n

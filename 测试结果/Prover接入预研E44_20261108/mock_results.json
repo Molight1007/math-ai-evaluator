@@ -1,0 +1,97 @@
+{
+  "summary": {
+    "n_units": 5,
+    "status": {
+      "CLOSED": 1,
+      "ERROR": 2,
+      "UNSOLVED": 1,
+      "NO_LEAN_BLOCK": 1
+    },
+    "closed": 1,
+    "drift_candidates": 1,
+    "precheck": {
+      "OK": 4,
+      "NO_LEAN_BLOCK": 1
+    },
+    "first_error_types": [
+      [
+        "Unknown identifier `X`",
+        1
+      ]
+    ]
+  },
+  "rows": [
+    {
+      "name": "mock_closed",
+      "sig": "(mock)",
+      "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_closed : (1:ℝ) + 1 = 2 := by norm_num\n",
+      "precheck": "OK",
+      "reply_len": 148,
+      "tag": "mock_closed",
+      "qid": "(mock)",
+      "status": "CLOSED",
+      "brief": "OK",
+      "n_hard": 0,
+      "hard": [],
+      "drift": false
+    },
+    {
+      "name": "mock_drift",
+      "sig": "(mock)",
+      "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_drift : (1:ℝ) + 1 = 2 := by exact NoSuchLemma.this_does_not_exist\n",
+      "precheck": "OK",
+      "reply_len": 176,
+      "tag": "mock_drift",
+      "qid": "(mock)",
+      "status": "ERROR",
+      "brief": "Unknown identifier `NoSuchLemma.this_does_not_exist`",
+      "n_hard": 1,
+      "hard": [
+        "Unknown identifier `NoSuchLemma.this_does_not_exist`"
+      ],
+      "drift": true
+    },
+    {
+      "name": "mock_sorry",
+      "sig": "(mock)",
+      "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_sorry : (1:ℝ) + 1 = 2 := by sorry\n",
+      "precheck": "OK",
+      "reply_len": 144,
+      "tag": "mock_sorry",
+      "qid": "(mock)",
+      "status": "ERROR",
+      "brief": "declaration uses 'sorry'",
+      "n_hard": 0,
+      "hard": [],
+      "drift": false
+    },
+    {
+      "name": "mock_open",
+      "sig": "(mock)",
+      "code": "import Mathlib.Tactic\n\nset_option maxHeartbeats 200000\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem mock_open (n : ℕ) : n = n := by\n",
+      "precheck": "OK",
+      "reply_len": 137,
+      "tag": "mock_open",
+      "qid": "(mock)",
+      "status": "UNSOLVED",
+      "brief": "unsolved",
+      "n_hard": 0,
+      "hard": [],
+      "drift": false
+    },
+    {
+      "name": "mock_noblock",
+      "sig": "(mock)",
+      "code": "",
+      "precheck": "NO_LEAN_BLOCK",
+      "reply_len": 0,
+      "tag": "mock_noblock",
+      "qid": "(mock)",
+      "status": "NO_LEAN_BLOCK",
+      "brief": "",
+      "n_hard": 0,
+      "hard": [],
+      "drift": false
+    }
+  ]
+}
