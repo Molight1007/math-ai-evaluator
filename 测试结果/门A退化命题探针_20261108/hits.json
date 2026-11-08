@@ -1,0 +1,923 @@
+{
+ "closed": {
+  "70": [
+   "P:omega",
+   "P:trivial",
+   "P:tauto"
+  ],
+  "11": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "12": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "13": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "18": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "31": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "36": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "39": [
+   "N:simp",
+   "N:norm_num"
+  ],
+  "74": [
+   "N:simp",
+   "N:norm_num"
+  ]
+ },
+ "items": [
+  {
+   "idx": 0,
+   "qid": "q03d3e039",
+   "run": "20261015",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(a b : ℝ)",
+   "prop": "2 * a * b ^ 3 ≤ a ^ 2 + b ^ 4 ∧ (2 * a * b ^ 3 = a ^ 2 + b ^ 4 ↔ a = b ^ 2)",
+   "sig": "example (a b : ℝ) : 2 * a * b ^ 3 ≤ a ^ 2 + b ^ 4 ∧ (2 * a * b ^ 3 = a ^ 2 + b ^ 4 ↔ a = b ^ 2) := by sorry"
+  },
+  {
+   "idx": 1,
+   "qid": "q03d3e039",
+   "run": "20261015",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(x y z : ℝ)",
+   "prop": "x * y ^ 3 + y * z ^ 3 + z * x ^ 3 ≤ (x ^ 2 + y ^ 2 + z ^ 2 + x ^ 4 + y ^ 4 + z ^ 4) / 2",
+   "sig": "example (x y z : ℝ) : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 ≤ (x ^ 2 + y ^ 2 + z ^ 2 + x ^ 4 + y ^ 4 + z ^ 4) / 2 := by sorry"
+  },
+  {
+   "idx": 2,
+   "qid": "q03d3e039",
+   "run": "20261015",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(x y z : ℝ) (h : x ^ 2 + y ^ 2 + z ^ 2 = 3)",
+   "prop": "x ^ 4 + y ^ 4 + z ^ 4 ≥ 3 ∧ (x ^ 4 + y ^ 4 + z ^ 4 = 3 ↔ x ^ 2 = 1 ∧ y ^ 2 = 1 ∧ z ^ 2 = 1)",
+   "sig": "example (x y z : ℝ) (h : x ^ 2 + y ^ 2 + z ^ 2 = 3) : x ^ 4 + y ^ 4 + z ^ 4 ≥ 3 ∧ (x ^ 4 + y ^ 4 + z ^ 4 = 3 ↔ x ^ 2 = 1 ∧ y ^ 2 = 1 ∧ z ^ 2 = 1) := by sorry"
+  },
+  {
+   "idx": 3,
+   "qid": "q5db89772",
+   "run": "20261015",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(X : Set ℤ) (hX : ∀ k l : ℕ, 0 < k → 0 < l → (2^k - 2^l) ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X)",
+   "prop": "0 ∈ X",
+   "sig": "example (X : Set ℤ) (hX : ∀ k l : ℕ, 0 < k → 0 < l → (2^k - 2^l) ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : 0 ∈ X := by sorry"
+  },
+  {
+   "idx": 4,
+   "qid": "q5db89772",
+   "run": "20261015",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(X : Set ℤ) (h0 : 0 ∈ X) (h2 : 2 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X)",
+   "prop": "-1 ∈ X",
+   "sig": "example (X : Set ℤ) (h0 : 0 ∈ X) (h2 : 2 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : -1 ∈ X := by sorry"
+  },
+  {
+   "idx": 5,
+   "qid": "q5db89772",
+   "run": "20261015",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(X : Set ℤ) (hNeg1 : -1 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X)",
+   "prop": "∀ r : ℤ, r ∈ X",
+   "sig": "example (X : Set ℤ) (hNeg1 : -1 ∈ X) (hRich : ∀ (n : ℕ) (x : Fin (n+1) → ℤ), (∀ i, x i ∈ X) → ∀ r : ℤ, (∑ i : Fin (n+1), x i * r ^ (i : ℕ)) = 0 → r ∈ X) : ∀ r : ℤ, r ∈ X := by sorry"
+  },
+  {
+   "idx": 6,
+   "qid": "q5db89772",
+   "run": "20261015",
+   "sg_id": 4,
+   "type": "compute",
+   "binders": "(X : Set ℤ) (h : ∀ r : ℤ, r ∈ X)",
+   "prop": "X = (Set.univ : Set ℤ)",
+   "sig": "example (X : Set ℤ) (h : ∀ r : ℤ, r ∈ X) : X = (Set.univ : Set ℤ) := by sorry"
+  },
+  {
+   "idx": 7,
+   "qid": "qa658f533",
+   "run": "20261015",
+   "sg_id": 3,
+   "type": "derive",
+   "binders": "(p q r s : ℝ) (hp : p ≠ 0)",
+   "prop": "(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) ↔ (3*p*r-q^2 < 0 ∧ ∃ y1 y2 : ℝ, y1 ≠ y2 ∧ 3*p*y1^2+2*q*y1+r=0 ∧ 3*p*y2^2+2*q*y2+r=0 ∧ (p*y1^3+q*y1^2+r*y1+s)*(p*y2^3+q*y2^2+r*y2+s) < 0)",
+   "sig": "example (p q r s : ℝ) (hp : p ≠ 0) : (∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) ↔ (3*p*r-q^2 < 0 ∧ ∃ y1 y2 : ℝ, y1 ≠ y2 ∧ 3*p*y1^2+2*q*y1+r=0 ∧ 3*p*y2^2+2*q*y2+r=0 ∧ (p*y1^3+q*y1^2+r*y1+s)*(p*y2^3+q*y2^2+r*y2+s) < 0) := by sorry"
+  },
+  {
+   "idx": 8,
+   "qid": "qa658f533",
+   "run": "20261015",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0)",
+   "prop": "16*p^2*(3*p*r-q^2+9*p*s) > 0",
+   "sig": "example (p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) : 16*p^2*(3*p*r-q^2+9*p*s) > 0 := by sorry"
+  },
+  {
+   "idx": 9,
+   "qid": "qa658f533",
+   "run": "20261015",
+   "sg_id": 5,
+   "type": "compute",
+   "binders": "(p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0)",
+   "prop": "∃ z1 z2 : ℝ, z1 ≠ z2 ∧ (p*z1^3+q*z1^2+r*z1+s)*(6*p*z1+2*q)=(3*p*z1^2+2*q*z1+r)^2 ∧ (p*z2^3+q*z2^2+r*z2+s)*(6*p*z2+2*q)=(3*p*z2^2+2*q*z2+r)^2 ∧ ∀ z : ℝ, (p*z^3+q*z^2+r*z+s)*(6*p*z+2*q)=(3*p*z^2+2*q*z+r)^2 → z=z1 ∨ z=z2",
+   "sig": "example (p q r s : ℝ) (hp : p ≠ 0) (h : ∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ p*y1^3+q*y1^2+r*y1+s=0 ∧ p*y2^3+q*y2^2+r*y2+s=0 ∧ p*y3^3+q*y3^2+r*y3+s=0) : ∃ z1 z2 : ℝ, z1 ≠ z2 ∧ (p*z1^3+q*z1^2+r*z1+s)*(6*p*z1+2*q)=(3*p*z1^2+2*q*z1+r)^2 ∧ (p*z2^3+q*z2^2+r*z2+s)*(6*p*z2+2*q)=(3*p*z2^2+2*q*z2+r)^2 ∧ ∀ z : ℝ, (p*z^3+q*z^2+r*z+s)*(6*p*z+2*q)=(3*p*z^2+2*q*z+r)^2 → z=z1 ∨ z=z2 := by sorry"
+  },
+  {
+   "idx": 10,
+   "qid": "qa658f533",
+   "run": "20261015",
+   "sg_id": 6,
+   "type": "prove",
+   "binders": "(q r s : ℝ)",
+   "prop": "¬(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ q*y1^2+r*y1+s=0 ∧ q*y2^2+r*y2+s=0 ∧ q*y3^2+r*y3+s=0)",
+   "sig": "example (q r s : ℝ) : ¬(∃ y1 y2 y3 : ℝ, y1 ≠ y2 ∧ y2 ≠ y3 ∧ y1 ≠ y3 ∧ q*y1^2+r*y1+s=0 ∧ q*y2^2+r*y2+s=0 ∧ q*y3^2+r*y3+s=0) := by sorry"
+  },
+  {
+   "idx": 11,
+   "qid": "q03d3e039",
+   "run": "20261017",
+   "sg_id": 5,
+   "type": "prove",
+   "binders": "(x y z : ℝ) (hx : x ≠ 0) (hy : y ≠ 0) (hz : z ≠ 0) (hxy : x ≠ y) (hyz : y ≠ z) (hxz : x ≠ z) (h1 : x^2 + y^2 + z^2 = 3) (h2 : x*y^3 + y*z^3 + z*x^3 = 3)",
+   "prop": "False",
+   "sig": "example (x y z : ℝ) (hx : x ≠ 0) (hy : y ≠ 0) (hz : z ≠ 0) (hxy : x ≠ y) (hyz : y ≠ z) (hxz : x ≠ z) (h1 : x^2 + y^2 + z^2 = 3) (h2 : x*y^3 + y*z^3 + z*x^3 = 3) : False := by sorry"
+  },
+  {
+   "idx": 12,
+   "qid": "q03d3e039",
+   "run": "20261017",
+   "sg_id": 6,
+   "type": "prove",
+   "binders": "(x z : ℝ) (hx : x ≠ 0) (hz : z ≠ 0) (hxz : x ≠ z) (h1 : 2*x^2 + z^2 = 3) (h2 : x^4 + x*z^3 + z*x^3 = 3)",
+   "prop": "False",
+   "sig": "example (x z : ℝ) (hx : x ≠ 0) (hz : z ≠ 0) (hxz : x ≠ z) (h1 : 2*x^2 + z^2 = 3) (h2 : x^4 + x*z^3 + z*x^3 = 3) : False := by sorry"
+  },
+  {
+   "idx": 13,
+   "qid": "q03d3e039",
+   "run": "20261017",
+   "sg_id": 7,
+   "type": "prove",
+   "binders": "(x : ℝ) (hx : x ≠ 0) (h1 : 3*x^2 = 3) (h2 : 3*x^4 = 3)",
+   "prop": "False",
+   "sig": "example (x : ℝ) (hx : x ≠ 0) (h1 : 3*x^2 = 3) (h2 : 3*x^4 = 3) : False := by sorry"
+  },
+  {
+   "idx": 14,
+   "qid": "q5db89772",
+   "run": "20261017",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X)",
+   "prop": "2 ∈ X",
+   "sig": "example (X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : 2 ∈ X := by sorry"
+  },
+  {
+   "idx": 15,
+   "qid": "q5db89772",
+   "run": "20261017",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X)",
+   "prop": "0 ∈ X",
+   "sig": "example (X : Set ℤ) (h2 : ∀ k l : ℕ, k > 0 → l > 0 → (2^k - 2^l) ∈ X) : 0 ∈ X := by sorry"
+  },
+  {
+   "idx": 16,
+   "qid": "qa658f533",
+   "run": "20261017",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(α β γ : ℝ) (h : α < β ∧ β < γ)",
+   "prop": "∀ C : ℝ, ∃ (s : Finset ℝ), s.card = 2 ∧ ∀ z ∈ s, (1/(z-α) + 1/(z-β) + 1/(z-γ)) = C",
+   "sig": "example (α β γ : ℝ) (h : α < β ∧ β < γ) : ∀ C : ℝ, ∃ (s : Finset ℝ), s.card = 2 ∧ ∀ z ∈ s, (1/(z-α) + 1/(z-β) + 1/(z-γ)) = C := by sorry"
+  },
+  {
+   "idx": 17,
+   "qid": "qd6f08f68",
+   "run": "20261017",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(boris_targets : Finset (ℕ × ℕ)) (natasha_reds : ℕ → Finset (ℕ × ℕ))",
+   "prop": "boris_targets.card = 4 → ∀ k, (natasha_reds k).card ≤ 2 * k → ∃ (blue_sofar : Finset (ℕ × ℕ)), blue_sofar.card ≥ 4",
+   "sig": "example (boris_targets : Finset (ℕ × ℕ)) (natasha_reds : ℕ → Finset (ℕ × ℕ)) : boris_targets.card = 4 → ∀ k, (natasha_reds k).card ≤ 2 * k → ∃ (blue_sofar : Finset (ℕ × ℕ)), blue_sofar.card ≥ 4 := by sorry"
+  },
+  {
+   "idx": 18,
+   "qid": "qdecd0474",
+   "run": "20261017",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(D : ℝ) (y : ℕ → ℝ) (hD : D > (777:ℝ)^2 / 2) (hy : ∀ k, 0 ≤ y k ∧ y k ≤ (777:ℝ)^2) (h : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D)",
+   "prop": "False",
+   "sig": "example (D : ℝ) (y : ℕ → ℝ) (hD : D > (777:ℝ)^2 / 2) (hy : ∀ k, 0 ≤ y k ∧ y k ≤ (777:ℝ)^2) (h : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D) : False := by sorry"
+  },
+  {
+   "idx": 19,
+   "qid": "qdecd0474",
+   "run": "20261017",
+   "sg_id": 4,
+   "type": "verify",
+   "binders": "(y : ℕ → ℝ) (h : ∀ k, y k = (777:ℝ)^2 * k / (2 * (k + 1)))",
+   "prop": "∀ m n, m < n → (m + n) * |y n - y m| ≥ (777:ℝ)^2 / 2",
+   "sig": "example (y : ℕ → ℝ) (h : ∀ k, y k = (777:ℝ)^2 * k / (2 * (k + 1))) : ∀ m n, m < n → (m + n) * |y n - y m| ≥ (777:ℝ)^2 / 2 := by sorry"
+  },
+  {
+   "idx": 20,
+   "qid": "q3b5dc802",
+   "run": "20261019",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "",
+   "prop": "¬ ∃ (a b : ℤ), a ≠ b ∧ b^3 = a^3 ∧ ¬ ∃ (a b c : ℤ), a ≠ b ∧ b ≠ c ∧ a ≠ c ∧ c^3 = a^3 + b^3",
+   "sig": "example : ¬ ∃ (a b : ℤ), a ≠ b ∧ b^3 = a^3 ∧ ¬ ∃ (a b c : ℤ), a ≠ b ∧ b ≠ c ∧ a ≠ c ∧ c^3 = a^3 + b^3 := by sorry"
+  },
+  {
+   "idx": 21,
+   "qid": "qdecd0474",
+   "run": "20261019",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(y : ℕ → ℝ) (h : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2)",
+   "prop": "∃ (s : Set ℕ), Infinite s ∧ (∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777^2/2) ∨ (∀ i ∈ s, 777^2/2 < y i ∧ y i ≤ 777^2)",
+   "sig": "example (y : ℕ → ℝ) (h : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) : ∃ (s : Set ℕ), Infinite s ∧ (∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777^2/2) ∨ (∀ i ∈ s, 777^2/2 < y i ∧ y i ≤ 777^2) := by sorry"
+  },
+  {
+   "idx": 22,
+   "qid": "qdecd0474",
+   "run": "20261019",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(D : ℝ) (y : ℕ → ℝ) (h1 : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) (h2 : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D)",
+   "prop": "D ≤ 2 * 777^2",
+   "sig": "example (D : ℝ) (y : ℕ → ℝ) (h1 : ∀ n, 0 ≤ y n ∧ y n ≤ 777^2) (h2 : ∀ m n, m < n → (m + n) * |y n - y m| ≥ D) : D ≤ 2 * 777^2 := by sorry"
+  },
+  {
+   "idx": 23,
+   "qid": "qdecd0474",
+   "run": "20261019",
+   "sg_id": 4,
+   "type": "verify",
+   "binders": "(y : ℕ → ℝ) (h : ∀ n, if Odd n then y n = 777^2 else y n = 0)",
+   "prop": "∀ m n, m < n → (m + n) * |y n - y m| ≥ 2 * 777^2",
+   "sig": "example (y : ℕ → ℝ) (h : ∀ n, if Odd n then y n = 777^2 else y n = 0) : ∀ m n, m < n → (m + n) * |y n - y m| ≥ 2 * 777^2 := by sorry"
+  },
+  {
+   "idx": 24,
+   "qid": "qdecd0474",
+   "run": "20261019",
+   "sg_id": 5,
+   "type": "verify",
+   "binders": "(x : ℕ → ℝ) (h : ∀ n, if Odd n then x n = 777 else x n = 0)",
+   "prop": "∀ n, 0 ≤ x n ∧ x n ≤ 777 ∧ ∀ m n, m < n → (m + n) * |x n^2 - x m^2| ≥ 2 * 777^2",
+   "sig": "example (x : ℕ → ℝ) (h : ∀ n, if Odd n then x n = 777 else x n = 0) : ∀ n, 0 ≤ x n ∧ x n ≤ 777 ∧ ∀ m n, m < n → (m + n) * |x n^2 - x m^2| ≥ 2 * 777^2 := by sorry"
+  },
+  {
+   "idx": 25,
+   "qid": "qadbc6d05",
+   "run": "20261021",
+   "sg_id": 1,
+   "type": "compute",
+   "binders": "(q m : ℕ) (hq : Nat.Prime q) (h3 : q > 3) (hmq : m ≥ q)",
+   "prop": "¬ (q ∣ 6 * Nat.factorial m - 1)",
+   "sig": "example (q m : ℕ) (hq : Nat.Prime q) (h3 : q > 3) (hmq : m ≥ q) : ¬ (q ∣ 6 * Nat.factorial m - 1) := by sorry"
+  },
+  {
+   "idx": 26,
+   "qid": "qadbc6d05",
+   "run": "20261021",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(P : Polynomial ℤ) (hP : P.Monic) (hdeg : P.natDegree ≥ 2)",
+   "prop": "∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ Int.natAbs (P.eval (q : ℤ)) > q",
+   "sig": "example (P : Polynomial ℤ) (hP : P.Monic) (hdeg : P.natDegree ≥ 2) : ∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ Int.natAbs (P.eval (q : ℤ)) > q := by sorry"
+  },
+  {
+   "idx": 27,
+   "qid": "qadbc6d05",
+   "run": "20261021",
+   "sg_id": 5,
+   "type": "compute",
+   "binders": "(a : ℤ) (ha : a ≠ -1 ∧ a ≠ 0)",
+   "prop": "∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ ¬ (q ∣ 6 * Nat.factorial (Int.natAbs (q + a)) - 1)",
+   "sig": "example (a : ℤ) (ha : a ≠ -1 ∧ a ≠ 0) : ∃ (q : ℕ) (hq : Nat.Prime q), q > 3 ∧ ¬ (q ∣ 6 * Nat.factorial (Int.natAbs (q + a)) - 1) := by sorry"
+  },
+  {
+   "idx": 28,
+   "qid": "qadbc6d05",
+   "run": "20261021",
+   "sg_id": 6,
+   "type": "prove",
+   "binders": "(q : ℕ) (hq : Nat.Prime q) (h3 : q > 3)",
+   "prop": "q ∣ 6 * Nat.factorial (q - 2) - 1",
+   "sig": "example (q : ℕ) (hq : Nat.Prime q) (h3 : q > 3) : q ∣ 6 * Nat.factorial (q - 2) - 1 := by sorry"
+  },
+  {
+   "idx": 29,
+   "qid": "qadbc6d05",
+   "run": "20261021",
+   "sg_id": 7,
+   "type": "prove",
+   "binders": "(q : ℕ) (hq : Nat.Prime q) (h3 : q > 3)",
+   "prop": "q ∣ 6 * Nat.factorial q - 1",
+   "sig": "example (q : ℕ) (hq : Nat.Prime q) (h3 : q > 3) : q ∣ 6 * Nat.factorial q - 1 := by sorry"
+  },
+  {
+   "idx": 30,
+   "qid": "q44dc3110",
+   "run": "20261021",
+   "sg_id": 1,
+   "type": "derive",
+   "binders": "(n : ℕ) (x : Fin n → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1)",
+   "prop": "n ≥ 10",
+   "sig": "example (n : ℕ) (x : Fin n → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1) : n ≥ 10 := by sorry"
+  },
+  {
+   "idx": 31,
+   "qid": "q44dc3110",
+   "run": "20261021",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(x : Fin 9 → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1)",
+   "prop": "False",
+   "sig": "example (x : Fin 9 → ℝ) (h1 : ∀ i, |x i| ≤ 1) (h2 : (∑ i, x i)^2 + ∑ i, (x i)^2 = 20) (h3 : |∑ i, x i| < 1) : False := by sorry"
+  },
+  {
+   "idx": 32,
+   "qid": "qdecd0474",
+   "run": "20261022",
+   "sg_id": 1,
+   "type": "compute",
+   "binders": "(D : ℝ) (x : ℕ → ℝ) (hD : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ) (hm : 0 < m) (hmn : m < n)",
+   "prop": "(m + n) * D ≤ 777 ^ 2",
+   "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ) (hm : 0 < m) (hmn : m < n) : (m + n) * D ≤ 777 ^ 2 := by sorry"
+  },
+  {
+   "idx": 33,
+   "qid": "qdecd0474",
+   "run": "20261022",
+   "sg_id": 2,
+   "type": "derive",
+   "binders": "(D : ℝ) (h : ∀ m n, 0 < m → m < n → (m + n) * D ≤ 777 ^ 2)",
+   "prop": "D ≤ 777 ^ 2 / 2",
+   "sig": "example (D : ℝ) (h : ∀ m n, 0 < m → m < n → (m + n) * D ≤ 777 ^ 2) : D ≤ 777 ^ 2 / 2 := by sorry"
+  },
+  {
+   "idx": 34,
+   "qid": "qdecd0474",
+   "run": "20261022",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(m n : ℕ) (hmn : 1 ≤ m ∧ m < n)",
+   "prop": "(m + n) * (777 ^ 2 * (n - m) / (m * n)) ≥ 777 ^ 2 / 2",
+   "sig": "example (m n : ℕ) (hmn : 1 ≤ m ∧ m < n) : (m + n) * (777 ^ 2 * (n - m) / (m * n)) ≥ 777 ^ 2 / 2 := by sorry"
+  },
+  {
+   "idx": 35,
+   "qid": "qdecd0474",
+   "run": "20261022",
+   "sg_id": 5,
+   "type": "compute",
+   "binders": "(ε : ℝ) (hε : 0 < ε)",
+   "prop": "¬(∃ x : ℕ → ℝ, (∀ i, 0 ≤ x i ∧ x i ≤ 777) ∧ ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε)",
+   "sig": "example (ε : ℝ) (hε : 0 < ε) : ¬(∃ x : ℕ → ℝ, (∀ i, 0 ≤ x i ∧ x i ≤ 777) ∧ ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε) := by sorry"
+  },
+  {
+   "idx": 36,
+   "qid": "qdecd0474",
+   "run": "20261022",
+   "sg_id": 6,
+   "type": "derive",
+   "binders": "(ε : ℝ) (hε : 0 < ε) (x : ℕ → ℝ) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (h : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε)",
+   "prop": "False",
+   "sig": "example (ε : ℝ) (hε : 0 < ε) (x : ℕ → ℝ) (hx : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (h : ∀ m n, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 + ε) : False := by sorry"
+  },
+  {
+   "idx": 37,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 1,
+   "type": "compute",
+   "binders": "(D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D)",
+   "prop": "∀ n : ℕ, 1 < n → |x n ^ 2 - x (n - 1) ^ 2| ≥ D / (2 * n - 1)",
+   "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : ∀ n : ℕ, 1 < n → |x n ^ 2 - x (n - 1) ^ 2| ≥ D / (2 * n - 1) := by sorry"
+  },
+  {
+   "idx": 38,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "",
+   "prop": "¬ Summable (fun k : ℕ => 1 / (2 * (k + 2) - 1))",
+   "sig": "example : ¬ Summable (fun k : ℕ => 1 / (2 * (k + 2) - 1)) := by sorry"
+  },
+  {
+   "idx": 39,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 4,
+   "type": "compute",
+   "binders": "(D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hb : ∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777)",
+   "prop": "False",
+   "sig": "example (D : ℝ) (x : ℕ → ℝ) (hD : 0 < D) (h : ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) (hb : ∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) : False := by sorry"
+  },
+  {
+   "idx": 40,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 5,
+   "type": "verify",
+   "binders": "(c : ℝ) (hc : 0 ≤ c ∧ c ≤ 777)",
+   "prop": "∃ x : ℕ → ℝ, (∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) ∧ ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 0",
+   "sig": "example (c : ℝ) (hc : 0 ≤ c ∧ c ≤ 777) : ∃ x : ℕ → ℝ, (∀ n : ℕ, 0 ≤ x n ∧ x n ≤ 777) ∧ ∀ m n : ℕ, 0 < m → m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ 0 := by sorry"
+  },
+  {
+   "idx": 41,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 1,
+   "type": "compute",
+   "binders": "(x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ)",
+   "prop": "|x n ^ 2 - x m ^ 2| ≤ 777 ^ 2",
+   "sig": "example (x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (m n : ℕ) : |x n ^ 2 - x m ^ 2| ≤ 777 ^ 2 := by sorry"
+  },
+  {
+   "idx": 42,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(D : ℝ) (hD : 0 < D)",
+   "prop": "∃ m n : ℕ, m < n ∧ (m + n : ℝ) > 777 ^ 2 / D",
+   "sig": "example (D : ℝ) (hD : 0 < D) : ∃ m n : ℕ, m < n ∧ (m + n : ℝ) > 777 ^ 2 / D := by sorry"
+  },
+  {
+   "idx": 43,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 3,
+   "type": "derive",
+   "binders": "(x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (D : ℝ) (hcond : ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D)",
+   "prop": "D ≤ 777 ^ 2 / 2",
+   "sig": "example (x : ℕ → ℝ) (h : ∀ i, 0 ≤ x i ∧ x i ≤ 777) (D : ℝ) (hcond : ∀ m n, m < n → (m + n) * |x n ^ 2 - x m ^ 2| ≥ D) : D ≤ 777 ^ 2 / 2 := by sorry"
+  },
+  {
+   "idx": 44,
+   "qid": "qdecd0474",
+   "run": "20261023",
+   "sg_id": 5,
+   "type": "verify",
+   "binders": "(x : ℕ → ℝ) (hx : ∀ n, x n = 777 * (n % 2)) (m n : ℕ) (h : m < n)",
+   "prop": "(m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 ∧ (∀ i, 0 ≤ x i ∧ x i ≤ 777)",
+   "sig": "example (x : ℕ → ℝ) (hx : ∀ n, x n = 777 * (n % 2)) (m n : ℕ) (h : m < n) : (m + n) * |x n ^ 2 - x m ^ 2| ≥ 777 ^ 2 / 2 ∧ (∀ i, 0 ≤ x i ∧ x i ≤ 777) := by sorry"
+  },
+  {
+   "idx": 45,
+   "qid": "q59f1afe4",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1)",
+   "prop": "(∀ n, a n < a (n + 1)) ∧ (∀ n, n ≤ a n)",
+   "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) : (∀ n, a n < a (n + 1)) ∧ (∀ n, n ≤ a n) := by sorry"
+  },
+  {
+   "idx": 46,
+   "qid": "q59f1afe4",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_mono : ∀ n, a n < a (n + 1)) (h_ge : ∀ n, n ≤ a n)",
+   "prop": "a 0 = 0",
+   "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_mono : ∀ n, a n < a (n + 1)) (h_ge : ∀ n, n ≤ a n) : a 0 = 0 := by sorry"
+  },
+  {
+   "idx": 47,
+   "qid": "q59f1afe4",
+   "run": "20261027",
+   "sg_id": 3,
+   "type": "compute",
+   "binders": "(a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a0 : a 0 = 0)",
+   "prop": "a 1 = 1",
+   "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a0 : a 0 = 0) : a 1 = 1 := by sorry"
+  },
+  {
+   "idx": 48,
+   "qid": "q59f1afe4",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a1 : a 1 = 1) (h_mono : ∀ n, a n < a (n + 1))",
+   "prop": "∀ n, 1 ≤ n → a n = n + 1",
+   "sig": "example (a : ℕ → ℕ) (h : ∀ p, a (a (a p)) = a (p + 1) + 1) (h_a1 : a 1 = 1) (h_mono : ∀ n, a n < a (n + 1)) : ∀ n, 1 ≤ n → a n = n + 1 := by sorry"
+  },
+  {
+   "idx": 49,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m)",
+   "prop": "Function.Injective f",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) : Function.Injective f := by sorry"
+  },
+  {
+   "idx": 50,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m)",
+   "prop": "Function.Surjective f",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) : Function.Surjective f := by sorry"
+  },
+  {
+   "idx": 51,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 3,
+   "type": "compute",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (surj : Function.Surjective f)",
+   "prop": "∃ a, f a = 1 ∧ ∀ n, f (f n + 1) = n + a",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (surj : Function.Surjective f) : ∃ a, f a = 1 ∧ ∀ n, f (f n + 1) = n + a := by sorry"
+  },
+  {
+   "idx": 52,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "compute",
+   "binders": "(f : ℕ+ → ℕ+) (a : ℕ+) (ha : ∀ n, f (f n + 1) = n + a)",
+   "prop": "f 2 = 2 * a ∧ f (f 1 + 1) = 1 + a",
+   "sig": "example (f : ℕ+ → ℕ+) (a : ℕ+) (ha : ∀ n, f (f n + 1) = n + a) : f 2 = 2 * a ∧ f (f 1 + 1) = 1 + a := by sorry"
+  },
+  {
+   "idx": 53,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 5,
+   "type": "derive",
+   "binders": "(f : ℕ+ → ℕ+) (inj : Function.Injective f) (a : ℕ+) (h2 : f 2 = 2 * a)",
+   "prop": "a = 1",
+   "sig": "example (f : ℕ+ → ℕ+) (inj : Function.Injective f) (a : ℕ+) (h2 : f 2 = 2 * a) : a = 1 := by sorry"
+  },
+  {
+   "idx": 54,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 6,
+   "type": "derive",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (inj : Function.Injective f) (a1 : f 1 = 1)",
+   "prop": "∀ n, f (n + 1) = f n + 1",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m, f (f n + f m) = n + m) (inj : Function.Injective f) (a1 : f 1 = 1) : ∀ n, f (n + 1) = f n + 1 := by sorry"
+  },
+  {
+   "idx": 55,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 7,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (rec : ∀ n, f (n + 1) = f n + 1) (base : f 1 = 1)",
+   "prop": "∀ n, f n = n",
+   "sig": "example (f : ℕ+ → ℕ+) (rec : ∀ n, f (n + 1) = f n + 1) (base : f 1 = 1) : ∀ n, f n = n := by sorry"
+  },
+  {
+   "idx": 56,
+   "qid": "q30d7c035",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(ζ : ℂ) (n : ℕ) (h : ζ ^ n = 1)",
+   "prop": "(∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0) ↔ (minpoly ℚ ζ).natDegree = 2",
+   "sig": "example (ζ : ℂ) (n : ℕ) (h : ζ ^ n = 1) : (∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0) ↔ (minpoly ℚ ζ).natDegree = 2 := by sorry"
+  },
+  {
+   "idx": 57,
+   "qid": "q30d7c035",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "compute",
+   "binders": "(n : ℕ) (h : n ∈ ({3, 4, 6} : Set ℕ)) (ζ : ℂ) (hprim : IsPrimitiveRoot ζ n)",
+   "prop": "∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0",
+   "sig": "example (n : ℕ) (h : n ∈ ({3, 4, 6} : Set ℕ)) (ζ : ℂ) (hprim : IsPrimitiveRoot ζ n) : ∃ (a b : ℤ), ζ ^ 2 + a * ζ + b = 0 := by sorry"
+  },
+  {
+   "idx": 58,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1)",
+   "prop": "∀ i, x i ≥ 3",
+   "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) : ∀ i, x i ≥ 3 := by sorry"
+  },
+  {
+   "idx": 59,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ∃ i, x i = 3)",
+   "prop": "∀ i, x i = 3",
+   "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ∃ i, x i = 3) : ∀ i, x i = 3 := by sorry"
+  },
+  {
+   "idx": 60,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ¬ ∃ i, x i = 3)",
+   "prop": "∀ i, Even (x i - 1)",
+   "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (h3 : ¬ ∃ i, x i = 3) : ∀ i, Even (x i - 1) := by sorry"
+  },
+  {
+   "idx": 61,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 5,
+   "type": "prove",
+   "binders": "(x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (hodd : ∀ i, Even (x i - 1)) (h5 : ¬ ∃ i, x i = 3)",
+   "prop": "∀ i, x i = 5",
+   "sig": "example (x : Fin 10 → ℕ) (h : ∀ i, x i = Nat.gcd (x (i - 1)) (x (i + 1)) + 1) (hodd : ∀ i, Even (x i - 1)) (h5 : ¬ ∃ i, x i = 3) : ∀ i, x i = 5 := by sorry"
+  },
+  {
+   "idx": 62,
+   "qid": "qfaed7d35",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "compute",
+   "binders": "(n : ℕ)",
+   "prop": "n ∣ 2 ^ n + 2 → n % 2 = 0",
+   "sig": "example (n : ℕ) : n ∣ 2 ^ n + 2 → n % 2 = 0 := by sorry"
+  },
+  {
+   "idx": 63,
+   "qid": "qfaed7d35",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(m : ℕ)",
+   "prop": "(2 * m) ∣ 2 ^ (2 * m) + 2 ↔ m ∣ 2 ^ (2 * m - 1) + 1",
+   "sig": "example (m : ℕ) : (2 * m) ∣ 2 ^ (2 * m) + 2 ↔ m ∣ 2 ^ (2 * m - 1) + 1 := by sorry"
+  },
+  {
+   "idx": 64,
+   "qid": "qfaed7d35",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(m : ℕ) (h : m ∣ 2 ^ (2 * m - 1) + 1)",
+   "prop": "(5 * m) ∣ 2 ^ (10 * m - 1) + 1",
+   "sig": "example (m : ℕ) (h : m ∣ 2 ^ (2 * m - 1) + 1) : (5 * m) ∣ 2 ^ (10 * m - 1) + 1 := by sorry"
+  },
+  {
+   "idx": 65,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m)",
+   "prop": "Function.Injective f",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) : Function.Injective f := by sorry"
+  },
+  {
+   "idx": 66,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m)",
+   "prop": "Function.Surjective f",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) : Function.Surjective f := by sorry"
+  },
+  {
+   "idx": 67,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 3,
+   "type": "compute",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f)",
+   "prop": "f 1 = 1",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f) : f 1 = 1 := by sorry"
+  },
+  {
+   "idx": 68,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "compute",
+   "binders": "(f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f) (h1 : f 1 = 1)",
+   "prop": "∀ n : ℕ+, f (n + 1) = f n + 1",
+   "sig": "example (f : ℕ+ → ℕ+) (h : ∀ n m : ℕ+, f (f n + f m) = n + m) (hf : Function.Injective f) (h1 : f 1 = 1) : ∀ n : ℕ+, f (n + 1) = f n + 1 := by sorry"
+  },
+  {
+   "idx": 69,
+   "qid": "q10a65b3d",
+   "run": "20261027",
+   "sg_id": 5,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (h3 : ∀ n : ℕ+, f (n + 1) = f n + 1) (h1 : f 1 = 1)",
+   "prop": "∀ n : ℕ+, f n = n",
+   "sig": "example (f : ℕ+ → ℕ+) (h3 : ∀ n : ℕ+, f (n + 1) = f n + 1) (h1 : f 1 = 1) : ∀ n : ℕ+, f n = n := by sorry"
+  },
+  {
+   "idx": 70,
+   "qid": "q5a7e5ee2",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(V : Type) [Fintype V] (c : V → V → Fin 3) (h : ∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w))",
+   "prop": "∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)",
+   "sig": "example (V : Type) [Fintype V] (c : V → V → Fin 3) (h : ∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) : ∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w) := by sorry"
+  },
+  {
+   "idx": 71,
+   "qid": "q5a7e5ee2",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(n : ℕ) (h : ∀ (c : Fin n → Fin n → Fin 3), ∃ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w ∧ c u v = c v w ∧ c v w = c u w)",
+   "prop": "n ≤ 5",
+   "sig": "example (n : ℕ) (h : ∀ (c : Fin n → Fin n → Fin 3), ∃ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w ∧ c u v = c v w ∧ c v w = c u w) : n ≤ 5 := by sorry"
+  },
+  {
+   "idx": 72,
+   "qid": "q5a7e5ee2",
+   "run": "20261027",
+   "sg_id": 5,
+   "type": "prove",
+   "binders": "",
+   "prop": "¬ (∃ (c : Fin 6 → Fin 6 → Fin 3), (∀ u v, u ≠ v → c u v = c v u) ∧ (∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) ∧ (∀ v, ¬ (∃ a b d, a ≠ b ∧ b ≠ d ∧ a ≠ d ∧ c v a = c v b ∧ c v b = c v d ∧ c v a = 0 ∧ c v a = 1 ∧ c v a = 2)))",
+   "sig": "example : ¬ (∃ (c : Fin 6 → Fin 6 → Fin 3), (∀ u v, u ≠ v → c u v = c v u) ∧ (∀ u v w, u ≠ v ∧ v ≠ w ∧ u ≠ w → ¬ (c u v = c v w ∧ c v w = c u w)) ∧ (∀ v, ¬ (∃ a b d, a ≠ b ∧ b ≠ d ∧ a ≠ d ∧ c v a = c v b ∧ c v b = c v d ∧ c v a = 0 ∧ c v a = 1 ∧ c v a = 2))) := by sorry"
+  },
+  {
+   "idx": 73,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(x : ℕ → ℕ) (i : ℕ) (h : x i = Nat.gcd (x (i-1)) (x (i+1)) + 1)",
+   "prop": "x i ≥ 2",
+   "sig": "example (x : ℕ → ℕ) (i : ℕ) (h : x i = Nat.gcd (x (i-1)) (x (i+1)) + 1) : x i ≥ 2 := by sorry"
+  },
+  {
+   "idx": 74,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(x : ℕ → ℕ) (h : ∀ i, x i = Nat.gcd (x (i-1)) (x (i+1)) + 1) (h' : ∀ i, x i ≥ 3)",
+   "prop": "False",
+   "sig": "example (x : ℕ → ℕ) (h : ∀ i, x i = Nat.gcd (x (i-1)) (x (i+1)) + 1) (h' : ∀ i, x i ≥ 3) : False := by sorry"
+  },
+  {
+   "idx": 75,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 3,
+   "type": "derive",
+   "binders": "(a b c : ℕ) (h : a = Nat.gcd b c + 1)",
+   "prop": "(a - 1) ∣ b ∧ (a - 1) ∣ c",
+   "sig": "example (a b c : ℕ) (h : a = Nat.gcd b c + 1) : (a - 1) ∣ b ∧ (a - 1) ∣ c := by sorry"
+  },
+  {
+   "idx": 76,
+   "qid": "q9c2676e2",
+   "run": "20261027",
+   "sg_id": 4,
+   "type": "derive",
+   "binders": "(x : ℕ → ℕ) (h : ∀ i, (x i - 1) ∣ x (i-1) ∧ (x i - 1) ∣ x (i+1)) (h' : ∃ i, x i = 2)",
+   "prop": "∀ i, Even (x i)",
+   "sig": "example (x : ℕ → ℕ) (h : ∀ i, (x i - 1) ∣ x (i-1) ∧ (x i - 1) ∣ x (i+1)) (h' : ∃ i, x i = 2) : ∀ i, Even (x i) := by sorry"
+  },
+  {
+   "idx": 77,
+   "qid": "qfaed7d35",
+   "run": "20261027",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(n : ℕ) (h : n ∣ 2 ^ n + 2) (h100 : 100 ≤ n)",
+   "prop": "Even n",
+   "sig": "example (n : ℕ) (h : n ∣ 2 ^ n + 2) (h100 : 100 ≤ n) : Even n := by sorry"
+  },
+  {
+   "idx": 78,
+   "qid": "qfaed7d35",
+   "run": "20261027",
+   "sg_id": 2,
+   "type": "compute",
+   "binders": "(n m : ℕ) (hn : n = 2 * m) (hm : Odd m)",
+   "prop": "(n ∣ 2 ^ n + 2) ↔ (m ∣ 2 ^ (2 * m - 1) + 1)",
+   "sig": "example (n m : ℕ) (hn : n = 2 * m) (hm : Odd m) : (n ∣ 2 ^ n + 2) ↔ (m ∣ 2 ^ (2 * m - 1) + 1) := by sorry"
+  },
+  {
+   "idx": 79,
+   "qid": "q10a65b3d",
+   "run": "20261028",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m)",
+   "prop": "Function.Injective f",
+   "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : Function.Injective f := by sorry"
+  },
+  {
+   "idx": 80,
+   "qid": "q10a65b3d",
+   "run": "20261028",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m)",
+   "prop": "Function.Surjective f",
+   "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : Function.Surjective f := by sorry"
+  },
+  {
+   "idx": 81,
+   "qid": "q10a65b3d",
+   "run": "20261028",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m)",
+   "prop": "f 1 = 1",
+   "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) : f 1 = 1 := by sorry"
+  },
+  {
+   "idx": 82,
+   "qid": "q10a65b3d",
+   "run": "20261028",
+   "sg_id": 4,
+   "type": "prove",
+   "binders": "(f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) (h1 : f 1 = 1)",
+   "prop": "∀ k, f k = k",
+   "sig": "example (f : ℕ+ → ℕ+) (hf : ∀ n m, f (f n + f m) = n + m) (h1 : f 1 = 1) : ∀ k, f k = k := by sorry"
+  },
+  {
+   "idx": 83,
+   "qid": "qfaed7d35",
+   "run": "20261028",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(n : ℕ) (h : (2^n + 2) % n = 0)",
+   "prop": "Even n",
+   "sig": "example (n : ℕ) (h : (2^n + 2) % n = 0) : Even n := by sorry"
+  },
+  {
+   "idx": 84,
+   "qid": "qfaed7d35",
+   "run": "20261028",
+   "sg_id": 2,
+   "type": "prove",
+   "binders": "(m : ℕ) (h : (2^(2*m) + 2) % (2*m) = 0)",
+   "prop": "Odd m ∧ (2^(2*m - 1) + 1) % m = 0",
+   "sig": "example (m : ℕ) (h : (2^(2*m) + 2) % (2*m) = 0) : Odd m ∧ (2^(2*m - 1) + 1) % m = 0 := by sorry"
+  },
+  {
+   "idx": 85,
+   "qid": "qfaed7d35",
+   "run": "20261028",
+   "sg_id": 3,
+   "type": "prove",
+   "binders": "(m : ℕ) (ho : Odd m) (hd : (2^(2*m - 1) + 1) % m = 0)",
+   "prop": "m % 3 = 0",
+   "sig": "example (m : ℕ) (ho : Odd m) (hd : (2^(2*m - 1) + 1) % m = 0) : m % 3 = 0 := by sorry"
+  },
+  {
+   "idx": 86,
+   "qid": "qfaed7d35",
+   "run": "20261030",
+   "sg_id": 1,
+   "type": "prove",
+   "binders": "(n : ℕ) (h_odd : Odd n) (h_gt1 : n > 1)",
+   "prop": "¬ (n ∣ 2 ^ n + 2)",
+   "sig": "example (n : ℕ) (h_odd : Odd n) (h_gt1 : n > 1) : ¬ (n ∣ 2 ^ n + 2) := by sorry"
+  }
+ ],
+ "literal_false": [
+  11,
+  12,
+  13,
+  18,
+  31,
+  36,
+  39,
+  74
+ ]
+}
