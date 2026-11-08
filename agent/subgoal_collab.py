@@ -341,6 +341,7 @@ def verify_and_mark(solver, ctx, sg, text) -> str:
         sg["sig_gate_stage"] = "UNAVAILABLE"
         sg["sig_gate_reasons"] = ["协作路径工具核验入口异常：%s" % type(e).__name__]
         sg["sig_gate_prop"] = ""
+        sg["sig_gate_goal_is_false"] = False   # 只读分桶，异常路径也保持字段形状
         sg["tool_ran"] = False
         sg["tool_verdict"] = ("unknown: sig_gate=UNAVAILABLE "
                               "协作路径工具核验入口异常")

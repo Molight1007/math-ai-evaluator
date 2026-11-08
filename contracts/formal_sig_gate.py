@@ -84,6 +84,28 @@ example (b r : ℕ) (score : ℕ) : score ≤ M + 1 := by sorry               --
 ★ 它只挡「自由名」这一种。**恒假**（数值验算不等）与**空真**（前件恒假、
 一秒可证）编译照样通过 ⇒ 3.3% 不是门 A 的总漏判率。
 
+## ★ 目标写成 `False` 是反证骨架，门 A 判不出它可不可证（E40）
+
+87 条 STATABLE 里 8 条（9.2%）的命题字面就是 `False`：
+
+```lean
+example (x : ℝ) (hx : x ≠ 0) (h1 : 3*x^2 = 3) (h2 : 3*x^4 = 3) : False := by sorry
+```
+
+`... : False := by sorry` 语法上永远合法 ⇒ 门 A 必然判 STATABLE；
+但它到底可不可证，完全取决于**假设自不自相矛盾** —— 这正是门 A 判据之外的东西
+（判它等于要求给出真证明）。上例 `x = 1` 同时满足三个假设 ⇒ `False` 不可证，
+而门 A 照样给它 STATABLE。
+
+⇒ **不为它加判定，只加只读分桶 `goal_is_false`**：让「STATABLE 60.4%」这个口径
+  不被反证骨架稀释，也免得日后有人把它当成忠实度引用。
+  ★ 分桶不改 stage / allowed / 任何历史闭合结论（历史 allowed 全 False）。
+  ★ 它与「命题是否忠实」无关：字面 `False` 只是**形态**，不代表命题错。
+
+★ 1218 次单 tactic 双侧扫描的负结果：87 条里能「一眼证掉」的只有 1 条，且是
+  **结论逐字符等于假设**的循环命题。这只排除「一眼可证」，不构成忠实度证据。
+  明细 `测试结果/门A退化命题探针_20261108/`。
+
 ## 判据的能力边界
 
 `is_trivial_prop()` 是**保守下界**：只认 5 种最明确的退化形态，
@@ -97,7 +119,8 @@ import re
 
 __all__ = [
     "SORRY_RE", "TAIL_RE", "TRIVIAL_RULES", "UNTRUSTED_RE", "STRICT_IMPLICIT",
-    "split_sig", "is_trivial_prop", "illegal_kind", "classify_stated",
+    "REFUTATION_GOAL_RE", "split_sig", "is_trivial_prop", "is_refutation_skeleton",
+    "illegal_kind", "classify_stated",
     "with_strict_implicit", "proof_credential", "evaluate", "verdict_text",
     "gate_fields",
 ]
@@ -135,6 +158,12 @@ TRIVIAL_RULES = (
         r"^∃\s*\(?\s*([A-Za-z]\w*)\s*(?::[^,)]+)?\s*\)?\s*,\s*\1\s*=", re.U)),
     ("恒等函数", re.compile(r"\(fun\s+(\w+)\s*:[^)]*=>\s*\1\s*\)", re.U)),
 )
+
+
+# ★ 目标字面为 `False`（反证骨架）。**只做只读分桶，不参与任何判定**：
+#   这种签名语法上永远合法，但可不可证取决于假设是否自相矛盾 ⇒ 门 A 判不出。
+#   E40：87 条 STATABLE 里 8 条（9.2%）属于此类，已核实 1 条是坏命题。
+REFUTATION_GOAL_RE = re.compile(r"^\s*False\s*$")
 
 
 def split_sig(sig):
@@ -190,6 +219,20 @@ def is_trivial_prop(prop):
         if pat.search(s):
             return name
     return ""
+
+
+def is_refutation_skeleton(prop):
+    """命题字面是 `False` ⇒「反证骨架」。**只读分桶，不参与任何判定。**
+
+    这类签名（`example ... : False := by sorry`）在门 A 下永远 STATABLE，
+    因为语法完全合法；它的可证性由「假设是否自相矛盾」决定，而那不是本模块
+    能判的（要判等于要求给出真证明）。
+
+    ★ 只认字面 `False`。`¬ True`、`Not False` 之类不在此列 —— 保守下界，
+      返回 False ≠「不是反证骨架」。
+    ★ 返回值**不得**接入 stage / allowed；用途只有统计口径与人工抽验取样。
+    """
+    return bool(REFUTATION_GOAL_RE.match(prop or ""))
 
 
 def illegal_kind(full_err):
@@ -261,13 +304,16 @@ def evaluate(sig, compile_result=None, proof_code=None):
       allowed   bool（只有 READY 为 True）
       reasons   list[str]
       prop      拆出的命题全文（供人工抽验）
+      goal_is_false  bool —— 命题字面是 `False`（反证骨架）。**只读分桶**：
+                不参与 stage/allowed 计算，见 `is_refutation_skeleton()`
 
     ★ 顺序刻意把零成本门放前面：影子模式下多数被拒条目不需要编译。
     ★ 本函数**不执行编译**。编译由调用方注入，契约层保持零依赖、可单测。
     """
     def _v(stage, reasons, prop=""):
         return {"stage": stage, "allowed": stage == "READY",
-                "reasons": list(reasons), "prop": prop}
+                "reasons": list(reasons), "prop": prop,
+                "goal_is_false": is_refutation_skeleton(prop)}
 
     if not (sig or "").strip():
         return _v("ABSENT", ["该步未形式化（不是被拒，是没给签名）"])
@@ -314,10 +360,13 @@ def gate_fields(v):
     """verdict → 子目标上应落盘的诊断字段（形状由契约层定，避免各处自拼）。"""
     if not isinstance(v, dict):
         v = {"stage": "UNAVAILABLE", "allowed": False,
-             "reasons": ["契约层门禁不可用"], "prop": ""}
+             "reasons": ["契约层门禁不可用"], "prop": "",
+             "goal_is_false": False}
     return {
         "sig_gate_allowed": bool(v.get("allowed")),
         "sig_gate_stage": str(v.get("stage") or "UNAVAILABLE"),
         "sig_gate_reasons": list(v.get("reasons") or []),
         "sig_gate_prop": str(v.get("prop") or ""),
+        # ★ 只读分桶：写出来只是为了统计与取样，任何闭合判定都不得读它。
+        "sig_gate_goal_is_false": bool(v.get("goal_is_false")),
     }

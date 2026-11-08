@@ -201,8 +201,11 @@ def test_verdict_text_pass_only_on_ready():
 
 def test_gate_fields_shape_is_stable():
     f = G.gate_fields(G.evaluate(SIG))
+    # ★ E40 加了只读分桶 `sig_gate_goal_is_false`：形状锁要跟着显式扩容，
+    #   不许出现「悄悄多一个字段」或「悄悄少一个字段」。
     assert set(f) == {"sig_gate_allowed", "sig_gate_stage",
-                      "sig_gate_reasons", "sig_gate_prop"}
+                      "sig_gate_reasons", "sig_gate_prop",
+                      "sig_gate_goal_is_false"}
     assert f["sig_gate_allowed"] is False and f["sig_gate_stage"] == "UNVERIFIED"
 
 
@@ -342,3 +345,56 @@ def test_compile_stated_passes_strict_implicit_to_compiler():
     assert G.STRICT_IMPLICIT in seen["code"]
     assert seen["code"].index(G.STRICT_IMPLICIT) < seen["code"].index("example")
     assert seen["allow_sorry"] is True      # 门 A 仍保留 sorry 原样编译
+
+
+# ------------------------------------------------- is_refutation_skeleton（E40）
+@pytest.mark.parametrize("prop", ["False", " False ", "False\n"])
+def test_refutation_skeleton_true(prop):
+    """目标字面 `False` = 反证骨架。门A 必然 STATABLE，可证性由假设矛盾决定。"""
+    assert G.is_refutation_skeleton(prop) is True
+
+
+@pytest.mark.parametrize("prop", [
+    "n + 1 = 4",
+    "False → False",          # 不是字面 False
+    "¬ True",                 # 等价但不是字面 False（保守下界）
+    "x = False",              # 右侧出现 False 也不算
+    "",
+    None,
+])
+def test_refutation_skeleton_boundary(prop):
+    """★ 返回 False ≠「不是反证骨架」，只是没识别（保守下界）。"""
+    assert G.is_refutation_skeleton(prop) is False
+
+
+def test_evaluate_marks_refutation_and_keeps_verdict():
+    """分桶只读：同一输入的 stage/allowed 不因分桶而变。"""
+    sig = ("example (x : ℝ) (hx : x ≠ 0) (h1 : 3*x^2 = 3) (h2 : 3*x^4 = 3) : "
+           "False := by sorry")
+    v = G.evaluate(sig, compile_result=(0, ""))
+    assert v["goal_is_false"] is True
+    assert v["stage"] == "NO_PROOF"       # 未被分桶影响
+    assert v["allowed"] is False
+
+
+def test_evaluate_normal_sig_not_refutation():
+    v = G.evaluate(SIG, compile_result=(0, ""))
+    assert v["goal_is_false"] is False
+    assert v["stage"] == "NO_PROOF"
+
+
+def test_gate_fields_carries_bucket_without_touching_allowed():
+    """落盘字段带出分桶，且 `sig_gate_allowed` 仍只由 stage 决定。"""
+    sig = "example (x : ℝ) (h) : False := by sorry"
+    d = G.gate_fields(G.evaluate(sig, compile_result=(0, "")))
+    assert d["sig_gate_goal_is_false"] is True
+    assert d["sig_gate_allowed"] is False
+    # 反证骨架即便走到 READY 也不会被这个字段否决（它不参与判定）
+    v = G.evaluate(sig, compile_result=(0, ""), proof_code="example (x : ℝ) (h) : False := by exact h")
+    assert v["allowed"] is True and v["goal_is_false"] is True
+
+
+def test_gate_fields_default_has_bucket_false():
+    d = G.gate_fields(None)
+    assert d["sig_gate_goal_is_false"] is False
+    assert d["sig_gate_allowed"] is False

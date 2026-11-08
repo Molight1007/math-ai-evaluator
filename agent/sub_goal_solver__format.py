@@ -112,6 +112,9 @@ def _build_trace_item(sg: dict, step_result: str, reused: bool = False) -> dict:
         item["sig_gate_stage"] = str(sg.get("sig_gate_stage") or "UNAVAILABLE")
         item["sig_gate_reasons"] = list(sg.get("sig_gate_reasons") or [])
         item["sig_gate_prop"] = str(sg.get("sig_gate_prop") or "")
+        # ★ 2026-11-08（E40）：目标字面为 `False` 的反证骨架，只读分桶。
+        #   不抄出来的话，归档侧无法把 9.2% 的骨架从 STATABLE 里分出来。
+        item["sig_gate_goal_is_false"] = bool(sg.get("sig_gate_goal_is_false"))
     # ★ 2026-11-06（E36）：把「为什么没真跑」也落盘，消除归因盲区。
     #   E34 真实运行里 3 条 lean 子目标停在 UNVERIFIED / tool_ran=False，
     #   但归档只剩这一个结果，无法区分「模型没写 Lean 块」「Lean 环境不可用」

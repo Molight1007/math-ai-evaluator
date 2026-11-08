@@ -110,6 +110,7 @@ def main():
         row = dict(item)
         row.update(stage=v0["stage"], allowed=v0["allowed"],
                    reasons=v0["reasons"], prop=v0["prop"],
+                   goal_is_false=v0["goal_is_false"],
                    stated=stated, stated_why=why,
                    first_err=first_error(full),
                    old_cat=old.get((item.get("qid"), sig), "(缺)"))
@@ -146,6 +147,18 @@ def report(res, n_q):
         print("  -- 不可陈述原因 --")
         for k, v in kinds.most_common():
             print("     %-18s %4d" % (k, v))
+
+    # ★ E40：只读分桶 —— STATABLE 里有多少是「目标字面 False」的反证骨架。
+    #   这一层不参与任何判定，只防止把 STATABLE 当成忠实度引用。
+    ok = [r for r in compiled if r["stated"] == "STATABLE"]
+    if ok:
+        skel = [r for r in ok if r.get("goal_is_false")]
+        print("\n== 门 A 分桶（只读，不参与判定）==")
+        print("  STATABLE %4d；其中目标字面 False（反证骨架）%3d（%.1f%%）"
+              "；普通命题 %4d"
+              % (len(ok), len(skel), 100.0 * len(skel) / len(ok), len(ok) - len(skel)))
+        print("  ★ 骨架的可证性取决于假设是否自相矛盾，门 A 判不出，"
+              "不得计入「命题成立」。")
 
     print("\n== 交叉表：上一版分类 x 门 A（检验 37% 是否站得住）==")
     cross = collections.Counter((r["old_cat"], r["stated"]) for r in res)
