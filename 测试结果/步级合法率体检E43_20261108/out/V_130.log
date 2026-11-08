@@ -1,0 +1,14 @@
+verify/V_130.lean:4:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/V_130.lean:9:19: error: unexpected token ','; expected command
+"MARK_130"

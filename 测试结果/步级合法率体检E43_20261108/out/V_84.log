@@ -1,0 +1,15 @@
+verify/V_84.lean:5:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+verify/V_84.lean:6:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_84"

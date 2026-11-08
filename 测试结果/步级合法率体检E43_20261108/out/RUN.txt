@@ -1,0 +1,3 @@
+S_full rc=1 sec=20 marks=329 errlines=645
+S_prefix rc=1 sec=18 marks=329 errlines=578
+S_full_ind rc=1 sec=19 marks=329 errlines=633

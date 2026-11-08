@@ -1,0 +1,10 @@
+verify/V_51.lean:9:4: error: unexpected identifier; expected '['
+verify/V_51.lean:4:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_51"

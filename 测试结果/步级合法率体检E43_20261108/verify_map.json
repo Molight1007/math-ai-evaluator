@@ -1,0 +1,211 @@
+[
+ {
+  "idx": 51,
+  "arm": "b_fix",
+  "tag": "q11",
+  "step": 5,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "rw h_eq at h2",
+  "prefix_len": 4,
+  "hard": [
+   "unexpected identifier; expected '['"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 205,
+  "arm": "base2",
+  "tag": "q24",
+  "step": 4,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "apply Set.infinite_of_unbounded_forall_nat",
+  "prefix_len": 3,
+  "hard": [
+   "Unknown constant `Set.infinite_of_unbounded_forall_nat`"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 238,
+  "arm": "rej",
+  "tag": "q03",
+  "step": 1,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "have h3 : (x - 1)^2 + (y - 1)^2 + (z - 1)^2 = 0 := by\n  ring\n  rw [h1]\n  norm_num",
+  "prefix_len": 0,
+  "hard": [
+   "Tactic `rewrite` failed: Did not find an occurrence of the pattern"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 130,
+  "arm": "base2",
+  "tag": "q06",
+  "step": 5,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "have h3 := hx 0 2, have h3' := h3 (by norm_num), norm_num at h2', h3'",
+  "prefix_len": 4,
+  "hard": [
+   "unexpected token ','; expected command"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 19,
+  "arm": "b_fix",
+  "tag": "q06",
+  "step": 2,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "have h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D := by { rw [Nat.cast_zero, Nat.cast_one, add_zero] at h1, exact h1 }",
+  "prefix_len": 1,
+  "hard": [
+   "unexpected token ','; expected '}'",
+   "Tactic `rewrite` failed: Did not find an occurrence of the pattern"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 81,
+  "arm": "b_fix",
+  "tag": "q24",
+  "step": 1,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "by_cases h0 : ∃ s, Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2",
+  "prefix_len": 0,
+  "hard": [
+   "failed to synthesize instance of type class"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 84,
+  "arm": "b_fix",
+  "tag": "q25",
+  "step": 1,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "have h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2 := by\n  intro i\n  have := h i\n  exact pow_le_pow (le_of_lt (lt_of_le_of_right this.1)) (le_of_lt (lt_of_le_of_right this.2)) 2",
+  "prefix_len": 0,
+  "hard": [
+   "Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 197,
+  "arm": "base2",
+  "tag": "q20",
+  "step": 2,
+  "probe_verify": "UNSOLVED",
+  "strict": "HARD_ERROR",
+  "prefix_strict": "OPEN",
+  "tactic": "· exact Nat.dvd_mul_right 6 q",
+  "prefix_len": 1,
+  "hard": [
+   "Type mismatch"
+  ],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 1
+ },
+ {
+  "idx": 0,
+  "arm": "b_fix",
+  "tag": "q01",
+  "step": 1,
+  "probe_verify": "UNSOLVED",
+  "strict": "OPEN",
+  "prefix_strict": "OPEN",
+  "tactic": "intro h",
+  "prefix_len": 0,
+  "hard": [],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 0
+ },
+ {
+  "idx": 88,
+  "arm": "b_fix",
+  "tag": "q26",
+  "step": 2,
+  "probe_verify": "UNSOLVED",
+  "strict": "OPEN",
+  "prefix_strict": "OPEN",
+  "tactic": "rw [hk]",
+  "prefix_len": 1,
+  "hard": [],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 0
+ },
+ {
+  "idx": 158,
+  "arm": "base2",
+  "tag": "q09",
+  "step": 3,
+  "probe_verify": "UNSOLVED",
+  "strict": "OPEN",
+  "prefix_strict": "OPEN",
+  "tactic": "have h2k := h2 k hk",
+  "prefix_len": 2,
+  "hard": [],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 0
+ },
+ {
+  "idx": 265,
+  "arm": "rej",
+  "tag": "q06",
+  "step": 3,
+  "probe_verify": "UNSOLVED",
+  "strict": "OPEN",
+  "prefix_strict": "OPEN",
+  "tactic": "have h2 := hx 1 2 (by decide)",
+  "prefix_len": 2,
+  "hard": [],
+  "unsolved": [
+   "unsolved goals"
+  ],
+  "expected_rc": 0
+ }
+]

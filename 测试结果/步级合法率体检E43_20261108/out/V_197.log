@@ -1,0 +1,13 @@
+verify/V_197.lean:6:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/V_197.lean:4:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_197"

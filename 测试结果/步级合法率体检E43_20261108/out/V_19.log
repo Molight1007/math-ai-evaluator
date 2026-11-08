@@ -1,0 +1,23 @@
+verify/V_19.lean:6:92: error: unexpected token ','; expected '}'
+verify/V_19.lean:6:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/V_19.lean:4:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_19"

@@ -1,0 +1,5146 @@
+lean/S_full.lean:4:102: error: unsolved goals
+h : ∃ x y z, x ≠ y ∧ y ≠ z ∧ z ≠ x ∧ x ^ 2 + y ^ 2 + z ^ 2 = 3 ∧ x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_0"
+lean/S_full.lean:9:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_1"
+lean/S_full.lean:18:14: error(lean.unknownIdentifier): Unknown identifier `sq_add_sq_add_sq_eq_three_of_cyclic_sum_eq_three`
+lean/S_full.lean:15:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_2"
+lean/S_full.lean:25:14: error(lean.unknownIdentifier): Unknown identifier `sq_add_sq_add_sq_eq_three_of_cyclic_sum_eq_three`
+lean/S_full.lean:22:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_3"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:30:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+"MARK_5"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:37:2: error: `ring_nf` made no progress on the goal
+"MARK_6"
+lean/S_full.lean:46:5: error: unexpected token '≤'; expected term
+lean/S_full.lean:42:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/S_full.lean:44:27: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+lean/S_full.lean:44:12: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:45:4: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+lean/S_full.lean:43:36: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x ^ 2 ≤ x * y ^ 2
+lean/S_full.lean:41:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_7"
+lean/S_full.lean:64:5: error: unexpected token '≤'; expected term
+lean/S_full.lean:60:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/S_full.lean:62:27: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+lean/S_full.lean:62:12: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:63:4: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+lean/S_full.lean:61:36: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x ^ 2 ≤ x * y ^ 2
+lean/S_full.lean:59:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_8"
+lean/S_full.lean:78:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_10"
+lean/S_full.lean:83:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_11"
+lean/S_full.lean:92:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  a
+in the target expression
+  0 = t ^ 2
+
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2
+"MARK_12"
+lean/S_full.lean:96:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+"MARK_13"
+lean/S_full.lean:101:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ False
+"MARK_14"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:110:45: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ (a * 2 - 1) ^ 2 = 1 + (a ^ 2 * 4 - a * 4)
+lean/S_full.lean:107:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+h2 : (2 * a - 1) ^ 2 = 4 * a ^ 2 - 4 * a + 1
+⊢ False
+"MARK_15"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:117:45: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ (a * 2 - 1) ^ 2 = 1 + (a ^ 2 * 4 - a * 4)
+lean/S_full.lean:118:2: error: `ring_nf` made no progress on the goal
+"MARK_16"
+lean/S_full.lean:122:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_18"
+lean/S_full.lean:129:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:129:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:127:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_19"
+lean/S_full.lean:135:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:135:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:133:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_20"
+lean/S_full.lean:142:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:142:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:140:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_21"
+lean/S_full.lean:150:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:150:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:148:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_22"
+lean/S_full.lean:159:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:159:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:157:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_23"
+lean/S_full.lean:169:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:169:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:167:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_24"
+lean/S_full.lean:180:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:180:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:178:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_25"
+lean/S_full.lean:192:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:192:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:190:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_26"
+lean/S_full.lean:205:92: error: unexpected token ','; expected '}'
+lean/S_full.lean:205:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:203:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_27"
+lean/S_full.lean:217:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_28"
+lean/S_full.lean:222:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_29"
+lean/S_full.lean:231:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a ^ 0
+in the target expression
+  (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_30"
+lean/S_full.lean:235:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+⊢ False
+"MARK_31"
+lean/S_full.lean:240:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+"MARK_32"
+lean/S_full.lean:246:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ False
+"MARK_33"
+lean/S_full.lean:257:42: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:258:8: error(lean.unknownIdentifier): Unknown identifier `abs_sub_le_of_le_and_le`
+lean/S_full.lean:259:2: error: No goals to be solved
+"MARK_34"
+lean/S_full.lean:268:42: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:269:8: error(lean.unknownIdentifier): Unknown identifier `abs_sub_le_of_le_and_le`
+lean/S_full.lean:270:2: error: No goals to be solved
+"MARK_35"
+lean/S_full.lean:276:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+⊢ 2 ≤ k → x k = 0
+"MARK_37"
+lean/S_full.lean:281:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+⊢ x k = 0
+"MARK_38"
+lean/S_full.lean:287:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+⊢ x k = 0
+"MARK_39"
+lean/S_full.lean:294:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+h3 : 0 ≤ x k ^ 2
+⊢ x k = 0
+"MARK_40"
+lean/S_full.lean:307:27: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+h3 : 0 ≤ x k ^ 2
+⊢ x k ^ 2 = 0
+lean/S_full.lean:308:8: error(lean.unknownIdentifier): Unknown identifier `le_antisym`
+lean/S_full.lean:309:2: error: No goals to be solved
+"MARK_41"
+lean/S_full.lean:325:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+"MARK_43"
+lean/S_full.lean:330:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |0 ^ 2 - 0 ^ 2| ≥ D
+⊢ False
+"MARK_44"
+lean/S_full.lean:336:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : D ≤ 0
+⊢ False
+"MARK_45"
+"MARK_46"
+lean/S_full.lean:351:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+⊢ f a = f b → a = b
+"MARK_47"
+lean/S_full.lean:356:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+⊢ a = b
+"MARK_48"
+lean/S_full.lean:362:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+⊢ a = b
+"MARK_49"
+lean/S_full.lean:369:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_50"
+lean/S_full.lean:382:4: error: unexpected identifier; expected '['
+lean/S_full.lean:377:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_51"
+lean/S_full.lean:391:4: error: unexpected identifier; expected '['
+lean/S_full.lean:386:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_52"
+lean/S_full.lean:401:4: error: unexpected identifier; expected '['
+lean/S_full.lean:396:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_53"
+lean/S_full.lean:412:4: error: unexpected identifier; expected '['
+lean/S_full.lean:407:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_54"
+lean/S_full.lean:424:4: error: unexpected identifier; expected '['
+lean/S_full.lean:419:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_55"
+lean/S_full.lean:432:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+⊢ 1 ≤ n → a n = n + 1
+"MARK_57"
+lean/S_full.lean:437:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+⊢ a n = n + 1
+"MARK_58"
+lean/S_full.lean:443:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_60"
+lean/S_full.lean:450:3: error: unknown tactic
+lean/S_full.lean:448:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_61"
+lean/S_full.lean:456:3: error: unknown tactic
+lean/S_full.lean:454:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_62"
+lean/S_full.lean:463:3: error: unknown tactic
+lean/S_full.lean:461:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_63"
+lean/S_full.lean:471:3: error: unknown tactic
+lean/S_full.lean:469:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_64"
+lean/S_full.lean:480:3: error: unknown tactic
+lean/S_full.lean:478:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_65"
+lean/S_full.lean:490:3: error: unknown tactic
+lean/S_full.lean:488:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_66"
+lean/S_full.lean:501:3: error: unknown tactic
+lean/S_full.lean:499:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_67"
+lean/S_full.lean:513:3: error: unknown tactic
+lean/S_full.lean:511:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_68"
+lean/S_full.lean:526:3: error: unknown tactic
+lean/S_full.lean:524:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_69"
+lean/S_full.lean:538:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ (6 * q.factorial - 1) % q = 0
+"MARK_70"
+lean/S_full.lean:545:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:543:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:545:56: error: unexpected token ','; expected command
+"MARK_71"
+lean/S_full.lean:557:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:555:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:557:56: error: unexpected token ','; expected command
+"MARK_72"
+lean/S_full.lean:570:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:568:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:570:56: error: unexpected token ','; expected command
+"MARK_73"
+lean/S_full.lean:584:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:582:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:584:56: error: unexpected token ','; expected command
+"MARK_74"
+lean/S_full.lean:599:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:597:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:599:56: error: unexpected token ','; expected command
+"MARK_75"
+lean/S_full.lean:615:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:613:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:615:56: error: unexpected token ','; expected command
+"MARK_76"
+lean/S_full.lean:632:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:630:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:632:56: error: unexpected token ','; expected command
+"MARK_77"
+lean/S_full.lean:650:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/S_full.lean:648:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/S_full.lean:650:56: error: unexpected token ','; expected command
+"MARK_78"
+lean/S_full.lean:667:17: warning: Variable name `hθ` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+"MARK_80"
+lean/S_full.lean:673:35: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  Membership ?m.143 (Sort ?u.86)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:672:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h0 : ∃ s, Infinite s ∧ ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h0 : ¬∃ s, Infinite s ∧ ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_81"
+lean/S_full.lean:678:35: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  Membership ?m.143 (Sort ?u.86)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:677:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+s : Prop
+hs_infinite : Infinite s
+hs_bound : ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h0 : ¬∃ s, Infinite s ∧ ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_82"
+lean/S_full.lean:684:35: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  Membership ?m.143 (Sort ?u.86)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:686:2: error: Tactic `left` failed: left tactic works for inductive types with exactly 2 constructors
+
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+s : Prop
+hs_infinite : Infinite s
+hs_bound : ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_83"
+lean/S_full.lean:691:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/S_full.lean:692:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_84"
+lean/S_full.lean:699:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/S_full.lean:700:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_85"
+lean/S_full.lean:707:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ m % 3 = 0
+"MARK_87"
+lean/S_full.lean:712:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_88"
+lean/S_full.lean:718:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_89"
+lean/S_full.lean:725:77: error: unsolved goals
+case pos
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+h_mod : (2 * k + 1) % 3 = 0
+⊢ (2 * k + 1) % 3 = 0
+
+case neg
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+h_mod : ¬(2 * k + 1) % 3 = 0
+⊢ (2 * k + 1) % 3 = 0
+"MARK_90"
+lean/S_full.lean:733:77: error: unsolved goals
+case neg
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+h_mod : ¬(2 * k + 1) % 3 = 0
+⊢ (2 * k + 1) % 3 = 0
+"MARK_91"
+lean/S_full.lean:748:14: error: Application type mismatch: The argument
+  rfl
+has type
+  ?m.84 = ?m.84
+but is expected to have type
+  (2 * k + 1) % 3 = 0
+in the application
+  h_mod rfl
+"MARK_92"
+lean/S_full.lean:752:102: error: unsolved goals
+h : ∃ x y z, x ≠ y ∧ y ≠ z ∧ z ≠ x ∧ x ^ 2 + y ^ 2 + z ^ 2 = 3 ∧ x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_93"
+lean/S_full.lean:757:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_94"
+lean/S_full.lean:763:102: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_95"
+lean/S_full.lean:770:102: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 : ℝ
+⊢ False
+"MARK_96"
+lean/S_full.lean:778:102: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ False
+"MARK_97"
+lean/S_full.lean:793:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/S_full.lean:794:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_98"
+lean/S_full.lean:808:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/S_full.lean:809:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_99"
+lean/S_full.lean:824:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/S_full.lean:825:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_100"
+lean/S_full.lean:841:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/S_full.lean:842:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_101"
+lean/S_full.lean:859:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/S_full.lean:860:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_102"
+lean/S_full.lean:872:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : x ^ 2 + y ^ 2 + z ^ 2 - (x ^ 2 + y ^ 2 + z ^ 2) ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_103"
+lean/S_full.lean:877:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_104"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:883:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/S_full.lean:886:7: error: unexpected token 'at'; expected command
+"MARK_105"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:890:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/S_full.lean:893:7: error: unexpected token 'at'; expected command
+"MARK_106"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:898:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/S_full.lean:901:7: error: unexpected token 'at'; expected command
+"MARK_107"
+lean/S_full.lean:908:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/S_full.lean:909:51: error: `simp` made no progress
+lean/S_full.lean:911:56: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+lean/S_full.lean:915:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+⊢ False
+failed
+"MARK_109"
+lean/S_full.lean:920:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/S_full.lean:921:51: error: `simp` made no progress
+lean/S_full.lean:923:56: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+lean/S_full.lean:927:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+⊢ False
+failed
+"MARK_110"
+lean/S_full.lean:932:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_112"
+lean/S_full.lean:937:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2 ↔ (0 - 1) * (24 - 0) = (t / 0) ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_113"
+lean/S_full.lean:943:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:946:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_114"
+lean/S_full.lean:954:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:954:11: error: No goals to be solved
+lean/S_full.lean:950:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:953:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_115"
+lean/S_full.lean:962:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:962:11: error: No goals to be solved
+lean/S_full.lean:963:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:963:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:958:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:961:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_116"
+lean/S_full.lean:971:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:971:11: error: No goals to be solved
+lean/S_full.lean:972:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:972:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:967:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:970:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_117"
+lean/S_full.lean:981:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:981:11: error: No goals to be solved
+lean/S_full.lean:982:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:982:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:977:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:980:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_118"
+lean/S_full.lean:992:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:992:11: error: No goals to be solved
+lean/S_full.lean:993:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:993:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:988:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:991:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_119"
+lean/S_full.lean:1004:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:1004:11: error: No goals to be solved
+lean/S_full.lean:1005:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:1005:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:1000:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:1003:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_120"
+lean/S_full.lean:1017:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:1017:11: error: No goals to be solved
+lean/S_full.lean:1018:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:1018:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/S_full.lean:1013:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:1016:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_121"
+lean/S_full.lean:1027:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+h_exists : ∃ k, k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+"MARK_122"
+lean/S_full.lean:1032:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+h_k : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+"MARK_123"
+lean/S_full.lean:1041:69: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+h_k : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ (2 * a - 2) ^ 2 < 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+lean/S_full.lean:1042:2: error: `ring_nf` made no progress on the goal
+"MARK_124"
+lean/S_full.lean:1047:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+⊢ False
+"MARK_126"
+lean/S_full.lean:1052:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+⊢ False
+"MARK_127"
+lean/S_full.lean:1058:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+"MARK_128"
+lean/S_full.lean:1065:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+"MARK_129"
+lean/S_full.lean:1073:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1078:19: error: unexpected token ','; expected command
+"MARK_130"
+lean/S_full.lean:1082:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1087:19: error: unexpected token ','; expected command
+"MARK_131"
+lean/S_full.lean:1092:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1097:19: error: unexpected token ','; expected command
+"MARK_132"
+lean/S_full.lean:1103:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1108:19: error: unexpected token ','; expected command
+"MARK_133"
+lean/S_full.lean:1115:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1120:19: error: unexpected token ','; expected command
+"MARK_134"
+lean/S_full.lean:1128:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/S_full.lean:1133:19: error: unexpected token ','; expected command
+"MARK_135"
+lean/S_full.lean:1143:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_136"
+lean/S_full.lean:1148:152: error: unsolved goals
+case pos
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 : x n ^ 2 ≤ D / (↑n + 1)
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 : ¬x n ^ 2 ≤ D / (↑n + 1)
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_137"
+lean/S_full.lean:1154:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 : ¬x n ^ 2 ≤ D / (↑n + 1)
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_138"
+lean/S_full.lean:1161:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+⊢ False
+"MARK_139"
+lean/S_full.lean:1169:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+⊢ False
+"MARK_140"
+lean/S_full.lean:1178:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+⊢ False
+"MARK_141"
+lean/S_full.lean:1188:152: error: unsolved goals
+case pos
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+"MARK_142"
+lean/S_full.lean:1207:14: error: Tactic `contradiction` failed
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+lean/S_full.lean:1199:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+"MARK_143"
+lean/S_full.lean:1219:14: error: Tactic `contradiction` failed
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+lean/S_full.lean:1211:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+h6 : ¬False
+⊢ False
+"MARK_144"
+lean/S_full.lean:1232:14: error: Tactic `contradiction` failed
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+lean/S_full.lean:1224:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+h6 : ¬False
+hlt : D / (↑(n + 1) + 1) < x (n + 1) ^ 2
+⊢ False
+"MARK_145"
+lean/S_full.lean:1238:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+⊢ False
+"MARK_146"
+lean/S_full.lean:1243:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1245:44: error: unexpected token ','; expected command
+"MARK_147"
+lean/S_full.lean:1249:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1251:44: error: unexpected token ','; expected command
+"MARK_148"
+lean/S_full.lean:1256:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1258:44: error: unexpected token ','; expected command
+"MARK_149"
+lean/S_full.lean:1264:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1266:44: error: unexpected token ','; expected command
+"MARK_150"
+lean/S_full.lean:1273:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1275:44: error: unexpected token ','; expected command
+"MARK_151"
+lean/S_full.lean:1283:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1285:44: error: unexpected token ','; expected command
+"MARK_152"
+lean/S_full.lean:1336:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1338:44: error: unexpected token ','; expected command
+"MARK_153"
+lean/S_full.lean:1390:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1392:44: error: unexpected token ','; expected command
+"MARK_154"
+lean/S_full.lean:1445:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/S_full.lean:1447:44: error: unexpected token ','; expected command
+"MARK_155"
+lean/S_full.lean:1501:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+⊢ 2 ≤ k → x k = 0
+"MARK_156"
+lean/S_full.lean:1506:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+⊢ x k = 0
+"MARK_157"
+lean/S_full.lean:1512:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+⊢ x k = 0
+"MARK_158"
+lean/S_full.lean:1519:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+⊢ x k = 0
+"MARK_159"
+lean/S_full.lean:1532:86: error: unexpected token ','; expected '}'
+lean/S_full.lean:1532:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+lean/S_full.lean:1527:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_160"
+lean/S_full.lean:1541:86: error: unexpected token ','; expected '}'
+lean/S_full.lean:1541:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+lean/S_full.lean:1536:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_161"
+lean/S_full.lean:1546:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+⊢ False
+"MARK_163"
+lean/S_full.lean:1551:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+h2 : x 0 = 0
+⊢ False
+lean/S_full.lean:1553:20: error: unexpected token ','; expected command
+"MARK_164"
+lean/S_full.lean:1557:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+⊢ f n = f m → n = m
+"MARK_166"
+lean/S_full.lean:1562:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+⊢ n = m
+"MARK_167"
+lean/S_full.lean:1568:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_168"
+lean/S_full.lean:1579:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1575:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_169"
+lean/S_full.lean:1587:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1583:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_170"
+lean/S_full.lean:1596:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1592:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_171"
+lean/S_full.lean:1606:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1602:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_172"
+lean/S_full.lean:1617:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1613:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_173"
+lean/S_full.lean:1629:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1625:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_174"
+lean/S_full.lean:1642:4: error: unexpected identifier; expected '['
+lean/S_full.lean:1638:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_175"
+lean/S_full.lean:1652:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+⊢ 1 ≤ n → a n = n + 1
+"MARK_176"
+lean/S_full.lean:1657:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+⊢ a n = n + 1
+"MARK_177"
+lean/S_full.lean:1663:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+⊢ a n = n + 1
+"MARK_178"
+lean/S_full.lean:1670:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+⊢ False
+"MARK_179"
+lean/S_full.lean:1678:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ False
+"MARK_180"
+lean/S_full.lean:1693:61: error: unexpected token ','; expected '}'
+lean/S_full.lean:1693:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/S_full.lean:1687:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_181"
+lean/S_full.lean:1703:61: error: unexpected token ','; expected '}'
+lean/S_full.lean:1703:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/S_full.lean:1697:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_182"
+lean/S_full.lean:1714:61: error: unexpected token ','; expected '}'
+lean/S_full.lean:1714:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/S_full.lean:1708:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_183"
+lean/S_full.lean:1726:61: error: unexpected token ','; expected '}'
+lean/S_full.lean:1726:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/S_full.lean:1720:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_184"
+lean/S_full.lean:1733:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_186"
+lean/S_full.lean:1740:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1740:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1738:173: error: unsolved goals
+case refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1740:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_187"
+lean/S_full.lean:1746:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1746:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1747:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1747:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1744:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1746:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1747:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1747:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1748:0: error: unexpected identifier; expected command
+"MARK_188"
+lean/S_full.lean:1754:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1754:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1755:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1755:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1752:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1754:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1755:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1755:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1756:0: error: unexpected identifier; expected command
+"MARK_189"
+lean/S_full.lean:1774:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1774:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1775:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1775:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1772:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1774:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1775:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1775:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1776:0: error: unexpected identifier; expected command
+"MARK_190"
+lean/S_full.lean:1796:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1796:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1797:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1797:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1794:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1796:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1797:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1797:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1798:0: error: unexpected identifier; expected command
+"MARK_191"
+lean/S_full.lean:1820:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1820:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1821:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1821:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1818:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1820:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1821:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1821:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1822:0: error: unexpected identifier; expected command
+"MARK_192"
+lean/S_full.lean:1846:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1846:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1847:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1847:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1844:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1846:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1847:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1847:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1848:0: error: unexpected identifier; expected command
+"MARK_193"
+lean/S_full.lean:1874:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1874:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1875:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1875:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1872:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1874:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1875:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1875:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1876:0: error: unexpected identifier; expected command
+"MARK_194"
+lean/S_full.lean:1904:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1904:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/S_full.lean:1905:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:1905:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/S_full.lean:1902:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/S_full.lean:1904:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1905:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1905:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/S_full.lean:1906:0: error: unexpected identifier; expected command
+"MARK_195"
+lean/S_full.lean:1934:81: error: unsolved goals
+case h₁
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 6 * q.factorial
+
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_196"
+lean/S_full.lean:1941:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:1939:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_197"
+lean/S_full.lean:1947:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:1945:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_198"
+lean/S_full.lean:1954:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:1952:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_199"
+lean/S_full.lean:1960:17: warning: Variable name `hθ` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+"MARK_201"
+lean/S_full.lean:1965:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ (Infinite ↑{i | y i ≤ 777 ^ 2 / 2} ∧ ∀ i ∈ {i | y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | y i ≤ 777 ^ 2 / 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_202"
+lean/S_full.lean:1970:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ Infinite ↑{i | y i ≤ 777 ^ 2 / 2} ∧ ∀ i ∈ {i | y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+"MARK_203"
+lean/S_full.lean:1976:162: error: unsolved goals
+case h.left
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ Infinite ↑{i | y i ≤ 777 ^ 2 / 2}
+
+case h.right
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ ∀ i ∈ {i | y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+"MARK_204"
+lean/S_full.lean:1987:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:1983:162: error: unsolved goals
+case h.right
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ ∀ i ∈ {i | y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+"MARK_205"
+lean/S_full.lean:1995:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:1991:162: error: unsolved goals
+case h.right
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_206"
+lean/S_full.lean:2004:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:2000:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/S_full.lean:2007:0: error: unexpected identifier; expected command
+"MARK_207"
+lean/S_full.lean:2015:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:2011:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/S_full.lean:2018:0: error: unexpected identifier; expected command
+"MARK_208"
+lean/S_full.lean:2027:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:2023:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/S_full.lean:2030:0: error: unexpected identifier; expected command
+"MARK_209"
+lean/S_full.lean:2040:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:2036:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/S_full.lean:2043:0: error: unexpected identifier; expected command
+"MARK_210"
+lean/S_full.lean:2054:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/S_full.lean:2050:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/S_full.lean:2057:0: error: unexpected identifier; expected command
+"MARK_211"
+lean/S_full.lean:2066:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/S_full.lean:2067:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_212"
+lean/S_full.lean:2074:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/S_full.lean:2075:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_213"
+lean/S_full.lean:2082:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ m % 3 = 0
+"MARK_215"
+lean/S_full.lean:2087:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_216"
+lean/S_full.lean:2093:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_217"
+lean/S_full.lean:2104:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:2100:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_218"
+lean/S_full.lean:2112:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:2108:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_219"
+lean/S_full.lean:2124:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:2120:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_220"
+lean/S_full.lean:2137:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:2133:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_221"
+lean/S_full.lean:2147:102: error: unsolved goals
+h : ∃ x y z, x ≠ y ∧ y ≠ z ∧ z ≠ x ∧ x ^ 2 + y ^ 2 + z ^ 2 = 3 ∧ x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_223"
+lean/S_full.lean:2152:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_224"
+lean/S_full.lean:2161:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+lean/S_full.lean:2158:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+⊢ False
+"MARK_225"
+lean/S_full.lean:2168:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+lean/S_full.lean:2165:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+h4 : x ^ 2 - y ^ 2 = (x + y) * (x - y)
+⊢ False
+lean/S_full.lean:2169:26: error: unexpected token ','; expected command
+"MARK_226"
+lean/S_full.lean:2173:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_228"
+lean/S_full.lean:2180:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2178:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_229"
+lean/S_full.lean:2186:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2184:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_230"
+lean/S_full.lean:2193:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2191:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_231"
+lean/S_full.lean:2201:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2199:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_232"
+lean/S_full.lean:2210:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2208:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_233"
+lean/S_full.lean:2220:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2218:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_234"
+lean/S_full.lean:2231:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2229:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_235"
+lean/S_full.lean:2243:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2241:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_236"
+lean/S_full.lean:2256:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2254:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_237"
+lean/S_full.lean:2269:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2271:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_238"
+lean/S_full.lean:2277:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2279:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_239"
+lean/S_full.lean:2286:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2288:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_240"
+lean/S_full.lean:2296:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2298:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_241"
+lean/S_full.lean:2307:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2309:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_242"
+lean/S_full.lean:2319:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2321:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_243"
+lean/S_full.lean:2332:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2334:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_244"
+lean/S_full.lean:2346:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2348:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_245"
+lean/S_full.lean:2361:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2363:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_246"
+lean/S_full.lean:2377:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/S_full.lean:2379:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_247"
+lean/S_full.lean:2393:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_248"
+lean/S_full.lean:2398:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2 ↔ (0 - 1) * (24 - 0) = (t / 0) ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+"MARK_249"
+lean/S_full.lean:2404:93: error: unsolved goals
+case pos
+a t : ℕ
+h : a = 0
+⊢ 0 = t ^ 2
+
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:2407:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_250"
+lean/S_full.lean:2415:6: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:2411:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/S_full.lean:2414:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_251"
+lean/S_full.lean:2423:6: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/S_full.lean:2424:6: error: Invalid rewrite argument: The pattern to be substituted is a metavariable (`?m.91`) in this equality
+  ?m.91 = ?m.90 * (?m.91 / ?m.90)
+lean/S_full.lean:2422:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_252"
+lean/S_full.lean:2428:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+h_exists : ∃ k, k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+"MARK_253"
+lean/S_full.lean:2433:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+"MARK_254"
+lean/S_full.lean:2439:75: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ False
+"MARK_255"
+lean/S_full.lean:2450:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2451:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2454:0: error: unexpected identifier; expected command
+"MARK_256"
+lean/S_full.lean:2462:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2463:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2466:0: error: unexpected identifier; expected command
+"MARK_257"
+lean/S_full.lean:2475:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2476:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2479:0: error: unexpected identifier; expected command
+"MARK_258"
+lean/S_full.lean:2489:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2490:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2493:0: error: unexpected identifier; expected command
+"MARK_259"
+lean/S_full.lean:2504:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2505:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2508:0: error: unexpected identifier; expected command
+"MARK_260"
+lean/S_full.lean:2520:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2521:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2524:0: error: unexpected identifier; expected command
+"MARK_261"
+lean/S_full.lean:2537:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/S_full.lean:2538:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/S_full.lean:2541:0: error: unexpected identifier; expected command
+"MARK_262"
+lean/S_full.lean:2551:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+⊢ False
+"MARK_263"
+lean/S_full.lean:2556:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+⊢ False
+"MARK_264"
+lean/S_full.lean:2562:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ False
+"MARK_265"
+lean/S_full.lean:2573:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/S_full.lean:2569:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ False
+"MARK_266"
+lean/S_full.lean:2581:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/S_full.lean:2582:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/S_full.lean:2584:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2587:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_267"
+lean/S_full.lean:2596:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/S_full.lean:2597:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/S_full.lean:2599:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2602:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_268"
+lean/S_full.lean:2612:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/S_full.lean:2613:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/S_full.lean:2615:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2618:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_269"
+lean/S_full.lean:2625:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+⊢ 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+"MARK_271"
+lean/S_full.lean:2630:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_272"
+lean/S_full.lean:2636:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_273"
+lean/S_full.lean:2647:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2643:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_274"
+lean/S_full.lean:2655:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2651:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_275"
+lean/S_full.lean:2667:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2663:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_276"
+lean/S_full.lean:2676:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+⊢ False
+"MARK_278"
+lean/S_full.lean:2681:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ^ 2 = 777 * 777
+⊢ False
+"MARK_279"
+lean/S_full.lean:2687:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+⊢ False
+"MARK_280"
+lean/S_full.lean:2694:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+⊢ False
+"MARK_281"
+lean/S_full.lean:2702:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' : 777 ^ 2 = 777 * 777
+⊢ False
+"MARK_282"
+lean/S_full.lean:2711:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ False
+"MARK_283"
+lean/S_full.lean:2728:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2729:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_284"
+lean/S_full.lean:2743:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2744:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_285"
+lean/S_full.lean:2759:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2760:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_286"
+lean/S_full.lean:2776:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/S_full.lean:2777:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_287"
+lean/S_full.lean:2787:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+⊢ 2 ≤ k → x k = 0
+"MARK_288"
+lean/S_full.lean:2792:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+⊢ x k = 0
+"MARK_289"
+lean/S_full.lean:2798:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h3 : x k ^ 2 ≤ D / (↑k + 1)
+⊢ x k = 0
+"MARK_290"
+lean/S_full.lean:2809:21: error(lean.unknownIdentifier): Unknown constant `Nat.lt_of_le_succ`
+lean/S_full.lean:2805:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h3 : x k ^ 2 ≤ D / (↑k + 1)
+h4 : (↑1 + ↑k) * |x k ^ 2 - x 1 ^ 2| ≥ D
+⊢ x k = 0
+"MARK_291"
+lean/S_full.lean:2813:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+"MARK_293"
+lean/S_full.lean:2818:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |0 ^ 2 - 0 ^ 2| ≥ D
+⊢ False
+"MARK_294"
+lean/S_full.lean:2824:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : D ≤ 0
+⊢ False
+"MARK_295"
+"MARK_296"
+lean/S_full.lean:2839:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+⊢ f n = f m → n = m
+"MARK_297"
+lean/S_full.lean:2844:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+⊢ n = m
+"MARK_298"
+lean/S_full.lean:2850:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_299"
+lean/S_full.lean:2861:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2857:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_300"
+lean/S_full.lean:2869:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2865:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_301"
+lean/S_full.lean:2878:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2874:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_302"
+lean/S_full.lean:2888:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2884:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_303"
+lean/S_full.lean:2899:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2895:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_304"
+lean/S_full.lean:2911:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2907:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_305"
+lean/S_full.lean:2924:4: error: unexpected identifier; expected '['
+lean/S_full.lean:2920:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_306"
+lean/S_full.lean:2934:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+⊢ 1 ≤ n → a n = n + 1
+"MARK_307"
+lean/S_full.lean:2939:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+⊢ a n = n + 1
+"MARK_308"
+lean/S_full.lean:2950:14: error: unexpected token '#eval'; expected '?', '_', '{' or tactic
+lean/S_full.lean:2950:12: error: unsolved goals
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+⊢ a (n + 1) = n + 1 + 1
+"MARK_309"
+lean/S_full.lean:2960:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/S_full.lean:2959:12: error: unsolved goals
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+⊢ a (n + 1) = n + 1 + 1
+"MARK_310"
+lean/S_full.lean:2970:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/S_full.lean:2969:12: error: unsolved goals
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (a n)) = a (n + 1) + 1
+⊢ a (n + 1) = n + 1 + 1
+"MARK_311"
+lean/S_full.lean:2981:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/S_full.lean:2980:12: error: unsolved goals
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (a n)) = a (n + 1) + 1
+h4 : a n = n + 1
+⊢ a (n + 1) = n + 1 + 1
+"MARK_312"
+lean/S_full.lean:2993:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/S_full.lean:2992:12: error: unsolved goals
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (n + 1)) = a (n + 1) + 1
+h4 : a n = n + 1
+⊢ a (n + 1) = n + 1 + 1
+"MARK_313"
+lean/S_full.lean:3006:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/S_full.lean:3010:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  a n
+in the target expression
+  a (a (n + 1)) = a (n + 1) + 1
+
+case succ
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (n + 1)) = a (n + 1) + 1
+h4 : a n = n + 1
+⊢ a (n + 1) = n + 1 + 1
+"MARK_314"
+lean/S_full.lean:3014:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_315"
+lean/S_full.lean:3021:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:3021:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ ∑ i, (fun x => -1) i * r ^ i = 0
+lean/S_full.lean:3022:2: error: `simp` made no progress
+lean/S_full.lean:3024:0: error: unexpected identifier; expected command
+"MARK_316"
+lean/S_full.lean:3030:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/S_full.lean:3030:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ ∑ i, (fun x => -1) i * r ^ i = 0
+lean/S_full.lean:3031:2: error: `simp` made no progress
+lean/S_full.lean:3033:0: error: unexpected identifier; expected command
+"MARK_317"
+lean/S_full.lean:3039:81: error: unsolved goals
+case h₁
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 6 * q.factorial
+
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_319"
+lean/S_full.lean:3046:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:3044:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_320"
+lean/S_full.lean:3052:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:3050:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_321"
+lean/S_full.lean:3059:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:3057:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_322"
+lean/S_full.lean:3067:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/S_full.lean:3070:2: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q = 1
+"MARK_323"
+lean/S_full.lean:3074:17: warning: Variable name `hθ` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+"MARK_324"
+lean/S_full.lean:3079:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_325"
+lean/S_full.lean:3084:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2} ∧ ∀ i ∈ {i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_326"
+lean/S_full.lean:3090:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2} ∧ ∀ i ∈ {i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_327"
+lean/S_full.lean:3097:162: error: unsolved goals
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∃ s, (Infinite ↑s ∧ ∀ i ∈ s, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨ ∀ i ∈ s, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_328"
+lean/S_full.lean:3105:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/S_full.lean:3111:0: error: unexpected identifier; expected command
+"MARK_329"
+lean/S_full.lean:3115:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/S_full.lean:3121:0: error: unexpected identifier; expected command
+"MARK_330"
+lean/S_full.lean:3127:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/S_full.lean:3133:0: error: unexpected identifier; expected command
+"MARK_331"
+lean/S_full.lean:3140:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/S_full.lean:3146:0: error: unexpected identifier; expected command
+"MARK_332"
+lean/S_full.lean:3154:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/S_full.lean:3160:0: error: unexpected identifier; expected command
+"MARK_333"
+lean/S_full.lean:3169:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_335"
+lean/S_full.lean:3176:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3174:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_336"
+lean/S_full.lean:3182:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3180:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3183:35: error: unexpected token ','; expected command
+"MARK_337"
+lean/S_full.lean:3190:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3188:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3191:35: error: unexpected token ','; expected command
+"MARK_338"
+lean/S_full.lean:3199:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3197:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3200:35: error: unexpected token ','; expected command
+"MARK_339"
+lean/S_full.lean:3209:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3207:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3210:35: error: unexpected token ','; expected command
+"MARK_340"
+lean/S_full.lean:3225:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3223:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3226:35: error: unexpected token ','; expected command
+"MARK_341"
+lean/S_full.lean:3242:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/S_full.lean:3240:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/S_full.lean:3243:35: error: unexpected token ','; expected command
+"MARK_342"
+lean/S_full.lean:3258:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ m % 3 = 0
+"MARK_344"
+lean/S_full.lean:3263:77: error: unsolved goals
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_345"
+lean/S_full.lean:3269:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_346"
+lean/S_full.lean:3280:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3276:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_347"
+lean/S_full.lean:3288:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3284:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_348"
+lean/S_full.lean:3300:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3296:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_349"
+lean/S_full.lean:3313:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3309:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_350"
+lean/S_full.lean:3327:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3323:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_351"
+lean/S_full.lean:3342:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3338:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_352"
+lean/S_full.lean:3358:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/S_full.lean:3354:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_353"

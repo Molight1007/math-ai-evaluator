@@ -1,0 +1,12 @@
+V_0 rc=1 hard=1 mark=1 | error: unsolved goals
+V_130 rc=1 hard=2 mark=1 | error: unsolved goals
+V_158 rc=1 hard=1 mark=1 | error: unsolved goals
+V_197 rc=1 hard=2 mark=1 | error: Type mismatch
+V_19 rc=1 hard=3 mark=1 | error: unexpected token ','; expected '}'
+V_205 rc=1 hard=2 mark=1 | error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+V_238 rc=1 hard=2 mark=1 | error: unsolved goals
+V_265 rc=1 hard=1 mark=1 | error: unsolved goals
+V_51 rc=1 hard=2 mark=1 | error: unexpected identifier; expected '['
+V_81 rc=1 hard=2 mark=1 | error(lean.synthInstanceFailed): failed to synthesize instance of type class
+V_84 rc=1 hard=2 mark=1 | error: unsolved goals
+V_88 rc=1 hard=1 mark=1 | error: unsolved goals
