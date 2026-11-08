@@ -1,0 +1,4595 @@
+lean/H_nlinarith.lean:5:2: error: linarith failed to find a contradiction
+⊢ False
+failed
+"MARK_0"
+lean/H_nlinarith.lean:11:2: error: linarith failed to find a contradiction
+h : ∃ x y z, x ≠ y ∧ y ≠ z ∧ z ≠ x ∧ x ^ 2 + y ^ 2 + z ^ 2 = 3 ∧ x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_1"
+lean/H_nlinarith.lean:18:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_2"
+lean/H_nlinarith.lean:25:14: error(lean.unknownIdentifier): Unknown identifier `sq_add_sq_add_sq_eq_three_of_cyclic_sum_eq_three`
+lean/H_nlinarith.lean:22:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_3"
+lean/H_nlinarith.lean:33:14: error(lean.unknownIdentifier): Unknown identifier `sq_add_sq_add_sq_eq_three_of_cyclic_sum_eq_three`
+lean/H_nlinarith.lean:30:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+"MARK_4"
+lean/H_nlinarith.lean:40:2: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) < 0
+⊢ False
+failed
+"MARK_5"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:46:2: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : x - x ^ 3 + y - y ^ 3 + z - z ^ 3 < 0
+⊢ False
+failed
+"MARK_6"
+lean/H_nlinarith.lean:51:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_7"
+lean/H_nlinarith.lean:60:5: error: unexpected token '≤'; expected term
+lean/H_nlinarith.lean:56:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/H_nlinarith.lean:58:27: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+lean/H_nlinarith.lean:58:12: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:59:4: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+lean/H_nlinarith.lean:57:36: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x ^ 2 ≤ x * y ^ 2
+lean/H_nlinarith.lean:55:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_8"
+lean/H_nlinarith.lean:79:5: error: unexpected token '≤'; expected term
+lean/H_nlinarith.lean:75:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/H_nlinarith.lean:77:27: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+lean/H_nlinarith.lean:77:12: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:78:4: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+lean/H_nlinarith.lean:76:36: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x ^ 2 ≤ x * y ^ 2
+lean/H_nlinarith.lean:74:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_9"
+lean/H_nlinarith.lean:95:2: error: linarith failed to find a contradiction
+a t : ℕ
+⊢ False
+failed
+"MARK_10"
+lean/H_nlinarith.lean:101:2: error: linarith failed to find a contradiction
+case pos
+a t : ℕ
+h : a = 0
+⊢ False
+failed
+"MARK_11"
+lean/H_nlinarith.lean:108:2: error: linarith failed to find a contradiction
+case pos.h1
+a t : ℕ
+h : a = 0
+a✝ : 0 < t ^ 2
+⊢ False
+failed
+"MARK_12"
+lean/H_nlinarith.lean:113:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+⊢ False
+failed
+"MARK_13"
+lean/H_nlinarith.lean:119:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+failed
+"MARK_14"
+lean/H_nlinarith.lean:126:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ False
+failed
+"MARK_15"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:133:45: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ (a * 2 - 1) ^ 2 = 1 + (a ^ 2 * 4 - a * 4)
+lean/H_nlinarith.lean:134:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+h2 : (2 * a - 1) ^ 2 = 4 * a ^ 2 - 4 * a + 1
+⊢ False
+failed
+"MARK_16"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:141:45: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : (2 * a + 1) ^ 2 = 4 * a ^ 2 + 4 * a + 1
+⊢ (a * 2 - 1) ^ 2 = 1 + (a ^ 2 * 4 - a * 4)
+lean/H_nlinarith.lean:142:2: error: `ring_nf` made no progress on the goal
+"MARK_17"
+lean/H_nlinarith.lean:148:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+a✝ : x 1 < 0
+⊢ False
+failed
+"MARK_18"
+lean/H_nlinarith.lean:154:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+a✝ : x 1 < 0
+⊢ False
+failed
+"MARK_19"
+lean/H_nlinarith.lean:160:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:160:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:158:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_20"
+lean/H_nlinarith.lean:167:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:167:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:165:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_21"
+lean/H_nlinarith.lean:175:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:175:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:173:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_22"
+lean/H_nlinarith.lean:184:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:184:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:182:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_23"
+lean/H_nlinarith.lean:194:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:194:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:192:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_24"
+lean/H_nlinarith.lean:205:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:205:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:203:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_25"
+lean/H_nlinarith.lean:217:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:217:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:215:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_26"
+lean/H_nlinarith.lean:230:92: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:230:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:228:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_27"
+lean/H_nlinarith.lean:243:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+⊢ False
+failed
+"MARK_28"
+lean/H_nlinarith.lean:249:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_29"
+lean/H_nlinarith.lean:256:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_30"
+lean/H_nlinarith.lean:261:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+a✝ : 777 ^ 2 < D
+⊢ False
+failed
+"MARK_31"
+lean/H_nlinarith.lean:267:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_32"
+lean/H_nlinarith.lean:274:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+failed
+"MARK_33"
+lean/H_nlinarith.lean:282:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_34"
+lean/H_nlinarith.lean:290:42: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:291:8: error(lean.unknownIdentifier): Unknown identifier `abs_sub_le_of_le_and_le`
+lean/H_nlinarith.lean:292:2: error: No goals to be solved
+"MARK_35"
+lean/H_nlinarith.lean:302:42: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+h : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:303:8: error(lean.unknownIdentifier): Unknown identifier `abs_sub_le_of_le_and_le`
+lean/H_nlinarith.lean:304:2: error: No goals to be solved
+"MARK_36"
+lean/H_nlinarith.lean:312:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+⊢ False
+failed
+"MARK_37"
+lean/H_nlinarith.lean:318:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+⊢ False
+failed
+"MARK_38"
+lean/H_nlinarith.lean:325:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_39"
+lean/H_nlinarith.lean:333:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_40"
+lean/H_nlinarith.lean:342:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+h3 : 0 ≤ x k ^ 2
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_41"
+lean/H_nlinarith.lean:351:27: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h1 : x k ^ 2 ≤ D / (↑k + 1)
+h3 : 0 ≤ x k ^ 2
+⊢ x k ^ 2 = 0
+lean/H_nlinarith.lean:352:8: error(lean.unknownIdentifier): Unknown identifier `le_antisym`
+lean/H_nlinarith.lean:353:2: error: No goals to be solved
+"MARK_42"
+lean/H_nlinarith.lean:371:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+⊢ False
+failed
+"MARK_43"
+lean/H_nlinarith.lean:377:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_44"
+lean/H_nlinarith.lean:384:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |0 ^ 2 - 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_45"
+"MARK_46"
+lean/H_nlinarith.lean:397:2: error: linarith failed to find a contradiction
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+⊢ False
+failed
+"MARK_47"
+lean/H_nlinarith.lean:403:2: error: linarith failed to find a contradiction
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+⊢ False
+failed
+"MARK_48"
+lean/H_nlinarith.lean:410:2: error: linarith failed to find a contradiction
+case h1
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+a✝ : a < b
+⊢ False
+failed
+"MARK_49"
+lean/H_nlinarith.lean:418:2: error: linarith failed to find a contradiction
+case h1
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+a✝ : a < b
+⊢ False
+failed
+"MARK_50"
+lean/H_nlinarith.lean:427:2: error: linarith failed to find a contradiction
+case h1
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+a✝ : a < b
+⊢ False
+failed
+"MARK_51"
+lean/H_nlinarith.lean:436:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:431:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_52"
+lean/H_nlinarith.lean:446:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:441:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_53"
+lean/H_nlinarith.lean:457:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:452:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_54"
+lean/H_nlinarith.lean:469:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:464:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_55"
+lean/H_nlinarith.lean:482:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:477:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_56"
+lean/H_nlinarith.lean:492:2: error: linarith failed to find a contradiction
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+⊢ False
+failed
+"MARK_57"
+lean/H_nlinarith.lean:498:2: error: linarith failed to find a contradiction
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+⊢ False
+failed
+"MARK_58"
+lean/H_nlinarith.lean:505:2: error: linarith failed to find a contradiction
+case h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+a✝ : a n < n + 1
+⊢ False
+failed
+"MARK_59"
+lean/H_nlinarith.lean:510:2: error: linarith failed to find a contradiction
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+⊢ False
+failed
+"MARK_60"
+lean/H_nlinarith.lean:516:2: error: linarith failed to find a contradiction
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ False
+failed
+"MARK_61"
+lean/H_nlinarith.lean:522:3: error: unknown tactic
+lean/H_nlinarith.lean:520:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_62"
+lean/H_nlinarith.lean:529:3: error: unknown tactic
+lean/H_nlinarith.lean:527:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_63"
+lean/H_nlinarith.lean:537:3: error: unknown tactic
+lean/H_nlinarith.lean:535:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_64"
+lean/H_nlinarith.lean:546:3: error: unknown tactic
+lean/H_nlinarith.lean:544:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_65"
+lean/H_nlinarith.lean:556:3: error: unknown tactic
+lean/H_nlinarith.lean:554:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_66"
+lean/H_nlinarith.lean:567:3: error: unknown tactic
+lean/H_nlinarith.lean:565:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_67"
+lean/H_nlinarith.lean:579:3: error: unknown tactic
+lean/H_nlinarith.lean:577:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_68"
+lean/H_nlinarith.lean:592:3: error: unknown tactic
+lean/H_nlinarith.lean:590:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_69"
+lean/H_nlinarith.lean:605:2: error: linarith failed to find a contradiction
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ False
+failed
+"MARK_70"
+lean/H_nlinarith.lean:611:2: error: linarith failed to find a contradiction
+case h1
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+a✝ : (6 * q.factorial - 1) % q < 0
+⊢ False
+failed
+"MARK_71"
+lean/H_nlinarith.lean:617:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:615:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:617:56: error: unexpected token ','; expected command
+"MARK_72"
+lean/H_nlinarith.lean:630:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:628:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:630:56: error: unexpected token ','; expected command
+"MARK_73"
+lean/H_nlinarith.lean:644:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:642:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:644:56: error: unexpected token ','; expected command
+"MARK_74"
+lean/H_nlinarith.lean:659:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:657:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:659:56: error: unexpected token ','; expected command
+"MARK_75"
+lean/H_nlinarith.lean:675:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:673:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:675:56: error: unexpected token ','; expected command
+"MARK_76"
+lean/H_nlinarith.lean:692:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:690:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:692:56: error: unexpected token ','; expected command
+"MARK_77"
+lean/H_nlinarith.lean:710:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:708:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:710:56: error: unexpected token ','; expected command
+"MARK_78"
+lean/H_nlinarith.lean:729:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+lean/H_nlinarith.lean:727:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+lean/H_nlinarith.lean:729:56: error: unexpected token ','; expected command
+"MARK_79"
+lean/H_nlinarith.lean:748:2: error: linarith failed to find a contradiction
+θ : ℕ
+hθ : 0 < θ ∧ θ < 90
+⊢ False
+failed
+"MARK_80"
+lean/H_nlinarith.lean:753:2: error: linarith failed to find a contradiction
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_81"
+lean/H_nlinarith.lean:758:35: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  Membership ?m.143 (Sort ?u.86)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:759:2: error: linarith failed to find a contradiction
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h0 : ∃ s, Infinite s ∧ ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ False
+failed
+"MARK_82"
+lean/H_nlinarith.lean:764:35: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  Membership ?m.143 (Sort ?u.86)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:766:2: error: linarith failed to find a contradiction
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+s : Prop
+hs_infinite : Infinite s
+hs_bound : ∀ (i : ℕ), sorry → 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2
+⊢ False
+failed
+"MARK_83"
+lean/H_nlinarith.lean:771:2: error: linarith failed to find a contradiction
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+a✝ : 777 ^ 2 / 2 < D
+⊢ False
+failed
+"MARK_84"
+lean/H_nlinarith.lean:776:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/H_nlinarith.lean:777:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_85"
+lean/H_nlinarith.lean:785:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/H_nlinarith.lean:786:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_86"
+lean/H_nlinarith.lean:795:2: error: linarith failed to find a contradiction
+case h1
+m : ℕ
+ho : Odd m
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+a✝ : m % 3 < 0
+⊢ False
+failed
+"MARK_87"
+lean/H_nlinarith.lean:801:2: error: linarith failed to find a contradiction
+case h1
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+a✝ : m % 3 < 0
+⊢ False
+failed
+"MARK_88"
+lean/H_nlinarith.lean:808:2: error: linarith failed to find a contradiction
+case h1
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+a✝ : (2 * k + 1) % 3 < 0
+⊢ False
+failed
+"MARK_89"
+lean/H_nlinarith.lean:816:2: error: linarith failed to find a contradiction
+case h1
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+a✝ : (2 * k + 1) % 3 < 0
+⊢ False
+failed
+"MARK_90"
+lean/H_nlinarith.lean:820:77: error: unsolved goals
+case neg
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+h_mod : ¬(2 * k + 1) % 3 = 0
+⊢ (2 * k + 1) % 3 = 0
+"MARK_91"
+lean/H_nlinarith.lean:835:2: error: linarith failed to find a contradiction
+case neg.h1
+m : ℕ
+hd : (2 ^ (2 * m - 1) + 1) % m = 0
+k : ℕ
+hk : m = 2 * k + 1
+h_mod : ¬(2 * k + 1) % 3 = 0
+a✝ : (2 * k + 1) % 3 < 0
+⊢ False
+failed
+"MARK_92"
+lean/H_nlinarith.lean:842:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_93"
+lean/H_nlinarith.lean:850:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_94"
+lean/H_nlinarith.lean:859:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 : ℝ
+⊢ False
+failed
+"MARK_95"
+lean/H_nlinarith.lean:869:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ False
+failed
+"MARK_96"
+lean/H_nlinarith.lean:879:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/H_nlinarith.lean:880:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_97"
+lean/H_nlinarith.lean:895:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/H_nlinarith.lean:896:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_98"
+lean/H_nlinarith.lean:912:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/H_nlinarith.lean:913:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_99"
+lean/H_nlinarith.lean:930:47: error: unsolved goals
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+⊢ (x - y) * (y - z) * (z - x) ≠ 0
+lean/H_nlinarith.lean:931:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x y z : ℝ
+hxy : ¬x = y
+hyz : ¬y = z
+hzx : ¬z = x
+hx2y2z2 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+hxyz3 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h1 h2 : ℝ
+h3 : (x - y) * (y - z) * (z - x) ≠ 0
+⊢ False
+"MARK_100"
+lean/H_nlinarith.lean:945:2: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : x ^ 2 + y ^ 2 + z ^ 2 - (x ^ 2 + y ^ 2 + z ^ 2) ^ 3 = 3 - 3 ^ 3
+a✝ : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) < 0
+⊢ False
+failed
+"MARK_101"
+lean/H_nlinarith.lean:952:2: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+a✝ : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) < 0
+⊢ False
+failed
+"MARK_102"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:956:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/H_nlinarith.lean:959:7: error: unexpected token 'at'; expected command
+"MARK_103"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:964:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/H_nlinarith.lean:967:7: error: unexpected token 'at'; expected command
+"MARK_104"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:973:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+lean/H_nlinarith.lean:976:7: error: unexpected token 'at'; expected command
+"MARK_105"
+lean/H_nlinarith.lean:984:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/H_nlinarith.lean:985:51: error: `simp` made no progress
+lean/H_nlinarith.lean:987:56: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+lean/H_nlinarith.lean:991:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+⊢ False
+failed
+"MARK_106"
+lean/H_nlinarith.lean:997:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/H_nlinarith.lean:998:51: error: `simp` made no progress
+lean/H_nlinarith.lean:1000:56: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+lean/H_nlinarith.lean:1004:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+⊢ False
+failed
+"MARK_107"
+lean/H_nlinarith.lean:1013:2: error: linarith failed to find a contradiction
+case pos
+a t : ℕ
+h : a = 0
+⊢ False
+failed
+"MARK_108"
+lean/H_nlinarith.lean:1021:2: error: linarith failed to find a contradiction
+case pos.h1
+a t : ℕ
+h : a = 0
+a✝ : 0 < t ^ 2
+⊢ False
+failed
+lean/H_nlinarith.lean:1020:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_109"
+lean/H_nlinarith.lean:1029:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1029:11: error: No goals to be solved
+lean/H_nlinarith.lean:1030:2: error: linarith failed to find a contradiction
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ False
+failed
+lean/H_nlinarith.lean:1028:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_110"
+lean/H_nlinarith.lean:1038:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1038:11: error: No goals to be solved
+lean/H_nlinarith.lean:1039:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:1039:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/H_nlinarith.lean:1034:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/H_nlinarith.lean:1037:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_111"
+lean/H_nlinarith.lean:1048:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1048:11: error: No goals to be solved
+lean/H_nlinarith.lean:1049:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:1049:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/H_nlinarith.lean:1044:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/H_nlinarith.lean:1047:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_112"
+lean/H_nlinarith.lean:1059:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1059:11: error: No goals to be solved
+lean/H_nlinarith.lean:1060:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:1060:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/H_nlinarith.lean:1055:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/H_nlinarith.lean:1058:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_113"
+lean/H_nlinarith.lean:1071:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1071:11: error: No goals to be solved
+lean/H_nlinarith.lean:1072:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:1072:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/H_nlinarith.lean:1067:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/H_nlinarith.lean:1070:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_114"
+lean/H_nlinarith.lean:1084:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:1084:11: error: No goals to be solved
+lean/H_nlinarith.lean:1085:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:1085:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+lean/H_nlinarith.lean:1080:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+lean/H_nlinarith.lean:1083:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_115"
+lean/H_nlinarith.lean:1096:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+h_exists : ∃ k, k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+failed
+"MARK_116"
+lean/H_nlinarith.lean:1103:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+h_k : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+failed
+"MARK_117"
+lean/H_nlinarith.lean:1110:69: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+h_k : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ (2 * a - 2) ^ 2 < 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+lean/H_nlinarith.lean:1111:2: error: `ring_nf` made no progress on the goal
+"MARK_118"
+lean/H_nlinarith.lean:1119:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+⊢ False
+failed
+"MARK_119"
+lean/H_nlinarith.lean:1126:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+⊢ False
+failed
+"MARK_120"
+lean/H_nlinarith.lean:1134:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_121"
+lean/H_nlinarith.lean:1143:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_122"
+lean/H_nlinarith.lean:1147:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/H_nlinarith.lean:1152:19: error: unexpected token ','; expected command
+"MARK_123"
+lean/H_nlinarith.lean:1157:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/H_nlinarith.lean:1162:19: error: unexpected token ','; expected command
+"MARK_124"
+lean/H_nlinarith.lean:1168:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/H_nlinarith.lean:1173:19: error: unexpected token ','; expected command
+"MARK_125"
+lean/H_nlinarith.lean:1180:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/H_nlinarith.lean:1185:19: error: unexpected token ','; expected command
+"MARK_126"
+lean/H_nlinarith.lean:1193:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+lean/H_nlinarith.lean:1198:19: error: unexpected token ','; expected command
+"MARK_127"
+lean/H_nlinarith.lean:1209:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_128"
+lean/H_nlinarith.lean:1213:152: error: unsolved goals
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 : ¬x n ^ 2 ≤ D / (↑n + 1)
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_129"
+lean/H_nlinarith.lean:1224:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 : ¬x n ^ 2 ≤ D / (↑n + 1)
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_130"
+lean/H_nlinarith.lean:1233:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+⊢ False
+failed
+"MARK_131"
+lean/H_nlinarith.lean:1243:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+⊢ False
+failed
+"MARK_132"
+lean/H_nlinarith.lean:1254:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_133"
+lean/H_nlinarith.lean:1266:2: error: linarith failed to find a contradiction
+case pos
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+failed
+"MARK_134"
+lean/H_nlinarith.lean:1278:14: error: Tactic `contradiction` failed
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+lean/H_nlinarith.lean:1279:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+failed
+"MARK_135"
+lean/H_nlinarith.lean:1291:14: error: Tactic `contradiction` failed
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+⊢ False
+lean/H_nlinarith.lean:1293:2: error: linarith failed to find a contradiction
+case neg
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+h2 : 2 ≤ n
+h3 h4 : ¬x n ^ 2 ≤ D / (↑n + 1)
+h5 : (↑n + ↑(n + 1)) * |x (n + 1) ^ 2 - x n ^ 2| ≥ D
+hn1 : D / (↑n + 1) < x n ^ 2
+hn2 : ¬x (n + 1) ^ 2 ≤ D / (↑(n + 1) + 1)
+h6 : ¬False
+⊢ False
+failed
+"MARK_136"
+lean/H_nlinarith.lean:1297:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1299:44: error: unexpected token ','; expected command
+"MARK_137"
+lean/H_nlinarith.lean:1304:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1306:44: error: unexpected token ','; expected command
+"MARK_138"
+lean/H_nlinarith.lean:1312:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1314:44: error: unexpected token ','; expected command
+"MARK_139"
+lean/H_nlinarith.lean:1321:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1323:44: error: unexpected token ','; expected command
+"MARK_140"
+lean/H_nlinarith.lean:1331:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1333:44: error: unexpected token ','; expected command
+"MARK_141"
+lean/H_nlinarith.lean:1342:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1344:44: error: unexpected token ','; expected command
+"MARK_142"
+lean/H_nlinarith.lean:1396:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1398:44: error: unexpected token ','; expected command
+"MARK_143"
+lean/H_nlinarith.lean:1451:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+lean/H_nlinarith.lean:1453:44: error: unexpected token ','; expected command
+"MARK_144"
+lean/H_nlinarith.lean:1511:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_145"
+lean/H_nlinarith.lean:1520:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_146"
+lean/H_nlinarith.lean:1529:86: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1529:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+lean/H_nlinarith.lean:1524:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_147"
+lean/H_nlinarith.lean:1539:86: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1539:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+lean/H_nlinarith.lean:1534:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_148"
+lean/H_nlinarith.lean:1547:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+⊢ False
+failed
+"MARK_149"
+lean/H_nlinarith.lean:1551:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+h2 : x 0 = 0
+⊢ False
+lean/H_nlinarith.lean:1553:20: error: unexpected token ','; expected command
+"MARK_150"
+lean/H_nlinarith.lean:1560:2: error: linarith failed to find a contradiction
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+⊢ False
+failed
+"MARK_151"
+lean/H_nlinarith.lean:1567:2: error: linarith failed to find a contradiction
+case h1
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+a✝ : n < m
+⊢ False
+failed
+"MARK_152"
+lean/H_nlinarith.lean:1575:2: error: linarith failed to find a contradiction
+case h1
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+a✝ : n < m
+⊢ False
+failed
+"MARK_153"
+lean/H_nlinarith.lean:1583:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1579:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_154"
+lean/H_nlinarith.lean:1592:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1588:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_155"
+lean/H_nlinarith.lean:1602:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1598:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_156"
+lean/H_nlinarith.lean:1613:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1609:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_157"
+lean/H_nlinarith.lean:1625:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1621:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_158"
+lean/H_nlinarith.lean:1638:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:1634:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_159"
+lean/H_nlinarith.lean:1652:2: error: linarith failed to find a contradiction
+case h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+a✝ : a n < n + 1
+⊢ False
+failed
+"MARK_160"
+lean/H_nlinarith.lean:1661:2: error: linarith failed to find a contradiction
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+⊢ False
+failed
+"MARK_161"
+lean/H_nlinarith.lean:1671:2: error: linarith failed to find a contradiction
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ False
+failed
+"MARK_162"
+lean/H_nlinarith.lean:1681:61: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1681:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/H_nlinarith.lean:1675:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_163"
+lean/H_nlinarith.lean:1692:61: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1692:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/H_nlinarith.lean:1686:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_164"
+lean/H_nlinarith.lean:1704:61: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1704:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/H_nlinarith.lean:1698:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_165"
+lean/H_nlinarith.lean:1717:61: error: unexpected token ','; expected '}'
+lean/H_nlinarith.lean:1717:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+lean/H_nlinarith.lean:1711:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_166"
+lean/H_nlinarith.lean:1727:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1727:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1728:2: error: linarith failed to find a contradiction
+case refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ False
+failed
+lean/H_nlinarith.lean:1727:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_167"
+lean/H_nlinarith.lean:1734:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1734:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1735:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1735:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1732:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1734:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1735:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1735:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1736:0: error: unexpected identifier; expected command
+"MARK_168"
+lean/H_nlinarith.lean:1743:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1743:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1744:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1744:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1741:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1743:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1744:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1744:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1745:0: error: unexpected identifier; expected command
+"MARK_169"
+lean/H_nlinarith.lean:1764:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1764:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1765:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1765:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1762:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1764:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1765:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1765:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1766:0: error: unexpected identifier; expected command
+"MARK_170"
+lean/H_nlinarith.lean:1787:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1787:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1788:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1788:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1785:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1787:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1788:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1788:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1789:0: error: unexpected identifier; expected command
+"MARK_171"
+lean/H_nlinarith.lean:1812:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1812:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1813:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1813:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1810:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1812:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1813:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1813:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1814:0: error: unexpected identifier; expected command
+"MARK_172"
+lean/H_nlinarith.lean:1839:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1839:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1840:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1840:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1837:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1839:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1840:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1840:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1841:0: error: unexpected identifier; expected command
+"MARK_173"
+lean/H_nlinarith.lean:1868:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1868:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+lean/H_nlinarith.lean:1869:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:1869:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+lean/H_nlinarith.lean:1866:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+lean/H_nlinarith.lean:1868:72: warning: This simp argument is unused:
+  hNeg1
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵N̵e̵g̵1̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1869:61: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵zero_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1869:80: warning: This simp argument is unused:
+  zero_pow
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵z̵e̵r̵o̵_̵p̵o̵w̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+lean/H_nlinarith.lean:1870:0: error: unexpected identifier; expected command
+"MARK_174"
+lean/H_nlinarith.lean:1899:2: error: linarith failed to find a contradiction
+case h₁
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ False
+failed
+"MARK_175"
+lean/H_nlinarith.lean:1905:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:1906:2: error: linarith failed to find a contradiction
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ False
+failed
+"MARK_176"
+lean/H_nlinarith.lean:1912:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:1914:2: error: linarith failed to find a contradiction
+case h2
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+a✝ : 1 < q
+⊢ False
+failed
+"MARK_177"
+lean/H_nlinarith.lean:1920:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:1923:2: error: linarith failed to find a contradiction
+case h2
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+a✝ : 1 < q
+⊢ False
+failed
+"MARK_178"
+lean/H_nlinarith.lean:1929:2: error: linarith failed to find a contradiction
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_179"
+lean/H_nlinarith.lean:1936:2: error: linarith failed to find a contradiction
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_180"
+lean/H_nlinarith.lean:1944:2: error: linarith failed to find a contradiction
+case h.left
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_181"
+lean/H_nlinarith.lean:1952:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:1953:2: error: linarith failed to find a contradiction
+case h.right
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_182"
+lean/H_nlinarith.lean:1961:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:1963:2: error: linarith failed to find a contradiction
+case h.right
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+⊢ False
+failed
+"MARK_183"
+lean/H_nlinarith.lean:1971:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:1967:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:1974:0: error: unexpected identifier; expected command
+"MARK_184"
+lean/H_nlinarith.lean:1983:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:1979:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:1986:0: error: unexpected identifier; expected command
+"MARK_185"
+lean/H_nlinarith.lean:1996:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:1992:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:1999:0: error: unexpected identifier; expected command
+"MARK_186"
+lean/H_nlinarith.lean:2010:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+lean/H_nlinarith.lean:2006:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:2013:0: error: unexpected identifier; expected command
+"MARK_187"
+lean/H_nlinarith.lean:2022:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/H_nlinarith.lean:2023:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_188"
+lean/H_nlinarith.lean:2031:46: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+⊢ ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+lean/H_nlinarith.lean:2032:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h777 : ∀ (i : ℕ), x i ^ 2 ≤ 777 ^ 2
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_189"
+lean/H_nlinarith.lean:2044:2: error: linarith failed to find a contradiction
+case h1
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+a✝ : (2 * k + 1) % 3 < 0
+⊢ False
+failed
+"MARK_190"
+lean/H_nlinarith.lean:2052:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:2048:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_191"
+lean/H_nlinarith.lean:2061:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:2057:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_192"
+lean/H_nlinarith.lean:2074:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:2070:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_193"
+lean/H_nlinarith.lean:2088:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:2084:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_194"
+lean/H_nlinarith.lean:2102:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ False
+failed
+"MARK_195"
+lean/H_nlinarith.lean:2109:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2110:2: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+⊢ False
+failed
+"MARK_196"
+lean/H_nlinarith.lean:2117:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2114:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+h4 : x ^ 2 - y ^ 2 = (x + y) * (x - y)
+⊢ False
+lean/H_nlinarith.lean:2118:26: error: unexpected token ','; expected command
+"MARK_197"
+lean/H_nlinarith.lean:2125:2: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+a✝ : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) < 0
+⊢ False
+failed
+"MARK_198"
+lean/H_nlinarith.lean:2131:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2129:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_199"
+lean/H_nlinarith.lean:2138:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2136:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_200"
+lean/H_nlinarith.lean:2146:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2144:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_201"
+lean/H_nlinarith.lean:2155:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2153:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_202"
+lean/H_nlinarith.lean:2165:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2163:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_203"
+lean/H_nlinarith.lean:2176:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2174:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_204"
+lean/H_nlinarith.lean:2188:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2186:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_205"
+lean/H_nlinarith.lean:2201:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2199:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_206"
+lean/H_nlinarith.lean:2214:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2216:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_207"
+lean/H_nlinarith.lean:2223:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2225:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_208"
+lean/H_nlinarith.lean:2233:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2235:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_209"
+lean/H_nlinarith.lean:2244:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2246:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_210"
+lean/H_nlinarith.lean:2256:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2258:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_211"
+lean/H_nlinarith.lean:2269:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2271:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_212"
+lean/H_nlinarith.lean:2283:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2285:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_213"
+lean/H_nlinarith.lean:2298:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2300:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_214"
+lean/H_nlinarith.lean:2314:53: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+lean/H_nlinarith.lean:2316:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  x ^ 2 + y ^ 2 + z ^ 2
+in the target expression
+  x = 1 ∧ y = 1 ∧ z = 1
+
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - 1) ^ 2 + (y - 1) ^ 2 + (z - 1) ^ 2 = 0
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_215"
+lean/H_nlinarith.lean:2334:6: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+lean/H_nlinarith.lean:2335:2: error: linarith failed to find a contradiction
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2333:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_216"
+lean/H_nlinarith.lean:2342:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+⊢ False
+failed
+"MARK_217"
+lean/H_nlinarith.lean:2350:2: error: linarith failed to find a contradiction
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ False
+failed
+"MARK_218"
+lean/H_nlinarith.lean:2358:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2359:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2362:0: error: unexpected identifier; expected command
+"MARK_219"
+lean/H_nlinarith.lean:2371:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2372:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2375:0: error: unexpected identifier; expected command
+"MARK_220"
+lean/H_nlinarith.lean:2385:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2386:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2389:0: error: unexpected identifier; expected command
+"MARK_221"
+lean/H_nlinarith.lean:2400:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2401:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2404:0: error: unexpected identifier; expected command
+"MARK_222"
+lean/H_nlinarith.lean:2416:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2417:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2420:0: error: unexpected identifier; expected command
+"MARK_223"
+lean/H_nlinarith.lean:2433:29: error: unsolved goals
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+⊢ k ^ 2 % 4 = 0
+lean/H_nlinarith.lean:2434:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  k ^ 2
+in the target expression
+  False
+
+a : ℕ
+h : a ≥ 7
+k : ℕ
+hk : k ^ 2 = 4 * a ^ 3 - a ^ 2 - 12 * a - 4
+h1 : k ^ 2 % 4 = (4 * a ^ 3 - a ^ 2 - 12 * a - 4) % 4
+h2 : k ^ 2 % 4 = 0
+⊢ False
+lean/H_nlinarith.lean:2437:0: error: unexpected identifier; expected command
+"MARK_224"
+lean/H_nlinarith.lean:2451:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_225"
+lean/H_nlinarith.lean:2459:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2460:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ False
+failed
+"MARK_226"
+lean/H_nlinarith.lean:2468:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2469:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/H_nlinarith.lean:2471:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2474:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_227"
+lean/H_nlinarith.lean:2484:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2485:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/H_nlinarith.lean:2487:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2490:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_228"
+lean/H_nlinarith.lean:2501:58: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+a✝ : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 0
+⊢ False
+failed
+lean/H_nlinarith.lean:2502:64: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+⊢ (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+lean/H_nlinarith.lean:2504:4: error: Tactic `apply` failed: could not unify the conclusion of `@abs_sub_le_of_le_of_le`
+  |?a - ?b| ≤ ?ub - ?lb
+with the goal
+  |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+
+Note: The full type of `@abs_sub_le_of_le_of_le` is
+  ∀ {G : Type ?u.185} [inst : AddCommGroup G] [inst_1 : LinearOrder G] [IsOrderedAddMonoid G] {a b lb ub : G},
+    lb ≤ a → a ≤ ub → lb ≤ b → b ≤ ub → |a - b| ≤ ub - lb
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+⊢ |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2507:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : (↑1 + ↑2) * |x 2 ^ 2 - x 1 ^ 2| ≥ D
+h2_pos : 0 < (1 + 2) * |x 2 ^ 2 - x 1 ^ 2|
+h2_le : (1 + 2) * |x 2 ^ 2 - x 1 ^ 2| ≤ 3 * 777 ^ 2
+this : |x 2 ^ 2 - x 1 ^ 2| ≤ 777 ^ 2
+⊢ False
+failed
+"MARK_229"
+lean/H_nlinarith.lean:2517:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+⊢ False
+failed
+"MARK_230"
+lean/H_nlinarith.lean:2524:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_231"
+lean/H_nlinarith.lean:2532:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+a✝ : D / (↑n + 1) < x n ^ 2
+⊢ False
+failed
+"MARK_232"
+lean/H_nlinarith.lean:2540:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2536:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_233"
+lean/H_nlinarith.lean:2549:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2545:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_234"
+lean/H_nlinarith.lean:2562:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2558:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_235"
+lean/H_nlinarith.lean:2575:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ^ 2 = 777 * 777
+⊢ False
+failed
+"MARK_236"
+lean/H_nlinarith.lean:2583:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+⊢ False
+failed
+"MARK_237"
+lean/H_nlinarith.lean:2592:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+⊢ False
+failed
+"MARK_238"
+lean/H_nlinarith.lean:2602:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' : 777 ^ 2 = 777 * 777
+⊢ False
+failed
+"MARK_239"
+lean/H_nlinarith.lean:2613:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ False
+failed
+"MARK_240"
+lean/H_nlinarith.lean:2624:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2625:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_241"
+lean/H_nlinarith.lean:2640:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2641:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_242"
+lean/H_nlinarith.lean:2657:54: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+⊢ ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+lean/H_nlinarith.lean:2658:8: error: Tactic `introN` failed: There are no additional binders or `let` bindings in the goal to introduce
+
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 h777_sq : 777 ^ 2 = 777 * 777
+h777_pos : 0 < 777
+h777_sq' h777_sq'' : 777 ^ 2 = 777 * 777
+h777_bound : ∀ (i : ℕ), |x i ^ 2| ≤ 777 ^ 2
+⊢ False
+"MARK_243"
+lean/H_nlinarith.lean:2672:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h3 : x k ^ 2 ≤ D / (↑k + 1)
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_244"
+lean/H_nlinarith.lean:2680:21: error(lean.unknownIdentifier): Unknown constant `Nat.lt_of_le_succ`
+lean/H_nlinarith.lean:2681:2: error: linarith failed to find a contradiction
+case h1
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h3 : x k ^ 2 ≤ D / (↑k + 1)
+h4 : (↑1 + ↑k) * |x k ^ 2 - x 1 ^ 2| ≥ D
+a✝ : x k < 0
+⊢ False
+failed
+"MARK_245"
+lean/H_nlinarith.lean:2687:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_246"
+lean/H_nlinarith.lean:2694:2: error: linarith failed to find a contradiction
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : (↑0 + ↑1) * |0 ^ 2 - 0 ^ 2| ≥ D
+⊢ False
+failed
+"MARK_247"
+"MARK_248"
+lean/H_nlinarith.lean:2710:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2706:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_249"
+lean/H_nlinarith.lean:2720:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2716:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_250"
+lean/H_nlinarith.lean:2731:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2727:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_251"
+lean/H_nlinarith.lean:2743:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2739:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_252"
+lean/H_nlinarith.lean:2756:4: error: unexpected identifier; expected '['
+lean/H_nlinarith.lean:2752:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_253"
+lean/H_nlinarith.lean:2772:2: error: linarith failed to find a contradiction
+case succ.h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+a✝ : a (n + 1) < n + 1 + 1
+⊢ False
+failed
+"MARK_254"
+lean/H_nlinarith.lean:2782:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/H_nlinarith.lean:2783:2: error: linarith failed to find a contradiction
+case succ.h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+a✝ : a (n + 1) < n + 1 + 1
+⊢ False
+failed
+"MARK_255"
+lean/H_nlinarith.lean:2793:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/H_nlinarith.lean:2795:2: error: linarith failed to find a contradiction
+case succ.h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (a n)) = a (n + 1) + 1
+a✝ : a (n + 1) < n + 1 + 1
+⊢ False
+failed
+"MARK_256"
+lean/H_nlinarith.lean:2805:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/H_nlinarith.lean:2808:2: error: linarith failed to find a contradiction
+case succ.h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (a n)) = a (n + 1) + 1
+h4 : a n = n + 1
+a✝ : a (n + 1) < n + 1 + 1
+⊢ False
+failed
+"MARK_257"
+lean/H_nlinarith.lean:2818:24: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+lean/H_nlinarith.lean:2822:2: error: linarith failed to find a contradiction
+case succ.h1
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+ih : 1 ≤ n → a n = n + 1
+h1 : 1 ≤ n + 1
+h2 : 1 ≤ n
+h3 : a (a (n + 1)) = a (n + 1) + 1
+h4 : a n = n + 1
+a✝ : a (n + 1) < n + 1 + 1
+⊢ False
+failed
+"MARK_258"
+lean/H_nlinarith.lean:2828:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:2828:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ ∑ i, (fun x => -1) i * r ^ i = 0
+lean/H_nlinarith.lean:2829:2: error: `simp` made no progress
+lean/H_nlinarith.lean:2831:0: error: unexpected identifier; expected command
+"MARK_259"
+lean/H_nlinarith.lean:2838:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/H_nlinarith.lean:2838:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ ∑ i, (fun x => -1) i * r ^ i = 0
+lean/H_nlinarith.lean:2839:2: error: `simp` made no progress
+lean/H_nlinarith.lean:2841:0: error: unexpected identifier; expected command
+"MARK_260"
+lean/H_nlinarith.lean:2850:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:2851:2: error: linarith failed to find a contradiction
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ False
+failed
+"MARK_261"
+lean/H_nlinarith.lean:2857:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:2859:2: error: linarith failed to find a contradiction
+case h2
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+a✝ : 1 < q
+⊢ False
+failed
+"MARK_262"
+lean/H_nlinarith.lean:2865:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+lean/H_nlinarith.lean:2868:2: error: linarith failed to find a contradiction
+case h2
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+a✝ : 1 < q
+⊢ False
+failed
+"MARK_263"
+lean/H_nlinarith.lean:2874:2: error: linarith failed to find a contradiction
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ False
+failed
+"MARK_264"
+lean/H_nlinarith.lean:2881:2: error: linarith failed to find a contradiction
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ False
+failed
+"MARK_265"
+lean/H_nlinarith.lean:2889:2: error: linarith failed to find a contradiction
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ False
+failed
+"MARK_266"
+lean/H_nlinarith.lean:2898:2: error: linarith failed to find a contradiction
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ False
+failed
+"MARK_267"
+lean/H_nlinarith.lean:2902:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/H_nlinarith.lean:2908:0: error: unexpected identifier; expected command
+"MARK_268"
+lean/H_nlinarith.lean:2913:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/H_nlinarith.lean:2919:0: error: unexpected identifier; expected command
+"MARK_269"
+lean/H_nlinarith.lean:2926:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/H_nlinarith.lean:2932:0: error: unexpected identifier; expected command
+"MARK_270"
+lean/H_nlinarith.lean:2940:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/H_nlinarith.lean:2946:0: error: unexpected identifier; expected command
+"MARK_271"
+lean/H_nlinarith.lean:2955:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ (Infinite ↑{i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2} ∧
+      ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2) ∨
+    ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+lean/H_nlinarith.lean:2961:0: error: unexpected identifier; expected command
+"MARK_272"
+lean/H_nlinarith.lean:2973:2: error: linarith failed to find a contradiction
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+a✝ : 777 ^ 2 / 2 < D
+⊢ False
+failed
+"MARK_273"
+lean/H_nlinarith.lean:2979:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:2980:2: error: linarith failed to find a contradiction
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+a✝ : 777 ^ 2 / 2 < D
+⊢ False
+failed
+"MARK_274"
+lean/H_nlinarith.lean:2986:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:2984:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:2987:35: error: unexpected token ','; expected command
+"MARK_275"
+lean/H_nlinarith.lean:2995:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:2993:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:2996:35: error: unexpected token ','; expected command
+"MARK_276"
+lean/H_nlinarith.lean:3005:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:3003:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:3006:35: error: unexpected token ','; expected command
+"MARK_277"
+lean/H_nlinarith.lean:3016:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:3014:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:3017:35: error: unexpected token ','; expected command
+"MARK_278"
+lean/H_nlinarith.lean:3033:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:3031:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:3034:35: error: unexpected token ','; expected command
+"MARK_279"
+lean/H_nlinarith.lean:3051:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+lean/H_nlinarith.lean:3049:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+lean/H_nlinarith.lean:3052:35: error: unexpected token ','; expected command
+"MARK_280"
+lean/H_nlinarith.lean:3072:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:3068:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_281"
+lean/H_nlinarith.lean:3088:8: error(lean.unknownIdentifier): Unknown constant `Nat.mod_eq_zero_iff_dvd`
+lean/H_nlinarith.lean:3084:77: error: unsolved goals
+m k : ℕ
+hd : (2 ^ (2 * (2 * k + 1) - 1) + 1) % (2 * k + 1) = 0
+hk : m = 2 * k + 1
+⊢ (2 * k + 1) % 3 = 0
+"MARK_282"

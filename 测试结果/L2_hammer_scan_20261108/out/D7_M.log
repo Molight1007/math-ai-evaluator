@@ -1,0 +1,41 @@
+lean/D7_M.lean:9:5: error: unexpected token '≤'; expected term
+lean/D7_M.lean:5:21: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x = 1
+lean/D7_M.lean:7:27: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+lean/D7_M.lean:7:12: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+lean/D7_M.lean:8:4: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+lean/D7_M.lean:6:36: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x ^ 2 ≤ x * y ^ 2
+lean/D7_M.lean:4:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_7"

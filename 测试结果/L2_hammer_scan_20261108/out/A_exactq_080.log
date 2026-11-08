@@ -1,0 +1,8 @@
+Try this:
+  [apply] exact exists_apply_eq_apply (fun a => a) (360 / Nat.gcd 360 (2 * θ))
+verify/A_exactq_080.lean:4:17: warning: Variable name `hθ` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+"MARK_80"

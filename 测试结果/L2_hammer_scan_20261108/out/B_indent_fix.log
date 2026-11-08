@@ -1,0 +1,2531 @@
+verify/B_indent_fix.lean:9:7: error: unexpected token '≤'; expected term
+verify/B_indent_fix.lean:7:29: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+verify/B_indent_fix.lean:7:14: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:8:6: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+verify/B_indent_fix.lean:6:38: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x ^ 2 ≤ x * y ^ 2
+verify/B_indent_fix.lean:4:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_7"
+verify/B_indent_fix.lean:27:7: error: unexpected token '≤'; expected term
+verify/B_indent_fix.lean:25:29: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+verify/B_indent_fix.lean:25:14: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:26:6: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+verify/B_indent_fix.lean:24:38: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x ^ 2 ≤ x * y ^ 2
+verify/B_indent_fix.lean:22:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_8"
+verify/B_indent_fix.lean:46:7: error: unexpected token '≤'; expected term
+verify/B_indent_fix.lean:44:29: error: numerals are data in Lean, but the expected type is a proposition
+  1 ≤ x : Prop
+verify/B_indent_fix.lean:44:14: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  MulLeftMono ℝ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:45:6: error(lean.unknownIdentifier): Unknown identifier `nlinarith`
+verify/B_indent_fix.lean:43:38: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+⊢ x ^ 2 ≤ x * y ^ 2
+verify/B_indent_fix.lean:41:174: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x = 1
+⊢ x = 1 ∧ y = 1 ∧ z = 1
+"MARK_9"
+verify/B_indent_fix.lean:62:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:62:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:60:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_19"
+verify/B_indent_fix.lean:68:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:68:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:66:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_20"
+verify/B_indent_fix.lean:75:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:75:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:73:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_21"
+verify/B_indent_fix.lean:83:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:83:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:81:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_22"
+verify/B_indent_fix.lean:92:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:92:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:90:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_23"
+verify/B_indent_fix.lean:102:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:102:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:100:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_24"
+verify/B_indent_fix.lean:113:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:113:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:111:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_25"
+verify/B_indent_fix.lean:125:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:125:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:123:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_26"
+verify/B_indent_fix.lean:138:92: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:138:77: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  ?a + 0
+in the target expression
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:136:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1 : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2 : |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ x 1 = 0
+"MARK_27"
+verify/B_indent_fix.lean:155:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:150:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_51"
+verify/B_indent_fix.lean:164:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:159:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_52"
+verify/B_indent_fix.lean:174:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:169:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_53"
+verify/B_indent_fix.lean:185:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:180:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_54"
+verify/B_indent_fix.lean:197:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:192:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_55"
+verify/B_indent_fix.lean:210:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:205:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+a b : ℕ+
+h_eq : f a = f b
+h1 : f (f a + f a) = a + a
+h2 : f (f a + f b) = a + b
+⊢ a = b
+"MARK_56"
+verify/B_indent_fix.lean:220:3: error: unknown tactic
+verify/B_indent_fix.lean:218:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_61"
+verify/B_indent_fix.lean:226:3: error: unknown tactic
+verify/B_indent_fix.lean:224:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_62"
+verify/B_indent_fix.lean:233:3: error: unknown tactic
+verify/B_indent_fix.lean:231:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_63"
+verify/B_indent_fix.lean:241:3: error: unknown tactic
+verify/B_indent_fix.lean:239:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_64"
+verify/B_indent_fix.lean:250:3: error: unknown tactic
+verify/B_indent_fix.lean:248:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_65"
+verify/B_indent_fix.lean:260:3: error: unknown tactic
+verify/B_indent_fix.lean:258:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_66"
+verify/B_indent_fix.lean:271:3: error: unknown tactic
+verify/B_indent_fix.lean:269:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_67"
+verify/B_indent_fix.lean:283:3: error: unknown tactic
+verify/B_indent_fix.lean:281:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_68"
+verify/B_indent_fix.lean:296:3: error: unknown tactic
+verify/B_indent_fix.lean:294:173: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ∈ X
+"MARK_69"
+verify/B_indent_fix.lean:310:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:308:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:310:56: error: unexpected token ','; expected command
+"MARK_71"
+verify/B_indent_fix.lean:322:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:320:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:322:56: error: unexpected token ','; expected command
+"MARK_72"
+verify/B_indent_fix.lean:335:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:333:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:335:56: error: unexpected token ','; expected command
+"MARK_73"
+verify/B_indent_fix.lean:349:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:347:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:349:56: error: unexpected token ','; expected command
+"MARK_74"
+verify/B_indent_fix.lean:364:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:362:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:364:56: error: unexpected token ','; expected command
+"MARK_75"
+verify/B_indent_fix.lean:380:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:378:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:380:56: error: unexpected token ','; expected command
+"MARK_76"
+verify/B_indent_fix.lean:397:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:395:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:397:56: error: unexpected token ','; expected command
+"MARK_77"
+verify/B_indent_fix.lean:415:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:413:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:415:56: error: unexpected token ','; expected command
+"MARK_78"
+verify/B_indent_fix.lean:434:39: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  a ≥ 4
+where
+ a := ↑q
+verify/B_indent_fix.lean:432:81: error: unsolved goals
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+h_fact : sorry ∣ sorry.factorial
+⊢ (6 * q.factorial - 1) % q = 0
+verify/B_indent_fix.lean:434:56: error: unexpected token ','; expected command
+"MARK_79"
+verify/B_indent_fix.lean:457:14: error: Application type mismatch: The argument
+  rfl
+has type
+  ?m.84 = ?m.84
+but is expected to have type
+  (2 * k + 1) % 3 = 0
+in the application
+  h_mod rfl
+"MARK_92"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:461:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+verify/B_indent_fix.lean:464:7: error: unexpected token 'at'; expected command
+"MARK_102"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:468:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+verify/B_indent_fix.lean:471:7: error: unexpected token 'at'; expected command
+"MARK_103"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:476:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+verify/B_indent_fix.lean:479:7: error: unexpected token 'at'; expected command
+"MARK_104"
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:485:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this : 3 - 3 ^ 3 = 3 - 3 ^ 3
+⊢ x - x ^ 3 + y - y ^ 3 + z - z ^ 3 = 0
+verify/B_indent_fix.lean:488:7: error: unexpected token 'at'; expected command
+"MARK_105"
+verify/B_indent_fix.lean:496:53: error: `simp` made no progress
+verify/B_indent_fix.lean:498:58: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+verify/B_indent_fix.lean:502:4: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+a✝ : x < 1
+⊢ False
+failed
+verify/B_indent_fix.lean:503:2: error: Type mismatch
+  h3
+has type
+  x = 1
+but is expected to have type
+  x = 1 ∧ y = 1 ∧ z = 1
+"MARK_106"
+verify/B_indent_fix.lean:509:53: error: `simp` made no progress
+verify/B_indent_fix.lean:511:58: error: Type mismatch
+  h2
+has type
+  x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+but is expected to have type
+  3 = x * y ^ 3 + y * z ^ 3 + z * x ^ 3
+verify/B_indent_fix.lean:515:4: error: linarith failed to find a contradiction
+case h1
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+this✝ : x ^ 2 ≤ 3
+this : 3 ≤ 3 * x ^ 4
+a✝ : x < 1
+⊢ False
+failed
+verify/B_indent_fix.lean:516:2: error: Type mismatch
+  h3
+has type
+  x = 1
+but is expected to have type
+  x = 1 ∧ y = 1 ∧ z = 1
+"MARK_107"
+verify/B_indent_fix.lean:524:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:524:11: error: No goals to be solved
+verify/B_indent_fix.lean:525:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:525:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:520:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:523:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_110"
+verify/B_indent_fix.lean:533:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:533:11: error: No goals to be solved
+verify/B_indent_fix.lean:534:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:534:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:529:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:532:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_111"
+verify/B_indent_fix.lean:543:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:543:11: error: No goals to be solved
+verify/B_indent_fix.lean:544:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:544:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:539:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:542:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_112"
+verify/B_indent_fix.lean:554:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:554:11: error: No goals to be solved
+verify/B_indent_fix.lean:555:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:555:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:550:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:553:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_113"
+verify/B_indent_fix.lean:566:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:566:11: error: No goals to be solved
+verify/B_indent_fix.lean:567:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:567:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:562:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:565:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_114"
+verify/B_indent_fix.lean:579:8: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:579:11: error: No goals to be solved
+verify/B_indent_fix.lean:580:8: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommGroup ℕ
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+verify/B_indent_fix.lean:580:35: error: Function expected at
+  24 - a
+but this term has type
+  ℕ
+
+Note: Expected a function because this term is being applied to the argument
+  a
+verify/B_indent_fix.lean:575:93: error: unsolved goals
+case neg
+a t : ℕ
+h : ¬a = 0
+⊢ a * (a - 1) * (24 - a) = t ^ 2 ↔ (a - 1) * (24 - a) = (t / a) ^ 2
+verify/B_indent_fix.lean:578:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_115"
+verify/B_indent_fix.lean:589:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:594:19: error: unexpected token ','; expected command
+"MARK_122"
+verify/B_indent_fix.lean:598:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:603:19: error: unexpected token ','; expected command
+"MARK_123"
+verify/B_indent_fix.lean:608:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:613:19: error: unexpected token ','; expected command
+"MARK_124"
+verify/B_indent_fix.lean:619:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:624:19: error: unexpected token ','; expected command
+"MARK_125"
+verify/B_indent_fix.lean:631:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:636:19: error: unexpected token ','; expected command
+"MARK_126"
+verify/B_indent_fix.lean:644:146: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hbound : ∀ (n : ℕ), 0 ≤ x n ∧ x n ≤ 777
+h1_ne : ¬x 1 = 0
+h1_pos : 0 ≤ x 1
+h2 : 0 < 1 → (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h2' : (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h3 : 0 < 2 → (↑0 + ↑2) * |x 2 ^ 2 - x 0 ^ 2| ≥ D
+⊢ False
+verify/B_indent_fix.lean:649:19: error: unexpected token ','; expected command
+"MARK_127"
+verify/B_indent_fix.lean:659:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:661:44: error: unexpected token ','; expected command
+"MARK_137"
+verify/B_indent_fix.lean:666:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:668:44: error: unexpected token ','; expected command
+"MARK_138"
+verify/B_indent_fix.lean:674:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:676:44: error: unexpected token ','; expected command
+"MARK_139"
+verify/B_indent_fix.lean:683:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:685:44: error: unexpected token ','; expected command
+"MARK_140"
+verify/B_indent_fix.lean:693:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:695:44: error: unexpected token ','; expected command
+"MARK_141"
+verify/B_indent_fix.lean:746:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:748:44: error: unexpected token ','; expected command
+"MARK_142"
+verify/B_indent_fix.lean:800:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:802:44: error: unexpected token ','; expected command
+"MARK_143"
+verify/B_indent_fix.lean:855:141: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : ∀ (m n : ℕ), 0 < m → m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hx : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+hD' : ¬D ≤ 777 ^ 2
+h777 : 777 ≤ 777
+⊢ False
+verify/B_indent_fix.lean:857:44: error: unexpected token ','; expected command
+"MARK_144"
+verify/B_indent_fix.lean:916:86: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:916:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+verify/B_indent_fix.lean:911:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_146"
+verify/B_indent_fix.lean:925:86: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:925:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+verify/B_indent_fix.lean:920:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_147"
+verify/B_indent_fix.lean:935:86: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:935:72: error: Application type mismatch: The argument
+  sq_nonneg ?m.196
+has type
+  0 ≤ ?m.196 ^ 2
+but is expected to have type
+  0 ≤ x k ^ 2 - 0
+in the application
+  abs_of_nonneg (sq_nonneg ?m.196)
+verify/B_indent_fix.lean:930:165: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h2 : ∀ (n : ℕ), 2 ≤ n → x n ^ 2 ≤ D / (↑n + 1)
+k : ℕ
+hk : 2 ≤ k
+h2k : x k ^ 2 ≤ D / (↑k + 1)
+h_pos : 0 < D / (↑k + 1)
+h_bound : |x k ^ 2 - 0| < D / (↑k + 1)
+⊢ x k = 0
+"MARK_148"
+verify/B_indent_fix.lean:940:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+h2 : x 0 = 0
+⊢ False
+verify/B_indent_fix.lean:942:20: error: unexpected token ','; expected command
+"MARK_149"
+verify/B_indent_fix.lean:946:131: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+hzero : ∀ (n : ℕ), x n = 0
+h1 : 0 < D
+h2 : x 0 = 0
+⊢ False
+verify/B_indent_fix.lean:948:20: error: unexpected token ','; expected command
+"MARK_150"
+verify/B_indent_fix.lean:956:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:952:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_153"
+verify/B_indent_fix.lean:964:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:960:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_154"
+verify/B_indent_fix.lean:973:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:969:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_155"
+verify/B_indent_fix.lean:983:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:979:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_156"
+verify/B_indent_fix.lean:994:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:990:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_157"
+verify/B_indent_fix.lean:1006:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1002:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_158"
+verify/B_indent_fix.lean:1019:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1015:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_159"
+verify/B_indent_fix.lean:1035:61: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:1035:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+verify/B_indent_fix.lean:1029:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_162"
+verify/B_indent_fix.lean:1045:61: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:1045:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+verify/B_indent_fix.lean:1039:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_163"
+verify/B_indent_fix.lean:1056:61: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:1056:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+verify/B_indent_fix.lean:1050:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_164"
+verify/B_indent_fix.lean:1068:61: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:1068:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+verify/B_indent_fix.lean:1062:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_165"
+verify/B_indent_fix.lean:1081:61: error: unexpected token ','; expected '}'
+verify/B_indent_fix.lean:1081:32: error: Tactic `apply` failed: could not unify the conclusion of `Nat.lt_iff_add_one_le.mpr`
+  ?m.87 < ?m.88
+with the goal
+  a n ≤ n + 1
+
+Note: The full type of `Nat.lt_iff_add_one_le.mpr` is
+  ?m.87 + 1 ≤ ?m.88 → ?m.87 < ?m.88
+
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+⊢ a n ≤ n + 1
+verify/B_indent_fix.lean:1075:138: error: unsolved goals
+a : ℕ → ℕ
+h : ∀ (p : ℕ), a (a (a p)) = a (p + 1) + 1
+h_a1 : a 1 = 1
+h_mono : ∀ (n : ℕ), a n < a (n + 1)
+n : ℕ
+h1 : 1 ≤ n
+h2 : a (a (a n)) = a (n + 1) + 1
+hne : ¬a n = n + 1
+hlt : a n < a (n + 1)
+h3 : a n ≤ n + 1
+⊢ False
+"MARK_166"
+verify/B_indent_fix.lean:1092:3: error: unknown tactic
+verify/B_indent_fix.lean:1090:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1090:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1091:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1091:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1088:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_167"
+verify/B_indent_fix.lean:1100:3: error: unknown tactic
+verify/B_indent_fix.lean:1098:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1098:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1099:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1099:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1096:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_168"
+verify/B_indent_fix.lean:1120:3: error: unknown tactic
+verify/B_indent_fix.lean:1118:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1118:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1119:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1119:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1116:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_169"
+verify/B_indent_fix.lean:1142:3: error: unknown tactic
+verify/B_indent_fix.lean:1140:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1140:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1141:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1141:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1138:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_170"
+verify/B_indent_fix.lean:1166:3: error: unknown tactic
+verify/B_indent_fix.lean:1164:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1164:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1165:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1165:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1162:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_171"
+verify/B_indent_fix.lean:1192:3: error: unknown tactic
+verify/B_indent_fix.lean:1190:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1190:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1191:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1191:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1188:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_172"
+verify/B_indent_fix.lean:1220:3: error: unknown tactic
+verify/B_indent_fix.lean:1218:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1218:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1219:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1219:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1216:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_173"
+verify/B_indent_fix.lean:1250:3: error: unknown tactic
+verify/B_indent_fix.lean:1248:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1248:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1249:37: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.113 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1249:52: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 1
+verify/B_indent_fix.lean:1246:173: error: unsolved goals
+case refine_1.refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1.refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0' : ∑ i, -1 * r ^ i = -1
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_2
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+h0 : ∑ i, (fun x => -1) i * r ^ i = 0
+⊢ r ∈ X
+"MARK_174"
+verify/B_indent_fix.lean:1280:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1278:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q ∣ 1
+"MARK_175"
+verify/B_indent_fix.lean:1286:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1284:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_176"
+verify/B_indent_fix.lean:1293:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1291:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_177"
+verify/B_indent_fix.lean:1301:4: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1299:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_178"
+verify/B_indent_fix.lean:1314:3: error: unknown tactic
+verify/B_indent_fix.lean:1307:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_183"
+verify/B_indent_fix.lean:1325:3: error: unknown tactic
+verify/B_indent_fix.lean:1318:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_184"
+verify/B_indent_fix.lean:1337:3: error: unknown tactic
+verify/B_indent_fix.lean:1330:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_185"
+verify/B_indent_fix.lean:1350:3: error: unknown tactic
+verify/B_indent_fix.lean:1343:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_186"
+verify/B_indent_fix.lean:1364:3: error: unknown tactic
+verify/B_indent_fix.lean:1357:162: error: unsolved goals
+case pos
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∈ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+
+case neg
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+n : ℕ
+h_in : n ∉ {i | y i ≤ 777 ^ 2 / 2}
+⊢ n ∈ {i | y i ≤ 777 ^ 2 / 2} → 0 ≤ y n ∧ y n ≤ 777 ^ 2 / 2
+"MARK_187"
+verify/B_indent_fix.lean:1375:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+verify/B_indent_fix.lean:1372:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+h4 : x ^ 2 - y ^ 2 = (x + y) * (x - y)
+⊢ False
+verify/B_indent_fix.lean:1376:26: error: unexpected token ','; expected command
+"MARK_196"
+verify/B_indent_fix.lean:1383:72: error: linarith failed to find a contradiction
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+a✝ : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 < 0
+⊢ False
+failed
+verify/B_indent_fix.lean:1380:102: error: unsolved goals
+x y z : ℝ
+hxy : x ≠ y
+hyz : y ≠ z
+hzx : z ≠ x
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : (x - y) ^ 2 + (y - z) ^ 2 + (z - x) ^ 2 ≥ 0
+h4 : x ^ 2 - y ^ 2 = (x + y) * (x - y)
+⊢ False
+verify/B_indent_fix.lean:1384:26: error: unexpected token ','; expected command
+"MARK_197"
+verify/B_indent_fix.lean:1390:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1388:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_198"
+verify/B_indent_fix.lean:1396:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1394:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_199"
+verify/B_indent_fix.lean:1403:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1401:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_200"
+verify/B_indent_fix.lean:1411:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1409:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_201"
+verify/B_indent_fix.lean:1420:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1418:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_202"
+verify/B_indent_fix.lean:1430:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1428:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_203"
+verify/B_indent_fix.lean:1441:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1439:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_204"
+verify/B_indent_fix.lean:1453:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1451:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_205"
+verify/B_indent_fix.lean:1466:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1464:190: error: unsolved goals
+x y z : ℝ
+hx : 0 < x
+hy : 0 < y
+hz : 0 < z
+hxy : y ≤ x
+hyz : z ≤ y
+h1 : x ^ 2 + y ^ 2 + z ^ 2 = 3
+h2 : x * y ^ 3 + y * z ^ 3 + z * x ^ 3 = 3
+h3 : x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = x + y + z - (x ^ 3 + y ^ 3 + z ^ 3)
+⊢ x - x ^ 3 + (y - y ^ 3) + (z - z ^ 3) = 0
+"MARK_206"
+verify/B_indent_fix.lean:1482:6: error: numerals are data in Lean, but the expected type is a proposition
+  0 = t ^ 2 : Prop
+verify/B_indent_fix.lean:1483:6: error: Invalid rewrite argument: The pattern to be substituted is a metavariable (`?m.91`) in this equality
+  ?m.91 = ?m.90 * (?m.91 / ?m.90)
+verify/B_indent_fix.lean:1481:8: warning: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_216"
+verify/B_indent_fix.lean:1493:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1493:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1495:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_218"
+verify/B_indent_fix.lean:1505:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1505:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1507:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_219"
+verify/B_indent_fix.lean:1518:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1518:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1520:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_220"
+verify/B_indent_fix.lean:1532:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1532:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1534:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_221"
+verify/B_indent_fix.lean:1547:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1547:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1549:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_222"
+verify/B_indent_fix.lean:1563:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1563:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1565:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_223"
+verify/B_indent_fix.lean:1580:36: error(lean.unknownIdentifier): Unknown constant `Nat.sub_mod`
+verify/B_indent_fix.lean:1580:4: error: `simp` made no progress
+verify/B_indent_fix.lean:1582:2: error: Type mismatch
+  h2
+has type
+  k ^ 2 % 4 = 0
+but is expected to have type
+  False
+"MARK_224"
+verify/B_indent_fix.lean:1596:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1592:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_232"
+verify/B_indent_fix.lean:1604:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1600:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_233"
+verify/B_indent_fix.lean:1616:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1612:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_234"
+verify/B_indent_fix.lean:1629:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1625:152: error: unsolved goals
+D : ℝ
+x : ℕ → ℝ
+hD : 0 < D
+hx : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h1 : x 1 = 0
+n : ℕ
+hn : 2 ≤ n
+h2 : (↑1 + ↑n) * |x n ^ 2 - x 1 ^ 2| ≥ D
+⊢ x n ^ 2 ≤ D / (↑n + 1)
+"MARK_235"
+verify/B_indent_fix.lean:1642:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1638:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_249"
+verify/B_indent_fix.lean:1652:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1648:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_250"
+verify/B_indent_fix.lean:1663:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1659:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_251"
+verify/B_indent_fix.lean:1675:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1671:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_252"
+verify/B_indent_fix.lean:1688:4: error: unexpected identifier; expected '['
+verify/B_indent_fix.lean:1684:88: error: unsolved goals
+f : ℕ+ → ℕ+
+h : ∀ (n m : ℕ+), f (f n + f m) = n + m
+n m : ℕ+
+h_eq : f n = f m
+h1 : f (f n + f m) = n + m
+⊢ n = m
+"MARK_253"
+verify/B_indent_fix.lean:1700:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1700:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1703:64: error(lean.unknownIdentifier): Unknown identifier `h0`
+verify/B_indent_fix.lean:1703:2: error: Tactic `apply` failed: could not unify the type of `hRich 0 (fun x => -1) ?m.99 r sorry`
+  r ∈ X
+with the goal
+  Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+verify/B_indent_fix.lean:1701:10: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [̵F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵z̵e̵r̵o̵]̵[̲F̲i̲n̲.̲v̲a̲l̲_̲z̲e̲r̲o̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+verify/B_indent_fix.lean:1701:29: warning: This simp argument is unused:
+  Fin.val_zero
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵z̵e̵r̵o̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_259"
+verify/B_indent_fix.lean:1711:49: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  HPow ℤ (Fin 1) (?m.74 i)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Try this:
+  [apply] ring_nf
+  
+  The `ring` tactic failed to close the goal. Use `ring_nf` to obtain a normal form.
+    
+  Note that `ring` works primarily in *commutative* rings. If you have a noncommutative ring, abelian group or module, consider using `noncomm_ring`, `abel` or `module` instead.
+verify/B_indent_fix.lean:1711:63: error: unsolved goals
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ r ^ 0 = 0
+verify/B_indent_fix.lean:1714:64: error(lean.unknownIdentifier): Unknown identifier `h0`
+verify/B_indent_fix.lean:1714:2: error: Tactic `apply` failed: could not unify the type of `hRich 0 (fun x => -1) ?m.99 r sorry`
+  r ∈ X
+with the goal
+  Fin 1 → HPow ℤ (Fin 1) ℤ
+
+case refine_1
+X : Set ℤ
+hNeg1 : -1 ∈ X
+hRich : ∀ (n : ℕ) (x : Fin (n + 1) → ℤ), (∀ (i : Fin (n + 1)), x i ∈ X) → ∀ (r : ℤ), ∑ i, x i * r ^ ↑i = 0 → r ∈ X
+r : ℤ
+⊢ Fin 1 → HPow ℤ (Fin 1) ℤ
+verify/B_indent_fix.lean:1712:10: warning: This simp argument is unused:
+  Fin.sum_univ_succ
+
+Hint: Omit it from the simp argument list.
+  simp [̵F̵i̵n̵.̵s̵u̵m̵_̵u̵n̵i̵v̵_̵s̵u̵c̵c̵,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵z̵e̵r̵o̵]̵[̲F̲i̲n̲.̲v̲a̲l̲_̲z̲e̲r̲o̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+verify/B_indent_fix.lean:1712:29: warning: This simp argument is unused:
+  Fin.val_zero
+
+Hint: Omit it from the simp argument list.
+  simp [Fin.sum_univ_succ,̵ ̵F̵i̵n̵.̵v̵a̵l̵_̵z̵e̵r̵o̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+"MARK_260"
+verify/B_indent_fix.lean:1722:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1720:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_261"
+verify/B_indent_fix.lean:1729:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1727:81: error: unsolved goals
+case h₂
+q : ℕ
+hq : Nat.Prime q
+h3 : q > 3
+⊢ q = 1
+"MARK_262"
+verify/B_indent_fix.lean:1737:4: error: Type mismatch
+  Nat.dvd_mul_left 6 q
+has type
+  6 ∣ q * 6
+but is expected to have type
+  q ∣ 6 * q.factorial
+verify/B_indent_fix.lean:1740:2: error: Type mismatch
+  Nat.dvd_mul_right 6 q
+has type
+  6 ∣ 6 * q
+but is expected to have type
+  q = 1
+"MARK_263"
+verify/B_indent_fix.lean:1744:162: error: unsolved goals
+case h
+y : ℕ → ℝ
+h : ∀ (n : ℕ), 0 ≤ y n ∧ y n ≤ 777 ^ 2
+h_inf : ¬Infinite ↑{i | 0 ≤ y i ∧ y i ≤ 777 ^ 2 / 2}
+⊢ ∀ i ∈ {i | 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2}, 777 ^ 2 / 2 < y i ∧ y i ≤ 777 ^ 2
+"MARK_267"
+verify/B_indent_fix.lean:1754:21: warning: Variable name `h` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+"MARK_268"
+verify/B_indent_fix.lean:1775:2: error: No goals to be solved
+"MARK_269"
+verify/B_indent_fix.lean:1788:2: error: No goals to be solved
+"MARK_270"
+verify/B_indent_fix.lean:1802:2: error: No goals to be solved
+"MARK_271"
+verify/B_indent_fix.lean:1817:2: error: No goals to be solved
+"MARK_272"
+verify/B_indent_fix.lean:1825:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1823:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+⊢ D ≤ 777 ^ 2 / 2
+"MARK_273"
+verify/B_indent_fix.lean:1831:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1829:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1832:35: error: unexpected token ','; expected command
+"MARK_274"
+verify/B_indent_fix.lean:1839:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1837:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1840:35: error: unexpected token ','; expected command
+"MARK_275"
+verify/B_indent_fix.lean:1848:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1846:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1849:35: error: unexpected token ','; expected command
+"MARK_276"
+verify/B_indent_fix.lean:1858:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1856:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1859:35: error: unexpected token ','; expected command
+"MARK_277"
+verify/B_indent_fix.lean:1874:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1872:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1875:35: error: unexpected token ','; expected command
+"MARK_278"
+verify/B_indent_fix.lean:1891:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1889:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1892:35: error: unexpected token ','; expected command
+"MARK_279"
+verify/B_indent_fix.lean:1909:50: error: Type mismatch
+  hcond 0 1 ?m.159
+has type
+  (↑0 + ↑1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+but is expected to have type
+  (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+verify/B_indent_fix.lean:1907:139: error: unsolved goals
+x : ℕ → ℝ
+h : ∀ (i : ℕ), 0 ≤ x i ∧ x i ≤ 777
+D : ℝ
+hcond : ∀ (m n : ℕ), m < n → (↑m + ↑n) * |x n ^ 2 - x m ^ 2| ≥ D
+h0_le : 0 ≤ x 0
+h0_ge : x 0 ≤ 777
+h01 : (0 + 1) * |x 1 ^ 2 - x 0 ^ 2| ≥ D
+h1_le : x 1 ≤ 777
+⊢ D ≤ 777 ^ 2 / 2
+verify/B_indent_fix.lean:1910:35: error: unexpected token ','; expected command
+"MARK_280"

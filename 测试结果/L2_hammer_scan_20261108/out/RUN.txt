@@ -1,0 +1,10 @@
+V_base rc=1 sec=19 errs=565 marks=283
+H_omega rc=1 sec=18 errs=522 marks=283
+H_nlinarith rc=1 sec=30 errs=520 marks=283
+H_linarith rc=1 sec=23 errs=520 marks=283
+H_simp_all rc=1 sec=32 errs=517 marks=283
+H_norm_num rc=1 sec=21 errs=521 marks=283
+H_positivity rc=1 sec=18 errs=522 marks=283
+H_ring_nf rc=1 sec=20 errs=522 marks=283
+H_exactq rc=1 sec=196 errs=519 marks=283
+H_aesop rc=1 sec=139 errs=515 marks=283

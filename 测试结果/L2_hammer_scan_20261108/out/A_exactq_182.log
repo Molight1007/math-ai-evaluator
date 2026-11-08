@@ -1,0 +1,4 @@
+verify/A_exactq_182.lean:8:8: error(lean.unknownIdentifier): Unknown constant `Set.infinite_of_unbounded_forall_nat`
+Try this:
+  [apply] exact fun i a => And.imp_right (fun a_1 => a) (h i)
+"MARK_182"
